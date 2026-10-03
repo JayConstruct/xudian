@@ -1,0 +1,17 @@
+.tools/
+.cache/
+.aws/
+.codex/
+.agents/
+.dart_tool/
+.flutter-plugins*
+.packages
+.idea/
+.vscode/
+build/
+*.log
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks

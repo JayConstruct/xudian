@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xudian.app/schemas/module-package-v1.schema.json",
+  "title": "Xudian Module Package v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packageFormat",
+    "module",
+    "release",
+    "integrity"
+  ],
+  "properties": {
+    "packageFormat": {
+      "const": 1
+    },
+    "module": {
+      "type": "object"
+    },
+    "release": {
+      "$ref": "#/$defs/release"
+    },
+    "integrity": {
+      "$ref": "#/$defs/integrity"
+    },
+    "signature": {
+      "$ref": "#/$defs/signature"
+    }
+  },
+  "$defs": {
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel"
+      ],
+      "properties": {
+        "channel": {
+          "enum": [
+            "local",
+            "market"
+          ]
+        },
+        "publisherId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "review": {
+          "$ref": "#/$defs/review"
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "unreviewed",
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "reviewId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "policyVersion": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "digest"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "keyId",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "ed25519"
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "release": {
+            "properties": {
+              "channel": {
+                "const": "market"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "signature"
+        ],
+        "properties": {
+          "release": {
+            "required": [
+              "publisherId",
+              "publishedAt",
+              "review"
+            ],
+            "properties": {
+              "review": {
+                "required": [
+                  "status",
+                  "reviewId",
+                  "reviewedAt",
+                  "policyVersion"
+                ],
+                "properties": {
+                  "status": {
+                    "const": "approved"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "release": {
+            "properties": {
+              "channel": {
+                "const": "local"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "signature"
+          ]
+        }
+      }
+    }
+  ]
+}
