@@ -2,6 +2,8 @@
 
 本项目已使用 Flutter 开发 Android 和 Windows 客户端，云端计划采用 Node.js/TypeScript，尚无服务端工程。当前工作机是 Debian Linux，可在这里开发和测试共享 Dart 代码、生成 Android APK；Windows 构建、平台验证和安装包制作需在 Windows 主机完成。
 
+Windows 11 上使用 Android Studio 和 Android 模拟器，请按 [Windows 模拟器调试指南](docs/WINDOWS_ANDROID_DEVELOPMENT.md) 配置和运行。
+
 ## 已配置的工具
 
 - Flutter stable 3.47.5 / Dart 3.13.4，放在 `.tools/flutter`（本地 SDK，不提交）。
@@ -152,9 +154,9 @@ dart run build_runner build
 
 安装 Git、curl、unzip、Java 21 后，将 Flutter stable 克隆到 `.tools/flutter`。Android 命令行工具安装到 `.tools/android-sdk/cmdline-tools/latest`，使用 `sdkmanager --licenses` 接受许可证，再安装 `platform-tools`、`platforms;android-36`、`build-tools;36.0.0` 和 `ndk;28.2.13676358`。最后运行上面的环境脚本和 `flutter doctor -v`。Flutter 版本以项目的实际兼容性检查为准，升级时同时更新本文档。
 
-## Windows 构建
+## Windows 桌面构建
 
-Windows 上需要单独安装与项目兼容的 Flutter、Visual Studio 的 C++ 桌面开发组件以及 Windows SDK，然后运行 `flutter doctor -v`。项目的 `scripts/dev-env.sh` 是 Linux 环境脚本，Windows 使用自己的 SDK 配置。
+构建 Windows 桌面应用需要单独安装与项目兼容的 Flutter、Visual Studio 的 C++ 桌面开发组件以及 Windows SDK，然后运行 `flutter doctor -v`。仅调试 Android 时无需安装这些桌面构建组件。项目的 `scripts/dev-env.sh` 是 Linux 环境脚本，Windows 使用自己的 SDK 配置。
 
 在 Windows 主机进入 `client/` 后运行：
 

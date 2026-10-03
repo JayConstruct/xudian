@@ -1,13 +1,15 @@
 # VPS 与 WSL 开发配置
 
+源码已推送到 [JayConstruct/xudian](https://github.com/JayConstruct/xudian)，主分支为 `main`。Windows 11 本地使用 Android Studio 模拟器时，先按 [Windows 模拟器调试指南](WINDOWS_ANDROID_DEVELOPMENT.md) 操作；本文介绍 VPS/WSL 共用身边手机的远程调试方式。
+
 当前使用 Windows 电脑通过 USB 连接 Android 手机。建议 VPS 与 WSL 各有一份源码和 Linux SDK，通过 Git 交换修改，Windows 提供同一个 ADB server。两端都能运行 Flutter，但同一手机上的同一应用一次由一个 `flutter attach` 会话控制。
 
 2026-09-30 VPS 已通过 ADB 15037 与 VM Service 8181 转发连接手机 PHY120，attach 与无源码变更的热重载已验证；Windows/WSL 互切仍待验证。固定端口连接使用 `--no-dds`。APK 通过独立 HTTPS 下载并在手机旁安装，VPS 只使用 flutter attach，不经 SSH 传输 APK。单机远程调试基础见 [开发环境](../DEVELOPMENT.md#通过-ssh-远程预览-android)。
 
 ## 源码与工具
 
-- 建立 Git 远端（例如私有仓库），VPS 与 WSL 分别 clone。切换机器前 commit/push，另一端 pull；同时开发时使用独立分支，通过 merge 或 cherry-pick 合并。当前 VPS 工作区已初始化 `main` 分支，尚无提交或远端；首次连接需配置提交身份和仓库地址，并完成 GitHub 身份认证。
-- VPS 可继续使用 `/opt/my_app`；WSL 推荐 `~/projects/my_app`，将源码放在 WSL 的 Linux 文件系统，避免在 `/mnt/c` 上构建。
+- VPS 已配置 SSH 远端 `origin` 为 `git@github.com:JayConstruct/xudian.git`，本地 `main` 跟踪 `origin/main`。新 WSL 工作区可执行 `git clone git@github.com:JayConstruct/xudian.git ~/projects/xudian`，需在 WSL 单独配置 SSH 认证；也可使用 HTTPS 地址克隆。切换机器前 commit/push，另一端 `git pull --ff-only`；同时开发时使用独立分支，通过 merge 或 cherry-pick 合并。
+- VPS 可继续使用 `/opt/my_app`；WSL 推荐 `~/projects/xudian`，将源码放在 WSL 的 Linux 文件系统，避免在 `/mnt/c` 上构建。
 - 两端各自安装 Linux Flutter 3.47.5 / Dart 3.13.4、Java 21 和 Android SDK，布局沿用 `.tools/flutter` 与 `.tools/android-sdk`。`scripts/dev-env.sh` 根据自身位置计算项目根目录，不要求 WSL 使用 `/opt/my_app`；默认 Java 路径需在 WSL 存在或按实际安装调整。
 - 保持 SDK 与 `client/pubspec.lock` 一致。两端各自执行 `flutter pub get`；`.tools/`、`.cache/`、`client/build/`、`.dart_tool/` 和 `client/android/local.properties` 保持本机生成，不在机器之间复制或共享。
 - Android 调试安装使用相同的应用 ID。VPS 与 WSL 应使用同一开发用 debug keystore，并在私有渠道复制到各自的标准位置（通常为 `~/.android/debug.keystore`，若自定义 Android 用户目录则按实际位置配置）。不同签名无法覆盖已安装应用，卸载会清除应用数据；不要为切换开发机自动卸载。开发签名文件不进入源码仓库，正式发布签名单独管理。
@@ -53,7 +55,7 @@ networkingMode=mirrored
 Windows 上保持 ADB server 与 USB 手机连接。WSL 中检查连接：
 
 ```bash
-cd ~/projects/my_app
+cd ~/projects/xudian
 source scripts/dev-env.sh
 export ADB_SERVER_SOCKET=tcp:127.0.0.1:5037
 adb devices -l
@@ -80,7 +82,7 @@ ssh -N -p WSL_SSH_PORT -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o 
 WSL 执行：
 
 ```bash
-cd ~/projects/my_app
+cd ~/projects/xudian
 XUDIAN_ADB_PORT=5038 XUDIAN_VM_SERVICE_PORT=8182 bash scripts/preview-android.sh DEVICE_SERIAL
 ```
 

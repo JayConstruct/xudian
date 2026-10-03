@@ -1,0 +1,18 @@
+# Normalize text in Git and use LF across Linux and Windows.
+* text=auto eol=lf
+
+# Windows command scripts use CRLF when checked out.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh text eol=lf
+
+# Binary assets must not undergo line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.zip binary
+*.ttf binary
+*.woff2 binary

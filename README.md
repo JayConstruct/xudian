@@ -9,6 +9,7 @@
 | 入口 | 内容 |
 | --- | --- |
 | [开发环境](DEVELOPMENT.md) | SDK、测试、Android 构建与临时 APK 分享 |
+| [Windows 模拟器调试](docs/WINDOWS_ANDROID_DEVELOPMENT.md) | Windows 11 环境、Android Studio、模拟器与 Git 同步 |
 | [VPS 与 WSL 开发配置](docs/MULTI_MACHINE_DEVELOPMENT.md) | 源码同步、共享手机调试、端口与开发签名 |
 | [客户端说明](client/README.md) | 代码入口、数据流和当前实现边界 |
 | [目标与交接](PROJECT_HANDOFF.md) | 已确认产品选择、当前状态和后续交接 |
@@ -26,6 +27,8 @@ assets/brand/       品牌图标源文件与生成工具
 `.tools/` 与 `.cache/` 存放本机 SDK 和缓存。未来云端拟采用 TypeScript/Fastify + PostgreSQL，尚未创建 `server/` 工程。
 
 ## 快速开始
+
+源码仓库为 [JayConstruct/xudian](https://github.com/JayConstruct/xudian)，主分支为 `main`。Windows 11 本地调试请先按 [Windows 模拟器调试指南](docs/WINDOWS_ANDROID_DEVELOPMENT.md) 安装 SDK，克隆后用 Android Studio 打开 `client/`。
 
 使用当前 Linux 工作区已配置的 SDK，从项目根目录运行：
 
