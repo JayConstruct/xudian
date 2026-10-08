@@ -93,7 +93,7 @@ class AppRepositoryLinks extends ConsumerWidget {
       TextButton.icon(
         onPressed: onBrowseModules,
         icon: const Icon(Icons.public),
-        label: const Text('浏览并安装模块'),
+        label: const Text('打开模块商店'),
       ),
     ],
   );

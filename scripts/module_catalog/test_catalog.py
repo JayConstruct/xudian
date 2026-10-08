@@ -132,6 +132,29 @@ class PublicationTest(unittest.TestCase):
         self.assertEqual((root / 'scripts/module_catalog/catalog.py').read_bytes(),
                          (root / 'packages/catalog/tools/validate.py').read_bytes())
 
+    def test_optional_store_metadata_preserves_old_directories(self):
+        self.assertIs(self.catalog, validate_catalog(self.catalog))
+        self.assertNotIn('category', self.entry)
+        self.assertNotIn('featured', self.entry)
+        self.entry.update(category=' 学习 ', featured=True)
+        self.assertIs(self.catalog, validate_catalog(self.catalog))
+        self.entry.update(category='分' * 20, featured=False)
+        self.assertIs(self.catalog, validate_catalog(self.catalog))
+
+    def test_invalid_store_metadata_is_rejected(self):
+        for category in ('', ' \t\n ', None, 1, True, [], '分' * 21):
+            with self.subTest(category=category):
+                malformed = copy.deepcopy(self.catalog)
+                malformed['modules'][0]['category'] = category
+                with self.assertRaisesRegex(ValueError, 'invalid category'):
+                    validate_catalog(malformed)
+        for featured in (None, '', 'true', 0, 1, [], {}):
+            with self.subTest(featured=featured):
+                malformed = copy.deepcopy(self.catalog)
+                malformed['modules'][0]['featured'] = featured
+                with self.assertRaisesRegex(ValueError, 'invalid featured'):
+                    validate_catalog(malformed)
+
     def test_historical_package_is_kept_byte_identical(self):
         old_asset = self.publish()[0]
         old_data = old_asset.read_bytes()

@@ -43,9 +43,12 @@ class CatalogModule {
     this.author,
     this.repository,
     this.indexUrl,
+    this.category,
+    this.featured,
   );
-  final String id, name, description, author, repository;
+  final String id, name, description, author, repository, category;
   final Uri indexUrl;
+  final bool featured;
   factory CatalogModule.fromJson(Object? value) {
     final json = object(value, 'catalog module');
     final id = string(json['id'], 'module id');
@@ -57,6 +60,19 @@ class CatalogModule {
     );
     final indexUrl = Uri.parse(string(json['indexUrl'], 'indexUrl'));
     validateRepositoryUrl(indexUrl, repository);
+    var category = '其他';
+    if (json.containsKey('category')) {
+      final rawCategory = json['category'];
+      if (rawCategory is! String ||
+          rawCategory.trim().isEmpty ||
+          rawCategory.runes.length > 20) {
+        throw const FormatException('目录分类必须是 1 至 20 字的非空字符串');
+      }
+      category = rawCategory.trim();
+    }
+    if (json.containsKey('featured') && json['featured'] is! bool) {
+      throw const FormatException('目录推荐标记必须是布尔值');
+    }
     return CatalogModule._(
       id,
       string(json['name'], 'name'),
@@ -64,6 +80,8 @@ class CatalogModule {
       json['author'] as String? ?? '',
       repository,
       indexUrl,
+      category,
+      json['featured'] as bool? ?? false,
     );
   }
 }

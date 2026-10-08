@@ -212,7 +212,7 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                                 ),
                               ),
                         icon: const Icon(Icons.public),
-                        label: const Text('在线模块目录'),
+                        label: const Text('模块商店'),
                       ),
                     ],
                   ),

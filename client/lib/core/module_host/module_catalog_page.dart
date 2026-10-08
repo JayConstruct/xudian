@@ -415,6 +415,11 @@ class ModuleCatalogPage extends ConsumerStatefulWidget {
 class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
   ModuleCatalog? catalog;
   final indexes = <String, Future<ModuleVersionIndex>>{};
+  final loadedIndexes = <String, ModuleVersionIndex>{};
+  final indexFailures = <String, String>{};
+  final searchController = TextEditingController();
+  String category = '全部分类', filter = '全部';
+  int loadGeneration = 0;
   Map<String, InstalledCatalogModule> installations = {};
   String? failure, repository;
   bool loading = false, busy = false, offline = false;
@@ -422,6 +427,13 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
   void initState() {
     super.initState();
     Future.microtask(load);
+  }
+
+  @override
+  void dispose() {
+    loadGeneration++;
+    searchController.dispose();
+    super.dispose();
   }
 
   Future<ModuleVersionIndex> indexFor(CatalogModule item) =>
@@ -432,43 +444,75 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
                 .loadIndex(item, offline: offline),
       );
 
+  Future<void> loadIndexes(ModuleCatalog result, int generation) async {
+    await Future.wait([
+      for (final item in result.modules.values)
+        () async {
+          try {
+            final index = await indexFor(item);
+            if (mounted && generation == loadGeneration) {
+              setState(() => loadedIndexes[item.id] = index);
+            }
+          } catch (error) {
+            if (mounted && generation == loadGeneration) {
+              setState(() => indexFailures[item.id] = '$error');
+            }
+          }
+        }(),
+    ]);
+  }
+
   Future<void> load() async {
+    if (!mounted) return;
+    final generation = ++loadGeneration;
     indexes.clear();
+    loadedIndexes.clear();
+    indexFailures.clear();
     setState(() {
       loading = true;
       failure = null;
     });
     try {
+      final current = await _installed(widget.host);
+      if (!mounted || generation != loadGeneration) return;
+      setState(() => installations = current);
       final client = await ref.read(moduleCatalogClientProvider.future);
       final result = await client.loadCatalog(offline: offline);
-      final current = await _installed(widget.host);
-      if (mounted) {
-        setState(() {
-          catalog = result;
-          repository = client.repository;
-          installations = current;
-          if (client.loadedFromCache) offline = true;
-        });
-      }
+      if (!mounted || generation != loadGeneration) return;
+      setState(() {
+        catalog = result;
+        repository = client.repository;
+        installations = current;
+        if (client.loadedFromCache) offline = true;
+        if (!result.modules.values.any((item) => item.category == category)) {
+          category = '全部分类';
+        }
+      });
+      await loadIndexes(result, generation);
     } catch (error) {
-      if (mounted) setState(() => failure = '$error');
+      if (!mounted || generation != loadGeneration) return;
+      setState(() => failure = '$error');
       if (!offline) {
         try {
           final client = await ref.read(moduleCatalogClientProvider.future);
           final cached = await client.loadCatalog(offline: true);
-          if (mounted) {
-            setState(() {
-              catalog = cached;
-              repository = client.repository;
-              offline = true;
-            });
-          }
+          final current = await _installed(widget.host);
+          if (!mounted || generation != loadGeneration) return;
+          setState(() {
+            catalog = cached;
+            repository = client.repository;
+            installations = current;
+            offline = true;
+          });
+          await loadIndexes(cached, generation);
         } catch (_) {
-          /* The original network error remains visible. */
+          // The original network error remains visible.
         }
       }
     } finally {
-      if (mounted) setState(() => loading = false);
+      if (mounted && generation == loadGeneration) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -515,14 +559,14 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     await load();
   }
 
-  Future<void> install(String id) async {
+  Future<void> install(String id, {String? version}) async {
     setState(() => busy = true);
     try {
       await installResolvedModules(
         context,
         ref,
         widget.host,
-        requests: {id: 'any'},
+        requests: {id: version ?? 'any'},
         offline: offline,
       );
       final current = await _installed(widget.host);
@@ -567,8 +611,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
       }
       final item = catalog?.modules[id];
       if (item == null) throw StateError('目录未收录模块：$id');
-      final client = await ref.read(moduleCatalogClientProvider.future);
-      final index = await client.loadIndex(item, offline: offline);
+      final index = await indexFor(item);
       final versions = index.versions
           .where(
             (version) =>
@@ -672,83 +715,344 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     }
   }
 
+  CatalogVersion? latestCompatible(CatalogModule item) => loadedIndexes[item.id]
+      ?.versions
+      .where(
+        (version) =>
+            !Version.parse(version.version).isPreRelease &&
+            VersionConstraint.parse(version.manifest['hostApi'] as String)
+                .allows(Version(1, 8, 0)),
+      )
+      .firstOrNull;
+
+  bool canUpdate(CatalogModule item) {
+    final installed = installations[item.id];
+    final latest = latestCompatible(item);
+    return installed != null &&
+        latest != null &&
+        Version.parse(latest.version) >
+            Version.parse(installed.package.version);
+  }
+
+  bool matches(CatalogModule item) {
+    final query = searchController.text.trim().toLowerCase();
+    if (query.isNotEmpty &&
+        ![
+          item.name,
+          item.description,
+          item.author,
+          item.id,
+          item.repository,
+        ].any((value) => value.toLowerCase().contains(query))) {
+      return false;
+    }
+    if (category != '全部分类' && item.category != category) return false;
+    final installed = installations.containsKey(item.id);
+    return switch (filter) {
+      '推荐' => item.featured,
+      '已安装' => installed,
+      '未安装' => !installed,
+      '可更新' => canUpdate(item),
+      _ => true,
+    };
+  }
+
+  void clearFilters() {
+    setState(() {
+      searchController.clear();
+      category = '全部分类';
+      filter = '全部';
+    });
+  }
+
+  Widget moduleCard(CatalogModule item) {
+    final colors = Theme.of(context).colorScheme;
+    final installed = installations[item.id];
+    final latest = latestCompatible(item);
+    final hasIndex = loadedIndexes.containsKey(item.id);
+    final unavailable = indexFailures.containsKey(item.id);
+    final update = canUpdate(item);
+    final enableExisting = installed != null && !installed.enabled;
+    final action = enableExisting
+        ? '启用'
+        : update
+        ? '更新'
+        : installed == null
+        ? '安装'
+        : '已安装';
+    final status = installed != null
+        ? (installed.enabled ? '已启用' : '已停用')
+        : unavailable
+        ? '版本索引不可用'
+        : !hasIndex
+        ? '正在读取版本'
+        : latest == null
+        ? '没有兼容当前宿主的稳定版本'
+        : '可安装';
+    final version = installed == null
+        ? latest?.version ?? '版本待加载'
+        : update
+        ? '${installed.package.version} → ${latest!.version}'
+        : installed.package.version;
+    final actionable =
+        !busy &&
+        (enableExisting ||
+            (!unavailable && latest != null && (installed == null || update)));
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: busy ? null : () => details(item.id),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    item.name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (item.featured)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.secondaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '推荐',
+                        style: TextStyle(
+                          color: colors.onSecondaryContainer,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(item.description),
+              const SizedBox(height: 8),
+              Text(
+                '${item.category} · ${item.author.isEmpty ? '作者未提供' : item.author}',
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 4),
+              Text('版本：$version · $status'),
+              if (unavailable || (hasIndex && latest == null)) ...[
+                const SizedBox(height: 4),
+                Text(
+                  unavailable ? '请刷新重试，或在商店设置中检查目录仓库。' : '请等待兼容当前宿主的稳定版本。',
+                  style: TextStyle(color: colors.error),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonal(
+                    onPressed: actionable
+                        ? () => install(
+                            item.id,
+                            version: action == '更新'
+                                ? '>${installed!.package.version}'
+                                : null,
+                          )
+                        : null,
+                    child: Text(action),
+                  ),
+                  if (enableExisting && update)
+                    TextButton(
+                      onPressed: busy
+                          ? null
+                          : () => install(
+                              item.id,
+                              version: '>${installed.package.version}',
+                            ),
+                      child: const Text('更新'),
+                    ),
+                  TextButton(
+                    onPressed: busy ? null : () => details(item.id),
+                    child: const Text('查看详情'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('在线模块目录')),
-    body: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              onPressed: loading || busy ? null : configure,
-              icon: const Icon(Icons.settings_outlined),
-              label: const Text('修改目录仓库'),
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final modules =
+        (catalog?.modules.values ?? <CatalogModule>[]).where(matches).toList()
+          ..sort((a, b) {
+            final recommended = (b.featured ? 1 : 0).compareTo(
+              a.featured ? 1 : 0,
+            );
+            return recommended != 0 ? recommended : a.name.compareTo(b.name);
+          });
+    final categories =
+        (catalog?.modules.values.map((item) => item.category).toSet() ??
+                <String>{})
+            .toList()
+          ..sort();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('模块商店'),
+        actions: [
+          IconButton(
+            tooltip: '刷新 / 重试',
+            onPressed: loading || busy ? null : load,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text('发现适合你的模块', style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          const Text('选择所需功能，商店会准备依赖模块并在安装前统一确认。'),
+          const SizedBox(height: 16),
+          TextField(
+            controller: searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: '搜索名称、作用、作者或模块 ID',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: '清空搜索',
+                      onPressed: () => setState(() => searchController.clear()),
+                      icon: const Icon(Icons.close),
+                    ),
+              border: const OutlineInputBorder(),
             ),
-            OutlinedButton.icon(
-              onPressed: loading || busy ? null : load,
-              icon: const Icon(Icons.refresh),
-              label: const Text('刷新 / 重试'),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final value in ['全部', '推荐', '已安装', '未安装', '可更新'])
+                ChoiceChip(
+                  label: Text(value),
+                  selected: filter == value,
+                  onSelected: (_) => setState(() => filter = value),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final value in ['全部分类', ...categories])
+                ChoiceChip(
+                  label: Text(value),
+                  selected: category == value,
+                  onSelected: (_) => setState(() => category = value),
+                ),
+            ],
+          ),
+          if (offline) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text('正在浏览缓存。离线安装需要全部模块包已缓存；可在商店设置中恢复联网。'),
             ),
           ],
-        ),
-        if (repository != null) SelectableText('目录：$repository'),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('离线浏览缓存'),
-          value: offline,
-          onChanged: loading || busy
-              ? null
-              : (value) {
-                  setState(() => offline = value);
-                  load();
-                },
-        ),
-        if (loading || busy) const LinearProgressIndicator(),
-        if (failure != null)
-          SelectableText(
-            failure!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          const SizedBox(height: 12),
+          if (loading || busy) const LinearProgressIndicator(),
+          if (failure != null) ...[
+            const SizedBox(height: 8),
+            SelectableText(failure!, style: TextStyle(color: colors.error)),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: loading || busy ? null : load,
+                icon: const Icon(Icons.refresh),
+                label: const Text('刷新 / 重试'),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            '找到 ${modules.length} 个模块 · 目录共 ${catalog?.modules.length ?? 0} 个',
+            style: Theme.of(context).textTheme.labelLarge,
           ),
-        if (catalog != null && catalog!.modules.isEmpty) const Text('目录中没有模块'),
-        for (final item in catalog?.modules.values ?? <CatalogModule>[])
-          Card(
-            child: FutureBuilder<ModuleVersionIndex>(
-              future: indexFor(item),
-              builder: (context, snapshot) {
-                final installed = installations[item.id];
-                final latest = snapshot.data?.versions
-                    .where(
-                      (version) => !Version.parse(version.version).isPreRelease,
-                    )
-                    .firstOrNull;
-                return ModuleSummaryTile(
-                  name: item.name,
-                  description: item.description,
-                  version:
-                      installed?.package.version ?? latest?.version ?? '版本待加载',
-                  status: installed != null
-                      ? (installed.enabled ? '已启用' : '已停用')
-                      : snapshot.hasError
-                      ? '版本索引不可用'
-                      : offline
-                      ? '缓存目录'
-                      : '可安装',
-                  onTap: busy ? null : () => details(item.id),
-                  trailing: IconButton(
-                    tooltip: '解析依赖并安装',
-                    onPressed: busy ? null : () => install(item.id),
-                    icon: const Icon(Icons.download_outlined),
+          if (catalog != null && catalog!.modules.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text('目录中没有模块，请在商店设置中检查目录仓库。'),
+            )
+          else if (catalog != null && modules.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    loading && filter == '可更新' ? '正在检查模块版本…' : '没有符合筛选条件的模块',
                   ),
-                );
-              },
+                  const SizedBox(height: 8),
+                  const Text('试试其他关键词、分类或安装状态。'),
+                  TextButton(
+                    onPressed: clearFilters,
+                    child: const Text('清除筛选'),
+                  ),
+                ],
+              ),
+            ),
+          for (final item in modules) moduleCard(item),
+          const SizedBox(height: 16),
+          Card(
+            child: ExpansionTile(
+              title: const Text('商店设置'),
+              leading: const Icon(Icons.settings_outlined),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (repository != null) SelectableText('目录：$repository'),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: loading || busy ? null : configure,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('修改目录仓库'),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('离线浏览缓存'),
+                  value: offline,
+                  onChanged: loading || busy
+                      ? null
+                      : (value) {
+                          setState(() => offline = value);
+                          load();
+                        },
+                ),
+                const Text('安装前检查模块身份、摘要、权限与完整依赖；摘要校验不代表发布者签名。'),
+              ],
             ),
           ),
-        const SizedBox(height: 16),
-        const Text('选择模块后解析完整依赖链。离线模式只安装已完整缓存的模块包。'),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }

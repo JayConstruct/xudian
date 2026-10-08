@@ -6,6 +6,8 @@
 
 目录使用 `catalogFormat: 1` 和 `modules` 数组。每个条目包含 `id`、`name`、`description`、`author`、`repository`（`owner/repo`）及 `indexUrl`。客户端默认目录地址为 `https://raw.githubusercontent.com/JayConstruct/xudian-modules/main/catalog.json`，支持更换目录仓库。
 
+模块商店支持目录条目的可选 `category` 和 `featured`。`category` 是长度 1 至 20 字、不能全部为空白的字符串，客户端去除首尾空白后显示；缺省分类为“其他”。`featured` 必须是布尔值，缺省为 `false`，用于商店的推荐区域。分类和推荐由目录维护者编辑，可直接通过目录 PR 更新；它们不改变模块包、版本索引、官方身份或签名信任，也不表示安全审查结论。未含这些字段的现有目录继续兼容。
+
 ```json
 {
   "catalogFormat": 1,
@@ -14,6 +16,8 @@
     "name": "正方教务导入（通用）",
     "description": "通过浏览器采集正方教务课表，再导入大学课表。",
     "author": "JayConstruct",
+    "category": "学习",
+    "featured": true,
     "repository": "JayConstruct/xudian",
     "indexUrl": "https://raw.githubusercontent.com/JayConstruct/xudian/module-catalog/module-index/app.import.zhengfang.json"
   }]

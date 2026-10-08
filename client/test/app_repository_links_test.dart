@@ -152,7 +152,7 @@ void main() {
       launch: (_) async => true,
       onBrowseModules: () => opened++,
     );
-    await tester.tap(find.text('浏览并安装模块'));
+    await tester.tap(find.text('打开模块商店'));
     await tester.pumpAndSettle();
     expect(opened, 1);
     expect(tester.takeException(), isNull);
@@ -184,8 +184,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     }
-    await tester.ensureVisible(find.text('浏览并安装模块'));
-    await tester.tap(find.text('浏览并安装模块'));
+    await tester.ensureVisible(find.text('打开模块商店'));
+    await tester.tap(find.text('打开模块商店'));
     await tester.pumpAndSettle();
     expect(launched, [Uri.parse(_projectUrl), Uri.parse(_modulesUrl)]);
     expect(opened, 1);
@@ -272,32 +272,50 @@ void main() {
         await tester.pump(const Duration(milliseconds: 20));
       }
       await tester.scrollUntilVisible(
-        find.text('浏览并安装模块'),
+        find.text('打开模块商店'),
         200,
         scrollable: find.byType(Scrollable).last,
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('浏览并安装模块'));
+      await tester.ensureVisible(find.text('打开模块商店'));
       await tester.pumpAndSettle();
-      await tester.runAsync(() => tester.tap(find.text('浏览并安装模块')));
-      for (var i = 0; i < 24; i++) {
+      await tester.runAsync(() => tester.tap(find.text('打开模块商店')));
+      for (var i = 0; i < 48; i++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),
         );
         await tester.pump(const Duration(milliseconds: 20));
       }
       expect(find.byType(ModuleCatalogPage), findsOneWidget);
-      expect(find.text('在线模块目录'), findsOneWidget);
+      expect(find.text('模块商店'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('商店设置'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('商店设置'));
+      await tester.pumpAndSettle();
       expect(find.text('目录：$repository'), findsOneWidget);
       expect(requested, contains(catalogUrl));
       for (final name in ['拾光教务导入兼容', '正方教务导入（通用）', '大学课表']) {
+        tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position
+            .jumpTo(0);
+        await tester.pump();
+        await tester.enterText(find.byType(TextField), name);
+        await tester.pumpAndSettle();
+        final moduleName = find.descendant(
+          of: find.byType(Card),
+          matching: find.text(name),
+        );
         await tester.scrollUntilVisible(
-          find.text(name),
+          moduleName,
           160,
-          scrollable: find.byType(Scrollable).last,
+          scrollable: find.byType(Scrollable).first,
         );
         await tester.pumpAndSettle();
-        expect(find.text(name), findsOneWidget);
+        expect(moduleName, findsOneWidget);
         expect(tester.takeException(), isNull);
       }
       expect(
