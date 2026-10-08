@@ -1,0 +1,49 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.ui.examples",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.1.1",
+      "manifest": {
+        "id": "app.ui.examples",
+        "name": "UI 示例",
+        "version": "1.1.1",
+        "hostApi": "^1.7.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui"
+        ],
+        "dependencies": [],
+        "defaultInstall": false,
+        "description": "浏览模块界面组件、布局和交互示例。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.ui.examples-1.1.1.xmodule",
+      "size": 7148,
+      "sha256": "6d070e2eca0bc11fbd59a89ab3ab057e51414fca2f315d4bcc98f16a6ab306ba",
+      "signature": null
+    },
+    {
+      "version": "1.1.0",
+      "manifest": {
+        "id": "app.ui.examples",
+        "name": "UI 示例",
+        "version": "1.1.0",
+        "hostApi": "^1.7.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui"
+        ],
+        "dependencies": [],
+        "defaultInstall": false
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.ui.examples-1.1.0.xmodule",
+      "size": 7075,
+      "sha256": "d7ed8d57533730ca2aadfb748f9f95e226ce12a02534e85564e2dc6c71352e62",
+      "signature": null
+    }
+  ]
+}

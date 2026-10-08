@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../security/capability_registry.dart';
 import '../ui/ui_registry.dart';
 import '../ui/ui_slot.dart';
+import '../ui/ui_composition.dart';
 import 'app_module.dart';
 import 'builtin_module_registration.dart';
 
@@ -78,6 +79,10 @@ class ModuleRegistry extends ChangeNotifier {
   void restoreBuiltinStates(Map<String, bool> states) =>
       _apply(_builtinCandidate(states));
 
+  void replaceExtensions(Iterable<AppModule> modules) {
+    _apply([..._modules.where((m) => isBuiltin(m.manifest.id)), ...modules]);
+  }
+
   void addOrReplace(AppModule module) {
     validateAddition(module);
     final next = List<AppModule>.of(_modules);
@@ -136,7 +141,7 @@ class ModuleRegistry extends ChangeNotifier {
     ui.clear();
     for (final slot in UiSlot.values) {
       for (final registration in nextUi.forSlot(slot)) {
-        ui.register(registration);
+        ui.register(registration, moduleId: nextUi.ownerOf(registration));
       }
     }
     if (notify) notifyListeners();
@@ -193,7 +198,40 @@ class ModuleRegistry extends ChangeNotifier {
         );
       }
       for (final registration in module.ui) {
-        result.register(registration);
+        final owner = switch (registration) {
+          UiPageRegistration() => registration.moduleId,
+          UiEntryRegistration() => registration.moduleId,
+          _ => module.manifest.id,
+        };
+        if (owner != module.manifest.id) {
+          throw StateError(
+            'UI registration cannot impersonate another module: $owner',
+          );
+        }
+        if (registration is UiPageRegistration) {
+          final slotIds = <String>{};
+          for (final slot in registration.slots) {
+            if (slot.id.isEmpty ||
+                !slotIds.add(slot.id) ||
+                (slot.capacity != null && slot.capacity! < 1)) {
+              throw StateError(
+                'Invalid or duplicate page slot: ${registration.id}/${slot.id}',
+              );
+            }
+          }
+        }
+        if ((registration is UiPageRegistration &&
+                    registration.slots.isNotEmpty ||
+                registration is UiEntryRegistration &&
+                    (registration.content ||
+                        registration.defaultMount.placement ==
+                            UiPlacement.page)) &&
+            !module.manifest.requiresCapabilities.contains('ui.composition')) {
+          throw StateError(
+            'Module ${module.manifest.id} must declare ui.composition',
+          );
+        }
+        result.register(registration, moduleId: module.manifest.id);
       }
     }
     return result;

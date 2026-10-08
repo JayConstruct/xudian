@@ -1,0 +1,45 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "app.views.today",
+    "name": "今天",
+    "version": "1.1.1",
+    "hostApi": "^1.6.0",
+    "dataVersion": 1,
+    "permissions": [
+      "ui",
+      "clock.today",
+      "services.query:app.tasks/task.list@1",
+      "services.query:app.tasks/task.get@1",
+      "services.query:app.tasks/project.list@1",
+      "services.command:app.tasks/project.create@1",
+      "services.command:app.tasks/task.create@1",
+      "services.command:app.tasks/task.updateFields@1",
+      "services.command:app.tasks/task.setCompleted@1",
+      "extensions.command:app.tasks/tasks"
+    ],
+    "dependencies": [
+      "app.tasks"
+    ],
+    "defaultInstall": true,
+    "description": "查看今天的任务和计划。",
+    "author": "JayConstruct"
+  },
+  "entryPoint": "main.js",
+  "pages": [
+    {
+      "id": "app.views.today.home",
+      "title": "今天",
+      "icon": "today",
+      "handler": "render",
+      "entry": {
+        "id": "app.views.today.home",
+        "opening": "workspace",
+        "placement": "main",
+        "order": 0
+      }
+    }
+  ],
+  "collections": [],
+  "services": []
+}

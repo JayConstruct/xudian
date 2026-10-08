@@ -1,0 +1,78 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "app.ui.examples",
+    "name": "UI 示例",
+    "version": "1.1.1",
+    "hostApi": "^1.7.0",
+    "dataVersion": 1,
+    "permissions": [
+      "ui"
+    ],
+    "dependencies": [],
+    "defaultInstall": false,
+    "description": "浏览模块界面组件、布局和交互示例。",
+    "author": "JayConstruct"
+  },
+  "entryPoint": "main.js",
+  "collections": [],
+  "services": [],
+  "pages": [
+    {
+      "id": "app.ui.examples.page",
+      "title": "UI 示例",
+      "handler": "render",
+      "entry": {
+        "id": "app.ui.examples.entry",
+        "opening": "detail",
+        "placement": "hidden"
+      }
+    },
+    {
+      "id": "app.ui.examples.composition",
+      "title": "页面槽位示例",
+      "kind": "container",
+      "handler": "render",
+      "retainPosition": true,
+      "entry": {
+        "id": "app.ui.examples.compositionEntry",
+        "opening": "detail",
+        "placement": "hidden"
+      },
+      "slots": [
+        {
+          "id": "actions",
+          "label": "本模块入口",
+          "kind": "entries"
+        },
+        {
+          "id": "tabs",
+          "label": "公开页签",
+          "kind": "tabs",
+          "public": true
+        },
+        {
+          "id": "sections",
+          "label": "公开纵向内容",
+          "kind": "sections",
+          "public": true
+        }
+      ]
+    },
+    {
+      "id": "app.ui.examples.local",
+      "title": "局部位置示例",
+      "handler": "render",
+      "retainPosition": true,
+      "entry": {
+        "id": "app.ui.examples.localEntry",
+        "label": "本模块滚动示例",
+        "opening": "detail",
+        "content": true,
+        "placement": "page",
+        "targetPageId": "app.ui.examples.composition",
+        "slotId": "tabs"
+      }
+    }
+  ]
+}

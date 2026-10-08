@@ -1,0 +1,71 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.views.projects",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.1.1",
+      "manifest": {
+        "id": "app.views.projects",
+        "name": "项目",
+        "version": "1.1.1",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.query:app.tasks/task.list@1",
+          "services.query:app.tasks/task.get@1",
+          "services.query:app.tasks/project.list@1",
+          "services.command:app.tasks/project.create@1",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/task.updateFields@1",
+          "services.command:app.tasks/task.setCompleted@1",
+          "extensions.command:app.tasks/tasks"
+        ],
+        "dependencies": [
+          "app.tasks"
+        ],
+        "defaultInstall": true,
+        "description": "按项目查看任务与项目进度。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.views.projects-1.1.1.xmodule",
+      "size": 2959,
+      "sha256": "02e28823b3a05e2ea5335f1bbda432a346f6ecd27cdf47283f318183c8442911",
+      "signature": null
+    },
+    {
+      "version": "1.1.0",
+      "manifest": {
+        "id": "app.views.projects",
+        "name": "项目",
+        "version": "1.1.0",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.query:app.tasks/task.list@1",
+          "services.query:app.tasks/task.get@1",
+          "services.query:app.tasks/project.list@1",
+          "services.command:app.tasks/project.create@1",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/task.updateFields@1",
+          "services.command:app.tasks/task.setCompleted@1",
+          "extensions.command:app.tasks/tasks"
+        ],
+        "dependencies": [
+          "app.tasks"
+        ],
+        "defaultInstall": true
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.views.projects-1.1.0.xmodule",
+      "size": 2885,
+      "sha256": "264d46591fd8b75cb695b239c872fe8c3ebfa0eb79996da4795d57dab92edc6b",
+      "signature": null
+    }
+  ]
+}

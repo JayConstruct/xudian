@@ -1,10 +1,13 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import '../core/ui/app_destination.dart';
+import '../core/ui/ui_annotation.dart';
+import '../core/ui/ui_component.dart';
+import 'toolbar_size_reporter.dart';
 import 'design_system.dart';
+import 'frosted_toolbar_surface.dart';
 
 class MobileBottomDock extends StatelessWidget {
   const MobileBottomDock({
@@ -14,6 +17,12 @@ class MobileBottomDock extends StatelessWidget {
     required this.onSelected,
     required this.showNavigation,
     this.input,
+    this.visibleCount,
+    this.hasMore,
+    this.moreSelected = false,
+    this.annotate = false,
+    this.entryModuleIds = const {},
+    this.onSizeChanged,
   });
 
   final List<AppDestination> destinations;
@@ -21,6 +30,12 @@ class MobileBottomDock extends StatelessWidget {
   final ValueChanged<int> onSelected;
   final bool showNavigation;
   final Widget? input;
+  final int? visibleCount;
+  final bool? hasMore;
+  final bool moreSelected;
+  final bool annotate;
+  final Map<String, String> entryModuleIds;
+  final ValueChanged<Size>? onSizeChanged;
 
   static double navigationHeight(BuildContext context) =>
       60 + math.max(0, MediaQuery.textScalerOf(context).scale(12) - 12);
@@ -40,94 +55,87 @@ class MobileBottomDock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
-    final highContrast = MediaQuery.highContrastOf(context);
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 220);
-    final shape = AppDesign.smoothShape(radius: AppDesign.dockRadius);
-    final surface = Color.alphaBlend(
-      scheme.primary.withValues(alpha: dark ? 0.035 : 0.015),
-      scheme.surface,
-    );
-
-    return DecoratedBox(
-      key: const ValueKey('mobile-bottom-dock'),
-      decoration: ShapeDecoration(
-        shape: shape,
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.24 : 0.075),
-            blurRadius: 28,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRSuperellipse(
-        borderRadius: shape.borderRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: DecoratedBox(
-            decoration: ShapeDecoration(
-              shape: shape.copyWith(
-                side: BorderSide(
-                  color: highContrast
-                      ? scheme.onSurface.withValues(alpha: 0.35)
-                      : Colors.white.withValues(alpha: dark ? 0.14 : 0.8),
-                ),
-              ),
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  surface.withValues(alpha: highContrast ? 0.98 : 0.87),
-                  surface.withValues(alpha: highContrast ? 0.98 : 0.74),
-                ],
-              ),
-            ),
-            child: Material(
-              type: MaterialType.transparency,
-              child: _DockSizeTransition(
-                duration: duration,
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (input != null)
-                        SizedBox(height: inputHeight(context), child: input),
-                      if (input != null && showNavigation)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 3,
-                          ),
-                          child: SizedBox(
-                            height: 1,
-                            child: ColoredBox(
-                              color: scheme.onSurface.withValues(alpha: 0.065),
-                            ),
-                          ),
-                        ),
-                      if (showNavigation) _navigation(context, duration),
-                    ],
+    final navigation = showNavigation
+        ? _navigation(context, duration)
+        : const SizedBox.shrink();
+    final input = this.input == null
+        ? const SizedBox.shrink()
+        : SizedBox(height: inputHeight(context), child: this.input);
+    final fallback = FrostedToolbarSurface(
+      surfaceKey: const ValueKey('mobile-bottom-dock'),
+      child: _DockSizeTransition(
+        duration: duration,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (this.input != null) input,
+              if (this.input != null && showNavigation)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 3,
+                  ),
+                  child: SizedBox(
+                    height: 1,
+                    child: ColoredBox(
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: .065),
+                    ),
                   ),
                 ),
-              ),
-            ),
+              if (showNavigation) navigation,
+            ],
           ),
         ),
+      ),
+    );
+    return ToolbarSizeReporter(
+      onSizeChanged: onSizeChanged,
+      child: UiComponent(
+        ref: 'ui.chrome.bottomNav@1',
+        props: {
+          'selectedIndex': selectedIndex,
+          'showNavigation': showNavigation,
+          'hasInput': this.input != null,
+          'moreSelected': moreSelected,
+          'destinations': [
+            for (var i = 0; i < destinations.length; i++)
+              {
+                'id': destinations[i].id,
+                'label': destinations[i].label,
+                'index': i,
+                'selected': !moreSelected && i == selectedIndex,
+              },
+          ],
+        },
+        slots: {'navigation': navigation, 'input': input},
+        events: {
+          'select': (value) {
+            if (value is int && value >= 0 && value < destinations.length) {
+              onSelected(value);
+            }
+          },
+          'more': (_) => onSelected(destinations.length),
+        },
+        fallback: fallback,
       ),
     );
   }
 
   Widget _navigation(BuildContext context, Duration duration) {
-    final visibleCount = math.min(4, destinations.length);
-    final hasMore = destinations.length > visibleCount;
+    final visibleCount = (this.visibleCount ?? math.min(4, destinations.length))
+        .clamp(0, destinations.length);
+    final hasMore = this.hasMore ?? destinations.length > visibleCount;
     final count = visibleCount + (hasMore ? 1 : 0);
-    final selected = math.min(selectedIndex, visibleCount);
+    if (count == 0) return const SizedBox.shrink();
+    final selected = moreSelected
+        ? visibleCount
+        : (selectedIndex < 0 ? -1 : math.min(selectedIndex, visibleCount));
     final scheme = Theme.of(context).colorScheme;
 
     return SizedBox(
@@ -138,43 +146,67 @@ class MobileBottomDock extends StatelessWidget {
           final itemWidth = constraints.maxWidth / count;
           return Stack(
             children: [
-              AnimatedPositionedDirectional(
-                key: const ValueKey('mobile-navigation-indicator'),
-                duration: duration,
-                curve: Curves.easeOutCubic,
-                start: selected * itemWidth + 4,
-                top: 3,
-                bottom: 3,
-                width: itemWidth - 8,
-                child: DecoratedBox(
-                  decoration: ShapeDecoration(
-                    shape: AppDesign.smoothShape(
-                      radius: AppDesign.selectionRadius,
-                      side: BorderSide(
-                        color: scheme.primary.withValues(alpha: 0.07),
+              if (selected >= 0 && selected < count)
+                PositionedDirectional(
+                  start: 4,
+                  top: 3,
+                  bottom: 3,
+                  width: itemWidth - 8,
+                  child: AnimatedSlide(
+                    duration: duration,
+                    curve: Curves.easeOutCubic,
+                    offset: Offset(
+                      selected *
+                          itemWidth /
+                          (itemWidth - 8) *
+                          (Directionality.of(context) == TextDirection.rtl
+                              ? -1
+                              : 1),
+                      0,
+                    ),
+                    child: RepaintBoundary(
+                      key: const ValueKey('mobile-navigation-indicator'),
+                      child: DecoratedBox(
+                        decoration: ShapeDecoration(
+                          shape: AppDesign.smoothShape(
+                            radius: AppDesign.selectionRadius,
+                            side: BorderSide(
+                              color: scheme.primary.withValues(alpha: 0.07),
+                            ),
+                          ),
+                          color: scheme.primaryContainer.withValues(
+                            alpha: 0.78,
+                          ),
+                        ),
                       ),
                     ),
-                    color: scheme.primaryContainer.withValues(alpha: 0.78),
                   ),
                 ),
-              ),
               Row(
                 children: [
                   for (var i = 0; i < count; i++)
                     Expanded(
-                      child: _DockDestination(
-                        key: ValueKey(
-                          i < visibleCount ? destinations[i].id : 'more',
+                      child: _annotated(
+                        i < visibleCount
+                            ? destinations[i].id
+                            : 'app.shell.more',
+                        i < visibleCount ? destinations[i].label : '更多',
+                        _DockDestination(
+                          key: ValueKey(
+                            i < visibleCount ? destinations[i].id : 'more',
+                          ),
+                          label: i < visibleCount
+                              ? destinations[i].label
+                              : '更多',
+                          icon: i < visibleCount
+                              ? (i == selected
+                                    ? destinations[i].selectedIcon
+                                    : destinations[i].icon)
+                              : Icons.more_horiz_rounded,
+                          selected: i == selected,
+                          duration: duration,
+                          onTap: () => onSelected(i),
                         ),
-                        label: i < visibleCount ? destinations[i].label : '更多',
-                        icon: i < visibleCount
-                            ? (i == selected
-                                  ? destinations[i].selectedIcon
-                                  : destinations[i].icon)
-                            : Icons.more_horiz_rounded,
-                        selected: i == selected,
-                        duration: duration,
-                        onTap: () => onSelected(i),
                       ),
                     ),
                 ],
@@ -185,6 +217,17 @@ class MobileBottomDock extends StatelessWidget {
       ),
     );
   }
+
+  Widget _annotated(String id, String label, Widget child) => annotate
+      ? UiAnnotation(
+          id: id,
+          name: label,
+          moduleId: entryModuleIds[id] ?? 'app.core.system',
+          slot: 'main',
+          purpose: '主导航入口',
+          child: child,
+        )
+      : child;
 }
 
 /// A zero-duration AnimatedSize can finish during layout when preferences

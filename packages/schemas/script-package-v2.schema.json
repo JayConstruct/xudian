@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "序点 .xmodule 包清单 v2",
+  "type": "object",
+  "required": [
+    "packageFormat",
+    "release",
+    "files"
+  ],
+  "properties": {
+    "packageFormat": {
+      "const": 2
+    },
+    "release": {
+      "type": "object",
+      "required": [
+        "channel"
+      ],
+      "properties": {
+        "channel": {
+          "enum": [
+            "local",
+            "market"
+          ]
+        },
+        "publisherId": {
+          "type": "string"
+        },
+        "publishedAt": {
+          "type": "string"
+        },
+        "review": {
+          "type": "object"
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "size",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2097152
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "signature": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "keyId",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "ed25519"
+        },
+        "keyId": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

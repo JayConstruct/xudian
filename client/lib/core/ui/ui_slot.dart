@@ -7,4 +7,5 @@ enum UiSlot {
   inputActions,
   projectViews,
   settingsSections,
+  globalOverlay,
 }

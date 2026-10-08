@@ -4,6 +4,8 @@
 
 Windows 11 上使用 Android Studio 和 Android 模拟器，请按 [Windows 模拟器调试指南](docs/WINDOWS_ANDROID_DEVELOPMENT.md) 配置和运行。
 
+当前 WSL 工作区通过 Linux 版 `adb` 直连 Windows ADB server（`export ADB_SERVER_SOCKET=tcp:127.0.0.1:5037`），后续设备查询、APK 安装与启动不通过 PowerShell、`cmd.exe` 或 `adb.exe` 调用 Windows ADB 客户端。2026-10-04 已验证模拟器连接和已安装包查询；命令及本机 SDK/APK 状态见 [WSL 原生 ADB](docs/MULTI_MACHINE_DEVELOPMENT.md#wsl-原生-adb连接与安装-apk)。下列项目内 SDK 配置与构建记录来自既有构建环境，不代表当前 WSL 已具备这些 SDK 或构建产物。
+
 ## 已配置的工具
 
 - Flutter stable 3.47.5 / Dart 3.13.4，放在 `.tools/flutter`（本地 SDK，不提交）。
@@ -35,7 +37,20 @@ flutter build apk --debug --no-pub
 
 `--no-pub` 适用于已完成 `flutter pub get` 的环境；修改 `pubspec.yaml` 后先更新依赖。当前工程没有 Linux 桌面运行目标；`flutter run` 需要可用的 Android 设备/模拟器，或在 Windows 主机连接 Windows 桌面目标。
 
+## 动画性能验证
+
+底栏指示器使用固定布局和 `AnimatedSlide` 绘制位移；页面、底栏及其交互内容通过重绘边界隔离。`client/test/mobile_bottom_dock_test.dart` 覆盖左右方向的逐帧布局检查、快速切换、减少动画、更多入口和高对比模式。定向回归命令：
+
+```bash
+cd client
+flutter test --no-pub test/mobile_bottom_dock_test.dart test/task_home_test.dart test/settings_test.dart
+```
+
+Widget 测试验证动画行为及布局回归，不代表设备实际帧率。调试包和模拟器适合功能开发；评估流畅度时应对比 release 包，并在 Android 真机使用 profile 模式分析 UI 与 raster 帧耗时。首次启动、首次进入页面与预热后的连续操作分别观察，不将模拟器或 debug 模式的结果当作真机帧率基准。
+
 ## 当前验证基线
+
+- 2026-10-04 底栏动画优化：`flutter analyze --no-pub` 无问题，`flutter test --no-pub` 90 项全部通过（新增 6 项）。Android x86_64 debug 与 release APK 构建通过；release 以 versionCode 3 在 `emulator-5554` 同签名覆盖安装，未卸载或清除本次优化前的数据。动画逐帧布局测试不代表实测 FPS，仍需真机 profile 验证。
 
 - 2026-10-03 查询与字段一致性优化：`flutter analyze --no-pub` 无问题，`flutter test --no-pub` 84 项全部通过（本轮新增 12 项），Android release 分架构 APK 构建通过。验证包含 SQL/Dart 过滤语义一致性、1 万条额外任务下的按需返回行数与单次查询、字段/模块启停订阅刷新、跨日/恢复前台与订阅释放、字段类型/权限校验、批量回滚、模板失败事件抑制和规则循环保护。此数据规模用例验证查询行为，不代表真机耗时或帧率基准；Windows 与真机运行尚未验证。
 
@@ -168,3 +183,5 @@ flutter build windows --release
 ```
 
 构建后应同时分发生成的可执行文件及其依赖资源；当前工程尚未定义安装包流程。Windows 安全凭据、文件导入、键盘操作与窗口缩放需在真实 Windows 环境验证，Linux 不能直接验证 Windows 安装包。
+
+模块开发与原生引擎构建见 [MODULE_HOST.md](docs/MODULE_HOST.md) 和 [MODULE_SDK.md](docs/MODULE_SDK.md)。提交前执行 `python3 scripts/module_host/build_packages.py --defaults` 与 `python3 scripts/module_host/check_architecture.py`，并运行 Flutter 静态检查和测试。

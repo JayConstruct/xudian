@@ -1,0 +1,382 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "app.schedule",
+    "name": "大学课表",
+    "version": "1.6.2",
+    "hostApi": "^1.6.0",
+    "dataVersion": 1,
+    "permissions": [
+      "ui",
+      "files",
+      "clock.today"
+    ],
+    "dependencies": [],
+    "description": "管理学期、作息、课程、调课记录与多个课表，支持导入和备份。",
+    "author": "JayConstruct"
+  },
+  "entryPoint": "main.js",
+  "collections": [
+    {
+      "id": "timetables",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "indexes": []
+    },
+    {
+      "id": "courses",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "indexes": [
+        {
+          "id": "timetable",
+          "fields": [
+            "timetableId"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "meetings",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "indexes": [
+        {
+          "id": "timetable",
+          "fields": [
+            "timetableId"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "occurrenceChanges",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "indexes": [
+        {
+          "id": "timetable",
+          "fields": [
+            "timetableId"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "importSources",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "indexes": [
+        {
+          "id": "timetable",
+          "fields": [
+            "timetableId"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "importBatches",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "indexes": [
+        {
+          "id": "timetable",
+          "fields": [
+            "timetableId"
+          ]
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "app.schedule.home",
+      "title": "课表",
+      "icon": "calendar",
+      "handler": "render",
+      "entry": {
+        "id": "app.schedule.home",
+        "opening": "workspace",
+        "placement": "main"
+      },
+      "slots": [
+        {
+          "id": "importers",
+          "label": "教务导入",
+          "kind": "entries",
+          "public": true
+        }
+      ],
+      "retainPosition": true,
+      "headerMode": "contributed"
+    },
+    {
+      "id": "app.schedule.settings",
+      "title": "课表设置",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true,
+      "entry": {
+        "id": "app.schedule.settings.entry",
+        "opening": "detail",
+        "placement": "settings"
+      }
+    },
+    {
+      "id": "app.schedule.semester",
+      "title": "学期设置",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.schedule.periods",
+      "title": "作息设置",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.schedule.display",
+      "title": "显示设置",
+      "icon": "settings",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.schedule.courses",
+      "title": "课程管理",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.schedule.changes",
+      "title": "调课记录",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.schedule.imports",
+      "title": "导入与备份",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true,
+      "slots": [
+        {
+          "id": "importers",
+          "label": "教务导入",
+          "kind": "entries",
+          "public": true
+        }
+      ]
+    },
+    {
+      "id": "app.schedule.timetables",
+      "title": "课表管理",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.schedule.today",
+      "title": "今日课程",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.schedule.occurrence",
+      "title": "课程详情",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true
+    }
+  ],
+  "services": [
+    {
+      "id": "schedule.query.timetables",
+      "major": 1,
+      "handler": "queryTimetables",
+      "kind": "query",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "schedule.query.week",
+      "major": 1,
+      "handler": "queryWeek",
+      "kind": "query",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "host",
+      "tool": {
+        "description": "schedule.query.week"
+      }
+    },
+    {
+      "id": "schedule.query.today",
+      "major": 1,
+      "handler": "queryToday",
+      "kind": "query",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "host",
+      "tool": {
+        "description": "schedule.query.today"
+      }
+    },
+    {
+      "id": "schedule.import.prepare",
+      "major": 1,
+      "handler": "importPlan",
+      "kind": "command",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "provider"
+    },
+    {
+      "id": "schedule.timetable.save",
+      "major": 1,
+      "handler": "saveTimetable",
+      "kind": "command",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "host"
+    },
+    {
+      "id": "schedule.course.save",
+      "major": 1,
+      "handler": "saveCourse",
+      "kind": "command",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "host"
+    },
+    {
+      "id": "schedule.change.save",
+      "major": 1,
+      "handler": "saveChange",
+      "kind": "command",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "host"
+    },
+    {
+      "id": "schedule.entity.delete",
+      "major": 1,
+      "handler": "deleteEntity",
+      "kind": "command",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "host"
+    },
+    {
+      "id": "schedule.backup.export",
+      "major": 1,
+      "handler": "exportBackup",
+      "kind": "query",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "host"
+    }
+  ]
+}

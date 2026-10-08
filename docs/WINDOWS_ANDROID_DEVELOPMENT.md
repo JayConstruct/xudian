@@ -2,6 +2,8 @@
 
 Windows 负责本地 Flutter 编译和模拟器运行，源码通过 [JayConstruct/xudian](https://github.com/JayConstruct/xudian) 与 VPS 同步。客户端位于 `client/`，启动入口为 `lib/main.dart`。本流程直接在 Windows PowerShell 和 Android Studio 中操作。
 
+当前工作区采用 **WSL 开发 + Windows Android Studio 模拟器**：Windows 只负责运行模拟器和 ADB server，设备查询、APK 安装、启动和日志操作在 WSL 使用 Linux 版 `adb`，不通过 PowerShell、`cmd.exe` 或 `adb.exe` 调用 Windows ADB 客户端。2026-10-04 已验证 WSL 经 `127.0.0.1:5037` 连接 `emulator-5554`；连接与安装命令见 [WSL 原生 ADB](MULTI_MACHINE_DEVELOPMENT.md#wsl-原生-adb连接与安装-apk)。以下 Windows Flutter 安装、编译和运行步骤仅供纯 Windows 开发使用，不是当前 WSL 工作区的必经流程。
+
 ## 1. 安装开发工具
 
 安装 [Git for Windows](https://git-scm.com/downloads/win) 和 [Flutter SDK](https://docs.flutter.dev/install)。当前项目验证版本为 Flutter stable **3.47.5 / Dart 3.13.4**，建议从 [Flutter SDK 归档](https://docs.flutter.dev/install/archive) 安装相同 Windows 版本；Dart 随 Flutter 提供。`client/pubspec.yaml` 要求 Dart `^3.13.4`。

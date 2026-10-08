@@ -2,7 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:task_app/app/app.dart';
+import 'support/legacy_app.dart';
 import 'package:task_app/core/declarative/runtime/declarative_module_store.dart';
 import 'package:task_app/core/modules/app_module.dart';
 import 'package:task_app/core/modules/module_manifest.dart';
@@ -219,7 +219,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('项目'), findsNothing);
       expect(find.byTooltip('打开 AI 助手'), findsNothing);
-      expect(find.text('今天已经安排妥当'), findsOneWidget);
+      expect(find.text('暂无今天待办或逾期任务'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
       final restarted = XudianApp();
@@ -252,6 +252,10 @@ void main() {
       });
       await tester.pumpWidget(scope(db, app));
       await tester.pumpAndSettle();
+      if (find.text('模块').evaluate().isEmpty) {
+        await tester.tap(find.text('更多'));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.text('模块').last);
       await tester.pumpAndSettle();
       for (final id in [

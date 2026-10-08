@@ -1,19 +1,43 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
+
+import '../core/module_host/module_host.dart';
+import '../core/module_host/module_package.dart';
+import '../core/module_host/host_providers.dart';
+import '../core/module_host/script_app_module.dart';
+import '../core/module_host/host_network.dart';
+import '../core/module_host/host_browser.dart';
+import '../core/module_host/host_dialogs.dart';
+import '../core/module_host/host_manager_page.dart';
+import '../core/module_host/host_settings_page.dart';
+import '../core/module_host/host_control_services.dart';
+import '../core/module_host/collection_store.dart';
+import '../core/ui/ui_slot.dart';
+import '../core/ui/ui_registration.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/modules/module_registry.dart';
 import '../core/ui/app_destination.dart';
-import '../features/ai/ai_module.dart';
-import '../features/declarative_runtime/declarative_runtime_controller.dart';
-import '../features/module_manager/builtin_module_controller.dart';
-import '../features/module_manager/module_manager_page.dart';
-import '../features/tasks/application/providers.dart';
-import '../features/tasks/quick_task_input.dart';
+import '../core/ui/ui_composition.dart';
+import '../core/ui/ui_layout_resolver.dart';
+import '../core/ui/ui_page_host.dart';
+import '../core/ui/ui_annotation.dart';
+import '../core/ui/ui_component.dart';
+import '../core/ui/ui_pack_settings_page.dart';
+import '../core/ui/workspace_header.dart';
+import '../core/ui/workspace_chrome.dart';
+import '../features/settings/ui_layout.dart';
+import '../features/settings/ui_layout_page.dart';
 import '../features/settings/app_preferences.dart';
-import '../features/settings/settings_page.dart';
 import 'design_system.dart';
 import 'mobile_bottom_dock.dart';
+import 'frosted_toolbar_surface.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.registry});
@@ -25,48 +49,277 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int index = 0;
-  bool aiOpen = false;
+  UiEntryRegistration? panelEntry;
+  PageContext? panelContext;
   bool restoring = true;
   String? restoreError;
-  List<ModuleRestoreFailure> restoreFailures = const [];
+  Map<String, String> restoreFailures = {};
+  ModuleHost? host;
+  HostNetwork? network;
+  final browser = HostBrowser();
+  StreamSubscription<void>? hostSubscription;
+  StreamSubscription<Set<String>>? dataSubscription;
   String? selectedDestinationId;
-  final quickController = TextEditingController();
+  final workspaceHeader = WorkspaceHeaderController();
+  final workspaceChrome = WorkspaceChromeController();
+  double? _measuredDockHeight;
+
+  void _dockSizeChanged(Size size) {
+    if (!mounted || _measuredDockHeight == size.height) return;
+    setState(() => _measuredDockHeight = size.height);
+  }
 
   @override
   void initState() {
     super.initState();
     widget.registry.addListener(_onRegistryChanged);
+    workspaceHeader.addListener(_headerChanged);
+    workspaceChrome.addListener(_headerChanged);
     _restoreInstalledModules();
   }
 
   Future<void> _restoreInstalledModules() async {
     try {
-      await (await ref.read(
-        builtinModuleControllerProvider(widget.registry).future,
-      )).restore();
+      host = await ref.read(moduleHostProvider.future);
       if (!mounted) return;
-      final store = await ref.read(declarativeModuleStoreProvider.future);
-      final runtime = DeclarativeRuntimeController(
-        store: store,
-        registry: widget.registry,
-        ruleEngine: await ref.read(ruleEngineProvider.future),
-        templateEngine: await ref.read(templateEngineProvider.future),
+      network ??= HostNetwork(host!.store);
+      host!.interaction = _hostInteraction;
+      host!.onDeactivate = (actor) {
+        network!.revoke(actor);
+        unawaited(browser.revoke(actor));
+      };
+      host!.onDeleteData = network!.deleteModuleCredentials;
+      registerHostControlServices(
+        host!,
+        widget.registry,
+        hasDirtyLayout: () =>
+            ref.read(uiLayoutEditorSessionsProvider).hasDirtyEditors,
       );
-      final failures = await runtime.restoreEnabled();
+      dataSubscription ??= host!.store.changes.stream.listen((ids) {
+        if (mounted && ids.contains('app.host')) {
+          ref.invalidate(appPreferencesProvider);
+          ref.invalidate(uiLayoutProvider);
+        }
+      });
+      hostSubscription ??= host!.registryChanges.stream.listen(
+        (_) => _syncHost(),
+      );
+      _syncHost();
+      setState(() {
+        restoring = false;
+        restoreError = null;
+        restoreFailures = Map.of(host!.failures);
+      });
+    } catch (error) {
       if (mounted) {
         setState(() {
           restoring = false;
-          restoreError = null;
-          restoreFailures = failures;
+          restoreError = '恢复模块状态失败：$error';
         });
       }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          restoring = false;
-          restoreError = '恢复模块状态失败';
-        });
-      }
+    }
+  }
+
+  void _syncHost() {
+    if (!mounted || host == null) return;
+    widget.registry.replaceExtensions([
+      for (final instance in host!.instances.values)
+        ScriptAppModule(host!, instance.package),
+    ]);
+    network?.revokeInactive();
+  }
+
+  Future<Object?> _hostInteraction(
+    ModuleActor caller,
+    String method,
+    Map<String, Object?> args,
+  ) async {
+    if (!mounted) throw StateError('Host interaction unavailable');
+    switch (method) {
+      case 'ui.review':
+        return reviewDialog(context, '确认实际数据变更', args);
+      case 'packages.review':
+        return reviewDialog(context, '审核模块文件、数据、界面和权限', args);
+      case 'grants.request':
+        return reviewDialog(context, '授权模块调用（30分钟，最多20次写入）', args);
+      case 'ui.dialog':
+        return showDialog<Map<String, Object?>>(
+          context: context,
+          builder: (_) => UiPackScope(
+            moduleId: caller.moduleId,
+            child: HostFormDialog(
+              title: args['title'] as String? ?? '模块输入',
+              fields: [
+                for (final f in args['fields'] as List? ?? []) object(f),
+              ],
+            ),
+          ),
+        );
+      case 'secrets.configure':
+        final endpoint = network!.validateEndpoint(args['endpoint']);
+        final values = await showDialog<Map<String, Object?>>(
+          context: context,
+          builder: (_) => UiPackScope(
+            defaultOnly: true,
+            child: HostFormDialog(
+              title: '安全凭据 · ${caller.moduleId}',
+              fields: [
+                {
+                  'key': 'key',
+                  'label': '${args['label'] ?? '密钥'}（绑定 $endpoint）',
+                  'type': 'secret',
+                },
+              ],
+            ),
+          ),
+        );
+        host!.store.requireActive(caller);
+        if (values == null) return null;
+        return network!.configure(
+          caller,
+          endpoint.toString(),
+          values['key'] as String,
+        );
+      case 'secrets.delete':
+        await network!.delete(caller, args['handle'] as String);
+        return null;
+      case 'http.request':
+        return network!.request(caller, args);
+      case 'http.cancel':
+        network!.cancel(caller, args['id'] as String);
+        return null;
+      case 'files.readText':
+        final file = await openFile(
+          acceptedTypeGroups: [
+            const XTypeGroup(label: 'JSON 文件', extensions: ['json']),
+          ],
+        );
+        if (file == null) return null;
+        final bytes = await file.readAsBytes();
+        if (bytes.length > 2 * 1024 * 1024) throw StateError('文件超过2 MiB');
+        return utf8.decode(bytes);
+      case 'browser.capture':
+        return browser.capture(caller, args);
+      case 'files.saveText':
+        if (utf8.encode(args['text'] as String).length > 2 * 1024 * 1024) {
+          throw StateError('文件超过2 MiB');
+        }
+        if (Platform.isAndroid) {
+          return await const MethodChannel('xudian.host/files')
+                  .invokeMethod<bool>('saveText', {
+                    'name': args['name'],
+                    'text': args['text'],
+                  }) ??
+              false;
+        }
+        final location = await getSaveLocation(
+          suggestedName: args['name'] as String,
+        );
+        if (location == null) return false;
+        await XFile.fromData(
+          Uint8List.fromList(utf8.encode(args['text'] as String)),
+          mimeType: 'application/json',
+        ).saveTo(location.path);
+        return true;
+      case 'ui.navigate':
+      case 'ui.panel':
+        final pageId = args['page'] as String;
+        if (pageId == 'app.host.settings') {
+          _openSettings();
+          return true;
+        }
+        if (pageId == 'app.host.layout') {
+          unawaited(
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UiLayoutPage(registry: widget.registry),
+              ),
+            ),
+          );
+          return true;
+        }
+        final page = widget.registry.ui.page(pageId);
+        if (page == null) throw StateError('Page unavailable');
+        final values = object(args['context'] ?? {});
+        final child = UiPackScope(
+          moduleId: page.moduleId,
+          child: UiPageHost(
+            registry: widget.registry,
+            pageId: pageId,
+            pageContext: PageContext(values: values),
+          ),
+        );
+        if (method == 'ui.panel') {
+          final adaptive =
+              object(args['presentation'] ?? {})['adaptive'] == true;
+          if (adaptive && MediaQuery.sizeOf(context).width >= 820) {
+            unawaited(
+              showGeneralDialog<void>(
+                context: context,
+                barrierDismissible: true,
+                barrierLabel: '关闭面板',
+                pageBuilder: (panelContext, _, _) => SafeArea(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
+                      width: 480,
+                      child: Material(
+                        elevation: 16,
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Column(
+                          children: [
+                            AppBar(
+                              automaticallyImplyLeading: false,
+                              title: Text(page.title),
+                              actions: [
+                                IconButton(
+                                  tooltip: '关闭面板',
+                                  onPressed: () => Navigator.pop(panelContext),
+                                  icon: const Icon(Icons.close),
+                                ),
+                              ],
+                            ),
+                            Expanded(child: child),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          } else {
+            unawaited(
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                useSafeArea: true,
+                showDragHandle: adaptive,
+                builder: (_) =>
+                    FractionallySizedBox(heightFactor: .9, child: child),
+              ),
+            );
+          }
+        } else {
+          unawaited(
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UiPackScope(
+                  moduleId: page.moduleId,
+                  child: Scaffold(
+                    appBar: AppBar(title: Text(page.title)),
+                    body: child,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        return true;
+      default:
+        throw StateError('Unsupported host capability: $method');
     }
   }
 
@@ -77,8 +330,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         title: const Text('模块恢复详情'),
         content: SingleChildScrollView(
           child: Text(
-            restoreFailures
-                .map((failure) => '${failure.moduleId}\n${failure.reason}')
+            restoreFailures.entries
+                .map((failure) => '${failure.key}\n${failure.value}')
                 .join('\n\n'),
           ),
         ),
@@ -95,7 +348,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 MaterialPageRoute(
                   builder: (_) => Scaffold(
                     appBar: AppBar(title: const Text('模块管理')),
-                    body: ModuleManagerPage(registry: widget.registry),
+                    body: const HostManagerPage(),
                   ),
                 ),
               );
@@ -110,36 +363,376 @@ class _AppShellState extends ConsumerState<AppShell> {
   void _onRegistryChanged() {
     if (!mounted) return;
     setState(() {
-      final destinations = widget.registry.ui.primaryDestinations;
+      final destinations = widget.registry.ui.entries;
       final retained = destinations.indexWhere(
         (item) => item.id == selectedDestinationId,
       );
       index = retained >= 0 ? retained : 0;
-      if (!widget.registry.isEnabled('app.ai')) aiOpen = false;
+      if (panelEntry != null &&
+          !destinations.any((entry) => entry.id == panelEntry!.id)) {
+        panelEntry = null;
+      }
     });
+  }
+
+  void _headerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     widget.registry.removeListener(_onRegistryChanged);
-    quickController.dispose();
+    workspaceHeader.removeListener(_headerChanged);
+    workspaceHeader.dispose();
+    workspaceChrome.removeListener(_headerChanged);
+    workspaceChrome.dispose();
+    hostSubscription?.cancel();
+    dataSubscription?.cancel();
+    if (host?.interaction == _hostInteraction) host?.interaction = null;
+    network?.close();
+    unawaited(browser.close());
     super.dispose();
   }
 
-  void _openAi(bool sidePanel) {
-    if (!widget.registry.isEnabled('app.ai')) return;
-    if (sidePanel) {
-      setState(() => aiOpen = !aiOpen);
+  UiLayoutProfile get _profile =>
+      (ref.read(uiLayoutProvider).asData?.value ?? UiLayout()).profile(
+        MediaQuery.sizeOf(context).width >= 820,
+      );
+
+  void _openEntry(UiEntryRegistration entry, {PageContext? pageContext}) {
+    final mount = _profile.mountFor(entry);
+    final problem = mountProblem(
+      widget.registry.ui,
+      entry,
+      mount,
+      context: pageContext ?? const PageContext(),
+    );
+    if (problem != null) {
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('入口失效'),
+          content: Text(problem),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('暂时保留'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UiLayoutPage(registry: widget.registry),
+                  ),
+                );
+              },
+              child: const Text('处理挂载'),
+            ),
+          ],
+        ),
+      );
       return;
     }
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => FractionallySizedBox(
-        heightFactor: 0.88,
-        child: AiWorkspacePanel(registry: widget.registry),
+    _navigationFeedback();
+    if (entry.opening == UiOpening.workspace) {
+      setState(() => selectedDestinationId = entry.id);
+    } else if (entry.opening == UiOpening.adaptivePanel &&
+        MediaQuery.sizeOf(context).width >= 1100) {
+      setState(() {
+        panelEntry = panelEntry?.id == entry.id ? null : entry;
+        panelContext = pageContext;
+      });
+    } else if (entry.opening == UiOpening.adaptivePanel) {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (_) => FractionallySizedBox(
+          heightFactor: 0.88,
+          child: _page(entry, pageContext: pageContext),
+        ),
+      );
+    } else {
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UiPackScope(
+            moduleId: entry.moduleId,
+            child: DetailPage(
+              title: entry.label,
+              child: _page(entry, pageContext: pageContext),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _page(UiEntryRegistration entry, {PageContext? pageContext}) =>
+      UiPackScope(
+        moduleId: entry.moduleId,
+        child: UiEntryActivationScope(
+          open: (entry, context) => _openEntry(entry, pageContext: context),
+          child: UiPageHost(
+            key: ValueKey(entry.id),
+            registry: widget.registry,
+            pageId: entry.pageId,
+            pageContext: pageContext ?? _profile.mountFor(entry).context,
+            mountPath: [entry.id],
+          ),
+        ),
+      );
+
+  AppDestination _destination(UiEntryRegistration entry) {
+    final page = widget.registry.ui.page(entry.pageId);
+    return AppDestination(
+      id: entry.id,
+      label: entry.label,
+      icon: entry.icon,
+      selectedIcon: entry.selectedIcon ?? entry.icon,
+      builder: (_) => _page(entry),
+      quickAdd: page?.quickAdd ?? false,
+      quickAddDefaults: page?.quickAddDefaults ?? const {},
+    );
+  }
+
+  Widget _chromeWorkspace({required Widget child, required bool collapsed}) =>
+      NotificationListener<ScrollNotification>(
+        onNotification: workspaceChrome.handleScroll,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            child,
+            if (collapsed)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (MediaQuery.sizeOf(context).width < 820)
+                        _chromeRevealButton()
+                      else
+                        UiPackScope(
+                          defaultOnly: true,
+                          child: IconButton(
+                            tooltip: '展开工具栏',
+                            onPressed: workspaceChrome.reveal,
+                            icon: const Icon(Icons.unfold_more),
+                          ),
+                        ),
+                      UiPackScope(
+                        defaultOnly: true,
+                        child: IconButton(
+                          tooltip: '界面风格与恢复',
+                          onPressed: _openUiRecovery,
+                          icon: const Icon(Icons.palette_outlined),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+
+  Widget _chromeRevealButton() => Tooltip(
+    message: '展开顶栏和导航',
+    child: FrostedToolbarSurface(
+      radius: 28,
+      child: TextButton.icon(
+        key: const ValueKey('workspace-chrome-reveal'),
+        onPressed: workspaceChrome.reveal,
+        style: TextButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        ),
+        icon: const Icon(Icons.unfold_more, size: 20),
+        label: const Text('展开工具栏'),
+      ),
+    ),
+  );
+
+  Widget _workspaceHeader(
+    String fallbackTitle,
+    bool desktop,
+    List<UiEntryRegistration> entries,
+  ) {
+    final contribution = workspaceHeader.lease?.isActive() == true
+        ? workspaceHeader.content
+        : null;
+    final spec = contribution?.spec;
+    final title = spec?['title'] is String
+        ? spec!['title'] as String
+        : fallbackTitle;
+    final leading = object(spec?['leading'] ?? {});
+    final actions = (spec?['actions'] as List? ?? const [])
+        .take(12)
+        .map(object)
+        .toList();
+    Widget settings() => UiAnnotation(
+      id: 'app.shell.settings',
+      name: '设置',
+      purpose: '受保护的设置与恢复入口',
+      child: IconButton(
+        tooltip: '打开设置',
+        onPressed: _openSettings,
+        icon: const Icon(Icons.settings_outlined),
+      ),
+    );
+    final leadingWidget = contribution != null && leading['label'] is String
+        ? TextButton(
+            onPressed: leading['event'] == null
+                ? null
+                : () => contribution.dispatch(leading['event']),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    leading['label'] as String,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.expand_more, size: 18),
+              ],
+            ),
+          )
+        : const SizedBox.shrink();
+    final titleWidget = spec?['titleEvent'] == null
+        ? Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+          )
+        : TextButton(
+            onPressed: () => contribution!.dispatch(spec!['titleEvent']),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const Icon(Icons.expand_more, size: 18),
+              ],
+            ),
+          );
+    final actionWidgets = <Widget>[
+      if (contribution == null)
+        for (final entry in entries)
+          UiAnnotation(
+            id: entry.id,
+            name: entry.label,
+            moduleId: entry.moduleId,
+            slot: 'header',
+            purpose: '打开功能入口',
+            child: IconButton(
+              tooltip: '打开 ${entry.label}',
+              onPressed: () => _openEntry(entry),
+              icon: Icon(entry.icon),
+            ),
+          ),
+      if (!desktop || contribution != null) settings(),
+      if (contribution != null)
+        PopupMenuButton<int>(
+          tooltip: '页面菜单',
+          icon: const Icon(Icons.more_vert),
+          onSelected: (index) {
+            if (index < actions.length) {
+              contribution.dispatch(actions[index]['event']);
+            } else {
+              _openEntry(entries[index - actions.length]);
+            }
+          },
+          itemBuilder: (_) => [
+            for (var i = 0; i < actions.length; i++)
+              PopupMenuItem(
+                value: i,
+                child: Text('${actions[i]['label'] ?? ''}'),
+              ),
+            if (actions.isNotEmpty && entries.isNotEmpty)
+              const PopupMenuDivider(),
+            for (var i = 0; i < entries.length; i++)
+              PopupMenuItem(
+                value: actions.length + i,
+                child: Row(
+                  children: [
+                    Icon(entries[i].icon, size: 20),
+                    const SizedBox(width: 12),
+                    Text(entries[i].label),
+                  ],
+                ),
+              ),
+          ],
+        ),
+    ];
+    final fallback = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      child: Row(
+        children: [
+          if (contribution != null && leading['label'] is String)
+            Expanded(child: leadingWidget),
+          Expanded(flex: contribution == null ? 1 : 2, child: titleWidget),
+          ...actionWidgets,
+        ],
+      ),
+    );
+    // Recovery is owned by the host and cannot be removed by a recipe.
+    return Row(
+      children: [
+        Expanded(
+          child: UiComponent(
+            ref: 'ui.chrome.header@1',
+            props: {'title': title},
+            slots: {
+              'title': titleWidget,
+              'leading': leadingWidget,
+              'actions': Row(
+                mainAxisSize: MainAxisSize.min,
+                children: actionWidgets,
+              ),
+            },
+            fallback: fallback,
+          ),
+        ),
+        UiPackScope(
+          defaultOnly: true,
+          child: IconButton(
+            key: const ValueKey('ui-pack-recovery'),
+            tooltip: '界面风格与恢复',
+            onPressed: _openUiRecovery,
+            icon: const Icon(Icons.palette_outlined, size: 20),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openUiRecovery() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UiPackScope(
+          defaultOnly: true,
+          child: UiPackSettingsPage(registry: widget.registry),
+        ),
       ),
     );
   }
@@ -149,7 +742,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     Navigator.push<void>(
       context,
       MaterialPageRoute(
-        builder: (_) => SettingsPage(registry: widget.registry),
+        builder: (_) => HostSettingsPage(registry: widget.registry),
       ),
     );
   }
@@ -159,7 +752,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (preferences?.haptics ?? true) HapticFeedback.selectionClick();
   }
 
-  void _showMore(List<AppDestination> destinations) {
+  void _showMore(List<UiEntryRegistration> entries) {
     showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
@@ -169,19 +762,27 @@ class _AppShellState extends ConsumerState<AppShell> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('切换模块', style: Theme.of(sheetContext).textTheme.titleMedium),
+            Text('更多入口', style: Theme.of(sheetContext).textTheme.titleMedium),
             const SizedBox(height: 12),
-            for (var i = 4; i < destinations.length; i++)
-              ListTile(
-                shape: AppDesign.smoothShape(),
-                leading: Icon(destinations[i].icon),
-                title: Text(destinations[i].label),
-                selected: i == index,
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  setState(() => index = i);
-                },
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (final entry in entries)
+                      ListTile(
+                        shape: AppDesign.smoothShape(),
+                        leading: Icon(entry.icon),
+                        title: Text(entry.label),
+                        selected: entry.id == selectedDestinationId,
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _openEntry(entry);
+                        },
+                      ),
+                  ],
+                ),
               ),
+            ),
           ],
         ),
       ),
@@ -208,70 +809,181 @@ class _AppShellState extends ConsumerState<AppShell> {
                 child: const Text('重试'),
               ),
               TextButton(onPressed: _openSettings, child: const Text('打开设置')),
+              UiPackScope(
+                defaultOnly: true,
+                child: TextButton(
+                  onPressed: _openUiRecovery,
+                  child: const Text('界面风格与恢复'),
+                ),
+              ),
             ],
           ),
         ),
       );
     }
-    final destinations = widget.registry.ui.primaryDestinations;
-    if (destinations.isEmpty) {
-      return const Scaffold(body: Center(child: Text('没有可用模块')));
-    }
-    if (index >= destinations.length) index = 0;
-
-    final current = destinations[index];
-    selectedDestinationId = current.id;
-    final aiEnabled = widget.registry.isEnabled('app.ai');
     final width = MediaQuery.sizeOf(context).width;
     final desktop = width >= 820;
-    final showPanel = desktop && aiOpen && width >= 1100;
+    final layout = ref.watch(uiLayoutProvider).asData?.value;
+    final profile = (layout ?? UiLayout()).profile(desktop);
+    final entries = widget.registry.ui.entries;
+    final workspace =
+        entries
+            .where(
+              (entry) => entry.opening == UiOpening.workspace && !entry.content,
+            )
+            .toList()
+          ..sort(
+            (a, b) =>
+                profile.mountFor(a).order.compareTo(profile.mountFor(b).order),
+          );
+    if (workspace.isEmpty) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('没有可用工作区'),
+              TextButton(
+                onPressed: _openSettings,
+                child: const Text('打开设置并恢复模块'),
+              ),
+              UiPackScope(
+                defaultOnly: true,
+                child: TextButton(
+                  onPressed: _openUiRecovery,
+                  child: const Text('界面风格与恢复'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final selected = workspace.where(
+      (entry) => entry.id == selectedDestinationId,
+    );
+    final activeEntry = selected.isEmpty ? workspace.first : selected.first;
+    selectedDestinationId = activeEntry.id;
+    final current = _destination(activeEntry);
+    final activePage = widget.registry.ui.page(activeEntry.pageId);
+    final instance = host?.instances[activeEntry.moduleId];
+    final lease = workspaceHeader.activate(
+      identity:
+          '${activeEntry.id}:${activeEntry.pageId}:${profile.mountFor(activeEntry).context.identity}:${instance?.actor.generation}',
+      moduleId: activeEntry.moduleId,
+      pageId: activeEntry.pageId,
+      enabled: activePage?.headerMode == 'contributed' && instance != null,
+      isActive: () =>
+          mounted &&
+          selectedDestinationId == activeEntry.id &&
+          identical(host?.instances[activeEntry.moduleId], instance),
+    );
+    workspaceChrome.configure(
+      lease?.identity ?? activeEntry.id,
+      enabled:
+          lease?.isActive() == true &&
+          workspaceHeader.content?.spec['autoHideChrome'] == true &&
+          MediaQuery.viewInsetsOf(context).bottom == 0,
+    );
+    final chromeCollapsed = workspaceChrome.collapsed;
+    final chromeDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+    Widget workspaceContent() => WorkspaceHeaderScope(
+      controller: workspaceHeader,
+      lease: lease,
+      child: current.builder(context),
+    );
+    List<UiEntryRegistration> at(UiPlacement placement) => orderedEntries(
+      widget.registry.ui,
+      profile.mountFor,
+      (entry) => profile.mountFor(entry).placement == placement,
+    );
+    final main = at(UiPlacement.main);
+    final header = at(UiPlacement.header);
+    final mainCount = navigationVisibleCount(
+      total: main.length,
+      limit: profile.mainLimit,
+      width: width - 24,
+      textScale: MediaQuery.textScalerOf(context).scale(12) / 12,
+      desktop: desktop,
+    );
+    final headerLimit = headerVisibleCount(width: width, desktop: desktop);
+    final visibleHeader = header.take(headerLimit).toList();
+    final more = [
+      ...at(UiPlacement.more),
+      ...main.skip(mainCount),
+      ...header.skip(headerLimit),
+    ];
+    final visibleMain = main.take(mainCount).toList();
+    final destinations = visibleMain.map(_destination).toList();
+    index = visibleMain.indexWhere((entry) => entry.id == activeEntry.id);
+    final moreSelected = more.any((entry) => entry.id == activeEntry.id);
+    final showPanel = desktop && panelEntry != null && width >= 1100;
     final showNavigation = MediaQuery.viewInsetsOf(context).bottom == 0;
-    final showDock = showNavigation || current.quickAdd;
+    final showDock =
+        (showNavigation && (visibleMain.isNotEmpty || more.isNotEmpty)) ||
+        current.quickAdd;
     final dockInset = !desktop && showDock
-        ? MobileBottomDock.height(
-                context,
-                hasInput: current.quickAdd,
-                showNavigation: showNavigation,
-              ) +
+        ? (_measuredDockHeight ??
+                  MobileBottomDock.height(
+                    context,
+                    hasInput: current.quickAdd,
+                    showNavigation: showNavigation,
+                  )) +
               24
         : 0.0;
+    final contentInset = chromeCollapsed && !desktop && showDock
+        ? 60.0 + (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, 100)
+        : dockInset;
     return Scaffold(
       backgroundColor: AppDesign.canvas(context),
       body: SafeArea(
         child: Row(
           children: [
-            if (desktop) _sidebar(destinations),
+            if (desktop)
+              _sidebar(destinations, visibleMain, more, moreSelected),
             Expanded(
               child: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            current.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                  KeyedSubtree(
+                    key: const ValueKey('workspace-header-region'),
+                    child: chromeDuration == Duration.zero
+                        ? (chromeCollapsed
+                              ? const SizedBox(
+                                  width: double.infinity,
+                                  height: 0,
+                                )
+                              : _workspaceHeader(
+                                  current.label,
+                                  desktop,
+                                  visibleHeader,
+                                ))
+                        : AnimatedSize(
+                            duration: chromeDuration,
+                            alignment: Alignment.topCenter,
+                            child: chromeCollapsed
+                                ? const SizedBox(
+                                    width: double.infinity,
+                                    height: 0,
+                                  )
+                                : _workspaceHeader(
+                                    current.label,
+                                    desktop,
+                                    visibleHeader,
+                                  ),
                           ),
-                        ),
-                        if (aiEnabled)
-                          IconButton(
-                            tooltip: '打开 AI 助手',
-                            onPressed: () => _openAi(desktop && width >= 1100),
-                            icon: const Icon(Icons.auto_awesome_outlined),
-                          ),
-                        if (!desktop)
-                          IconButton(
-                            tooltip: '打开设置',
-                            onPressed: _openSettings,
-                            icon: const Icon(Icons.settings_outlined),
-                          ),
-                      ],
-                    ),
                   ),
+                  if (layout?.warning != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(layout!.warning!),
+                    ),
+                  if (ref.watch(uiLayoutProvider).hasError)
+                    TextButton(
+                      onPressed: () => ref.invalidate(uiLayoutProvider),
+                      child: const Text('布局读取失败，暂用默认布局，点击重试'),
+                    ),
                   if (restoreFailures.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -290,53 +1002,93 @@ class _AppShellState extends ConsumerState<AppShell> {
                           IconButton(
                             tooltip: '关闭恢复提示',
                             onPressed: () =>
-                                setState(() => restoreFailures = const []),
+                                setState(() => restoreFailures = const {}),
                             icon: const Icon(Icons.close, size: 18),
                           ),
                         ],
                       ),
                     ),
                   Expanded(
-                    child: desktop
-                        ? Align(
-                            alignment: Alignment.topCenter,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 1040),
-                              child: current.builder(context),
-                            ),
-                          )
-                        : Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              WorkspaceContentInsets(
-                                bottom: dockInset,
-                                child: current.builder(context),
+                    child: _chromeWorkspace(
+                      collapsed: chromeCollapsed,
+                      child: desktop
+                          ? Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 1040,
+                                ),
+                                child: workspaceContent(),
                               ),
-                              if (showDock)
-                                Positioned(
-                                  left: 12,
-                                  right: 12,
-                                  bottom: 12,
-                                  child: MobileBottomDock(
-                                    destinations: destinations,
-                                    selectedIndex: index,
-                                    showNavigation: showNavigation,
-                                    onSelected: (value) {
-                                      if (value >= 4) {
-                                        _navigationFeedback();
-                                        _showMore(destinations);
-                                      } else if (value != index) {
-                                        _navigationFeedback();
-                                        setState(() => index = value);
-                                      }
-                                    },
-                                    input: current.quickAdd
-                                        ? _quickInputContent(current.label)
-                                        : null,
+                            )
+                          : Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                RepaintBoundary(
+                                  child: TweenAnimationBuilder<double>(
+                                    tween: Tween(end: contentInset),
+                                    duration: chromeDuration,
+                                    child: workspaceContent(),
+                                    builder: (_, inset, child) =>
+                                        WorkspaceContentInsets(
+                                          bottom: inset,
+                                          child: child!,
+                                        ),
                                   ),
                                 ),
-                            ],
-                          ),
+                                if (showDock)
+                                  Positioned(
+                                    left: 12,
+                                    right: 12,
+                                    bottom: 12,
+                                    child: IgnorePointer(
+                                      ignoring: chromeCollapsed,
+                                      child: ExcludeSemantics(
+                                        excluding: chromeCollapsed,
+                                        child: AnimatedSlide(
+                                          offset: chromeCollapsed
+                                              ? const Offset(0, 1.5)
+                                              : Offset.zero,
+                                          duration: chromeDuration,
+                                          child: AnimatedOpacity(
+                                            opacity: chromeCollapsed ? 0 : 1,
+                                            duration: chromeDuration,
+                                            child: MobileBottomDock(
+                                              onSizeChanged: _dockSizeChanged,
+                                              destinations: destinations,
+                                              selectedIndex: index,
+                                              visibleCount: destinations.length,
+                                              hasMore: more.isNotEmpty,
+                                              moreSelected: moreSelected,
+                                              annotate: true,
+                                              entryModuleIds: {
+                                                for (final entry in visibleMain)
+                                                  entry.id: entry.moduleId,
+                                              },
+                                              showNavigation: showNavigation,
+                                              onSelected: (value) {
+                                                if (value >=
+                                                    visibleMain.length) {
+                                                  _navigationFeedback();
+                                                  _showMore(more);
+                                                } else {
+                                                  _openEntry(
+                                                    visibleMain[value],
+                                                  );
+                                                }
+                                              },
+                                              input: current.quickAdd
+                                                  ? _quickInputContent(current)
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                    ),
                   ),
                   if (desktop && current.quickAdd)
                     Padding(
@@ -348,7 +1100,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       ),
                       child: FloatingSurface(
                         padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
-                        child: _quickInputContent(current.label),
+                        child: _quickInputContent(current),
                       ),
                     ),
                 ],
@@ -361,7 +1113,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   padding: const EdgeInsets.fromLTRB(0, 12, 16, 16),
                   child: FloatingSurface(
                     padding: EdgeInsets.zero,
-                    child: AiWorkspacePanel(registry: widget.registry),
+                    child: _page(panelEntry!, pageContext: panelContext),
                   ),
                 ),
               ),
@@ -371,33 +1123,62 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  Widget _sidebar(List<AppDestination> destinations) {
+  Widget _sidebar(
+    List<AppDestination> destinations,
+    List<UiEntryRegistration> entries,
+    List<UiEntryRegistration> more,
+    bool moreSelected,
+  ) {
     final theme = Theme.of(context);
-    return SizedBox(
+    final brand = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 28),
+      child: Row(
+        children: [
+          Icon(Icons.grid_view_outlined, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Text(
+            '序点',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+    final navigation = ListView.separated(
+      itemCount: destinations.length + (more.isEmpty ? 0 : 1),
+      separatorBuilder: (_, _) => const SizedBox(height: 4),
+      itemBuilder: (_, i) => i < destinations.length
+          ? _sidebarDestination(destinations[i], i, entries[i])
+          : ListTile(
+              leading: const Icon(Icons.more_horiz),
+              title: const Text('更多'),
+              selected: moreSelected,
+              onTap: () => _showMore(more),
+            ),
+    );
+    final settings = Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: UiAnnotation(
+        id: 'app.shell.settings',
+        name: '设置',
+        purpose: '受保护的设置与恢复入口',
+        child: ListTile(
+          shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
+          leading: const Icon(Icons.settings_outlined, size: 21),
+          title: const Text('设置'),
+          onTap: _openSettings,
+        ),
+      ),
+    );
+    final fallback = SizedBox(
       width: 216,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 20, 4, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 8, 28),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.grid_view_outlined,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '序点',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            brand,
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 0, 8),
               child: Text(
@@ -407,70 +1188,109 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
               ),
             ),
-            Expanded(
-              child: ListView.separated(
-                itemCount: destinations.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 4),
-                itemBuilder: (_, i) => _sidebarDestination(destinations[i], i),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: ListTile(
-                shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
-                leading: const Icon(Icons.settings_outlined, size: 21),
-                title: const Text('设置'),
-                onTap: _openSettings,
-              ),
-            ),
+            Expanded(child: navigation),
+            if (workspaceChrome.collapsed) _chromeRevealButton(),
+            settings,
           ],
         ),
       ),
     );
+    return UiComponent(
+      ref: 'ui.chrome.sidebar@1',
+      props: {
+        'selectedIndex': index,
+        'moreSelected': moreSelected,
+        'destinations': [
+          for (var i = 0; i < destinations.length; i++)
+            {
+              'id': destinations[i].id,
+              'label': destinations[i].label,
+              'index': i,
+              'selected': i == index,
+            },
+        ],
+      },
+      slots: {'navigation': navigation, 'brand': brand, 'settings': settings},
+      events: {
+        'select': (value) {
+          if (value is int && value >= 0 && value < entries.length) {
+            _openEntry(entries[value]);
+          }
+        },
+        'more': (_) => _showMore(more),
+      },
+      fallback: fallback,
+    );
   }
 
-  Widget _sidebarDestination(AppDestination destination, int i) {
+  Widget _sidebarDestination(
+    AppDestination destination,
+    int i,
+    UiEntryRegistration entry,
+  ) {
     final selected = i == index;
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: selected
-          ? scheme.primaryContainer.withValues(alpha: 0.55)
-          : Colors.transparent,
-      shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        customBorder: AppDesign.smoothShape(radius: AppDesign.controlRadius),
-        hoverColor: scheme.surfaceContainerHigh.withValues(alpha: 0.8),
-        onTap: () => setState(() => index = i),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Icon(
-                destination.icon,
-                size: 21,
-                color: selected ? scheme.primary : AppDesign.muted(context),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                destination.label,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+    return UiAnnotation(
+      id: entry.id,
+      name: entry.label,
+      moduleId: entry.moduleId,
+      slot: 'main',
+      purpose: '主导航入口',
+      child: Material(
+        color: selected
+            ? scheme.primaryContainer.withValues(alpha: 0.55)
+            : Colors.transparent,
+        shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          customBorder: AppDesign.smoothShape(radius: AppDesign.controlRadius),
+          hoverColor: scheme.surfaceContainerHigh.withValues(alpha: 0.8),
+          onTap: () => _openEntry(entry),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  destination.icon,
+                  size: 21,
+                  color: selected ? scheme.primary : AppDesign.muted(context),
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    destination.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _quickInputContent(String pageLabel) {
-    final destination = widget.registry.ui.primaryDestinations[index];
-    return QuickTaskInput(
-      controller: quickController,
-      hintText: '添加到$pageLabel…',
-      defaults: destination.quickAddDefaults,
+  Widget _quickInputContent(AppDestination destination) {
+    return UiAnnotation(
+      id: 'app.shell.quick_input',
+      name: '快速输入',
+      pagePath: destination.id,
+      slot: 'input',
+      purpose: '使用当前工作区的输入贡献',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final contribution
+              in widget.registry.ui
+                  .forSlot(UiSlot.inputActions)
+                  .whereType<WidgetRegistration>())
+            contribution.builder(context),
+        ],
+      ),
     );
   }
 }

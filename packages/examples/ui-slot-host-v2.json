@@ -1,0 +1,36 @@
+{
+  "formatVersion": 2,
+  "manifest": {
+    "id": "example.ui.host",
+    "version": "1.0.0",
+    "coreApi": "1",
+    "dependencies": [],
+    "requiresCapabilities": ["ui.composition", "ui.registry"],
+    "permissions": ["ui.register"]
+  },
+  "pages": [
+    {
+      "id": "workspace",
+      "title": "公开槽位工作区",
+      "kind": "container",
+      "retainPosition": true,
+      "entry": {},
+      "slots": [
+        {
+          "id": "tabs",
+          "label": "公开页签",
+          "kind": "tabs",
+          "public": true,
+          "editable": true
+        },
+        {
+          "id": "sections",
+          "label": "公开纵向内容",
+          "kind": "sections",
+          "public": true,
+          "editable": true
+        }
+      ]
+    }
+  ]
+}

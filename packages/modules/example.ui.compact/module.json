@@ -1,0 +1,182 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "example.ui.compact",
+    "kind": "uiPack",
+    "name": "紧凑界面示例",
+    "version": "1.0.1",
+    "hostApi": "^1.6.0",
+    "dataVersion": 1,
+    "permissions": [],
+    "dependencies": [],
+    "defaultInstall": false,
+    "description": "提供紧凑布局的可选界面包。",
+    "author": "JayConstruct"
+  },
+  "collections": [],
+  "services": [],
+  "pages": [],
+  "uiPack": {
+    "contractVersion": 1,
+    "tokens": {
+      "light": {
+        "primary": "#00796B",
+        "surface": "#F0F7F5",
+        "canvas": "#E2EEEA",
+        "radius": 8,
+        "spacing": 8
+      },
+      "dark": {
+        "primary": "#80CBC4",
+        "surface": "#18312D",
+        "canvas": "#102420",
+        "radius": 8,
+        "spacing": 8
+      }
+    },
+    "components": {
+      "ui.input@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "padding",
+          "props": {
+            "padding": 4
+          },
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      },
+      "ui.button@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "button",
+          "props": {
+            "label": {
+              "bind": [
+                "props",
+                "label"
+              ]
+            },
+            "disabled": {
+              "bind": [
+                "props",
+                "disabled"
+              ]
+            },
+            "variant": "outlined"
+          },
+          "event": "press"
+        }
+      },
+      "ui.card@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "padding",
+          "props": {
+            "padding": 4
+          },
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      }
+    },
+    "templates": {
+      "ui.page.list@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "card",
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      },
+      "ui.page.form@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "card",
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      },
+      "ui.page.settings@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "card",
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      },
+      "ui.page.detail@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "card",
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      },
+      "ui.page.timeGrid@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "card",
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      }
+    },
+    "chrome": {
+      "ui.chrome.header@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "card",
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      },
+      "ui.chrome.bottomNav@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "card",
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      },
+      "ui.chrome.sidebar@1": {
+        "tree": {
+          "type": "primitive",
+          "name": "card",
+          "children": [
+            {
+              "type": "base"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

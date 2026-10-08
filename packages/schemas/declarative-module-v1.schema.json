@@ -92,6 +92,12 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "description": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
         }
       }
     },

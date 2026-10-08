@@ -1,3 +1,5 @@
+import '../core/module_host/host_manager_page.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,11 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/modules/module_registry.dart';
 import '../core/modules/builtin_module_registration.dart';
 import '../core/security/capability_registry.dart';
-import '../features/ai/ai_module.dart';
-import '../features/declarative_runtime/builtin_declarative_modules.dart';
-import '../features/module_manager/module_manager_module.dart';
-import '../features/projects/projects_module.dart';
 import '../features/settings/app_preferences.dart';
+import '../core/ui/ui_annotation.dart';
+import '../core/ui/ui_component.dart';
+import '../core/ui/app_navigation.dart';
+import '../core/ui/global_overlay_host.dart';
 import 'app_shell.dart';
 import 'design_system.dart';
 
@@ -21,39 +23,15 @@ class XudianApp extends ConsumerWidget {
         'tasks.query',
         'tasks.command',
         'ui.registry',
+        'ui.composition',
       ]),
     );
-    final views = buildBuiltinDeclarativeModules();
-    for (var i = 0; i < views.length; i++) {
-      registry.registerBuiltin(
-        BuiltinModuleRegistration(
-          module: views[i],
-          title: i == 0 ? '今天' : '收件箱',
-          description: i == 0 ? '查看今天计划及到期的任务' : '收集未归入项目的任务',
-          kind: BuiltinModuleKind.declarative,
-        ),
-      );
-    }
     registry.registerBuiltin(
       BuiltinModuleRegistration(
-        module: ProjectsModule(),
-        title: '项目',
-        description: '组织项目及相关任务',
-      ),
-    );
-    registry.registerBuiltin(
-      BuiltinModuleRegistration(
-        module: ModuleManagerModule(registry: registry),
+        module: HostManagerModule(),
         title: '模块管理',
-        description: '管理内置功能与扩展模块',
+        description: '安装、授权和恢复独立模块',
         canDisable: false,
-      ),
-    );
-    registry.registerBuiltin(
-      BuiltinModuleRegistration(
-        module: AiModule(),
-        title: 'AI 助手',
-        description: '连接模型服务，生成并预览功能模块',
       ),
     );
   }
@@ -66,6 +44,8 @@ class XudianApp extends ConsumerWidget {
         ref.watch(appPreferencesProvider).asData?.value ??
         const AppPreferences();
     return MaterialApp(
+      navigatorKey: ref.read(appNavigationProvider).navigatorKey,
+      navigatorObservers: [ref.read(appNavigationProvider)],
       title: '序点',
       debugShowCheckedModeBanner: false,
       theme: _theme(Brightness.light),
@@ -78,9 +58,15 @@ class XudianApp extends ConsumerWidget {
             disableAnimations:
                 media.disableAnimations || preferences.reduceMotion,
           ),
-          child: AnnotatedRegion<SystemUiOverlayStyle>(
-            value: AppDesign.overlayStyle(Theme.of(context).brightness),
-            child: child!,
+          child: UiPackScope(
+            child: Builder(
+              builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>(
+                value: AppDesign.overlayStyle(Theme.of(context).brightness),
+                child: AnnotationControls(
+                  child: GlobalOverlayHost(registry: registry, child: child!),
+                ),
+              ),
+            ),
           ),
         );
       },

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "app.ai",
+    "asset": "assets/modules/app.ai-1.0.1.xmodule",
+    "sha256": "6981bcad078a08134f28901c1e9837a7ddde09c581b53021e0048be97d9fe51c",
+    "default": true
+  },
+  {
+    "id": "app.tasks",
+    "asset": "assets/modules/app.tasks-1.1.1.xmodule",
+    "sha256": "b9f6c7ce24235930bf85dbb65d99d23387af76449bba2a4898b824671c641d0b",
+    "default": true
+  },
+  {
+    "id": "app.ui.contributions",
+    "asset": "assets/modules/app.ui.contributions-1.0.2.xmodule",
+    "sha256": "02bda9957f59f8f5cb8507abd381aebe74dff940142d49245aaedcbfde167d17",
+    "default": false
+  },
+  {
+    "id": "app.ui.examples",
+    "asset": "assets/modules/app.ui.examples-1.1.1.xmodule",
+    "sha256": "6d070e2eca0bc11fbd59a89ab3ab057e51414fca2f315d4bcc98f16a6ab306ba",
+    "default": false
+  },
+  {
+    "id": "app.views.inbox",
+    "asset": "assets/modules/app.views.inbox-1.1.1.xmodule",
+    "sha256": "acb0682081f9a7d1e254d6d5ce2beefe74bbdb8487adf7e3f7ccf6a0af6c0e60",
+    "default": true
+  },
+  {
+    "id": "app.views.projects",
+    "asset": "assets/modules/app.views.projects-1.1.1.xmodule",
+    "sha256": "02e28823b3a05e2ea5335f1bbda432a346f6ecd27cdf47283f318183c8442911",
+    "default": true
+  },
+  {
+    "id": "app.views.today",
+    "asset": "assets/modules/app.views.today-1.1.1.xmodule",
+    "sha256": "bf7ebd6896f24a5828660bc275cb7406a18aa4ca0a87608ba4bf51b05e7a40e6",
+    "default": true
+  },
+  {
+    "id": "example.ui.compact",
+    "asset": "assets/modules/example.ui.compact-1.0.1.xmodule",
+    "sha256": "380d67193f4843614b13befe8e47deb7a6147ecc306e5fa4c47902cb702d2e19",
+    "default": false
+  }
+]

@@ -1,0 +1,105 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "app.import.shiguang",
+    "name": "拾光教务导入兼容",
+    "version": "1.1.1",
+    "hostApi": "^1.8.0",
+    "dataVersion": 1,
+    "permissions": [
+      "ui",
+      "files",
+      "browser.capture",
+      "services.query:app.schedule/schedule.query.timetables@1",
+      "services.command:app.schedule/schedule.import.prepare@1"
+    ],
+    "dependencies": [
+      {
+        "moduleId": "app.schedule",
+        "version": "^1.6.1"
+      }
+    ],
+    "description": "兼容拾光教务导入脚本，将教务数据转换为课表导入草稿。",
+    "author": "JayConstruct"
+  },
+  "entryPoint": "main.js",
+  "collections": [],
+  "services": [
+    {
+      "id": "shiguang.bridge.compile",
+      "major": 1,
+      "kind": "query",
+      "handler": "compileBridge",
+      "input": {
+        "type": "object",
+        "required": [
+          "script"
+        ],
+        "properties": {
+          "script": {
+            "type": "string"
+          },
+          "bridgeVersion": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "required": [
+          "script",
+          "bridgeVersion"
+        ],
+        "properties": {
+          "script": {
+            "type": "string"
+          },
+          "bridgeVersion": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "shiguang.convert",
+      "major": 1,
+      "kind": "query",
+      "handler": "convert",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "id": "app.import.shiguang.home",
+      "title": "拾光教务导入",
+      "icon": "calendar",
+      "handler": "render",
+      "retainPosition": true,
+      "entries": [
+        {
+          "id": "app.import.shiguang.settings",
+          "opening": "detail",
+          "placement": "settings"
+        },
+        {
+          "id": "app.import.shiguang.importer",
+          "opening": "detail",
+          "placement": "page",
+          "targetPageId": "app.schedule.imports",
+          "slotId": "importers"
+        }
+      ]
+    }
+  ]
+}

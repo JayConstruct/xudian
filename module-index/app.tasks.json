@@ -1,0 +1,1015 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.tasks",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.1.1",
+      "manifest": {
+        "id": "app.tasks",
+        "name": "任务",
+        "version": "1.1.1",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "extensions.query"
+        ],
+        "dependencies": [],
+        "defaultInstall": true,
+        "description": "管理任务、项目、状态和计划日期。",
+        "author": "JayConstruct"
+      },
+      "services": [
+        {
+          "id": "task.list",
+          "major": 1,
+          "handler": "taskList",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "view": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "raw",
+                  "today",
+                  "inbox"
+                ]
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              }
+            }
+          },
+          "output": {
+            "type": "array"
+          },
+          "tool": {
+            "name": "task_list",
+            "description": "task.list",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "view": {
+                  "type": "string",
+                  "enum": [
+                    "all",
+                    "raw",
+                    "today",
+                    "inbox"
+                  ]
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "task.get",
+          "major": 1,
+          "handler": "taskGet",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "task_get",
+            "description": "task.get",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "project.list",
+          "major": 1,
+          "handler": "projectList",
+          "kind": "query",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "array"
+          },
+          "tool": {
+            "name": "project_list",
+            "description": "project.list",
+            "inputSchema": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "id": "project.create",
+          "major": 1,
+          "handler": "projectCreate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "project_create",
+            "description": "project.create",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "task.create",
+          "major": 1,
+          "handler": "taskCreate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "title"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "parentTaskId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dueDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plannedDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "task_create",
+            "description": "task.create",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "title"
+              ],
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
+                "projectId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "parentTaskId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "dueDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "plannedDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "priority": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "task.updateFields",
+          "major": 1,
+          "handler": "taskUpdate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "id",
+              "changes"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "dueDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "plannedDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "expectedValues": {
+                "type": "object"
+              },
+              "expectedUpdatedAt": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "task_updateFields",
+            "description": "task.updateFields",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "id",
+                "changes"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "changes": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "plannedDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "expectedValues": {
+                  "type": "object"
+                },
+                "expectedUpdatedAt": {
+                  "type": "string"
+                }
+              }
+            },
+            "undo": {
+              "serviceId": "task.updateFields",
+              "input": {
+                "id": {
+                  "bind": [
+                    "result",
+                    "id"
+                  ]
+                },
+                "expectedValues": {
+                  "bind": [
+                    "result"
+                  ]
+                },
+                "changes": {
+                  "beforeChangedFields": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "task.setCompleted",
+          "major": 1,
+          "handler": "taskComplete",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "id",
+              "completed"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "completed": {
+                "type": "boolean"
+              },
+              "expectedValues": {
+                "type": "object"
+              },
+              "expectedUpdatedAt": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "task_setCompleted",
+            "description": "task.setCompleted",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "id",
+                "completed"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "completed": {
+                  "type": "boolean"
+                },
+                "expectedValues": {
+                  "type": "object"
+                },
+                "expectedUpdatedAt": {
+                  "type": "string"
+                }
+              }
+            },
+            "undo": {
+              "serviceId": "task.setCompleted",
+              "input": {
+                "id": {
+                  "bind": [
+                    "result",
+                    "id"
+                  ]
+                },
+                "expectedValues": {
+                  "bind": [
+                    "result"
+                  ]
+                },
+                "completed": {
+                  "bind": [
+                    "before",
+                    "completedAt"
+                  ],
+                  "boolean": true
+                }
+              }
+            }
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.tasks-1.1.1.xmodule",
+      "size": 4196,
+      "sha256": "b9f6c7ce24235930bf85dbb65d99d23387af76449bba2a4898b824671c641d0b",
+      "signature": null
+    },
+    {
+      "version": "1.1.0",
+      "manifest": {
+        "id": "app.tasks",
+        "name": "任务",
+        "version": "1.1.0",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "extensions.query"
+        ],
+        "dependencies": [],
+        "defaultInstall": true
+      },
+      "services": [
+        {
+          "id": "task.list",
+          "major": 1,
+          "handler": "taskList",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "view": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "raw",
+                  "today",
+                  "inbox"
+                ]
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              }
+            }
+          },
+          "output": {
+            "type": "array"
+          },
+          "tool": {
+            "name": "task_list",
+            "description": "task.list",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "view": {
+                  "type": "string",
+                  "enum": [
+                    "all",
+                    "raw",
+                    "today",
+                    "inbox"
+                  ]
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "task.get",
+          "major": 1,
+          "handler": "taskGet",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "task_get",
+            "description": "task.get",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "project.list",
+          "major": 1,
+          "handler": "projectList",
+          "kind": "query",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "array"
+          },
+          "tool": {
+            "name": "project_list",
+            "description": "project.list",
+            "inputSchema": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "id": "project.create",
+          "major": 1,
+          "handler": "projectCreate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "project_create",
+            "description": "project.create",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "task.create",
+          "major": 1,
+          "handler": "taskCreate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "title"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "parentTaskId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dueDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plannedDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "task_create",
+            "description": "task.create",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "title"
+              ],
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
+                "projectId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "parentTaskId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "dueDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "plannedDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "priority": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "task.updateFields",
+          "major": 1,
+          "handler": "taskUpdate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "id",
+              "changes"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "dueDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "plannedDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "expectedValues": {
+                "type": "object"
+              },
+              "expectedUpdatedAt": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "task_updateFields",
+            "description": "task.updateFields",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "id",
+                "changes"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "changes": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "plannedDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "expectedValues": {
+                  "type": "object"
+                },
+                "expectedUpdatedAt": {
+                  "type": "string"
+                }
+              }
+            },
+            "undo": {
+              "serviceId": "task.updateFields",
+              "input": {
+                "id": {
+                  "bind": [
+                    "result",
+                    "id"
+                  ]
+                },
+                "expectedValues": {
+                  "bind": [
+                    "result"
+                  ]
+                },
+                "changes": {
+                  "beforeChangedFields": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "task.setCompleted",
+          "major": 1,
+          "handler": "taskComplete",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "id",
+              "completed"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "completed": {
+                "type": "boolean"
+              },
+              "expectedValues": {
+                "type": "object"
+              },
+              "expectedUpdatedAt": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "tool": {
+            "name": "task_setCompleted",
+            "description": "task.setCompleted",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "id",
+                "completed"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "completed": {
+                  "type": "boolean"
+                },
+                "expectedValues": {
+                  "type": "object"
+                },
+                "expectedUpdatedAt": {
+                  "type": "string"
+                }
+              }
+            },
+            "undo": {
+              "serviceId": "task.setCompleted",
+              "input": {
+                "id": {
+                  "bind": [
+                    "result",
+                    "id"
+                  ]
+                },
+                "expectedValues": {
+                  "bind": [
+                    "result"
+                  ]
+                },
+                "completed": {
+                  "bind": [
+                    "before",
+                    "completedAt"
+                  ],
+                  "boolean": true
+                }
+              }
+            }
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.tasks-1.1.0.xmodule",
+      "size": 4108,
+      "sha256": "0e2e5c51d48a2ffa0c5db3e71704fa38488b0bec857208407be77a72c7ab4e33",
+      "signature": null
+    }
+  ]
+}

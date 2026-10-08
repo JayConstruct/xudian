@@ -86,7 +86,7 @@ class _TemplateParameterDialogState
         ),
         FilledButton(
           onPressed: _submit,
-          child: const Text('应用模板'),
+          child: const Text('创建任务'),
         ),
       ],
     );

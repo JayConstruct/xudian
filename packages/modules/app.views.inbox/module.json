@@ -1,0 +1,45 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "app.views.inbox",
+    "name": "收件箱",
+    "version": "1.1.1",
+    "hostApi": "^1.6.0",
+    "dataVersion": 1,
+    "permissions": [
+      "ui",
+      "clock.today",
+      "services.query:app.tasks/task.list@1",
+      "services.query:app.tasks/task.get@1",
+      "services.query:app.tasks/project.list@1",
+      "services.command:app.tasks/project.create@1",
+      "services.command:app.tasks/task.create@1",
+      "services.command:app.tasks/task.updateFields@1",
+      "services.command:app.tasks/task.setCompleted@1",
+      "extensions.command:app.tasks/tasks"
+    ],
+    "dependencies": [
+      "app.tasks"
+    ],
+    "defaultInstall": true,
+    "description": "集中查看和处理尚未归类的任务。",
+    "author": "JayConstruct"
+  },
+  "entryPoint": "main.js",
+  "pages": [
+    {
+      "id": "app.views.inbox.home",
+      "title": "收件箱",
+      "icon": "inbox",
+      "handler": "render",
+      "entry": {
+        "id": "app.views.inbox.home",
+        "opening": "workspace",
+        "placement": "main",
+        "order": 1
+      }
+    }
+  ],
+  "collections": [],
+  "services": []
+}

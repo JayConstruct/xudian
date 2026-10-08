@@ -6,6 +6,8 @@ import '../../../data/app_database.dart';
 import '../data/change_journal.dart';
 import '../data/task_store.dart';
 import '../domain/task_input.dart';
+import '../domain/task_snapshot.dart';
+import '../../../core/contracts/json_values.dart';
 
 class TaskCommandService {
   TaskCommandService({
@@ -43,12 +45,14 @@ class TaskCommandService {
         payload: {'name': cleaned},
       );
     });
-    events.publish(DomainEvent(
-      type: 'project.created',
-      entityType: 'project',
-      entityId: project.id,
-      payload: {'name': cleaned},
-    ));
+    events.publish(
+      DomainEvent(
+        type: 'project.created',
+        entityType: 'project',
+        entityId: project.id,
+        payload: {'name': cleaned},
+      ),
+    );
     return project;
   }
 
@@ -74,7 +78,9 @@ class TaskCommandService {
       }
       if (input.parentTaskId != null) {
         final parent = await store.findTask(input.parentTaskId!);
-        if (parent == null || parent.deletedAt != null || parent.archivedAt != null) {
+        if (parent == null ||
+            parent.deletedAt != null ||
+            parent.archivedAt != null) {
           throw StateError('父任务不可用');
         }
         if (parent.projectId != input.projectId) {
@@ -111,36 +117,31 @@ class TaskCommandService {
         },
       );
     });
-    events.publish(DomainEvent(
-      type: 'task.created',
-      entityType: 'task',
-      entityId: task.id,
-    ));
+    events.publish(
+      DomainEvent(type: 'task.created', entityType: 'task', entityId: task.id),
+    );
     return task;
   }
 
-  Future<void> updateFields(
+  Future<Task> updateFields(
     String id,
-    Map<String, Object?> changes,
-  ) async {
+    Map<String, Object?> changes, {
+    DateTime? expectedUpdatedAt,
+    Map<String, Object?>? expectedValues,
+  }) async {
     final current = await store.findTask(id);
     if (current == null) throw StateError('任务不存在');
     if (current.deletedAt != null) {
       throw StateError('已删除的任务不能修改');
     }
 
-    const allowed = {
-      'title',
-      'priority',
-      'dueDate',
-      'plannedDate',
-    };
+    const allowed = {'title', 'priority', 'dueDate', 'plannedDate'};
     for (final key in changes.keys) {
       if (!allowed.contains(key)) {
         throw ArgumentError('不支持修改字段：$key');
       }
     }
-    if (changes.isEmpty) return;
+    if (changes.isEmpty) return current;
 
     if (changes.containsKey('title')) {
       final title = changes['title'];
@@ -164,7 +165,8 @@ class TaskCommandService {
       _validateDate(changes['plannedDate'] as String?);
     }
 
-    await db.transaction(() async {
+    final updated = await db.transaction(() async {
+      await _checkRevision(id, expectedUpdatedAt, expectedValues);
       await store.updateTaskFields(id, changes);
       await journal.append(
         entityType: 'task',
@@ -172,6 +174,7 @@ class TaskCommandService {
         action: 'update',
         payload: changes,
       );
+      return (await store.findTask(id))!;
     });
     events.publish(
       DomainEvent(
@@ -181,26 +184,55 @@ class TaskCommandService {
         payload: {'fields': changes.keys.toList(growable: false)},
       ),
     );
+    return updated;
   }
 
-  Future<void> setCompleted(String id, bool completed) async {
+  Future<Task> setCompleted(
+    String id,
+    bool completed, {
+    DateTime? expectedUpdatedAt,
+    Map<String, Object?>? expectedValues,
+  }) async {
     final current = await store.findTask(id);
     if (current == null) throw StateError('任务不存在');
     if (current.deletedAt != null) throw StateError('已删除的任务不能修改');
 
-    await db.transaction(() async {
+    final updated = await db.transaction(() async {
+      await _checkRevision(id, expectedUpdatedAt, expectedValues);
       await store.setTaskCompleted(id, completed ? DateTime.now() : null);
       await journal.append(
         entityType: 'task',
         entityId: id,
         action: completed ? 'complete' : 'reopen',
       );
+      return (await store.findTask(id))!;
     });
-    events.publish(DomainEvent(
-      type: completed ? 'task.completed' : 'task.reopened',
-      entityType: 'task',
-      entityId: id,
-    ));
+    events.publish(
+      DomainEvent(
+        type: completed ? 'task.completed' : 'task.reopened',
+        entityType: 'task',
+        entityId: id,
+      ),
+    );
+    return updated;
+  }
+
+  Future<void> _checkRevision(
+    String id,
+    DateTime? expected,
+    Map<String, Object?>? values,
+  ) async {
+    final current = await store.findTask(id);
+    if (current == null || current.deletedAt != null) {
+      throw StateError('任务已不可用');
+    }
+    if (expected != null && current.updatedAt != expected) {
+      throw StateError('任务已被其他操作修改，请重新生成方案');
+    }
+    if (values != null &&
+        canonicalJson(values) != canonicalJson(taskStateSnapshot(current))) {
+      throw StateError('任务内容已变化，请重新生成方案');
+    }
   }
 
   void _validateDate(String? value) {

@@ -8,6 +8,8 @@ import '../../core/modules/app_module.dart';
 import '../../core/modules/module_manifest.dart';
 import '../../core/modules/module_registry.dart';
 import '../../core/ui/ui_registration.dart';
+import '../../core/ui/ui_composition.dart';
+import '../../core/ui/ui_slot.dart';
 import '../../app/design_system.dart';
 import '../declarative_runtime/declarative_runtime_controller.dart';
 import '../tasks/application/providers.dart';
@@ -16,26 +18,73 @@ import 'proposal/module_proposal_service.dart';
 import 'provider/openai_compatible_provider.dart';
 import 'settings/ai_connection_page.dart';
 import 'settings/ai_settings_store.dart';
+import 'assistant_overlay.dart';
+import 'assistant_panel.dart';
+import 'assistant_runtime.dart';
 
 class AiModule implements AppModule {
+  AiModule({required this.registry});
+
+  final ModuleRegistry registry;
   @override
-  ModuleManifest get manifest =>
-      const ModuleManifest(id: 'app.ai', version: '1.0.0', coreApi: '1');
+  ModuleManifest get manifest => const ModuleManifest(
+    id: 'app.ai',
+    version: '1.0.0',
+    coreApi: '1',
+    requiresCapabilities: ['ui.registry'],
+    permissions: ['ui.register', 'tasks.read', 'tasks.write'],
+  );
 
   @override
-  List<UiRegistration> get ui => const [];
+  List<UiRegistration> get ui => [
+    WidgetRegistration(
+      UiSlot.globalOverlay,
+      'app.ai.overlay',
+      (_) => AssistantOverlay(
+        registry: registry,
+        developerBuilder: (_) => AiModuleDeveloperPanel(registry: registry),
+      ),
+    ),
+    UiPageRegistration(
+      id: 'app.ai.page',
+      moduleId: manifest.id,
+      title: 'AI 助手',
+      builder: (_, _) => AiWorkspacePanel(registry: registry),
+    ),
+    UiEntryRegistration(
+      id: 'app.ai.entry',
+      moduleId: manifest.id,
+      pageId: 'app.ai.page',
+      label: 'AI 助手',
+      icon: Icons.auto_awesome_outlined,
+      opening: UiOpening.adaptivePanel,
+      defaultMount: const UiMount(placement: UiPlacement.header),
+    ),
+  ];
 }
 
-class AiWorkspacePanel extends ConsumerStatefulWidget {
+class AiWorkspacePanel extends StatelessWidget {
   const AiWorkspacePanel({super.key, required this.registry});
 
   final ModuleRegistry registry;
 
   @override
-  ConsumerState<AiWorkspacePanel> createState() => _AiPageState();
+  Widget build(BuildContext context) => AssistantPanel(
+    registry: registry,
+    developerBuilder: (_) => AiModuleDeveloperPanel(registry: registry),
+  );
 }
 
-class _AiPageState extends ConsumerState<AiWorkspacePanel> {
+class AiModuleDeveloperPanel extends ConsumerStatefulWidget {
+  const AiModuleDeveloperPanel({super.key, required this.registry});
+
+  final ModuleRegistry registry;
+
+  @override
+  ConsumerState<AiModuleDeveloperPanel> createState() => _AiPageState();
+}
+
+class _AiPageState extends ConsumerState<AiModuleDeveloperPanel> {
   AiSettings connection = const AiSettings(endpoint: '', model: '');
   String apiKey = '';
   final requestController = TextEditingController();
@@ -44,12 +93,17 @@ class _AiPageState extends ConsumerState<AiWorkspacePanel> {
   bool showAdvanced = false;
   bool loadingSettings = true;
   AiRequestCancellation? pendingRequest;
+  late final AssistantController assistant;
+  late int cancellationVersion;
 
   bool get available => mounted && widget.registry.isEnabled('app.ai');
 
   @override
   void initState() {
     super.initState();
+    assistant = ref.read(assistantControllerProvider(widget.registry));
+    cancellationVersion = assistant.cancellationVersion;
+    assistant.addListener(_assistantChanged);
     widget.registry.addListener(_registryChanged);
     _loadSettings();
   }
@@ -57,6 +111,13 @@ class _AiPageState extends ConsumerState<AiWorkspacePanel> {
   void _registryChanged() {
     if (!widget.registry.isEnabled('app.ai')) pendingRequest?.cancel();
     if (mounted) setState(() {});
+  }
+
+  void _assistantChanged() {
+    if (assistant.cancellationVersion != cancellationVersion) {
+      cancellationVersion = assistant.cancellationVersion;
+      pendingRequest?.cancel();
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -85,6 +146,7 @@ class _AiPageState extends ConsumerState<AiWorkspacePanel> {
 
   @override
   void dispose() {
+    assistant.removeListener(_assistantChanged);
     widget.registry.removeListener(_registryChanged);
     pendingRequest?.cancel();
     requestController.dispose();
@@ -219,12 +281,12 @@ class _AiPageState extends ConsumerState<AiWorkspacePanel> {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(width: 10),
-            Text('AI 工作区', style: Theme.of(context).textTheme.titleLarge),
+            Text('AI 模块生成', style: Theme.of(context).textTheme.titleLarge),
           ],
         ),
         const SizedBox(height: 8),
         Text(
-          '作用范围 · 私有模块功能',
+          '生成任务视图、自定义字段、任务模板和自动化规则',
           style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: AppDesign.muted(context)),
         ),
@@ -253,7 +315,7 @@ class _AiPageState extends ConsumerState<AiWorkspacePanel> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.auto_awesome_outlined),
-            label: const Text('生成并预览'),
+            label: const Text('生成并查看变更'),
           ),
         ),
         const SizedBox(height: 16),
@@ -271,6 +333,13 @@ class _AiPageState extends ConsumerState<AiWorkspacePanel> {
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: applying || loadingSettings ? null : _openConnection,
           ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '生成时会向你配置的模型服务发送功能描述和已安装模块的标识、版本；'
+          '确认变更后才会安装或更新模块。',
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: AppDesign.muted(context)),
         ),
         const SizedBox(height: 12),
         Card(
@@ -301,7 +370,7 @@ class _AiPageState extends ConsumerState<AiWorkspacePanel> {
                       child: OutlinedButton.icon(
                         onPressed: applying ? null : _reviewJson,
                         icon: const Icon(Icons.rate_review_outlined),
-                        label: const Text('预览 JSON 变更'),
+                        label: const Text('查看 JSON 变更'),
                       ),
                     ),
                   ],

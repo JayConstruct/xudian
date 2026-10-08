@@ -1,0 +1,71 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.views.inbox",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.1.1",
+      "manifest": {
+        "id": "app.views.inbox",
+        "name": "收件箱",
+        "version": "1.1.1",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.query:app.tasks/task.list@1",
+          "services.query:app.tasks/task.get@1",
+          "services.query:app.tasks/project.list@1",
+          "services.command:app.tasks/project.create@1",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/task.updateFields@1",
+          "services.command:app.tasks/task.setCompleted@1",
+          "extensions.command:app.tasks/tasks"
+        ],
+        "dependencies": [
+          "app.tasks"
+        ],
+        "defaultInstall": true,
+        "description": "集中查看和处理尚未归类的任务。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.views.inbox-1.1.1.xmodule",
+      "size": 2981,
+      "sha256": "acb0682081f9a7d1e254d6d5ce2beefe74bbdb8487adf7e3f7ccf6a0af6c0e60",
+      "signature": null
+    },
+    {
+      "version": "1.1.0",
+      "manifest": {
+        "id": "app.views.inbox",
+        "name": "收件箱",
+        "version": "1.1.0",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.query:app.tasks/task.list@1",
+          "services.query:app.tasks/task.get@1",
+          "services.query:app.tasks/project.list@1",
+          "services.command:app.tasks/project.create@1",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/task.updateFields@1",
+          "services.command:app.tasks/task.setCompleted@1",
+          "extensions.command:app.tasks/tasks"
+        ],
+        "dependencies": [
+          "app.tasks"
+        ],
+        "defaultInstall": true
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.views.inbox-1.1.0.xmodule",
+      "size": 2892,
+      "sha256": "9f6bf878a7c16cbd94ebc3156252bed33af174d13969ee0b202f00f63b93055e",
+      "signature": null
+    }
+  ]
+}

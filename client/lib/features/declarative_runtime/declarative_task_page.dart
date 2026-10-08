@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/declarative/declarative_module.dart';
 import '../../core/modules/module_context.dart';
+import '../../core/ui/ui_annotation.dart';
+import '../../core/ui/ui_composition.dart';
 import '../../app/design_system.dart';
 import '../tasks/application/providers.dart';
 import '../tasks/task_editor.dart';
@@ -16,11 +18,13 @@ class DeclarativeTaskPage extends ConsumerStatefulWidget {
     required this.module,
     required this.moduleContext,
     required this.page,
+    this.pageContext = const PageContext(),
   });
 
   final DeclarativeModule module;
   final ModuleContext moduleContext;
   final Map<String, Object?> page;
+  final PageContext pageContext;
 
   @override
   ConsumerState<DeclarativeTaskPage> createState() =>
@@ -47,7 +51,9 @@ class _DeclarativeTaskPageState extends ConsumerState<DeclarativeTaskPage>
   @override
   void didUpdateWidget(covariant DeclarativeTaskPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.module != widget.module || oldWidget.page != widget.page) {
+    if (oldWidget.module != widget.module ||
+        oldWidget.page != widget.page ||
+        oldWidget.pageContext.identity != widget.pageContext.identity) {
       view = widget.module.views.firstWhere(
         (item) => item['id'] == widget.page['view'],
       );
@@ -83,18 +89,107 @@ class _DeclarativeTaskPageState extends ConsumerState<DeclarativeTaskPage>
 
   Stream<Object?> _watch() async* {
     final moduleContext = widget.moduleContext;
+    final pageContext = widget.pageContext;
+    final requiredContext =
+        (widget.page['requiredContext'] as List?)?.cast<String>() ??
+        const <String>[];
+    if (!pageContext.satisfies(requiredContext)) {
+      throw StateError('页面上下文失效：缺少 ${requiredContext.join('、')}');
+    }
+    moduleContext.require('tasks.read');
     final source = view['source'] as String;
+    final contextFilters = <Map<String, Object?>>[
+      if (pageContext.taskId != null)
+        {'field': 'id', 'op': 'eq', 'value': pageContext.taskId},
+      if (pageContext.projectId != null)
+        {'field': 'projectId', 'op': 'eq', 'value': pageContext.projectId},
+    ];
     final payload = <String, Object?>{
-      'filter': view['filter'],
+      'filter': contextFilters.isEmpty
+          ? view['filter']
+          : {
+              'all': [
+                if (view['filter'] != null) view['filter'],
+                ...contextFilters,
+              ],
+            },
       'fieldNamespace': widget.module.manifest.id,
     };
     final bus = await ref.read(queryBusProvider.future);
-    yield* bus.watch(moduleContext, source, payload);
+    if (contextFilters.isEmpty) {
+      yield* bus.watch(moduleContext, source, payload);
+      return;
+    }
+    final queryService = pageContext.projectId == null
+        ? null
+        : await ref.read(taskQueryServiceProvider.future);
+    List<Map<String, Object?>>? rows;
+    bool? taskValid = pageContext.taskId == null ? true : null;
+    bool? projectValid = pageContext.projectId == null ? true : null;
+    final subscriptions = <StreamSubscription<Object?>>[];
+    late StreamController<Object?> controller;
+    void emit() {
+      if (controller.isClosed || taskValid == null || projectValid == null) {
+        return;
+      }
+      if (!taskValid! || !projectValid!) {
+        controller.addError(StateError('页面上下文失效：任务或项目不存在、已删除或不匹配'));
+      } else if (rows != null) {
+        controller.add(rows);
+      }
+    }
+
+    controller = StreamController<Object?>(
+      onListen: () {
+        subscriptions.add(
+          bus.watch(moduleContext, source, payload).listen((value) {
+            rows = (value as List).cast<Map<String, Object?>>();
+            emit();
+          }, onError: controller.addError),
+        );
+        if (pageContext.taskId != null) {
+          subscriptions.add(
+            bus
+                .watch(moduleContext, 'task.list', {
+                  'filter': {
+                    'all': [
+                      ...contextFilters,
+                      {'field': 'deleted', 'op': 'eq', 'value': false},
+                    ],
+                  },
+                })
+                .listen((value) {
+                  taskValid = (value as List).isNotEmpty;
+                  emit();
+                }, onError: controller.addError),
+          );
+        }
+        if (queryService != null) {
+          subscriptions.add(
+            queryService.watchProjects().listen((projects) {
+              projectValid = projects.any(
+                (project) =>
+                    project.id == pageContext.projectId &&
+                    project.archivedAt == null,
+              );
+              emit();
+            }, onError: controller.addError),
+          );
+        }
+      },
+      onCancel: () async {
+        await Future.wait(
+          subscriptions.map((subscription) => subscription.cancel()),
+        );
+      },
+    );
+    yield* controller.stream;
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Object?>(
+      key: ObjectKey(result),
       stream: result,
       builder: (context, snapshot) {
         if (!snapshot.hasData && !snapshot.hasError) {
@@ -113,6 +208,10 @@ class _DeclarativeTaskPageState extends ConsumerState<DeclarativeTaskPage>
           );
         }
         return ListView.separated(
+          key: PageStorageKey(
+            '${widget.module.manifest.id}.${widget.page['id']}:'
+            '${widget.pageContext.identity}:tasks',
+          ),
           padding: EdgeInsets.fromLTRB(
             16,
             16,
@@ -131,38 +230,55 @@ class _DeclarativeTaskPageState extends ConsumerState<DeclarativeTaskPage>
               );
             }
             final task = rows[index - 1];
-            return TaskObjectTile(
+            final pageId = '${widget.module.manifest.id}.${widget.page['id']}';
+            return UiAnnotation(
               key: ValueKey(task['id']),
-              title: task['title'] as String,
-              onTap: widget.moduleContext.allows('tasks.write')
-                  ? () => showTaskEditor(
-                      context: context,
-                      moduleContext: widget.moduleContext,
-                      taskId: task['id'] as String,
-                      title: task['title'] as String,
-                      priority: task['priority'] as int? ?? 0,
-                      plannedDate: task['plannedDate'] as String?,
-                      dueDate: task['dueDate'] as String?,
-                    )
-                  : null,
-              completed: task['completed'] == true,
-              onCompleted:
-                  widget.moduleContext.allows('tasks.write') &&
-                      !pendingTasks.contains(task['id'])
-                  ? (value) => _setCompleted(task, value ?? false)
-                  : null,
-              subtitle: _subtitle(task),
-              trailing: widget.module.fields.isNotEmpty
-                  ? IconButton(
-                      tooltip: '编辑扩展字段',
-                      icon: const Icon(Icons.tune_outlined),
-                      onPressed:
-                          widget.moduleContext.allows('fields.write') &&
-                              !pendingTasks.contains(task['id'])
-                          ? () => _editFields(task)
-                          : null,
-                    )
-                  : null,
+              id: '$pageId.task_card',
+              name: '任务卡片',
+              moduleId: widget.module.manifest.id,
+              pagePath: pageId,
+              slot: 'task.list',
+              purpose: '显示任务，按模块权限提供编辑和完成操作',
+              child: TaskObjectTile(
+                title: task['title'] as String,
+                onTap: widget.moduleContext.allows('tasks.write')
+                    ? () => showTaskEditor(
+                        context: context,
+                        moduleContext: widget.moduleContext,
+                        taskId: task['id'] as String,
+                        title: task['title'] as String,
+                        priority: task['priority'] as int? ?? 0,
+                        plannedDate: task['plannedDate'] as String?,
+                        dueDate: task['dueDate'] as String?,
+                      )
+                    : null,
+                completed: task['completed'] == true,
+                onCompleted:
+                    widget.moduleContext.allows('tasks.write') &&
+                        !pendingTasks.contains(task['id'])
+                    ? (value) => _setCompleted(task, value ?? false)
+                    : null,
+                subtitle: _subtitle(task),
+                trailing: widget.module.fields.isNotEmpty
+                    ? UiAnnotation(
+                        id: '$pageId.task_card.fields',
+                        name: '扩展字段按钮',
+                        moduleId: widget.module.manifest.id,
+                        pagePath: pageId,
+                        slot: 'task.list.task_card.trailing',
+                        purpose: '按模块权限编辑任务扩展字段',
+                        child: IconButton(
+                          tooltip: '编辑扩展字段',
+                          icon: const Icon(Icons.tune_outlined),
+                          onPressed:
+                              widget.moduleContext.allows('fields.write') &&
+                                  !pendingTasks.contains(task['id'])
+                              ? () => _editFields(task)
+                              : null,
+                        ),
+                      )
+                    : null,
+              ),
             );
           },
         );

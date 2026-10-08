@@ -1,0 +1,1 @@
+export function render({state={},context={}}) { return {state,tree:{type:'card',children:[{type:'text',text:context.pageId==='app.ui.contributions.context'?'上下文已满足；此示例不读取项目内容。':'此内容来自另一个模块，只申请 UI 注册权限，不读写真实业务数据。'}]}}; }

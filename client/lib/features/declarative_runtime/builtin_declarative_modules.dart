@@ -41,7 +41,7 @@ List<DeclarativeAppModule> buildBuiltinDeclarativeModules() {
               },
             ]
           },
-          'emptyText': '今天已经安排妥当',
+          'emptyText': '暂无今天待办或逾期任务',
         }
       ],
     })),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_destination.dart';
 import 'ui_slot.dart';
 
-sealed class UiRegistration {
+abstract class UiRegistration {
   const UiRegistration(this.slot);
 
   final UiSlot slot;
@@ -11,7 +11,7 @@ sealed class UiRegistration {
 
 class NavigationRegistration extends UiRegistration {
   const NavigationRegistration(this.destination)
-      : super(UiSlot.navigationPrimary);
+    : super(UiSlot.navigationPrimary);
 
   final AppDestination destination;
 }

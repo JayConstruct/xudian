@@ -1,0 +1,397 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "序点模块 v3（脚本与 UI 包）",
+  "type": "object",
+  "required": [
+    "formatVersion",
+    "manifest",
+    "collections",
+    "services",
+    "pages"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": 3
+    },
+    "entryPoint": {
+      "type": "string",
+      "pattern": "\\.js$"
+    },
+    "manifest": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "hostApi",
+        "dataVersion",
+        "permissions",
+        "dependencies"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9_-]+)+$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+        },
+        "hostApi": {
+          "type": "string",
+          "description": "pub_semver version constraint, e.g. ^1.0.0 or >=1.0.0 <2.0.0"
+        },
+        "dataVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "moduleId",
+                  "version"
+                ],
+                "properties": {
+                  "moduleId": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "uniqueItems": true
+        },
+        "serviceDependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "moduleId",
+              "serviceId",
+              "majorVersion"
+            ],
+            "properties": {
+              "moduleId": {
+                "type": "string"
+              },
+              "serviceId": {
+                "type": "string"
+              },
+              "majorVersion": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "httpOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "enum": [
+            "script",
+            "uiPack"
+          ],
+          "description": "Omitted means script for compatibility."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional module purpose; omitted on older packages."
+        },
+        "author": {
+          "type": "string",
+          "description": "Optional author display name, not a verified publisher identity."
+        }
+      }
+    },
+    "collections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "schema"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "object"
+          },
+          "indexes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "fields"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "unique": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "major",
+          "kind",
+          "handler",
+          "input",
+          "output"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "major": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "kind": {
+            "enum": [
+              "query",
+              "command"
+            ]
+          },
+          "handler": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": {
+            "enum": [
+              "host",
+              "provider"
+            ]
+          },
+          "tool": {
+            "type": "object"
+          },
+          "extensionFor": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "handler"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "handler": {
+            "type": "string"
+          },
+          "entry": {
+            "type": "object"
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "headerMode": {
+            "enum": [
+              "standard",
+              "contributed"
+            ],
+            "description": "contributed publishes a header through the active workspace lease; host settings remain protected."
+          }
+        }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "contributions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "interruptHandlers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "uiPack": {
+      "$ref": "ui-pack-v1.schema.json"
+    }
+  },
+  "$defs": {
+    "ServiceRef": {
+      "type": "object",
+      "required": [
+        "moduleId",
+        "serviceId",
+        "majorVersion"
+      ],
+      "properties": {
+        "moduleId": {
+          "type": "string"
+        },
+        "serviceId": {
+          "type": "string"
+        },
+        "majorVersion": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "EntityRef": {
+      "type": "object",
+      "required": [
+        "moduleId",
+        "collection",
+        "id"
+      ],
+      "properties": {
+        "moduleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "collection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "manifest": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "uiPack"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "uiPack"
+        ],
+        "properties": {
+          "manifest": {
+            "properties": {
+              "dataVersion": {
+                "const": 1
+              },
+              "permissions": {
+                "maxItems": 0
+              },
+              "serviceDependencies": {
+                "maxItems": 0
+              },
+              "httpOrigins": {
+                "maxItems": 0
+              }
+            }
+          },
+          "entryPoint": false,
+          "collections": {
+            "maxItems": 0
+          },
+          "services": {
+            "maxItems": 0
+          },
+          "pages": {
+            "maxItems": 0
+          },
+          "contributions": {
+            "maxItems": 0
+          },
+          "interruptHandlers": {
+            "maxItems": 0
+          },
+          "migrations": {
+            "maxProperties": 0
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "entryPoint"
+        ],
+        "properties": {
+          "uiPack": false
+        }
+      }
+    }
+  ]
+}

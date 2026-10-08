@@ -1,0 +1,61 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.import.zhengfang",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.0.1",
+      "manifest": {
+        "id": "app.import.zhengfang",
+        "name": "正方教务导入（通用）",
+        "version": "1.0.1",
+        "hostApi": "^1.8.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "browser.capture",
+          "services.query:app.import.shiguang/shiguang.bridge.compile@1"
+        ],
+        "dependencies": [
+          {
+            "moduleId": "app.import.shiguang",
+            "version": "^1.1.0"
+          }
+        ],
+        "description": "通过浏览器采集正方教务课表，调用拾光兼容模块导入大学课表。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.import.zhengfang-1.0.1.xmodule",
+      "size": 6908,
+      "sha256": "4a8861d401f9ec3a5f26f5fc28083b97f8579acc294f033e884cb517d2c259c4",
+      "signature": null
+    },
+    {
+      "version": "1.0.0",
+      "manifest": {
+        "id": "app.import.zhengfang",
+        "name": "正方教务导入（通用）",
+        "version": "1.0.0",
+        "hostApi": "^1.8.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "browser.capture",
+          "services.query:app.import.shiguang/shiguang.bridge.compile@1"
+        ],
+        "dependencies": [
+          {
+            "moduleId": "app.import.shiguang",
+            "version": "^1.1.0"
+          }
+        ]
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.import.zhengfang-1.0.0.xmodule",
+      "size": 6784,
+      "sha256": "f01025a6295dc2740b5ab50be758bb95712f353d64edfd222b3736f1bc01f419",
+      "signature": null
+    }
+  ]
+}
