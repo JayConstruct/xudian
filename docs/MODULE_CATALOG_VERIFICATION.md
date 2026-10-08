@@ -7,6 +7,7 @@
 - `flutter analyze --no-pub`：无问题。
 - `flutter test --no-pub --concurrency=1`：560 个测试通过，包含现有宿主、课表及导入测试。
 - `python3 -m unittest discover -s scripts/module_catalog -p 'test_*.py'`：17 个测试通过。
+  发布工具的草稿恢复修复后重新运行，共 19 个测试通过；新增完整草稿位于后续分页时的恢复，以及同一待发布 tag 对应多份 Release 时拒绝操作的回归。
 - 作者索引、历史包与新包校验：11 个模块、22 个不可变资产；原历史包保持原字节。
 - Android release APK：arm64-v8a、armeabi-v7a、x86_64 构建成功；8 个内置包的版本、说明、作者与摘要逐项匹配。
 

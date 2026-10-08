@@ -17,4 +17,4 @@
 
 已安装官方模块只接受与当前 APK 内置目录的可信模块 ID、固定摘要匹配的官方版本。作者版本索引或本目录提供的摘要不会创建官方身份、数字签名或发布者信任。
 
-使用方法和作者发布工具见作者仓库的 `docs/MODULE_CATALOG.md`、`scripts/module_catalog/publish.py`。本仓库不收录模块包、模块业务脚本或私钥。
+使用方法见 [模块接入文档](https://github.com/JayConstruct/xudian/blob/module-catalog/docs/MODULE_CATALOG.md)，作者工具见 [publish.py](https://github.com/JayConstruct/xudian/blob/module-catalog/scripts/module_catalog/publish.py)。本仓库不收录模块包、模块业务脚本或私钥。

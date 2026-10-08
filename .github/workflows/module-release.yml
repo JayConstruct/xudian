@@ -1,7 +1,14 @@
 name: Publish immutable module release
 
 on:
+  workflow_dispatch:
   push:
+    branches:
+      - module-catalog
+    paths:
+      - .github/workflows/module-release.yml
+      - scripts/module_catalog/release.py
+      - scripts/module_catalog/test_release.py
     tags:
       - 'modules-*'
 
@@ -9,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: module-release-${{ github.ref }}
+  group: module-release-${{ github.ref_type == 'tag' && github.ref_name || 'modules-2026-10-08' }}
   cancel-in-progress: false
 
 jobs:
@@ -29,7 +36,7 @@ jobs:
       - name: Publish verified packages without replacing existing assets
         env:
           GH_TOKEN: ${{ github.token }}
-          MODULE_RELEASE_TAG: ${{ github.ref_name }}
+          MODULE_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'modules-2026-10-08' }}
           MODULE_RELEASE_REPOSITORY: ${{ github.repository }}
         run: >-
           python3 scripts/module_catalog/release.py

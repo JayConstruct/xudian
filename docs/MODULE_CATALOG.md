@@ -55,7 +55,11 @@ python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json --online
 
 发布脚本需要 [GitHub CLI](https://cli.github.com/)；本地先安装 `gh` 并执行 `gh auth login`。脚本先验证已准备包的摘要、清单、服务和索引，再检查仓库公开状态以及远端 tag 已存在。它使用 `gh release create --verify-tag --draft`，下载上传后的资产重新校验，最后公开 Release。重试会验证同名包的完整字节，拒绝不同摘要、额外资产、被移动的 tag 和缺少资产的已公开 Release；失败的草稿可补传缺失资产，不覆盖任何资产。Release 说明记录 tag 对象摘要，缺少记录的已有 Release 要先人工审阅，脚本不会改写。
 
+草稿恢复使用有写权限的身份分页查询 Release 列表，按 `tag_name` 唯一匹配，再按 Release ID 读取和公开；按 tag 查询的 REST 接口只能找到已公开版本。即使包已全部上传但公开前进程失败，重试也会复用同一草稿，完整校验资产后公开，不重复创建。[GitHub Release 接口说明](https://docs.github.com/en/rest/releases/releases#list-releases)
+
 当前作者工程提供 `.github/workflows/module-release.yml`：推送经过审阅的 `modules-*` tag 后，Actions 从该 tag 取出已提交的 `module-index/`、目录种子及 `dist/module-releases/` 22 个首批资产，执行校验和上述发布脚本。工作流仅需当前仓库的 `contents: write`，使用 `GITHUB_TOKEN`；按 tag 串行执行且不自动取消上传。必须先确认正确的源代码、索引、包和工作流均在 tag 对应提交中，再推送 tag。工作流不会生成或移动 tag，不会创建目录仓库，不会变更仓库可见性。后续发布若首批资产数量变化，应审阅并更新工作流的 `--expected-count`，也可本地使用不同数量运行脚本。
+
+为了修复发布工具后重试首批 Release，`module-catalog` 分支上的工作流、`release.py` 或发布回归测试发生变化时，也会触发工作流，固定检查和发布原 `modules-2026-10-08`，不修改原 tag、包或索引。工作流同时提供 `workflow_dispatch`；该入口只有工作流已存在于默认分支时才可从 Actions 手动启动。后续 `modules-*` tag 触发仍使用各自 tag。首批分支重试与首批 tag 共用同一个并发组。
 
 ## 接入与依赖
 

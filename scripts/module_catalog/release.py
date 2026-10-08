@@ -38,14 +38,26 @@ def prepared_assets(catalog_path, index_dir, package_dir, repository, tag, expec
     return assets
 
 
-def gh(arguments, allow_missing=False):
+def gh(arguments):
     result = subprocess.run(['gh', *arguments], capture_output=True, text=True)
     if result.returncode:
-        if allow_missing and 'HTTP 404' in result.stderr:
-            return None
         raise ValueError(f'GitHub command failed: {result.stderr.strip() or result.stdout.strip()}. '
                          'Check network access, gh auth login, repository access, and contents:write permissions.')
     return result.stdout
+
+
+def find_release(repository, tag):
+    # The by-tag REST endpoint returns published releases only. Drafts keep their
+    # pending tag_name and must be found in the authenticated, paginated list.
+    pages = json.loads(gh(['api', f'repos/{repository}/releases?per_page=100',
+                          '--paginate', '--slurp']))
+    matches = [release for page in pages for release in page if release.get('tag_name') == tag]
+    require(len(matches) <= 1, f'Multiple Releases have pending tag {tag}; refusing ambiguous publication')
+    if not matches:
+        return None
+    release = json.loads(gh(['api', f'repos/{repository}/releases/{matches[0]["id"]}']))
+    require(release.get('tag_name') == tag, 'Release pending tag changed during lookup')
+    return release
 
 
 def verify_remote_assets(repository, tag, release, assets):
@@ -72,14 +84,14 @@ def publish(repository, tag, package_dir, assets, title, notes):
             'Make the author repository public or review a move to a public publishing repository first.')
     tag_ref = json.loads(gh(['api', f'repos/{repository}/git/ref/tags/{tag}']))
     marker = f'<!-- xudian-module-release-ref:{tag_ref["object"]["sha"]} -->'
-    endpoint = f'repos/{repository}/releases/tags/{tag}'
-    existing = gh(['api', endpoint], allow_missing=True)
-    if existing is None:
+    release = find_release(repository, tag)
+    if release is None:
         gh(['release', 'create', tag, *[str(package_dir / name) for name in sorted(assets)],
             '--repo', repository, '--verify-tag', '--draft', '--title', title,
             '--notes', f'{notes}\n\n{marker}'])
-        existing = gh(['api', endpoint])
-    release = json.loads(existing)
+        release = find_release(repository, tag)
+        require(release is not None, 'Created draft Release is not visible to the authenticated publisher')
+    endpoint = f'repos/{repository}/releases/{release["id"]}'
     require(marker in (release.get('body') or ''),
             'Release tag identity is unverified or changed; refusing to modify the existing Release')
     missing = verify_remote_assets(repository, tag, release, assets)
@@ -94,7 +106,9 @@ def publish(repository, tag, package_dir, assets, title, notes):
     current_ref = json.loads(gh(['api', f'repos/{repository}/git/ref/tags/{tag}']))
     require(current_ref['object']['sha'] == tag_ref['object']['sha'], 'Tag changed during publication')
     if release.get('draft') is True:
-        gh(['release', 'edit', tag, '--repo', repository, '--draft=false'])
+        release = json.loads(gh(['api', endpoint, '--method', 'PATCH', '-F', 'draft=false']))
+        require(release.get('draft') is False and release.get('tag_name') == tag,
+                'Release publication did not complete for the expected tag')
     return release.get('html_url') or f'https://github.com/{repository}/releases/tag/{tag}'
 
 
