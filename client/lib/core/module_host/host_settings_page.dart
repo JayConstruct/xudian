@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../modules/module_registry.dart';
+import '../ui/app_repository_links.dart';
 import '../ui/ui_annotation.dart';
 import '../ui/ui_component.dart';
 import '../ui/ui_composition.dart';
@@ -13,6 +14,8 @@ import '../../features/settings/app_preferences.dart';
 import '../../features/settings/ui_layout.dart';
 import '../../features/settings/ui_layout_page.dart';
 import 'host_manager_page.dart';
+import 'host_providers.dart';
+import 'module_catalog_page.dart';
 
 class HostSettingsPage extends ConsumerWidget {
   const HostSettingsPage({super.key, required this.registry});
@@ -164,6 +167,26 @@ class HostSettingsPage extends ConsumerWidget {
                   height: 320,
                   child: UiPageHost(registry: registry, pageId: page.pageId),
                 ),
+              AppRepositoryLinks(
+                onBrowseModules: () async {
+                  try {
+                    final host = await ref.read(moduleHostProvider.future);
+                    if (!context.mounted) return;
+                    await Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ModuleCatalogPage(host: host),
+                      ),
+                    );
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('无法打开模块目录：$error')),
+                      );
+                    }
+                  }
+                },
+              ),
             ],
           ),
         ),
