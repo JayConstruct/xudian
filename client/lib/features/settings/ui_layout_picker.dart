@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/design_system.dart';
+
 class UiLayoutChoice<Value> {
   const UiLayoutChoice({
     required this.value,
@@ -60,6 +62,9 @@ class _UiLayoutPickerState<Value> extends State<UiLayoutPicker<Value>> {
                       itemBuilder: (context, index) {
                         final choice = choices[index];
                         return ListTile(
+                          shape: AppDesign.smoothShape(
+                            radius: AppDesign.controlRadius,
+                          ),
                           title: Text(choice.label),
                           subtitle: choice.detail.isEmpty
                               ? null

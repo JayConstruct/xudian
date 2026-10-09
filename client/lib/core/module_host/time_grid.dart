@@ -166,13 +166,19 @@ class _TimeGridState extends State<TimeGrid> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final available = constraints.maxWidth - labelWidth;
+        final available = (constraints.maxWidth - labelWidth).clamp(
+          0.0,
+          double.infinity,
+        );
         final minimum = dimension('minColumnWidth', 68, 52, 320);
         final visible = (available / minimum).floor().clamp(
           1,
           columns.isEmpty ? 1 : columns.length,
         );
-        final columnWidth = compact
+        final fitColumns = widget.options['fitColumns'] == true;
+        final columnWidth = fitColumns
+            ? available / (columns.isEmpty ? 1 : columns.length)
+            : compact
             ? (available / visible).clamp(minimum, 320.0)
             : 150.0;
         // Explicit requests override a restored offset once; ordinary renders
@@ -196,7 +202,9 @@ class _TimeGridState extends State<TimeGrid> {
           }
           _syncHeader();
         });
-        final gridWidth = columnWidth * columns.length;
+        final gridWidth = fitColumns && columns.isNotEmpty
+            ? available
+            : columnWidth * columns.length;
         final gridHeight = rowHeight * rows.length;
         final heading = SizedBox(
           height: headerHeight,

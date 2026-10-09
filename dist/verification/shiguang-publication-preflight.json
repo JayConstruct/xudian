@@ -1,0 +1,14 @@
+{
+  "clientBuild": 36,
+  "flutterTestsPassed": 607,
+  "javascriptTestsPassed": 19,
+  "catalogToolTestsPassed": 21,
+  "flutterAnalyze": "no issues",
+  "directoryModules": 10,
+  "indexedPackages": 22,
+  "newReleaseAssets": 2,
+  "releaseTag": "modules-2026-10-09-shiguang",
+  "removedModuleId": "app.import.zhengfang",
+  "emulatorModuleUninstalled": true,
+  "emulatorHistoryPreserved": true
+}

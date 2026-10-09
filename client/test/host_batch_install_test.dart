@@ -128,6 +128,162 @@ void main() {
       expect(host.instances.keys, containsAll([dependency.id, client.id]));
     },
   );
+  test('batch update activates reused transitive dependencies before its candidate', () async {
+    await host.install(await candidate('test.root'));
+    await host.install(
+      await candidate('test.middle', dependencies: ['test.root']),
+    );
+    await host.install(
+      await candidate('test.leaf', dependencies: ['test.middle']),
+    );
+    final before = await store.sql(
+      'SELECT * FROM host_installations ORDER BY module_id',
+    );
+    final update = await candidate(
+      'test.leaf',
+      version: '1.1.0',
+      dependencies: ['test.middle'],
+      script: 'export function render(){return {tree:{type:"text",text:"updated leaf"}};}',
+    );
+    final plan = await host.prepareInstallBatch([update]);
+    expect(plan.packages.map((package) => package.id), ['test.leaf']);
+    await host.commitInstallBatch(plan);
+    expect(host.instances.keys.toList(), [
+      'test.root',
+      'test.middle',
+      'test.leaf',
+    ]);
+    expect(host.instances['test.leaf']!.package.version, '1.1.0');
+    final result = object(await host.invokePage('test.leaf', 'render', {}));
+    expect(object(result['tree'])['text'], 'updated leaf');
+    for (final row in before.where((row) => row['module_id'] != 'test.leaf')) {
+      final current = (await store.sql(
+        'SELECT * FROM host_installations WHERE module_id=?',
+        [row['module_id']],
+      )).single;
+      expect(current['space'], row['space']);
+      expect(current['version'], row['version']);
+      expect(current['generation'], (row['generation'] as int) + 1);
+    }
+    expect(
+      (await store.sql('SELECT * FROM host_snapshots')).single['module_id'],
+      'test.leaf',
+    );
+    await host.close();
+    host = ModuleHost(store: store, directory: directory);
+    await host.initialize();
+    expect(host.instances.keys.toSet(), {
+      'test.root',
+      'test.middle',
+      'test.leaf',
+    });
+    expect(host.instances['test.leaf']!.package.version, '1.1.0');
+  });
+  test(
+    'reused middle module waits for the new candidate provider version',
+    () async {
+      await host.install(await candidate('test.provider'));
+      final middle = await candidate(
+        'test.middle',
+        dependencies: [
+          {'moduleId': 'test.provider', 'version': '>=1.0.0 <3.0.0'},
+        ],
+      );
+      await host.install(middle);
+      final provider = await candidate('test.provider', version: '2.0.0');
+      final leaf = await candidate(
+        'test.leaf',
+        dependencies: [
+          'test.middle',
+          {'moduleId': 'test.provider', 'version': '^2.0.0'},
+        ],
+      );
+      final activated = <String>[];
+      host.validateCandidate = (package) =>
+          activated.add('${package.id}@${package.version}');
+      await host.commitInstallBatch(
+        await host.prepareInstallBatch([leaf, provider]),
+      );
+      expect(host.instances.keys.toList(), [
+        'test.provider',
+        'test.middle',
+        'test.leaf',
+      ]);
+      expect(host.instances['test.provider']!.package.version, '2.0.0');
+      expect(
+        host.instances['test.middle']!.package.packageDigest,
+        middle.packageDigest,
+      );
+      expect(activated, [
+        'test.provider@2.0.0',
+        'test.middle@1.0.0',
+        'test.leaf@1.0.0',
+      ]);
+      expect(
+        (await store.sql('SELECT * FROM host_snapshots')).single['module_id'],
+        'test.provider',
+      );
+    },
+  );
+  test('failed candidate after reused dependency activation restores the old complete graph', () async {
+    await host.install(await candidate('test.provider'));
+    await host.install(
+      await candidate(
+        'test.middle',
+        dependencies: [
+          {'moduleId': 'test.provider', 'version': '>=1.0.0 <3.0.0'},
+        ],
+      ),
+    );
+    final previous = Map.of(host.instances);
+    final before = await store.sql(
+      'SELECT * FROM host_installations ORDER BY module_id',
+    );
+    final history = await store.sql(
+      'SELECT * FROM host_packages ORDER BY module_id,version',
+    );
+    final bad = await candidate(
+      'test.bad',
+      dependencies: [
+        'test.middle',
+        {'moduleId': 'test.provider', 'version': '^2.0.0'},
+      ],
+      script: 'throw new Error("candidate failed after dependencies");',
+    );
+    await expectLater(
+      host.commitInstallBatch(
+        await host.prepareInstallBatch([
+          bad,
+          await candidate('test.provider', version: '2.0.0'),
+        ]),
+      ),
+      throwsA(anything),
+    );
+    expect(
+      await store.sql('SELECT * FROM host_installations ORDER BY module_id'),
+      before,
+    );
+    expect(
+      await store.sql('SELECT * FROM host_packages ORDER BY module_id,version'),
+      history,
+    );
+    expect(await store.sql('SELECT * FROM host_snapshots'), isEmpty);
+    expect(host.instances.keys.toList(), ['test.provider', 'test.middle']);
+    expect(host.instances['test.provider']!.package.version, '1.0.0');
+    for (final entry in previous.entries) {
+      expect(store.active(entry.value.actor), isFalse);
+      expect(store.active(host.instances[entry.key]!.actor), isTrue);
+      expect(object(await host.invokePage(entry.key, 'render', {}))['tree'], {
+        'type': 'text',
+        'text': 'hello',
+      });
+    }
+    await host.close();
+    host = ModuleHost(store: store, directory: directory);
+    await host.initialize();
+    expect(host.instances.keys.toSet(), {'test.provider', 'test.middle'});
+    expect(host.instances['test.provider']!.package.version, '1.0.0');
+  });
   test(
     'stale review, downgrade and release repository switching are rejected',
     () async {

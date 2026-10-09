@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/ShiGuangSchedule/shiguang_warehouse",
+  "revision": "c586957c077506a5182105ae3961ceff4d0223ce",
+  "schools": 247,
+  "adapters": 269,
+  "uniqueScripts": 261,
+  "excluded": [
+    "GLOBAL_TOOLS demos and external-app utilities"
+  ]
+}

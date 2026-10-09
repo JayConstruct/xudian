@@ -2,13 +2,12 @@ name: Publish immutable module release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable modules tag to publish
+        required: true
+        type: string
   push:
-    branches:
-      - module-catalog
-    paths:
-      - .github/workflows/module-release.yml
-      - scripts/module_catalog/release.py
-      - scripts/module_catalog/test_release.py
     tags:
       - 'modules-*'
 
@@ -16,7 +15,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: module-release-${{ github.ref_type == 'tag' && github.ref_name || 'modules-2026-10-08' }}
+  group: module-release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -25,20 +24,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate prepared indexes and all 22 packages
+      - name: Validate prepared indexes and packages
         run: >-
           python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json
           --index-dir module-index --package-dir dist/module-releases
+      - name: Select packages for this immutable release tag
+        env:
+          MODULE_RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          MODULE_RELEASE_DIR: ${{ runner.temp }}/module-release-assets
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, shutil, urllib.parse
+          tag = os.environ['MODULE_RELEASE_TAG']
+          assert tag.startswith('modules-') and '/' not in tag
+          destination = pathlib.Path(os.environ['MODULE_RELEASE_DIR'])
+          destination.mkdir()
+          selected = set()
+          for entry in json.loads(pathlib.Path('packages/catalog/catalog.json').read_text())['modules']:
+              index = json.loads(pathlib.Path(f'module-index/{entry["id"]}.json').read_text())
+              for version in index['versions']:
+                  parts = urllib.parse.urlsplit(version['url']).path.split('/')
+                  if parts[-2] == tag:
+                      name = parts[-1]
+                      assert name not in selected
+                      selected.add(name)
+                      shutil.copyfile(pathlib.Path('dist/module-releases') / name, destination / name)
+          assert selected, 'No prepared packages for this tag'
+          print(f'Prepared {len(selected)} packages for {tag}')
+          PY
       - name: Publish verified packages without replacing existing assets
         env:
           GH_TOKEN: ${{ github.token }}
-          MODULE_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'modules-2026-10-08' }}
+          MODULE_RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
           MODULE_RELEASE_REPOSITORY: ${{ github.repository }}
+          MODULE_RELEASE_DIR: ${{ runner.temp }}/module-release-assets
         run: >-
           python3 scripts/module_catalog/release.py
           --repository "$MODULE_RELEASE_REPOSITORY" --tag "$MODULE_RELEASE_TAG"
-          --expected-count 22
+          --package-dir "$MODULE_RELEASE_DIR"
+          --title "模块更新：拾光学校与通用教务导入"
+          --notes "拾光 1.3.1 内置学校搜索、通用系统、源码与致谢；课表 1.6.3 支持默认五天显示。独立正方模块下架，正方通用入口整合到拾光。七天表格适配屏幕需新版客户端（建议 build 36）；本 Release 提供模块包，客户端源码见 module-catalog 分支。采集先预览再保存；真实学校账号尚未逐校验收。"

@@ -392,6 +392,25 @@ void main() {
       expect(panelRect.width, lessThanOrEqualTo(420));
       expect(panelRect.bottom, lessThanOrEqualTo(gridRect.bottom));
       expect(panelRect.top, greaterThan(gridRect.top));
+      expect(
+        tester.widget<TimeGrid>(find.byType(TimeGrid)).columns,
+        hasLength(5),
+      );
+      await tester.ensureVisible(find.text('显示周六和周日'));
+      await tester.tap(find.text('显示周六和周日'));
+      await _settle(tester);
+      expect(
+        tester.widget<TimeGrid>(find.byType(TimeGrid)).columns,
+        hasLength(7),
+      );
+      final horizontal = find.descendant(
+        of: find.byKey(const PageStorageKey('time-grid-horizontal')),
+        matching: find.byType(Scrollable),
+      );
+      expect(
+        tester.state<ScrollableState>(horizontal).position.maxScrollExtent,
+        closeTo(0, .01),
+      );
       await tester.ensureVisible(find.text('+1'));
       await tester.tap(find.text('+1'));
       await _settle(tester);
@@ -400,12 +419,16 @@ void main() {
         72.5,
       );
       expect(tester.getRect(find.byType(TimeGrid)), gridRect);
-      await tester.tap(find.byTooltip('关闭高度调整'));
+      await tester.tap(find.byTooltip('关闭显示调整'));
       await _settle(tester);
       expect(find.byKey(const ValueKey('script-floating-panel')), findsNothing);
       expect(
         tester.widget<TimeGrid>(find.byType(TimeGrid)).options['rowHeight'],
         72,
+      );
+      expect(
+        tester.widget<TimeGrid>(find.byType(TimeGrid)).columns,
+        hasLength(5),
       );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -718,6 +741,152 @@ void main() {
     );
   });
 
+  test('weekend display defaults off, previews without writes and persists per timetable after save and restart', () async {
+    await command('schedule.timetable.save', {'timetable': _table()});
+    await command('schedule.timetable.save', {
+      'timetable': {..._table(), 'id': 'other'},
+    });
+    await command('schedule.course.save', {
+      'course': {'id': 'weekend', 'timetableId': 'table', 'name': '周日课程'},
+      'meeting': {
+        'id': 'weekend-meeting',
+        'weekday': 7,
+        'startPeriod': 1,
+        'endPeriod': 2,
+        'weeks': [1],
+      },
+    });
+    Map<String, Object?> grid(Map<String, Object?> page) =>
+        _nodes(page['tree']).singleWhere((node) => node['type'] == 'timeGrid');
+    var page = await render(
+      'home',
+      context: {'timetableId': 'table', 'week': 1},
+    );
+    expect(objects(grid(page)['columns']), hasLength(5));
+    expect(objects(grid(page)['blocks']), isEmpty);
+    final week = object(
+      await host.query(
+        actor,
+        const ServiceRef('app.schedule', 'schedule.query.week', 1),
+        {'timetableId': 'table', 'teachingWeek': 1},
+      ),
+    );
+    expect(objects(week['columns']), hasLength(7));
+    expect(objects(week['items']).single['title'], '周日课程');
+    page = await render(
+      'display',
+      context: {'timetableId': 'table', 'week': 1},
+      event: {'type': 'displayWeekends', 'value': true},
+    );
+    expect(objects(grid(page)['columns']), hasLength(7));
+    expect(objects(grid(page)['blocks']).single['title'], '周日课程');
+    expect(object(object(page['state'])['displayDraft'])['dirty'], isTrue);
+    expect(
+      object(await store.get(actor, 'timetables', 'table'))['showWeekends'],
+      isNull,
+    );
+    page = await render(
+      'display',
+      state: page['state'],
+      event: {'type': 'closeDisplay'},
+    );
+    expect(objects(grid(page)['columns']), hasLength(5));
+    page = await render(
+      'display',
+      state: page['state'],
+      event: {'type': 'openDisplay'},
+    );
+    host.interaction = (_, _, _) async => false;
+    page = await render(
+      'display',
+      state: page['state'],
+      event: {'type': 'saveDisplay'},
+    );
+    expect(object(object(page['state'])['displayDraft'])['dirty'], isTrue);
+    expect(
+      object(await store.get(actor, 'timetables', 'table'))['showWeekends'],
+      isNull,
+    );
+    mockDialogs();
+    page = await render(
+      'display',
+      state: page['state'],
+      event: {'type': 'saveDisplay'},
+    );
+    expect(object(object(page['state'])['displayDraft'])['dirty'], isFalse);
+    expect(
+      object(await store.get(actor, 'timetables', 'table'))['showWeekends'],
+      isTrue,
+    );
+    await host.close();
+    host = ModuleHost(store: store, directory: directory);
+    await host.initialize();
+    actor = host.instances['app.schedule']!.actor;
+    page = await render('home', context: {'timetableId': 'table', 'week': 1});
+    expect(objects(grid(page)['columns']), hasLength(7));
+    expect(objects(grid(page)['blocks']).single['title'], '周日课程');
+    page = await render('home', context: {'timetableId': 'other', 'week': 1});
+    expect(objects(grid(page)['columns']), hasLength(5));
+    mockDialogs();
+    page = await render(
+      'display',
+      context: {'timetableId': 'table'},
+      event: {'type': 'displayWeekends', 'value': false},
+    );
+    await render(
+      'display',
+      state: page['state'],
+      event: {'type': 'saveDisplay'},
+    );
+    expect(
+      object(await store.get(actor, 'timetables', 'table'))['showWeekends'],
+      isFalse,
+    );
+    expect(await store.query(actor, 'courses', {}), hasLength(1));
+    expect(await store.query(actor, 'meetings', {}), hasLength(1));
+  });
+
+  test('weekend draft rejects another page changing visibility and validates the saved flag', () async {
+    await command('schedule.timetable.save', {'timetable': _table()});
+    mockDialogs();
+    var page = await render(
+      'display',
+      event: {'type': 'displayHeight', 'value': 240},
+    );
+    await command('schedule.timetable.save', {
+      'timetable': {..._table(), 'showWeekends': true},
+    });
+    page = await render(
+      'display',
+      state: page['state'],
+      event: {'type': 'saveDisplay'},
+    );
+    expect(
+      object(object(page['state'])['displayDraft'])['error'],
+      contains('其他页面修改'),
+    );
+    expect(
+      object(await store.get(actor, 'timetables', 'table'))['showWeekends'],
+      isTrue,
+    );
+    page = await render(
+      'display',
+      state: page['state'],
+      event: {'type': 'resetDisplay'},
+    );
+    expect(
+      object(object(page['state'])['displayDraft'])['showWeekends'],
+      isTrue,
+    );
+    expect(object(object(page['state'])['displayDraft'])['dirty'], isFalse);
+    await expectLater(
+      command('schedule.timetable.save', {
+        'timetable': {..._table(), 'showWeekends': 'true'},
+      }),
+      throwsA(anything),
+    );
+  });
+
   test('return to this week preserves weekend courses and the menu can reveal their columns', () async {
     await command('schedule.timetable.save', {'timetable': _table()});
     await command('schedule.course.save', {
@@ -746,7 +915,8 @@ void main() {
     final grid = _nodes(page['tree'])
         .singleWhere((node) => node['type'] == 'timeGrid');
     expect(objects(grid['blocks']).single['title'], '周日课程');
-    expect(object(grid['options'])['scrollToColumn'], '2026-09-12');
+    expect(objects(grid['columns']), hasLength(7));
+    expect(object(grid['options'])['fitColumns'], isTrue);
     expect(
       objects(grid['columns'])
           .singleWhere((column) => column['id'] == '2026-09-13')['highlight'],
@@ -806,7 +976,8 @@ void main() {
         );
         await _settle(tester);
         expect(find.text('第 1 周'), findsOneWidget);
-        expect(find.byTooltip('打开设置'), findsOneWidget);
+        expect(find.byTooltip('页面菜单'), findsOneWidget);
+        expect(find.byTooltip('打开设置'), findsNothing);
         expect(find.byType(TimeGrid), findsOneWidget);
         await tester.tap(find.byTooltip('页面菜单'));
         await tester.pumpAndSettle();
@@ -844,9 +1015,15 @@ void main() {
         if (width < 820) {
           Navigator.of(tester.element(find.byType(BottomSheet))).pop();
           await tester.pumpAndSettle();
-          await tester.tap(find.byTooltip('打开设置'));
+          await tester.tap(find.byTooltip('页面菜单'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.widgetWithText(PopupMenuItem<int>, '设置'));
           await _settle(tester);
-          await tester.ensureVisible(find.text('课表设置'));
+          await Scrollable.ensureVisible(
+            tester.element(find.text('课表设置')),
+            alignment: .5,
+          );
+          await tester.pumpAndSettle();
           await tester.tap(find.text('课表设置'));
           await _settle(tester);
           await tester.ensureVisible(find.text('作息设置'));
@@ -955,16 +1132,19 @@ void main() {
       );
       await _settle(tester);
       expect(find.text('脚本提供的标题'), findsOneWidget);
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
+      expect(find.byTooltip('打开设置'), findsNothing);
       await tester.tap(find.text('触发渲染故障'));
       await _settle(tester);
       expect(find.text('脚本提供的标题'), findsNothing);
       expect(find.text('宿主后备标题'), findsWidgets);
       expect(find.textContaining('测试渲染失败'), findsOneWidget);
-      await tester.tap(find.byTooltip('打开设置'));
+      await tester.tap(find.byTooltip('页面菜单'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(PopupMenuItem<int>, '设置'));
       await _settle(tester);
-      expect(find.text('外观主题'), findsOneWidget);
-      expect(find.text('模块管理与恢复'), findsOneWidget);
+      expect(find.text('外观与交互'), findsOneWidget);
+      expect(find.text('模块与连接'), findsOneWidget);
       await tester.pageBack();
       await _settle(tester);
       await tester.runAsync(() => host.disable('private.header'));

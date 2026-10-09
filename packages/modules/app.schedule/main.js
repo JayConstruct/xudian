@@ -5,7 +5,7 @@ export {importPlan};
 let selectedTimetableId=null,selectionRevision=0,displayRequest=0;
 function selectTimetable(id) { if(selectedTimetableId!==id) { selectedTimetableId=id; selectionRevision++; } }
 const ref=id=>({moduleId:'app.schedule',serviceId:id,majorVersion:1});
-import {defaultPeriods,periodDraft,semesterDraft,resetPeriodDraft,resetSemesterDraft,displayDraft,resetDisplayDraft,scheduleRowHeight,periodError,appendPeriods,timeMinutes,timeString,listTile,group,importSummary} from './view_helpers.js';
+import {defaultPeriods,periodDraft,semesterDraft,resetPeriodDraft,resetSemesterDraft,displayDraft,resetDisplayDraft,scheduleRowHeight,scheduleShowWeekends,displayDirty,periodError,appendPeriods,timeMinutes,timeString,listTile,group,importSummary} from './view_helpers.js';
 async function snapshot(timetableId) {
   const t=await data.get('timetables',timetableId); if(!t) throw new Error('课表不存在');
   const filter={field:'timetableId',op:'eq',value:timetableId};
@@ -115,7 +115,6 @@ export async function render({state={},context={},event,formValues={}}) {
   if(state.selectionRevision!==undefined && state.selectionRevision<selectionRevision) { state.timetableId=selectedTimetableId; delete state.week; }
   if(event?.type==='select') { state.timetableId=event.id; delete state.week; selectTimetable(event.id); }
   if(event?.type==='week') state.week=event.week;
-  if(event?.type==='weekend') {state.scrollRequest=(state.scrollRequest||0)+1;state.scrollWeekend=true;}
   let timetables=await data.query('timetables');
   let t=timetables.find(x=>x.id===(state.timetableId||context.timetableId||selectedTimetableId)) || timetables[0];
   const page=context.pageId||'app.schedule.home';
@@ -126,6 +125,8 @@ export async function render({state={},context={},event,formValues={}}) {
   if(gridPage && event?.type==='closeDisplay') {state.displayControls=false;delete state.notice;}
   if(page==='app.schedule.home') delete state.tab;
   if(t) { state.timetableId=t.id; if(!selectedTimetableId) selectedTimetableId=t.id; }
+  if(t && state.weekendTimetableId!==t.id) {delete state.revealWeekends;state.weekendTimetableId=t.id;}
+  if(event?.type==='weekend') state.revealWeekends=true;
   if(context.week && !state.week && state.selectionRevision===undefined) state.week=context.week;
   if(event?.type==='navigate') await ui.navigate(pageId(event.page),{timetableId:t?.id,week:state.week,...(event.page==='display'?{displayRequest:++displayRequest}:{})});
   if(event?.type==='currentWeek' && t) state.week=Math.max(1,Math.min(t.totalWeeks,teachingWeek(t,await clock.today(t.timezone))));
@@ -167,6 +168,9 @@ export async function render({state={},context={},event,formValues={}}) {
   }
   if(t && gridPage) {
     const draft=displayDraft(t);
+    if(event?.type==='displayWeekends' && typeof event.value==='boolean') {
+      draft.showWeekends=event.value;draft.error=null;delete state.notice;delete state.revealWeekends;
+    }
     if(event?.type==='displayHeight') {
       const height=Number(event.value),rowHeight=(height-48)/t.periods.length;
       if(Number.isFinite(rowHeight)&&rowHeight>=48&&rowHeight<=160) {draft.rowHeight=rowHeight;draft.error=null;delete state.notice;}
@@ -176,12 +180,12 @@ export async function render({state={},context={},event,formValues={}}) {
       draft.rowHeight=(Math.max(48+count*48,Math.min(48+count*160,height))-48)/count;draft.error=null;delete state.notice;
     }
     if(event?.type==='defaultDisplay') {draft.rowHeight=72;draft.error=null;delete state.notice;}
-    if(event?.type==='resetDisplay') {resetDisplayDraft(t);delete state.notice;}
+    if(event?.type==='resetDisplay') {resetDisplayDraft(t);delete state.notice;delete state.revealWeekends;}
     if(event?.type==='saveDisplay') {
       try {
-        if(draft.baseline!==scheduleRowHeight(t))throw new Error('显示设置已在其他页面修改。草稿已保留，请重新载入后编辑。');
-        const saved=await command('schedule.timetable.save',{timetable:{...t,rowHeight:draft.rowHeight},expectedTimetable:t});
-        if(saved) {resetDisplayDraft(await data.get('timetables',t.id));state.notice='显示设置已保存';}
+        if(draft.baseline!==scheduleRowHeight(t)||draft.baselineShowWeekends!==scheduleShowWeekends(t))throw new Error('显示设置已在其他页面修改。草稿已保留，请重新载入后编辑。');
+        const saved=await command('schedule.timetable.save',{timetable:{...t,rowHeight:draft.rowHeight,showWeekends:draft.showWeekends},expectedTimetable:t});
+        if(saved) {resetDisplayDraft(await data.get('timetables',t.id));delete state.revealWeekends;state.notice='显示设置已保存';}
       } catch(error) {draft.error=error.message;}
     }
   }
@@ -316,7 +320,7 @@ export async function render({state={},context={},event,formValues={}}) {
       listTile('课程与安排',`${counts.courses.length} 门课程 · ${counts.meetings.length} 个周期安排 · ${counts.changes.length} 条调课`,'school',null,''),
       go('今日课程','today','查看今天的课程与上课时间','calendar')
     ]));
-    children.push(group('课表配置',[go('学期设置','semester','名称、学期日期、周数与时区','tune'),go('作息设置','periods',t?`${t.periods.length} 个节次，按上午、下午和晚间编辑`:'设置各节次起止时间','schedule'),go('显示设置','display',t?`课表总高度 ${48+t.periods.length*scheduleRowHeight(t)} · 调整紧凑程度`:'调整课表总高度','tune'),go('课表管理','timetables',`${timetables.length} 张课表，可切换、新建或删除`,'list')]));
+    children.push(group('课表配置',[go('学期设置','semester','名称、学期日期、周数与时区','tune'),go('作息设置','periods',t?`${t.periods.length} 个节次，按上午、下午和晚间编辑`:'设置各节次起止时间','schedule'),go('显示设置','display',t?`${scheduleShowWeekends(t)?'显示周末':'仅工作日'} · 课表总高度 ${48+t.periods.length*scheduleRowHeight(t)}`:'周末显示与课表总高度','tune'),go('课表管理','timetables',`${timetables.length} 张课表，可切换、新建或删除`,'list')]));
     children.push(group('课程与调课',[go('课程管理','courses','课程信息与周期上课安排','school'),go('调课记录','changes','取消、移动与临时加课','history')]));
     children.push(group('数据管理',[go('导入与备份','imports','JSON 备份与教务导入','importExport')]));
     return {state,tree:{type:'column',children}};
@@ -441,17 +445,19 @@ export async function render({state={},context={},event,formValues={}}) {
   } else {
     const today=await clock.today(t.timezone),week=Math.max(1,Math.min(t.totalWeeks,state.week||teachingWeek(t,today)));
     state.week=week;const result=await queryWeek({timetableId:t.id,teachingWeek:week}),local=await clock.local(t.timezone);
-    const columns=result.columns.map(c=>({...c,title:['','一','二','三','四','五','六','日'][weekday(c.id)],subtitle:c.id.slice(5),highlight:c.id===today}));
+    const draft=displayDraft(t),dirty=displayDirty(draft),count=t.periods.length,height=48+count*draft.rowHeight,showDisplay=state.displayControls===true;
+    const showWeekends=showDisplay?draft.showWeekends:scheduleShowWeekends(t)||state.revealWeekends===true;
+    const columns=result.columns.filter(c=>showWeekends||weekday(c.id)<6).map(c=>({...c,title:['','一','二','三','四','五','六','日'][weekday(c.id)],subtitle:c.id.slice(5),highlight:c.id===today}));
     const rows=result.rows.map((row,i)=>({...row,title:String(t.periods[i].number),subtitle:`${t.periods[i].start}\n${t.periods[i].end}`,highlight:local.time>=t.periods[i].start&&local.time<t.periods[i].end}));
     const weekend=result.items.filter(item=>weekday(item.date)>=6).length;
-    const weekendColumn=columns.find(c=>weekday(c.id)>=6)?.id;
-    const draft=displayDraft(t),dirty=draft.rowHeight!==draft.baseline,count=t.periods.length,height=48+count*draft.rowHeight,showDisplay=state.displayControls===true;
     state.displayDraft={...draft,dirty};
-    const floatingPanel=showDisplay?{title:'课表总高度',closeLabel:'关闭高度调整',closeEvent:{type:'closeDisplay'},top:64,child:{type:'column',spacing:6,children:[
+    const floatingPanel=showDisplay?{title:'课表显示设置',closeLabel:'关闭显示调整',closeEvent:{type:'closeDisplay'},top:64,child:{type:'column',spacing:6,children:[
+      {type:'switch',key:`display.${t.id}.weekends`,text:'显示周六和周日',value:draft.showWeekends,event:{type:'displayWeekends'}},
+      text('默认仅显示周一至周五；开启后七天完整适配屏幕。'),
       text(`总高度 ${Math.round(height)} · 默认 ${48+count*72}`),
       {type:'slider',key:`display.${t.id}.height`,text:'课表总高度',min:48+count*48,max:48+count*160,divisions:112,value:height,event:{type:'displayHeight'}},
       {type:'row',children:[{...button('−1',{type:'stepDisplay',delta:-1}),disabled:draft.rowHeight<=48},{...button('+1',{type:'stepDisplay',delta:1}),disabled:draft.rowHeight>=160},text('每次调整总高度 1') ]},
-      text(dirty?'预览中，尚未保存。关闭后恢复已保存高度。':'调整时课表同步预览。'),
+      text(dirty?'预览中，尚未保存。关闭后恢复已保存显示设置。':'调整时课表同步预览。'),
       ...(draft.error?[text(draft.error)]:[]),
       ...(state.notice?[text(state.notice)]:[]),
       {type:'row',children:[button('恢复默认高度',{type:'defaultDisplay'}),...(dirty?[button('重新载入',{type:'resetDisplay'}),button('保存显示设置',{type:'saveDisplay'})]:[])]}
@@ -460,11 +466,11 @@ export async function render({state={},context={},event,formValues={}}) {
       {label:'回到本周',event:{type:'currentWeek'}},
       {label:'今日课程',event:{type:'navigate',page:'today'}},
       {label:'课表设置',event:{type:'navigate',page:'settings'}},
-      {label:'调整课表高度',event:{type:'openDisplay'}},
+      {label:'显示设置',event:{type:'openDisplay'}},
       ...(weekend?[{label:`周末课程 · ${weekend} 次`,event:{type:'weekend'}}]:[])
     ]};
     return {state,header,tree:{type:'column',template:'ui.page.timeGrid@1',edgeToEdge:true,fillHeight:true,underlapChrome:true,spacing:0,...(floatingPanel?{floatingPanel}:{}),children:[
-      {type:'timeGrid',columns,rows,blocks:result.blocks,corner:{title:result.columns[0].id.slice(0,4),subtitle:`${week}周`},options:{rowHeight:showDisplay?draft.rowHeight:scheduleRowHeight(t),headerHeight:48,labelWidth:42,minColumnWidth:68,fillWidth:true,underlapChrome:true,...(state.scrollWeekend?{scrollToColumn:weekendColumn,scrollRequest:state.scrollRequest}:{})}}
+      {type:'timeGrid',columns,rows,blocks:result.blocks.filter(b=>columns.some(c=>c.id===b.column)),corner:{title:result.columns[0].id.slice(0,4),subtitle:`${week}周`},options:{rowHeight:showDisplay?draft.rowHeight:scheduleRowHeight(t),headerHeight:48,labelWidth:42,fillWidth:true,fitColumns:true,underlapChrome:true}}
     ]}};
   }
   return {state,tree:{type:'column',children}};

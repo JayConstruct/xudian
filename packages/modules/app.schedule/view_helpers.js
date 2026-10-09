@@ -3,8 +3,10 @@ import {validateTimetable,validateMeeting,validateChange} from './calendar.js';
 export const defaultPeriods=[['08:00','08:45'],['08:50','09:35'],['09:50','10:35'],['10:40','11:25'],['11:30','12:15'],['14:00','14:45'],['14:50','15:35'],['15:45','16:30'],['16:35','17:20'],['18:30','19:15'],['19:20','20:05'],['20:10','20:55']].map(([start,end],i)=>({number:i+1,start,end}));
 const periodDrafts=new Map(),semesterDrafts=new Map(),displayDrafts=new Map();
 export const scheduleRowHeight=t=>t.rowHeight??72;
-export function displayDraft(t) {let draft=displayDrafts.get(t.id);if(!draft || draft.rowHeight===draft.baseline&&draft.baseline!==scheduleRowHeight(t))draft=resetDisplayDraft(t);return draft;}
-export function resetDisplayDraft(t) {const draft={rowHeight:scheduleRowHeight(t),baseline:scheduleRowHeight(t),error:null};displayDrafts.set(t.id,draft);return draft;}
+export const scheduleShowWeekends=t=>t.showWeekends===true;
+export const displayDirty=draft=>draft.rowHeight!==draft.baseline||draft.showWeekends!==draft.baselineShowWeekends;
+export function displayDraft(t) {let draft=displayDrafts.get(t.id);if(!draft || !displayDirty(draft)&&(draft.baseline!==scheduleRowHeight(t)||draft.baselineShowWeekends!==scheduleShowWeekends(t)))draft=resetDisplayDraft(t);return draft;}
+export function resetDisplayDraft(t) {const draft={rowHeight:scheduleRowHeight(t),baseline:scheduleRowHeight(t),showWeekends:scheduleShowWeekends(t),baselineShowWeekends:scheduleShowWeekends(t),error:null};displayDrafts.set(t.id,draft);return draft;}
 const copy=value=>JSON.parse(JSON.stringify(value));
 export const timeMinutes=value=>{if(typeof value!=='string'||!/^\d{2}:\d{2}$/.test(value)) throw new Error('时间格式需为 HH:mm');const [h,m]=value.split(':').map(Number);if(h>23||m>59)throw new Error('时间需在00:00–23:59之间');return h*60+m;};
 export const timeString=value=>{if(value<0||value>=1440)throw new Error('追加节次将跨午夜，请先调整作息');return String(Math.floor(value/60)).padStart(2,'0')+':'+String(value%60).padStart(2,'0');};

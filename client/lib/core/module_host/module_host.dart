@@ -600,44 +600,51 @@ class ModuleHost {
         _stop(id);
       }
       await store.db.transaction(() async {
-        for (final package in plan.packages) {
-          final row = rowsById[package.id];
-          if (row != null &&
-              row['installed'] == 1 &&
-              row['version'] == package.version) {
-            final existing = await _storedPackage(package.id, package.version);
-            if (existing.packageDigest != package.packageDigest) {
-              throw StateError('Module version and source are immutable');
-            }
-            await _enable(package.id);
-          } else {
-            await _install(package);
-          }
-          final repository = plan.repositories[package.id];
-          if (repository != null) {
-            await store.db.customStatement(
-              'INSERT INTO host_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-              ['module-repository:${package.id}', repository],
-            );
-          }
-        }
-        final pending = priorPackages.keys
-            .where((id) => !instances.containsKey(id))
-            .toSet();
+        // Restart the complete final graph in dependency order. Reused modules
+        // must be available before candidates that depend on them, while reused
+        // dependents must wait for a candidate provider's new version.
+        final candidates = {
+          for (final package in plan.packages) package.id: package,
+        };
+        final pending = {...priorPackages, ...candidates};
         while (pending.isNotEmpty) {
-          final available = pending
+          final available = pending.values
               .where(
-                (id) => priorPackages[id]!.dependencies.every(
-                  instances.containsKey,
-                ),
+                (package) => package.dependencies.every(instances.containsKey),
               )
               .toList();
           if (available.isEmpty) {
-            throw StateError('Cannot restore enabled dependency graph');
+            throw StateError('Cannot activate final dependency graph');
           }
-          for (final id in available) {
-            await _enable(id);
-            pending.remove(id);
+          for (final package in available) {
+            if (!candidates.containsKey(package.id)) {
+              await _enable(package.id);
+              pending.remove(package.id);
+              continue;
+            }
+            final row = rowsById[package.id];
+            if (row != null &&
+                row['installed'] == 1 &&
+                row['version'] == package.version) {
+              final existing = await _storedPackage(
+                package.id,
+                package.version,
+              );
+              if (existing.packageDigest != package.packageDigest) {
+                throw StateError('Module version and source are immutable');
+              }
+              await _enable(package.id);
+            } else {
+              await _install(package);
+            }
+            final repository = plan.repositories[package.id];
+            if (repository != null) {
+              await store.db.customStatement(
+                'INSERT INTO host_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                ['module-repository:${package.id}', repository],
+              );
+            }
+            pending.remove(package.id);
           }
         }
         _validateBatchGraph({

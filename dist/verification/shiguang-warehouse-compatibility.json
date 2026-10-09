@@ -1,0 +1,85 @@
+{
+  "moduleVersion": "1.3.1",
+  "snapshot": {
+    "repository": "https://github.com/ShiGuangSchedule/shiguang_warehouse",
+    "revision": "c586957c077506a5182105ae3961ceff4d0223ce",
+    "schools": 247,
+    "adapters": 269,
+    "uniqueScripts": 261,
+    "excluded": [
+      "GLOBAL_TOOLS demos and external-app utilities"
+    ]
+  },
+  "staticChecks": {
+    "syntaxPassed": 269,
+    "sourceHashesPassed": 269,
+    "directUnsupportedBridgeReferences": 0,
+    "maxCaptureBytes": 57563,
+    "featureFlags": {
+      "customTime": [
+        "CDUTCM_01",
+        "CUIT_01",
+        "CMC_01",
+        "CCIT",
+        "NEU_1",
+        "NENU_01",
+        "DLU_01",
+        "GDOU_01",
+        "GDOUYJ_01",
+        "GDOUYJ_02",
+        "GUIT_01",
+        "SCNU_01",
+        "UJS_01",
+        "JUST",
+        "UJN_01",
+        "LIT_01",
+        "QHNU_01",
+        "QQHRIT",
+        "SHIEP_01",
+        "SCETOP_01",
+        "XATU_01",
+        "XAUAT_01",
+        "XUST_01",
+        "SCUEC",
+        "USTC_01"
+      ],
+      "comboSchedule": [
+        "HZU",
+        "UJS_02",
+        "USC_01",
+        "QDU_01",
+        "TSU_01"
+      ],
+      "jquery": [
+        "XZIT_01",
+        "CUP_02",
+        "UZZ_01",
+        "zhengfang_01"
+      ]
+    }
+  },
+  "fixtureExecution": [
+    "YXHMC unchanged official adapter",
+    "NEU_2 unchanged official postgraduate adapter",
+    "legacy Zhengfang DOM fixture (previous emulator verification)"
+  ],
+  "realQuickJsChecks": [
+    "269-entry pagination and search",
+    "all five lazy bundles match pinned sources",
+    "school selection clears old draft and source options",
+    "cancellation writes no courses"
+  ],
+  "uiChecks": [
+    "320px width at 1.6 text scale"
+  ],
+  "limits": [
+    "Static method scanning detects direct named bridge references only. Feature flags are heuristics, not counts of unsupported schools.",
+    "School sites and real accounts have not all been tested. Login, campus network, DOM changes and site-provided libraries affect execution.",
+    "Custom times must exactly match period boundaries. Seasonal/date-based combo schedules need adaptation.",
+    "Sunday-start first-week Sunday predates the first Monday and cannot currently be represented; conversion rejects the whole input."
+  ],
+  "package": {
+    "bytes": 996660,
+    "sha256": "4b56cf1fe143a867c14b9bb4557d34279730a49e377b388ba39bfeb932ca8027"
+  }
+}

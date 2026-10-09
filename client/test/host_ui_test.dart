@@ -77,8 +77,10 @@ void main() {
       expect(find.text('没有可用工作区'), findsOneWidget);
       await tester.tap(find.text('打开设置并恢复模块'));
       await settleNative(tester);
-      expect(find.text('外观主题'), findsOneWidget);
-      expect(find.text('模块管理与恢复'), findsOneWidget);
+      expect(find.text('外观与交互'), findsOneWidget);
+      expect(find.text('模块与连接'), findsOneWidget);
+      await tester.tap(find.text('模块与连接'));
+      await settleNative(tester);
       await tester.tap(find.text('模块管理与恢复'));
       await settleNative(tester);
       expect(find.byType(HostManagerPage), findsOneWidget);
@@ -86,55 +88,57 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
-  testWidgets(
-    'independent module settings render inline beside protected controls',
-    (tester) async {
-      await setup(tester);
-      await tester.runAsync(() async {
-        await host.install(
-          await ScriptPackage.verify(
-            await ScriptPackage.build(
-              {
-                'formatVersion': 3,
-                'manifest': {
-                  'id': 'private.settings',
-                  'version': '1.0.0',
-                  'hostApi': '^1.0.0',
-                  'dataVersion': 1,
-                  'permissions': ['ui'],
-                  'dependencies': [],
+  testWidgets('independent module settings stay under the module category', (
+    tester,
+  ) async {
+    await setup(tester);
+    await tester.runAsync(() async {
+      await host.install(
+        await ScriptPackage.verify(
+          await ScriptPackage.build(
+            {
+              'formatVersion': 3,
+              'manifest': {
+                'id': 'private.settings',
+                'version': '1.0.0',
+                'hostApi': '^1.0.0',
+                'dataVersion': 1,
+                'permissions': ['ui'],
+                'dependencies': [],
+              },
+              'entryPoint': 'main.js',
+              'collections': [],
+              'pages': [],
+              'services': [],
+              'contributions': [
+                {
+                  'id': 'private.settings.content',
+                  'slot': 'settingsSections',
+                  'kind': 'content',
+                  'handler': 'render',
+                  'label': '独立模块设置',
                 },
-                'entryPoint': 'main.js',
-                'collections': [],
-                'pages': [],
-                'services': [],
-                'contributions': [
-                  {
-                    'id': 'private.settings.content',
-                    'slot': 'settingsSections',
-                    'kind': 'content',
-                    'handler': 'render',
-                    'label': '独立模块设置',
-                  },
-                ],
-              },
-              {
-                'main.js': "export function render(){return {state:{},tree:{type:'text',text:'独立模块设置'}};}",
-              },
-            ),
-            allowUnsignedLocal: true,
+              ],
+            },
+            {
+              'main.js': "export function render(){return {state:{},tree:{type:'text',text:'独立模块设置'}};}",
+            },
           ),
-        );
-      });
-      await settleNative(tester);
-      await tester.tap(find.text('打开设置并恢复模块'));
-      await settleNative(tester);
-      expect(find.text('独立模块设置'), findsOneWidget);
-      expect(find.text('外观主题'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+          allowUnsignedLocal: true,
+        ),
+      );
+    });
+    await settleNative(tester);
+    await tester.tap(find.text('打开设置并恢复模块'));
+    await settleNative(tester);
+    expect(find.text('独立模块设置'), findsNothing);
+    await tester.tap(find.text('模块与连接'));
+    await settleNative(tester);
+    expect(find.text('独立模块设置'), findsOneWidget);
+    expect(find.text('模块管理与恢复'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets(
     'script task input prepares host-reviewed changes and writes generic records',
     (tester) async {

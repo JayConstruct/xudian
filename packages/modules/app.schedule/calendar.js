@@ -45,6 +45,7 @@ export function validateTimetable(t) {
   if(![1,7].includes(t.displayWeekStart)) throw new Error('显示起始需为周一或周日');
   if(!Array.isArray(t.periods)||!t.periods.length||t.periods.length>30) throw new Error('配置1–30个节次');
   if(t.rowHeight!==undefined && (!Number.isFinite(t.rowHeight)||t.rowHeight<48||t.rowHeight>160)) throw new Error('课表每节显示高度需在48–160之间');
+  if(t.showWeekends!==undefined && typeof t.showWeekends!=='boolean') throw new Error('周末显示设置需为开关值');
   let end=-1;
   t.periods.forEach((p,i)=> {
     if(p.number!==i+1 || minutes(p.start)<end || minutes(p.end)<=minutes(p.start)) throw new Error('节次必须连续，时间不重叠、不跨午夜');

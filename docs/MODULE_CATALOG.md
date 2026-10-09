@@ -12,14 +12,14 @@
 {
   "catalogFormat": 1,
   "modules": [{
-    "id": "app.import.zhengfang",
-    "name": "正方教务导入（通用）",
-    "description": "通过浏览器采集正方教务课表，再导入大学课表。",
+    "id": "app.import.shiguang",
+    "name": "拾光教务导入兼容",
+    "description": "按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。",
     "author": "JayConstruct",
     "category": "学习",
     "featured": true,
     "repository": "JayConstruct/xudian",
-    "indexUrl": "https://raw.githubusercontent.com/JayConstruct/xudian/module-catalog/module-index/app.import.zhengfang.json"
+    "indexUrl": "https://raw.githubusercontent.com/JayConstruct/xudian/module-catalog/module-index/app.import.shiguang.json"
   }]
 }
 ```
@@ -61,13 +61,11 @@ python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json --online
 
 草稿恢复使用有写权限的身份分页查询 Release 列表，按 `tag_name` 唯一匹配，再按 Release ID 读取和公开；按 tag 查询的 REST 接口只能找到已公开版本。即使包已全部上传但公开前进程失败，重试也会复用同一草稿，完整校验资产后公开，不重复创建。[GitHub Release 接口说明](https://docs.github.com/en/rest/releases/releases#list-releases)
 
-当前作者工程提供 `.github/workflows/module-release.yml`：推送经过审阅的 `modules-*` tag 后，Actions 从该 tag 取出已提交的 `module-index/`、目录种子及 `dist/module-releases/` 22 个首批资产，执行校验和上述发布脚本。工作流仅需当前仓库的 `contents: write`，使用 `GITHUB_TOKEN`；按 tag 串行执行且不自动取消上传。必须先确认正确的源代码、索引、包和工作流均在 tag 对应提交中，再推送 tag。工作流不会生成或移动 tag，不会创建目录仓库，不会变更仓库可见性。后续发布若首批资产数量变化，应审阅并更新工作流的 `--expected-count`，也可本地使用不同数量运行脚本。
-
-为了修复发布工具后重试首批 Release，`module-catalog` 分支上的工作流、`release.py` 或发布回归测试发生变化时，也会触发工作流，固定检查和发布原 `modules-2026-10-08`，不修改原 tag、包或索引。工作流同时提供 `workflow_dispatch`；该入口只有工作流已存在于默认分支时才可从 Actions 手动启动。后续 `modules-*` tag 触发仍使用各自 tag。首批分支重试与首批 tag 共用同一个并发组。
+当前作者工程提供 `.github/workflows/module-release.yml`：推送经过审阅的 `modules-*` tag 后，Actions 从 tag 取出源码、作者索引和已准备包，校验完整目录，按索引下载 URL 筛选当前 tag 对应资产，下载复验后公开 Release。工作流仅需当前仓库的 `contents: write`，按 tag 串行执行。它不会移动 tag、覆盖已发布包或更新目录仓库；完成 Release 验证后再更新公开作者索引及目录。手动重试使用 `workflow_dispatch` 并指定已有 tag；必须先确保该 tag 已存在。
 
 ## 接入与依赖
 
-正方通用模块依赖拾光兼容模块，拾光兼容模块依赖大学课表。各条目可以由不同作者仓库提供：依赖通过模块 ID 解析，发布仓库不需要相同。正式目录中三者均为当前自有作者仓库；客户端测试使用不同仓库的同类依赖链验证跨仓库安装。
+当前拾光兼容模块依赖大学课表；正方、青果、URP、超星通用导入在拾光模块内选择。独立的 `app.import.zhengfang` 已从当前源码、作者索引和统一目录移除，已有安装可卸载，已发布的历史 Release 保持不可变。各条目可以由不同作者仓库提供：依赖通过模块 ID 解析，发布仓库不需要相同。客户端测试使用独立学校适配器夹具验证“学校适配器 → 拾光兼容 → 大学课表”的跨仓库安装。
 
 模块依赖在 `manifest.dependencies` 声明 `{moduleId, version}`，服务依赖在 `manifest.serviceDependencies` 声明 `{moduleId, serviceId, majorVersion}`；现有 `services.query:<moduleId>/<serviceId>@<major>` 与 `services.command:...` 权限声明也参与服务依赖检查。客户端复用满足条件的已安装版本，补齐需要安装、升级或启用的模块，并在完整下载验证后一次确认。优先最高稳定版本，不自动降级，不自动选预发布版本。失败时显示具体版本、服务或循环冲突。
 

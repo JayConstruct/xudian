@@ -126,10 +126,16 @@ void main() {
           .columns
           .map((column) => column['id'])
           .toList();
-      await tester.tap(find.byTooltip('打开设置'));
+      await tester.tap(find.byTooltip('页面菜单'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(PopupMenuItem<int>, '设置'));
       await _settleNative(tester);
-      expect(find.text('外观主题'), findsOneWidget);
-      await tester.ensureVisible(find.text('课表设置'));
+      expect(find.text('外观与交互'), findsOneWidget);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('课表设置')),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('课表设置'));
       await _settleNative(tester);
       expect(find.text('概览'), findsOneWidget);
@@ -161,7 +167,7 @@ void main() {
       await _settleNative(tester);
 
       for (final destination in <String, String>{
-        '显示设置': '课表总高度',
+        '显示设置': '课表显示设置',
         '作息设置': '节次与模板',
         '课程管理': '添加课程',
         '调课记录': '临时加课',
@@ -201,7 +207,7 @@ void main() {
           await tester.tap(find.text('确认'));
           await _settleNative(tester);
           expect(find.text('显示设置已保存'), findsOneWidget);
-          await tester.tap(find.byTooltip('关闭高度调整'));
+          await tester.tap(find.byTooltip('关闭显示调整'));
           await _settleNative(tester);
           expect(find.byType(Slider), findsNothing);
           expect(find.byType(TimeGrid), findsOneWidget);
@@ -230,10 +236,10 @@ void main() {
       expect(find.text('第 1 周'), findsOneWidget);
       await tester.tap(find.byTooltip('页面菜单'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('调整课表高度'));
+      await tester.tap(find.text('显示设置'));
       await _settleNative(tester);
       expect(find.byType(Slider), findsOneWidget);
-      await tester.tap(find.byTooltip('关闭高度调整'));
+      await tester.tap(find.byTooltip('关闭显示调整'));
       await _settleNative(tester);
       expect(find.byType(Slider), findsNothing);
       expect(tester.takeException(), isNull);
@@ -458,4 +464,92 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  for (final width in [320.0, 420.0, 1200.0]) {
+    for (final days in [5, 7]) {
+      testWidgets(
+        '$days day schedule fits $width px with large text and selectable final column',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 700);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          var selected = false;
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(1.6)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: TimeGrid(
+                  columns: [
+                    for (var day = 1; day <= days; day++)
+                      {
+                        'id': 'day$day',
+                        'title': ['', '一', '二', '三', '四', '五', '六', '日'][day],
+                        'subtitle': '09-0$day',
+                      },
+                  ],
+                  rows: const [
+                    {'id': '1', 'title': '1', 'subtitle': '08:00\n08:45'},
+                  ],
+                  blocks: [
+                    {
+                      'id': 'last',
+                      'column': 'day$days',
+                      'start': 0,
+                      'end': 1,
+                      'title': '最后一天课程',
+                      'event': 'last',
+                    },
+                    {
+                      'id': 'overlap',
+                      'column': 'day1',
+                      'start': 0,
+                      'end': 1,
+                      'title': '重叠课程一',
+                    },
+                    {
+                      'id': 'overlap2',
+                      'column': 'day1',
+                      'start': 0,
+                      'end': 1,
+                      'title': '重叠课程二',
+                    },
+                  ],
+                  options: const {
+                    'fillWidth': true,
+                    'fitColumns': true,
+                    'labelWidth': 42,
+                  },
+                  onEvent: (event) => selected = event == 'last',
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final horizontal = find.descendant(
+            of: find.byKey(const PageStorageKey('time-grid-horizontal')),
+            matching: find.byType(Scrollable),
+          );
+          expect(
+            tester.state<ScrollableState>(horizontal).position.maxScrollExtent,
+            closeTo(0, .01),
+          );
+          final lastHeading = tester.getRect(find.text(days == 7 ? '日' : '五'));
+          expect(lastHeading.right, lessThanOrEqualTo(width));
+          expect(lastHeading.left, greaterThanOrEqualTo(42));
+          final course = find.widgetWithText(InkWell, '最后一天课程');
+          expect(tester.getRect(course).right, lessThanOrEqualTo(width));
+          await tester.tap(course);
+          await tester.pumpAndSettle();
+          expect(selected, isTrue);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
 }

@@ -176,7 +176,7 @@ void main() {
       final position = verticalPosition();
       position.jumpTo(position.maxScrollExtent);
       await tester.pumpAndSettle();
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       final lessonRect = tester.getRect(lastCourseBlock());
       expect(lessonRect.bottom, lessThanOrEqualTo(tester.getRect(dock()).top));
       expect(lessonRect.top, greaterThanOrEqualTo(gridRect.top));
@@ -207,10 +207,10 @@ void main() {
       }
       expect(verticalPosition().extentAfter, lessThan(1));
       expect(reveal(), findsOneWidget);
-      expect(find.byTooltip('打开设置'), findsNothing);
+      expect(find.byTooltip('页面菜单'), findsNothing);
       await tester.tap(reveal());
       await tester.pumpAndSettle();
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       final block = tester.getRect(lastCourseBlock());
       final navigation = tester.getRect(dock());
       expect(
@@ -252,7 +252,7 @@ void main() {
       );
       await tester.tap(reveal());
       await tester.pumpAndSettle();
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -302,7 +302,7 @@ void main() {
         tester.getRect(lastCourseBlock()).bottom,
         lessThanOrEqualTo(tester.getRect(dock()).top),
       );
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

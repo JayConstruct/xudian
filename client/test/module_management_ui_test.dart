@@ -206,11 +206,7 @@ void main() {
                   name: '拾光兼容',
                 );
           final schedule = official
-              ? await ScriptPackage.verify(
-                  await File('../dist/modules/app.import.zhengfang.xmodule')
-                      .readAsBytes(),
-                  allowUnsignedLocal: true,
-                )
+              ? null
               : await package(
                   'private.schedule',
                   dependency: compat.id,
@@ -218,7 +214,8 @@ void main() {
                 );
           final fixtures = <String, List<int>>{};
           final catalog = <Object?>[];
-          for (final (i, source) in [foundation, compat, schedule].indexed) {
+          final sources = [foundation, compat, ?schedule];
+          for (final (i, source) in sources.indexed) {
             final repository = 'author$i/modules';
             final indexUrl =
                 'https://raw.githubusercontent.com/$repository/main/index.json';
@@ -258,7 +255,7 @@ void main() {
             networkRetries: 0,
             preinstalledDigests: official
                 ? {
-                    for (final source in [foundation, compat, schedule])
+                    for (final source in sources)
                       source.id: source.packageDigest,
                   }
                 : {},
@@ -305,7 +302,7 @@ void main() {
                       ref,
                       host,
                       requests: {
-                        official ? 'app.import.zhengfang' : 'private.schedule':
+                        official ? 'app.import.shiguang' : 'private.schedule':
                             'any',
                       },
                     ),
@@ -336,19 +333,26 @@ void main() {
             expect(find.text('打开模块'), findsOneWidget);
             await tester.runAsync(() => tester.tap(find.text('打开模块')));
             await settleNative(tester);
-            expect(find.text('打开教务浏览器'), findsOneWidget);
+            expect(find.text('按学校导入'), findsOneWidget);
           }
         }
         await tester.runAsync(() async {
           final rows = await host.store.sql(
             'SELECT module_id FROM host_installations WHERE installed=1',
           );
-          expect(rows.length, cancel ? 0 : 3);
+          expect(
+            rows.length,
+            cancel
+                ? 0
+                : official
+                ? 2
+                : 3,
+          );
           if (!cancel) {
             expect(host.instances.keys.toSet(), {
               official ? 'app.schedule' : 'private.foundation',
               official ? 'app.import.shiguang' : 'private.compat',
-              official ? 'app.import.zhengfang' : 'private.schedule',
+              if (!official) 'private.schedule',
             });
             expect(
               await host.repositoryFor(
@@ -362,12 +366,12 @@ void main() {
               ),
               'author1/modules',
             );
-            expect(
-              await host.repositoryFor(
-                official ? 'app.import.zhengfang' : 'private.schedule',
-              ),
-              'author2/modules',
-            );
+            if (!official) {
+              expect(
+                await host.repositoryFor('private.schedule'),
+                'author2/modules',
+              );
+            }
           }
         });
         expect(tester.takeException(), isNull);

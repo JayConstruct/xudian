@@ -168,6 +168,119 @@
       "size": 13827,
       "sha256": "00153c9d7a0b3d6623e2ba428288b43688e66200f7fd4d618e959cb340869b02",
       "signature": null
+    },
+    {
+      "version": "1.3.1",
+      "manifest": {
+        "id": "app.import.shiguang",
+        "name": "拾光教务导入兼容",
+        "version": "1.3.1",
+        "hostApi": "^1.8.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "files",
+          "browser.capture",
+          "services.query:app.schedule/schedule.query.timetables@1",
+          "services.command:app.schedule/schedule.import.prepare@1"
+        ],
+        "dependencies": [
+          {
+            "moduleId": "app.schedule",
+            "version": "^1.6.1"
+          }
+        ],
+        "description": "按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。",
+        "author": "JayConstruct"
+      },
+      "services": [
+        {
+          "id": "shiguang.bridge.compile",
+          "major": 1,
+          "kind": "query",
+          "handler": "compileBridge",
+          "input": {
+            "type": "object",
+            "required": [
+              "script"
+            ],
+            "properties": {
+              "script": {
+                "type": "string"
+              },
+              "bridgeVersion": {
+                "type": "integer",
+                "enum": [
+                  1
+                ]
+              }
+            }
+          },
+          "output": {
+            "type": "object",
+            "required": [
+              "script",
+              "bridgeVersion"
+            ],
+            "properties": {
+              "script": {
+                "type": "string"
+              },
+              "bridgeVersion": {
+                "type": "integer",
+                "enum": [
+                  1
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "shiguang.convert",
+          "major": 1,
+          "kind": "query",
+          "handler": "convert",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "shiguang.adapters.list",
+          "major": 1,
+          "kind": "query",
+          "handler": "listAdapters",
+          "input": {
+            "type": "object",
+            "properties": {
+              "search": {
+                "type": "string"
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "school",
+                  "general"
+                ]
+              }
+            }
+          },
+          "output": {
+            "type": "object"
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-09-shiguang/app.import.shiguang-1.3.1.xmodule",
+      "size": 996660,
+      "sha256": "4b56cf1fe143a867c14b9bb4557d34279730a49e377b388ba39bfeb932ca8027",
+      "signature": null
     }
   ]
 }

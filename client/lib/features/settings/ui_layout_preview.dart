@@ -37,7 +37,6 @@ class UiLayoutPreview extends StatelessWidget {
       textScale: textScale,
       desktop: desktop,
     );
-    final headerLimit = headerVisibleCount(width: width, desktop: desktop);
     final host = registry.page(pageId ?? '');
     return AlertDialog(
       title: const Text('草稿结构预览'),
@@ -54,16 +53,15 @@ class UiLayoutPreview extends StatelessWidget {
                 Text(
                   '${desktop ? '宽屏' : '窄屏'}示意宽度 ${width.toInt()}px；实际显示数量以屏幕空间和文字缩放为准。',
                 ),
-                _group(context, '顶部入口', header.take(headerLimit).toList()),
+                _group(context, '右上角菜单', header),
                 _group(context, '主导航直显', main.take(visible).toList()),
                 _group(context, '更多（含溢出入口）', [
                   ...at(UiPlacement.more),
                   ...main.skip(visible),
-                  ...header.skip(headerLimit),
                 ]),
                 _group(context, '设置常用入口', at(UiPlacement.settings)),
                 _group(context, '隐藏（不显示）', at(UiPlacement.hidden)),
-                const Text('核心设置入口始终保留，不占用主导航直显上限。'),
+                const Text('右上角菜单包含全部顶部入口、设置和界面风格，不占用主导航直显上限。'),
               ] else ...[
                 Text(host?.title ?? '宿主页面不可用，配置仍保留'),
                 for (final slot in host?.slots ?? const <PageSlotDefinition>[])

@@ -203,6 +203,7 @@ void main() {
       late ModuleHost host;
       late ModuleCatalogClient client;
       late Directory directory;
+      late int moduleCount;
       final requested = <String>[];
       final registry = ModuleRegistry(
         const [],
@@ -224,7 +225,16 @@ void main() {
         final catalogBytes = await File('../packages/catalog/catalog.json')
             .readAsBytes();
         final catalog = jsonDecode(utf8.decode(catalogBytes)) as Map;
-        expect(catalog['modules'], hasLength(11));
+        final modules = catalog['modules'] as List;
+        moduleCount = modules.length;
+        expect(
+          modules.map((module) => module['id']),
+          containsAll(['app.import.shiguang', 'app.schedule']),
+        );
+        expect(
+          modules.map((module) => module['id']),
+          isNot(contains('app.import.zhengfang')),
+        );
         final fixtures = <String, List<int>>{catalogUrl: catalogBytes};
         for (final module in catalog['modules'] as List) {
           fixtures[module['indexUrl'] as String] = await File(
@@ -271,6 +281,8 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 20));
       }
+      await tester.tap(find.text('关于序点'));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('打开模块商店'),
         200,
@@ -293,11 +305,16 @@ void main() {
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('商店设置')),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('商店设置'));
       await tester.pumpAndSettle();
       expect(find.text('目录：$repository'), findsOneWidget);
       expect(requested, contains(catalogUrl));
-      for (final name in ['拾光教务导入兼容', '正方教务导入（通用）', '大学课表']) {
+      for (final name in ['拾光教务导入兼容', '大学课表']) {
         tester
             .state<ScrollableState>(find.byType(Scrollable).first)
             .position
@@ -320,7 +337,7 @@ void main() {
       }
       expect(
         requested.where((url) => url.contains('/module-index/')),
-        hasLength(11),
+        hasLength(moduleCount),
       );
       expect(find.text('版本索引不可用'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());

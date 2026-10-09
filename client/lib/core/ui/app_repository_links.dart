@@ -9,9 +9,14 @@ final externalUrlLauncherProvider = Provider<Future<bool> Function(Uri)>(
 );
 
 class AppRepositoryLinks extends ConsumerWidget {
-  const AppRepositoryLinks({super.key, required this.onBrowseModules});
+  const AppRepositoryLinks({
+    super.key,
+    required this.onBrowseModules,
+    this.showHeading = true,
+  });
 
   final VoidCallback onBrowseModules;
+  final bool showHeading;
 
   void _notify(BuildContext context, String message) {
     ScaffoldMessenger.of(context)
@@ -72,8 +77,10 @@ class AppRepositoryLinks extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const SizedBox(height: 16),
-      Text('关于序点', style: Theme.of(context).textTheme.titleMedium),
+      if (showHeading) ...[
+        const SizedBox(height: 16),
+        Text('关于序点', style: Theme.of(context).textTheme.titleMedium),
+      ],
       _link(
         context,
         ref,

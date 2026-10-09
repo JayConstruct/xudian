@@ -11,6 +11,7 @@ import 'package:task_app/app/mobile_bottom_dock.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/host_manager_page.dart';
+import 'package:task_app/core/module_host/host_settings_page.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/modules/app_module.dart';
 import 'package:task_app/core/modules/builtin_module_registration.dart';
@@ -25,67 +26,84 @@ import 'package:task_app/core/ui/ui_registration.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
-UiPackDefinition _pack() => UiPackDefinition.parse(
-  moduleId: 'test.ui',
-  version: '1.0.0',
-  digest: 'test-digest',
-  source: {
-    'contractVersion': 1,
-    'tokens': {
-      'light': {'primary': '#006633', 'canvas': '#EEEECC'},
-    },
-    'chrome': {
-      'ui.chrome.bottomNav@1': {
-        'tree': {
-          'type': 'primitive',
-          'name': 'padding',
-          'props': {'padding': 20},
-          'children': [
-            {'type': 'base'},
-          ],
+UiPackDefinition _pack({bool hideHeaderContent = false}) =>
+    UiPackDefinition.parse(
+      moduleId: 'test.ui',
+      version: '1.0.0',
+      digest: 'test-digest',
+      source: {
+        'contractVersion': 1,
+        'tokens': {
+          'light': {'primary': '#006633', 'canvas': '#EEEECC'},
         },
-      },
-      'ui.chrome.sidebar@1': {
-        'tree': {
-          'type': 'primitive',
-          'name': 'column',
-          'props': {'width': 216, 'fill': true},
-          'children': [
-            {
+        'chrome': {
+          'ui.chrome.bottomNav@1': {
+            'tree': {
               'type': 'primitive',
-              'name': 'text',
-              'props': {'text': '自定义侧栏'},
-            },
-            {
-              'type': 'primitive',
-              'name': 'expanded',
+              'name': 'padding',
+              'props': {'padding': 20},
               'children': [
-                {'type': 'slot', 'name': 'navigation'},
+                {'type': 'base'},
               ],
             },
-            {'type': 'slot', 'name': 'settings'},
-          ],
-        },
-      },
-      'ui.chrome.header@1': {
-        'tree': {
-          'type': 'primitive',
-          'name': 'column',
-          'children': [
-            {
+          },
+          'ui.chrome.sidebar@1': {
+            'tree': {
               'type': 'primitive',
-              'name': 'text',
-              'props': {'text': '自定义顶栏'},
+              'name': 'column',
+              'props': {'width': 216, 'fill': true},
+              'children': [
+                {
+                  'type': 'primitive',
+                  'name': 'text',
+                  'props': {'text': '自定义侧栏'},
+                },
+                {
+                  'type': 'primitive',
+                  'name': 'expanded',
+                  'children': [
+                    {'type': 'slot', 'name': 'navigation'},
+                  ],
+                },
+                {'type': 'slot', 'name': 'settings'},
+              ],
             },
-            {'type': 'base'},
-          ],
+          },
+          'ui.chrome.header@1': {
+            'tree': hideHeaderContent
+                ? {
+                    'type': 'primitive',
+                    'name': 'column',
+                    'children': [
+                      {
+                        'type': 'primitive',
+                        'name': 'text',
+                        'props': {'text': '仅自定义标题'},
+                      },
+                      {'type': 'slot', 'name': 'title'},
+                      {'type': 'slot', 'name': 'actions'},
+                    ],
+                  }
+                : {
+                    'type': 'primitive',
+                    'name': 'column',
+                    'children': [
+                      {
+                        'type': 'primitive',
+                        'name': 'text',
+                        'props': {'text': '自定义顶栏'},
+                      },
+                      {'type': 'base'},
+                    ],
+                  },
+          },
         },
       },
-    },
-  },
-);
+    );
 
 class _Workspace implements AppModule {
+  _Workspace({this.extraEntries = false});
+  final bool extraEntries;
   @override
   ModuleManifest get manifest => const ModuleManifest(
     id: 'test.workspace',
@@ -118,6 +136,24 @@ class _Workspace implements AppModule {
       label: '测试工作区',
       icon: Icons.list,
     ),
+    if (extraEntries)
+      for (var i = 0; i < 5; i++) ...[
+        UiPageRegistration(
+          id: 'test.menu.page.$i',
+          moduleId: manifest.id,
+          title: '模块页面 $i',
+          builder: (_, _) => Text('模块入口内容 $i'),
+        ),
+        UiEntryRegistration(
+          id: 'test.menu.entry.$i',
+          moduleId: manifest.id,
+          pageId: 'test.menu.page.$i',
+          label: i == 4 ? '模块入口 4：完整显示的较长选项名称' : '模块入口 $i',
+          icon: Icons.extension_outlined,
+          defaultMount: const UiMount(placement: UiPlacement.header),
+          opening: UiOpening.detail,
+        ),
+      ],
   ];
 }
 
@@ -194,6 +230,76 @@ void main() {
       await db.close();
       await directory.delete(recursive: true);
     });
+    for (final width in [320.0, 1280.0]) {
+      testWidgets(
+        'one protected menu retains all module entries and host settings at $width',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 800);
+          tester.view.devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          final app = XudianApp();
+          app.registry.registerBuiltin(
+            BuiltinModuleRegistration(
+              module: _Workspace(extraEntries: true),
+              title: '测试',
+              description: '含多个菜单入口的工作区',
+            ),
+          );
+          addTearDown(() async {
+            await tester.pumpWidget(const SizedBox.shrink());
+            app.registry.dispose();
+          });
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                databaseProvider.overrideWith((_) async => db),
+                moduleHostProvider.overrideWith((_) async => host),
+                uiPackRegistryProvider.overrideWith(
+                  (_) =>
+                      Stream.value({'test.ui': _pack(hideHeaderContent: true)}),
+                ),
+              ],
+              child: app,
+            ),
+          );
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 30)),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('仅自定义标题'), findsOneWidget);
+          final header = find.byKey(const ValueKey('workspace-header-region'));
+          expect(
+            find.descendant(of: header, matching: find.byType(IconButton)),
+            findsOneWidget,
+          );
+          expect(find.byTooltip('打开设置'), findsNothing);
+          expect(find.byTooltip('界面风格与恢复'), findsNothing);
+          await tester.tap(find.byTooltip('页面菜单'));
+          await tester.pumpAndSettle();
+          for (var i = 0; i < 5; i++) {
+            expect(find.textContaining('模块入口 $i'), findsOneWidget);
+          }
+          final last = find.text('模块入口 4：完整显示的较长选项名称');
+          await tester.ensureVisible(last);
+          await tester.tap(last);
+          await tester.pumpAndSettle();
+          expect(find.text('模块入口内容 4'), findsOneWidget);
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('页面菜单'));
+          await tester.pumpAndSettle();
+          final settings = find.widgetWithText(PopupMenuItem<int>, '设置');
+          await tester.ensureVisible(settings);
+          await tester.tap(settings);
+          await tester.pumpAndSettle();
+          expect(find.byType(HostSettingsPage), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
     testWidgets(
       'production custom chrome leaves default recovery available and measures inset',
       (tester) async {
@@ -235,6 +341,8 @@ void main() {
         );
         expect(WorkspaceContentInsets.bottomOf(workspace), closeTo(136, .01));
         expect(AppDesign.canvas(workspace), const Color(0xFFEEEECC));
+        await tester.tap(find.byKey(const ValueKey('workspace-menu')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('ui-pack-recovery')));
         await tester.pumpAndSettle();
         expect(find.byType(UiPackSettingsPage), findsOneWidget);
@@ -294,6 +402,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(HostManagerPage), findsOneWidget);
         await tester.pageBack();
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('workspace-menu')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('ui-pack-recovery')));
         await tester.pumpAndSettle();

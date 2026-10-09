@@ -2,7 +2,7 @@
 
 面向 Android 与 Windows 的模块化个人任务管理 App，使用 Flutter/Dart、Riverpod 和 Drift/SQLite。当前采用 v2 模块架构，已实现本地任务、声明式扩展、入口编排与全局 AI 助手。
 
-状态核对日期：2026-10-08。产品目标包含跨设备端到端加密同步和公开模块市场；当前仓库尚无同步或签名审核服务端。模块分发采用统一目录与作者各自发布的 GitHub Releases，接入协议、发布工具和目录仓库内容见 [模块目录](docs/MODULE_CATALOG.md)。
+状态核对日期：2026-10-09。产品目标包含跨设备端到端加密同步和公开模块市场；当前仓库尚无同步或签名审核服务端。模块分发采用统一目录与作者各自发布的 GitHub Releases，接入协议、发布工具和目录仓库内容见 [模块目录](docs/MODULE_CATALOG.md)。
 
 ## 文档与目录
 
@@ -15,6 +15,7 @@
 | [目标与交接](PROJECT_HANDOFF.md) | 已确认产品选择、当前状态和后续交接 |
 | [设计方案](docs/DESIGN.md) | 架构、同步/加密设计与验收目标 |
 | [界面设计系统](docs/UI_DESIGN_SYSTEM.md) | 视觉规则及模块/AI 页面约束 |
+| [设置层级](docs/SETTINGS_HIERARCHY.md) | 分类首页、二级设置、模块设置与常用入口 |
 | [UI 组合与模块示例](docs/UI_COMPOSITION.md) | 入口编排、公开页面槽位、标注模式与 v2 JSON 协议 |
 | [全局 AI 助手整合方案](docs/AI_ASSISTANT.md) | 悬浮插件、限时授权、任务与布局工具、冲突保护及后续边界 |
 
@@ -30,7 +31,7 @@ assets/brand/       品牌图标源文件与生成工具
 
 ## 快速开始
 
-源码仓库为 [JayConstruct/xudian](https://github.com/JayConstruct/xudian)，主分支为 `main`。Windows 11 本地调试请先按 [Windows 模拟器调试指南](docs/WINDOWS_ANDROID_DEVELOPMENT.md) 安装 SDK，克隆后用 Android Studio 打开 `client/`。
+源码仓库为 [JayConstruct/xudian](https://github.com/JayConstruct/xudian)，当前源码和作者索引发布在 [module-catalog 分支](https://github.com/JayConstruct/xudian/tree/module-catalog)。Windows 11 本地调试请先按 [Windows 模拟器调试指南](docs/WINDOWS_ANDROID_DEVELOPMENT.md) 安装 SDK，克隆并切换到该分支后，用 Android Studio 打开 `client/`。
 
 当前 WSL 工作区使用 Linux 版 `adb` 直连 Windows ADB server，后续不通过 Windows 命令调用 ADB 客户端；连接与安装流程见 [WSL 原生 ADB](docs/MULTI_MACHINE_DEVELOPMENT.md#wsl-原生-adb连接与安装-apk)。Windows Android Studio 仅负责模拟器运行，WSL 的本机 SDK 与构建产物需单独配置。
 
@@ -142,6 +143,6 @@ VPS 开发使用独立 HTTPS 链接下载调试 APK，在手机旁安装后，�
 
 正方通用脚本可通过独立的 [拾光导入兼容模块](docs/SHIGUANG_IMPORT.md) 运行；Android 支持内置教务浏览器，桌面端支持拾光 JSON 文件导入。
 
-学校解析脚本可作为独立模块，通过 [拾光适配模块接口](docs/SHIGUANG_ADAPTER_API.md) 复用桥接和公共导入流程；`app.import.zhengfang` 为可安装的正方通用示例。
+拾光模块内置学校搜索及正方、青果、URP、超星通用入口；原独立正方导入模块已移除。其他学校模块仍可通过 [拾光适配模块接口](docs/SHIGUANG_ADAPTER_API.md) 接入公共导入流程。
 
 统一目录仓库内容位于 [packages/catalog](packages/catalog/README.md)，作者版本索引位于 `module-index/`，首批与历史原始包位于 `dist/module-releases/`。元数据更新使用新版本，未签名包的 SHA-256 只作为完整性校验；发布状态和验证范围见 [模块目录接入文档](docs/MODULE_CATALOG.md)。

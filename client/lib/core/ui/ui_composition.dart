@@ -188,7 +188,7 @@ class UiEntryRegistration extends UiRegistration {
 
 String placementLabel(UiPlacement placement) => switch (placement) {
   UiPlacement.main => '主导航',
-  UiPlacement.header => '顶部入口',
+  UiPlacement.header => '顶部菜单',
   UiPlacement.more => '更多',
   UiPlacement.settings => '设置常用入口',
   UiPlacement.hidden => '隐藏',

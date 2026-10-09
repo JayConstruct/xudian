@@ -1,0 +1,19 @@
+{
+  "moduleVersion": "1.3.1",
+  "clientBuild": 36,
+  "apkUnchanged": true,
+  "moduleSha256": "4b56cf1fe143a867c14b9bb4557d34279730a49e377b388ba39bfeb932ca8027",
+  "schoolGroupingVerified": true,
+  "descriptionsOnlyInDetails": true,
+  "multipleSchoolEntriesVerified": true,
+  "noResultsGenericFallbackVerified": true,
+  "fourGeneralSystemsVerified": true,
+  "repositoryAddressesAndCreditsVerified": true,
+  "coursesWritten": false,
+  "fixtureBrowserNotExecuted": true,
+  "hierarchyVerifiedOn": "1.3.0",
+  "finalIconsAndAttributionVerifiedOn": "1.3.1",
+  "flutterTestsPassed": 24,
+  "javascriptTestsPassed": 19,
+  "flutterAnalyze": "no issues"
+}

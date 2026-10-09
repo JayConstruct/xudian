@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.schedule",
     "name": "大学课表",
-    "version": "1.6.2",
-    "hostApi": "^1.6.0",
+    "version": "1.6.3",
+    "hostApi": "^1.8.0",
     "dataVersion": 1,
     "permissions": [
       "ui",

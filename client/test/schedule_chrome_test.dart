@@ -136,11 +136,11 @@ void main() {
     (tester) async {
       await pumpApp(tester, largeText: true);
       final semantics = tester.ensureSemantics();
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);
       final viewport = tester.getSize(find.byType(TimeGrid));
       await scrollDown(tester);
-      expect(find.byTooltip('打开设置'), findsNothing);
+      expect(find.byTooltip('页面菜单'), findsNothing);
       expect(dockVisible(tester), isFalse);
       expect(
         find.byKey(const ValueKey('workspace-chrome-reveal')),
@@ -163,13 +163,13 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('workspace-chrome-reveal')));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);
       await scrollDown(tester);
       expect(dockVisible(tester), isFalse);
       await tester.drag(verticalGrid(), const Offset(0, 120));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);
       expect(tester.takeException(), isNull);
       semantics.dispose();
@@ -203,7 +203,7 @@ void main() {
           isTrue,
         );
         await scrollDown(tester);
-        expect(find.byTooltip('打开设置'), findsNothing);
+        expect(find.byTooltip('页面菜单'), findsNothing);
         expect(dockVisible(tester), isFalse);
         final header = find.byKey(const ValueKey('workspace-header-region'));
         expect(tester.widget(header), isNot(isA<AnimatedSize>()));
@@ -222,7 +222,7 @@ void main() {
         expect(find.bySemanticsLabel('展开工具栏'), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('workspace-chrome-reveal')));
         await tester.pumpAndSettle();
-        expect(find.byTooltip('打开设置'), findsOneWidget);
+        expect(find.byTooltip('页面菜单'), findsOneWidget);
         expect(dockVisible(tester), isTrue);
         expect(tester.takeException(), isNull);
       } finally {
@@ -241,7 +241,7 @@ void main() {
         const Offset(-180, 0),
       );
       await tester.pumpAndSettle();
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);
       final scrollable = find
           .descendant(of: verticalGrid(), matching: find.byType(Scrollable))
@@ -254,7 +254,7 @@ void main() {
           );
       scrollable.position.jumpTo(160);
       await tester.pumpAndSettle();
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -266,15 +266,15 @@ void main() {
     (tester) async {
       await pumpApp(tester);
       await scrollDown(tester);
-      expect(find.byTooltip('打开设置'), findsNothing);
+      expect(find.byTooltip('页面菜单'), findsNothing);
       await tester.runAsync(() => host.disable('app.schedule'));
       await _settle(tester);
       expect(find.text('没有可用工作区'), findsOneWidget);
       expect(find.text('打开设置并恢复模块'), findsOneWidget);
       await tester.tap(find.text('打开设置并恢复模块'));
       await _settle(tester);
-      expect(find.text('外观主题'), findsOneWidget);
-      expect(find.text('模块管理与恢复'), findsOneWidget);
+      expect(find.text('外观与交互'), findsOneWidget);
+      expect(find.text('模块与连接'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -351,7 +351,7 @@ export async function render(){
       await pumpApp(tester);
       expect(find.text('折叠测试标题'), findsOneWidget);
       await scrollDown(tester);
-      expect(find.byTooltip('打开设置'), findsNothing);
+      expect(find.byTooltip('页面菜单'), findsNothing);
       await tester.runAsync(() async {
         final caller = host.instances['private.chrome']!.actor;
         final plan = await host.prepare(
@@ -365,7 +365,7 @@ export async function render(){
       await _settle(tester);
       expect(find.text('折叠测试标题'), findsNothing);
       expect(find.text('安全后备标题'), findsWidgets);
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);
       expect(
         find.byKey(const ValueKey('workspace-chrome-reveal')),
@@ -381,10 +381,10 @@ export async function render(){
     'wide schedule collapses its header while the permanent sidebar stays available',
     (tester) async {
       await pumpApp(tester, width: 1200);
-      expect(find.byTooltip('打开设置'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(find.text('设置'), findsOneWidget);
       await scrollDown(tester);
-      expect(find.byTooltip('打开设置'), findsNothing);
+      expect(find.byTooltip('页面菜单'), findsNothing);
       expect(find.text('设置'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('workspace-chrome-reveal')),

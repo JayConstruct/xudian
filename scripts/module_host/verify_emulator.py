@@ -51,17 +51,28 @@ class Emulator:
         self.nodes()
         (OUT / (name + '.xml')).write_text(self.adb('shell', 'cat', '/sdcard/xudian-ui.xml'))
         print(name, flush=True)
+    def open_settings(self):
+        nodes = self.nodes()
+        recovery = [n for n in nodes if self.label(n) == '打开设置并恢复模块']
+        direct = [n for n in nodes if self.label(n) == '打开设置']
+        if recovery or direct:
+            self.tap_node((recovery or direct)[-1])
+        else:
+            self.tap_node(self.find(nodes, '页面菜单'))
+            self.tap('设置')
     def manager(self):
         nodes = self.nodes()
         if any(self.label(n) == '模块管理' for n in nodes): return
-        if not any(self.label(n) == '模块管理与恢复' for n in nodes):
-            recovery = [n for n in nodes if self.label(n) == '打开设置并恢复模块']
-            self.tap_node(recovery[-1] if recovery else self.find(nodes, '打开设置'))
-        self.tap('模块管理与恢复')
-    def home(self):
-        for _ in range(4):
+        if not any('模块管理与恢复' in self.label(n) or '模块与连接' in self.label(n) for n in nodes):
+            self.open_settings()
             nodes = self.nodes()
-            if any(self.label(n) in ['没有可用工作区', '打开设置'] for n in nodes): return
+        categories = [n for n in nodes if '模块与连接' in self.label(n)]
+        if categories: self.tap_node(categories[-1])
+        self.tap('模块管理与恢复', contains=True)
+    def home(self):
+        for _ in range(6):
+            nodes = self.nodes()
+            if any(self.label(n) in ['没有可用工作区', '打开设置', '页面菜单'] for n in nodes): return
             self.adb('shell', 'input', 'keyevent', '4')
         raise RuntimeError('Home did not appear')
     def schedule_menu(self):

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_select_field.dart';
+import '../../app/design_system.dart';
+import '../../features/settings/settings_widgets.dart';
 import '../contracts/json_values.dart';
 import '../module_host/host_providers.dart';
 import '../modules/module_registry.dart';
@@ -95,59 +98,79 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
     final ids = modules.keys.toList()..sort();
     return UiPackScope(
       defaultOnly: true,
-      child: Scaffold(
-        appBar: AppBar(title: const Text('界面风格')),
-        body: stored.when(
+      child: DetailPage(
+        title: '界面风格',
+        child: stored.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (failure, _) => Center(child: Text('无法读取界面风格：$failure')),
           data: (selection) {
             if (draft == null) baseline = draft = selection;
-            return ListView(
-              padding: const EdgeInsets.all(16),
+            return SettingsList(
               children: [
-                const Text('选择全局风格，或为业务模块单独设置。未提供的组件使用默认界面。'),
-                const SizedBox(height: 16),
-                _picker('全局界面', draft!.globalPackId, packs, (id) {
-                  setState(() {
-                    draft = draft!.copyWith(globalPackId: id);
-                    error = null;
-                  });
-                }),
-                if (packs[draft!.globalPackId] case final pack?)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(_packSummary(pack)),
+                const SettingsNote('选择全局风格，也可为模块单独设置。修改先保留为草稿，保存后应用。'),
+                const SectionHeading(title: '全局风格'),
+                ContentSurface(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _picker('全局界面', draft!.globalPackId, packs, (id) {
+                        setState(() {
+                          draft = draft!.copyWith(globalPackId: id);
+                          error = null;
+                        });
+                      }),
+                      if (packs[draft!.globalPackId] case final pack?)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(_packSummary(pack)),
+                        ),
+                      if (draft!.globalPackId != 'app.ui.default' &&
+                          !packs.containsKey(draft!.globalPackId))
+                        const Text('所选全局 UI 包不可用，当前使用默认界面；重新启用后恢复。'),
+                    ],
                   ),
-                if (draft!.globalPackId != 'app.ui.default' &&
-                    !packs.containsKey(draft!.globalPackId))
-                  const Text('所选全局 UI 包不可用，当前使用默认界面；重新启用后恢复。'),
-                const SizedBox(height: 24),
-                const Text('模块专属界面'),
-                for (final id in ids) ...[
-                  const SizedBox(height: 12),
-                  _picker(
-                    modules[id]!,
-                    draft!.modulePackIds[id] ?? '',
-                    packs,
-                    (packId) {
-                      final overrides = Map<String, String>.of(
-                        draft!.modulePackIds,
-                      );
-                      if (packId.isEmpty) {
-                        overrides.remove(id);
-                      } else {
-                        overrides[id] = packId;
-                      }
-                      setState(() {
-                        draft = draft!.copyWith(modulePackIds: overrides);
-                        error = null;
-                      });
-                    },
-                    inherit: true,
-                    fieldKey: id,
+                ),
+                const SizedBox(height: 12),
+                const SectionHeading(title: '模块专属界面'),
+                const SettingsNote('默认跟随全局风格。单独选择后，仅影响对应模块。'),
+                if (ids.isEmpty) const SettingsNote('当前没有可单独设置的模块。'),
+                if (ids.isNotEmpty)
+                  ContentSurface(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      children: [
+                        for (final id in ids) ...[
+                          const SizedBox(height: 12),
+                          _picker(
+                            modules[id]!,
+                            draft!.modulePackIds[id] ?? '',
+                            packs,
+                            (packId) {
+                              final overrides = Map<String, String>.of(
+                                draft!.modulePackIds,
+                              );
+                              if (packId.isEmpty) {
+                                overrides.remove(id);
+                              } else {
+                                overrides[id] = packId;
+                              }
+                              setState(() {
+                                draft = draft!.copyWith(
+                                  modulePackIds: overrides,
+                                );
+                                error = null;
+                              });
+                            },
+                            inherit: true,
+                            fieldKey: id,
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+                const SectionHeading(title: '保存与恢复'),
                 if (error != null) ...[
                   Text(
                     error!,
@@ -160,38 +183,40 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
                     child: const Text('重新读取已保存配置'),
                   ),
                 ],
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    FilledButton(
-                      onPressed: saving || !dirty ? null : () => _save(),
-                      child: Text(saving ? '保存中…' : '保存风格'),
-                    ),
-                    OutlinedButton(
-                      onPressed: saving
-                          ? null
-                          : () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => UiPackPreviewPage(
-                                  packs: packs,
-                                  selection: draft!,
-                                  moduleIds: ids,
+                ContentSurface(
+                  padding: const EdgeInsets.all(18),
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      FilledButton(
+                        onPressed: saving || !dirty ? null : () => _save(),
+                        child: Text(saving ? '保存中…' : '保存风格'),
+                      ),
+                      OutlinedButton(
+                        onPressed: saving
+                            ? null
+                            : () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => UiPackPreviewPage(
+                                    packs: packs,
+                                    selection: draft!,
+                                    moduleIds: ids,
+                                  ),
                                 ),
                               ),
-                            ),
-                      child: const Text('预览草稿'),
-                    ),
-                    TextButton.icon(
-                      onPressed: saving ? null : () => _save(restore: true),
-                      icon: const Icon(Icons.restore),
-                      label: const Text('恢复默认界面'),
-                    ),
-                  ],
+                        child: const Text('预览草稿'),
+                      ),
+                      TextButton.icon(
+                        onPressed: saving ? null : () => _save(restore: true),
+                        icon: const Icon(Icons.restore),
+                        label: const Text('恢复默认界面'),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                const Text('预览仅使用模拟数据。退出预览不会保存；恢复默认仅重置界面选择。'),
+                const SettingsNote('预览仅使用模拟数据。退出预览不会保存；恢复默认仅重置界面选择，保留业务数据。'),
               ],
             );
           },
@@ -218,17 +243,13 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
           !packs.containsKey(value))
         value: '$value（不可用，自动回退）',
     };
-    return DropdownButtonFormField<String>(
+    return AppSelectField<String>(
       key: ValueKey((fieldKey ?? 'global', value)),
-      initialValue: value,
-      isExpanded: true,
-      decoration: InputDecoration(labelText: label),
-      items: [
+      value: value,
+      label: label,
+      options: [
         for (final entry in options.entries)
-          DropdownMenuItem(
-            value: entry.key,
-            child: Text(entry.value, overflow: TextOverflow.ellipsis),
-          ),
+          AppSelectOption(value: entry.key, label: entry.value),
       ],
       onChanged: saving
           ? null
@@ -312,33 +333,44 @@ class _UiPackPreviewPageState extends State<UiPackPreviewPage> {
                 selected: dark,
                 onSelected: (value) => setState(() => dark = value),
               ),
-              DropdownButton<String>(
-                value: template,
-                items: [
-                  for (final entry in const {
-                    'list': '列表页',
-                    'form': '表单页',
-                    'settings': '设置页',
-                    'detail': '详情页',
-                    'timeGrid': '时间网格页',
-                  }.entries)
-                    DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value),
-                    ),
-                ],
-                onChanged: (value) => setState(() => template = value!),
+              SizedBox(
+                width: 180,
+                child: AppSelectField<String>(
+                  key: const ValueKey('ui-preview-template'),
+                  label: '页面类型',
+                  value: template,
+                  options: [
+                    for (final entry in const {
+                      'list': '列表页',
+                      'form': '表单页',
+                      'settings': '设置页',
+                      'detail': '详情页',
+                      'timeGrid': '时间网格页',
+                    }.entries)
+                      AppSelectOption(value: entry.key, label: entry.value),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => template = value);
+                  },
+                ),
               ),
               if (widget.moduleIds.isNotEmpty)
-                DropdownButton<String>(
-                  value: moduleId ?? '',
-                  items: [
-                    const DropdownMenuItem(value: '', child: Text('全局界面')),
-                    for (final id in widget.moduleIds)
-                      DropdownMenuItem(value: id, child: Text(id)),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => moduleId = value!.isEmpty ? null : value),
+                SizedBox(
+                  width: 220,
+                  child: AppSelectField<String>(
+                    label: '预览模块',
+                    value: moduleId ?? '',
+                    options: [
+                      const AppSelectOption(value: '', label: '全局界面'),
+                      for (final id in widget.moduleIds)
+                        AppSelectOption(value: id, label: id),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => moduleId = value.isEmpty ? null : value);
+                      }
+                    },
+                  ),
                 ),
             ],
           ),

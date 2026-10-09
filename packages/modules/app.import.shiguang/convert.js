@@ -8,6 +8,7 @@ const text = (value, label, max = 120) => {
   return value.trim();
 };
 const integer = (value, min, max, label) => {
+  if (typeof value==='string' && /^\d+$/.test(value.trim())) value=Number(value);
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label}需在${min}–${max}之间`);
   return value;
 };
@@ -23,14 +24,15 @@ export function suggestedMonday(config = {}) {
   if (!config.semesterStartDate) return '';
   const time=civil(config.semesterStartDate),day=(new Date(time).getUTCDay()+6)%7+1;
   // Sunday-based semester weeks have their Monday one day after that Sunday.
-  return new Date(time+(config.firstDayOfWeek===7 ? 1-day%7 : -(day-1))*86400000).toISOString().slice(0,10);
+  return new Date(time+(Number(config.firstDayOfWeek)===7 ? 1-day%7 : -(day-1))*86400000).toISOString().slice(0,10);
 }
-function minutes(value) {
-  if (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value)) throw new Error('作息时间需为 HH:mm');
-  const [h,m]=value.split(':').map(Number);
+function normalizedTime(value) {
+  if (typeof value!=='string' || !/^\d{1,2}:\d{2}(?::00)?$/.test(value.trim())) throw new Error('作息时间需为 HH:mm，秒数仅支持00');
+  const [h,m]=value.trim().split(':').map(Number);
   if (h>23 || m>59) throw new Error('作息时间无效');
-  return h*60+m;
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
 }
+const minutes=value=>{const [h,m]=normalizedTime(value).split(':').map(Number);return h*60+m;};
 export function convert({payload, options = {}}) {
   const input=Array.isArray(payload)?{courses:payload}:object(payload,'拾光数据');
   object(options,'导入配置');
@@ -42,7 +44,7 @@ export function convert({payload, options = {}}) {
   const firstMonday=options.firstMonday || suggestedMonday(config);
   if (new Date(civil(firstMonday)).getUTCDay()!==1) throw new Error('第一教学周需选择周一');
   const totalWeeks=integer(options.totalWeeks??config.semesterTotalWeeks??20,1,100,'学期周数');
-  const displayWeekStart=options.displayWeekStart??config.firstDayOfWeek??1;
+  const displayWeekStart=integer(options.displayWeekStart??config.firstDayOfWeek??1,1,7,'每周起始日');
   if (![1,7].includes(displayWeekStart)) throw new Error('每周起始日仅支持周一或周日');
   const timezone=text(options.timezone??'Asia/Shanghai','时区');
   const warnings=[];
@@ -50,21 +52,33 @@ export function convert({payload, options = {}}) {
   if (!input.timeSlots?.length) warnings.push(options.timeSlots?'使用所选课表的现有作息，请确认与学校一致':'来源没有作息，使用12节作息模板，请确认与学校一致');
   if (!Array.isArray(slots) || !slots.length || slots.length>30) throw new Error('作息需为1–30个连续节次');
   let previous=-1;
-  const periods=slots.map((slot,i)=>{
+  const orderedSlots=slots.map(slot=>object(slot,'节次')).slice().sort((a,b)=>integer(a.number,1,30,'作息节次')-integer(b.number,1,30,'作息节次'));
+  const periods=orderedSlots.map((slot,i)=>{
     object(slot,'节次');
-    if (slot.number!==i+1) throw new Error('作息节次需从1开始连续排列');
-    const start=slot.startTime??slot.start,end=slot.endTime??slot.end;
+    if (integer(slot.number,1,30,'作息节次')!==i+1) throw new Error('作息节次需从1开始连续排列');
+    const start=normalizedTime(slot.startTime??slot.start),end=normalizedTime(slot.endTime??slot.end);
     if (minutes(start)<previous || minutes(end)<=minutes(start)) throw new Error('作息不能重叠或跨午夜');
     previous=minutes(end);return {number:i+1,start,end};
   });
   const courses=new Map(),meetings=new Map();
-  let missingIdentity=false;
+  let missingIdentity=false,matchedCustomTime=false,shiftedSunday=false;
   for (const [i,raw] of input.courses.entries()) {
     const row=object(raw,`第${i+1}条课程`),name=text(row.name,`第${i+1}条课程名称`);
-    if (row.isCustomTime===true || row.customStartTime || row.customEndTime) throw new Error(`「${name}」使用自定义时间，当前课表只支持节次安排`);
-    const weekday=integer(row.day,1,7,'星期'),startPeriod=integer(row.startSection,1,periods.length,'开始节次'),endPeriod=integer(row.endSection,startPeriod,periods.length,'结束节次');
+    let start=row.startSection,end=row.endSection;
+    if (row.isCustomTime===true || row.isCustomTime==null && (row.customStartTime || row.customEndTime)) {
+      const startTime=normalizedTime(row.customStartTime),endTime=normalizedTime(row.customEndTime);
+      start=periods.find(p=>p.start===startTime)?.number;
+      end=periods.find(p=>p.end===endTime)?.number;
+      if (start==null || end==null || end<start) throw new Error(`「${name}」的自定义时间 ${startTime}–${endTime} 无法准确对应现有节次，需要适配该学校作息`);
+      matchedCustomTime=true;
+    }
+    const weekday=integer(row.day,1,7,'星期'),startPeriod=integer(start,1,periods.length,'开始节次'),endPeriod=integer(end,startPeriod,periods.length,'结束节次');
     if (!Array.isArray(row.weeks) || !row.weeks.length) throw new Error(`「${name}」缺少明确周次`);
-    const weeks=[...new Set(row.weeks.map(w=>integer(w,1,totalWeeks,'课程周次')))].sort((a,b)=>a-b);
+    let weeks=[...new Set(row.weeks.map(w=>integer(w,1,totalWeeks,'课程周次')))].sort((a,b)=>a-b);
+    if (Number(config.firstDayOfWeek)===7 && weekday===7) {
+      if (weeks.includes(1)) throw new Error(`「${name}」包含周日起始学期的第1周周日，早于第一教学周周一，当前课表无法准确表示，请先适配该学校日期`);
+      weeks=weeks.map(w=>w-1);shiftedSunday=true;
+    }
     const teacher=row.teacher??'',location=row.position??'';
     if (typeof teacher!=='string' || typeof location!=='string' || teacher.length>500 || location.length>500) throw new Error('教师或地点无效');
     const courseId=row.courseSourceId==null ? 'course:'+canonical([name,row.code??'']) : text(row.courseSourceId,'课程来源ID',500);
@@ -80,7 +94,9 @@ export function convert({payload, options = {}}) {
     const priorCourse=courses.get(courseId);
     if (priorCourse && canonical(priorCourse)!==canonical(course)) throw new Error(`「${name}」同一课程的信息不一致，请先修正来源数据`);
     courses.set(courseId,course);
-    const stable=row.sourceId??row.id;
+    // Warehouse `id` may be a course code or a random value, not a stable
+    // meeting identifier. Only our explicit sourceId extension is trusted.
+    const stable=row.sourceId;
     if (stable==null) missingIdentity=true;
     const sourceId=stable==null?'meeting:'+canonical([courseId,weekday,startPeriod,endPeriod,teacher,location]):text(stable,'安排来源ID',500);
     const meeting={sourceId,courseId,weekday,startPeriod,endPeriod,weeks,teacher,location};
@@ -92,7 +108,9 @@ export function convert({payload, options = {}}) {
     meetings.set(sourceId,meeting);
   }
   if (missingIdentity) warnings.push('来源未提供稳定安排ID；周次变化可以合并，改名、教师、地点或节次变化可能识别为新安排');
+  if (matchedCustomTime) warnings.push('自定义上课时刻已准确对应现有节次，上课起止时间保留');
+  if (shiftedSunday) warnings.push('来源以周日开始一周，周日课程已调整周次以保留实际日期');
   if (!meetings.size) warnings.push('来源课程为空，不会清空已有课表');
-  return {draftVersion:1,scope:'shiguang:'+scope,adapterVersion:'shiguang-compat@1.1.0',complete:options.complete===true,
+  return {draftVersion:1,scope:'shiguang:'+scope,adapterVersion:'shiguang-compat@1.2.0',complete:options.complete===true,
     timetable:{name,firstMonday,totalWeeks,timezone,displayWeekStart,periods},courses:[...courses.values()],meetings:[...meetings.values()],occurrenceChanges:[],warnings};
 }

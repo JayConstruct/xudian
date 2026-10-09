@@ -19,11 +19,21 @@ def labels(e):
 
 
 def home(e):
+    e.home()
+
+
+def open_importer(e):
+    e.open_settings()
     for _ in range(8):
-        if '打开设置' in labels(e):
+        nodes = e.nodes()
+        importers = [n for n in nodes if '拾光教务导入' in e.label(n)]
+        if importers:
+            e.tap_node(importers[-1])
+            e.tap('通用系统导入')
+            e.tap('正方', contains=True)
             return
-        e.adb('shell', 'input', 'keyevent', '4')
-    raise RuntimeError('无法返回主工作区')
+        e.adb('shell', 'input', 'swipe', '540', '1850', '540', '700', '300')
+    raise RuntimeError('设置中未找到拾光教务导入')
 
 
 def import_package(e, name):
@@ -61,9 +71,8 @@ def main():
     parser.add_argument('--install', action='store_true')
     parser.add_argument('--release', action='store_true', help='Use the release APK for installation')
     parser.add_argument('--public-url', help='Also verify an ordinary public HTTPS page')
-    parser.add_argument('--adapter-module', action='store_true', help='Verify the independent generic Zhengfang module')
     args = parser.parse_args()
-    modules = ['app.schedule', 'app.import.shiguang'] + (['app.import.zhengfang'] if args.adapter_module else [])
+    modules = ['app.schedule', 'app.import.shiguang']
     e = Emulator('emulator-5554')
     server = ThreadingHTTPServer(('127.0.0.1', 8188), partial(SimpleHTTPRequestHandler, directory=str(ROOT/'client/test/fixtures')))
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -86,8 +95,7 @@ def main():
         e.adb('shell', 'am', 'start', '-W', '-n', 'dev.taskapp.task_app/.MainActivity')
         e.adb('reverse', 'tcp:8188', 'tcp:8188')
         home(e)
-        e.tap('打开设置')
-        e.tap('正方教务导入（通用）' if args.adapter_module else '拾光教务导入')
+        open_importer(e)
         fixture_url = 'http://127.0.0.1:8188/zhengfang_capture.html'
         enter_url(e, fixture_url)
         e.tap('打开教务浏览器')
@@ -119,18 +127,17 @@ def main():
         # returned to Flutter without committing any captured data.
         e.record('android-shiguang-captured-config')
         e.tap('取消')
-        assert '拾光教务导入' in labels(e)
+        assert any('已取消导入配置' in label for label in labels(e)), labels(e)
         print('Native browser + HTTP/DNS error persistence + recovery + parser + cancellation verified', flush=True)
         OUT.mkdir(exist_ok=True)
-        result_name = 'shiguang-adapter-browser.json' if args.adapter_module else 'shiguang-browser.json'
-        (OUT/result_name).write_text(json.dumps({
-            'device': 'emulator-5554', 'clientBuild': 34,
+        (OUT/'shiguang-browser.json').write_text(json.dumps({
+            'device': 'emulator-5554',
             'fixture': 'client/test/fixtures/zhengfang_capture.html',
             'browserCaptureVerified': True, 'cancelVerified': True,
             'httpErrorVerified': True, 'dnsErrorVerified': True,
             'failedPageCaptureDisabled': True, 'loadRecoveryVerified': True,
             'publicPageVerified': args.public_url,
-            'independentAdapterVerified': args.adapter_module,
+            'builtinGenericZhengfangVerified': True,
             'realSchoolLoginVerified': False, 'capturedCoursesCommitted': False,
         }, ensure_ascii=False, indent=2)+'\n')
     except Exception:

@@ -562,7 +562,6 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Widget _workspaceHeader(
     String fallbackTitle,
-    bool desktop,
     List<UiEntryRegistration> entries,
   ) {
     final contribution = workspaceHeader.lease?.isActive() == true
@@ -577,16 +576,6 @@ class _AppShellState extends ConsumerState<AppShell> {
         .take(12)
         .map(object)
         .toList();
-    Widget settings() => UiAnnotation(
-      id: 'app.shell.settings',
-      name: '设置',
-      purpose: '受保护的设置与恢复入口',
-      child: IconButton(
-        tooltip: '打开设置',
-        onPressed: _openSettings,
-        icon: const Icon(Icons.settings_outlined),
-      ),
-    );
     final leadingWidget = contribution != null && leading['label'] is String
         ? TextButton(
             onPressed: leading['event'] == null
@@ -633,55 +622,74 @@ class _AppShellState extends ConsumerState<AppShell> {
               ],
             ),
           );
-    final actionWidgets = <Widget>[
-      if (contribution == null)
-        for (final entry in entries)
-          UiAnnotation(
-            id: entry.id,
-            name: entry.label,
-            moduleId: entry.moduleId,
-            slot: 'header',
-            purpose: '打开功能入口',
-            child: IconButton(
-              tooltip: '打开 ${entry.label}',
-              onPressed: () => _openEntry(entry),
-              icon: Icon(entry.icon),
+    Widget menuLabel(String label, IconData icon) => Row(
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label)),
+      ],
+    );
+    final menu = UiAnnotation(
+      id: 'app.shell.menu',
+      name: '页面菜单',
+      purpose: '打开页面操作、模块入口及设置',
+      child: PopupMenuButton<int>(
+        key: const ValueKey('workspace-menu'),
+        tooltip: '页面菜单',
+        icon: const Icon(Icons.more_vert),
+        position: PopupMenuPosition.under,
+        shape: AppDesign.smoothShape(radius: 20),
+        constraints: const BoxConstraints(minWidth: 224, maxWidth: 320),
+        onSelected: (index) {
+          if (index == -1) {
+            _openSettings();
+          } else if (index == -2) {
+            _openUiRecovery();
+          } else if (index < actions.length) {
+            contribution?.dispatch(actions[index]['event']);
+          } else {
+            _openEntry(entries[index - actions.length]);
+          }
+        },
+        itemBuilder: (_) => [
+          for (var i = 0; i < actions.length; i++)
+            PopupMenuItem(
+              value: i,
+              child: Text('${actions[i]['label'] ?? ''}'),
+            ),
+          if (actions.isNotEmpty && entries.isNotEmpty)
+            const PopupMenuDivider(),
+          for (var i = 0; i < entries.length; i++)
+            PopupMenuItem(
+              value: actions.length + i,
+              child: UiAnnotation(
+                id: entries[i].id,
+                name: entries[i].label,
+                moduleId: entries[i].moduleId,
+                slot: 'header',
+                purpose: '打开功能入口',
+                child: menuLabel(entries[i].label, entries[i].icon),
+              ),
+            ),
+          if (actions.isNotEmpty || entries.isNotEmpty)
+            const PopupMenuDivider(),
+          PopupMenuItem(
+            value: -1,
+            child: UiAnnotation(
+              id: 'app.shell.settings',
+              name: '设置',
+              purpose: '受保护的设置与恢复入口',
+              child: menuLabel('设置', Icons.settings_outlined),
             ),
           ),
-      if (!desktop || contribution != null) settings(),
-      if (contribution != null)
-        PopupMenuButton<int>(
-          tooltip: '页面菜单',
-          icon: const Icon(Icons.more_vert),
-          onSelected: (index) {
-            if (index < actions.length) {
-              contribution.dispatch(actions[index]['event']);
-            } else {
-              _openEntry(entries[index - actions.length]);
-            }
-          },
-          itemBuilder: (_) => [
-            for (var i = 0; i < actions.length; i++)
-              PopupMenuItem(
-                value: i,
-                child: Text('${actions[i]['label'] ?? ''}'),
-              ),
-            if (actions.isNotEmpty && entries.isNotEmpty)
-              const PopupMenuDivider(),
-            for (var i = 0; i < entries.length; i++)
-              PopupMenuItem(
-                value: actions.length + i,
-                child: Row(
-                  children: [
-                    Icon(entries[i].icon, size: 20),
-                    const SizedBox(width: 12),
-                    Text(entries[i].label),
-                  ],
-                ),
-              ),
-          ],
-        ),
-    ];
+          PopupMenuItem(
+            value: -2,
+            key: const ValueKey('ui-pack-recovery'),
+            child: menuLabel('界面风格与恢复', Icons.palette_outlined),
+          ),
+        ],
+      ),
+    );
     final fallback = Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
       child: Row(
@@ -689,11 +697,10 @@ class _AppShellState extends ConsumerState<AppShell> {
           if (contribution != null && leading['label'] is String)
             Expanded(child: leadingWidget),
           Expanded(flex: contribution == null ? 1 : 2, child: titleWidget),
-          ...actionWidgets,
         ],
       ),
     );
-    // Recovery is owned by the host and cannot be removed by a recipe.
+    // The unified menu is owned by the host and cannot be removed by a recipe.
     return Row(
       children: [
         Expanded(
@@ -703,23 +710,12 @@ class _AppShellState extends ConsumerState<AppShell> {
             slots: {
               'title': titleWidget,
               'leading': leadingWidget,
-              'actions': Row(
-                mainAxisSize: MainAxisSize.min,
-                children: actionWidgets,
-              ),
+              'actions': const SizedBox.shrink(),
             },
             fallback: fallback,
           ),
         ),
-        UiPackScope(
-          defaultOnly: true,
-          child: IconButton(
-            key: const ValueKey('ui-pack-recovery'),
-            tooltip: '界面风格与恢复',
-            onPressed: _openUiRecovery,
-            icon: const Icon(Icons.palette_outlined, size: 20),
-          ),
-        ),
+        UiPackScope(defaultOnly: true, child: menu),
       ],
     );
   }
@@ -908,13 +904,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       textScale: MediaQuery.textScalerOf(context).scale(12) / 12,
       desktop: desktop,
     );
-    final headerLimit = headerVisibleCount(width: width, desktop: desktop);
-    final visibleHeader = header.take(headerLimit).toList();
-    final more = [
-      ...at(UiPlacement.more),
-      ...main.skip(mainCount),
-      ...header.skip(headerLimit),
-    ];
+    final more = [...at(UiPlacement.more), ...main.skip(mainCount)];
     final visibleMain = main.take(mainCount).toList();
     final destinations = visibleMain.map(_destination).toList();
     index = visibleMain.indexWhere((entry) => entry.id == activeEntry.id);
@@ -954,11 +944,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                   width: double.infinity,
                                   height: 0,
                                 )
-                              : _workspaceHeader(
-                                  current.label,
-                                  desktop,
-                                  visibleHeader,
-                                ))
+                              : _workspaceHeader(current.label, header))
                         : AnimatedSize(
                             duration: chromeDuration,
                             alignment: Alignment.topCenter,
@@ -967,11 +953,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                     width: double.infinity,
                                     height: 0,
                                   )
-                                : _workspaceHeader(
-                                    current.label,
-                                    desktop,
-                                    visibleHeader,
-                                  ),
+                                : _workspaceHeader(current.label, header),
                           ),
                   ),
                   if (layout?.warning != null)

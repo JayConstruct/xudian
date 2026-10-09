@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.import.shiguang",
     "name": "拾光教务导入兼容",
-    "version": "1.1.1",
+    "version": "1.3.1",
     "hostApi": "^1.8.0",
     "dataVersion": 1,
     "permissions": [
@@ -19,7 +19,7 @@
         "version": "^1.6.1"
       }
     ],
-    "description": "兼容拾光教务导入脚本，将教务数据转换为课表导入草稿。",
+    "description": "按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。",
     "author": "JayConstruct"
   },
   "entryPoint": "main.js",
@@ -73,6 +73,35 @@
       "handler": "convert",
       "input": {
         "type": "object"
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "shiguang.adapters.list",
+      "major": 1,
+      "kind": "query",
+      "handler": "listAdapters",
+      "input": {
+        "type": "object",
+        "properties": {
+          "search": {
+            "type": "string"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "school",
+              "general"
+            ]
+          }
+        }
       },
       "output": {
         "type": "object"

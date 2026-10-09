@@ -23,6 +23,99 @@ import 'package:task_app/data/providers.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final dark in [false, true]) {
+    testWidgets(
+      'style options stay usable at 320px with large ${dark ? 'dark' : 'light'} text and only save explicitly',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final database = AppDatabase(NativeDatabase.memory());
+        addTearDown(database.close);
+        const missing =
+            'missing.global.with.a.long.name.for.an.unavailable.style';
+        final selection = UiSelection(
+          globalPackId: missing,
+          modulePackIds: {'missing.module': 'missing.local'},
+        );
+        await database
+            .into(database.appSettings)
+            .insert(
+              AppSettingsCompanion.insert(
+                key: UiSelectionController.storageKey,
+                value: jsonEncode(selection.toJson()),
+              ),
+            );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              databaseProvider.overrideWith((_) async => database),
+              moduleHostProvider.overrideWith(
+                (_) async => throw StateError('No host required'),
+              ),
+              uiPackRegistryProvider.overrideWith(
+                (_) => Stream.value(const {}),
+              ),
+            ],
+            child: MaterialApp(
+              theme: ThemeData(
+                useMaterial3: true,
+                brightness: dark ? Brightness.dark : Brightness.light,
+              ),
+              home: const UiPackSettingsPage(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey(('global', missing))));
+        await tester.pumpAndSettle();
+        expect(
+          find.widgetWithText(MenuItemButton, '$missing（不可用，自动回退）'),
+          findsOneWidget,
+        );
+        expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+        expect(tester.testTextInput.isVisible, isFalse);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.widgetWithText(MenuItemButton, '内置默认'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey(('global', 'app.ui.default'))),
+          findsOneWidget,
+        );
+        final stored =
+            await (database.select(database.appSettings)..where(
+                  (row) => row.key.equals(UiSelectionController.storageKey),
+                ))
+                .getSingle();
+        expect(jsonDecode(stored.value), selection.toJson());
+        await tester.scrollUntilVisible(
+          find.text('保存风格'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.ensureVisible(find.text('保存风格'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('保存风格'));
+        await tester.pumpAndSettle();
+        final saved =
+            await (database.select(database.appSettings)..where(
+                  (row) => row.key.equals(UiSelectionController.storageKey),
+                ))
+                .getSingle();
+        expect(
+          jsonDecode(saved.value),
+          selection.copyWith(globalPackId: 'app.ui.default').toJson(),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+  }
+
   test(
     'selection persists across scopes, retaining missing module choices',
     () async {
@@ -169,13 +262,16 @@ void main() {
       );
       await tester.pumpAndSettle();
       for (final label in ['表单页', '设置页', '详情页', '时间网格页', '列表页']) {
-        await tester.tap(find.byType(DropdownButton<String>).first);
+        await tester.tap(find.byKey(const ValueKey('ui-preview-template')));
         await tester.pumpAndSettle();
         await tester.tap(find.text(label).last);
         await tester.pumpAndSettle();
         if (label == '表单页') {
           expect(find.widgetWithText(OutlinedButton, '保存示例'), findsOneWidget);
-          await tester.enterText(find.byType(TextField), '保留模拟草稿');
+          await tester.enterText(
+            find.widgetWithText(TextField, '标题'),
+            '保留模拟草稿',
+          );
           tester.testTextInput.hide();
           await tester.tap(find.widgetWithText(FilterChip, '深色'));
           await tester.pumpAndSettle();
@@ -244,6 +340,7 @@ void main() {
               ))
               .getSingle();
       expect(jsonDecode(row.value), selection.toJson());
+      await tester.ensureVisible(find.text('预览草稿'));
       await tester.tap(find.text('预览草稿'));
       await tester.pumpAndSettle();
       await tester.pageBack();
@@ -258,6 +355,7 @@ void main() {
         ),
         selection.toJson(),
       );
+      await tester.ensureVisible(find.text('恢复默认界面'));
       await tester.tap(find.text('恢复默认界面'));
       await tester.pumpAndSettle();
       expect(
@@ -321,7 +419,7 @@ void main() {
       try {
         await tester.pumpWidget(page(HostSettingsPage(registry: registry)));
         await tester.pumpAndSettle();
-        expect(find.text('界面风格'), findsOneWidget);
+        expect(find.text('外观与交互'), findsOneWidget);
         expect(
           tester
               .widgetList<UiScopeData>(find.byType(UiScopeData))

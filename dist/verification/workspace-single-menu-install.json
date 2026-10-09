@@ -1,0 +1,22 @@
+{
+  "serial": "emulator-5554",
+  "clientBuild": 35,
+  "androidVersionCode": 4035,
+  "apkSha256": "8fd86d6f3426a556155c6984ad2e44e9f0a19e955d184a4d2f62b4319e1f2617",
+  "installedApkMatchesBuild": true,
+  "singleHeaderButtonOnHomeAndSchedule": true,
+  "allHeaderEntriesInMenu": true,
+  "hostSettingsOpens": true,
+  "uiRecoveryOpens": true,
+  "scheduleDisplaySettingsOpens": true,
+  "aiModuleEntryOpens": true,
+  "existingCoursePreserved": true,
+  "testsPassed": 124,
+  "flutterAnalyze": "no issues",
+  "screenshots": [
+    "android-workspace-single-menu-home.png",
+    "android-workspace-single-menu-home-open.png",
+    "android-workspace-single-menu-schedule.png",
+    "android-workspace-single-menu-schedule-open.png"
+  ]
+}

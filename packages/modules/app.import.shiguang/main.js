@@ -2,12 +2,19 @@ import {services,ui,files,browser} from '@xudian/sdk';
 import {convert,suggestedMonday} from './convert.js';
 import {captureScript} from './bridge.js';
 import zhengfang from './zhengfang.js';
+import {loadAdapter,snapshot} from './warehouse/catalog.js';
+import {selectedAdapter,schoolPicker,generalPicker,schoolAdapters,compatibilityNote} from './schools.js';
+import {aboutPage,repository} from './about.js';
 export {convert};
 export {compileBridge} from './bridge.js';
+export {listAdapters} from './schools.js';
 const ref=serviceId=>({moduleId:'app.schedule',serviceId,majorVersion:1});
 const text=value=>({type:'text',text:value});
 const button=(label,type)=>({type:'button',text:label,event:{type}});
 const field=(key,label,value,type='text',extra={})=>({key,label,value,type,...extra});
+function clearSourceDraft(state) {
+  delete state.input;delete state.plan;delete state.options;delete state.error;
+}
 async function configure(payload,previous={}) {
   const {timetables}=await services.query(ref('schedule.query.timetables'),{});
   const target=await ui.dialog({title:'选择导入目标',fields:[field('target','课表','new','select',{required:true,options:[{value:'new',label:'新建课表'},...timetables.map(t=>({value:t.id,label:t.name}))]})]});
@@ -37,7 +44,36 @@ async function prepare(state) {
   }
 }
 export async function render({state={},event,formValues={},context={}}) {
+  let replaceForms={};
   try {
+    if (event?.type==='chooseSchool') {
+      state.view='schools';state.choosingSchool=true;state.schoolSearch='';state.schoolPage=0;
+      if (formValues.url!==undefined) state.url=String(formValues.url).trim();
+      replaceForms.schoolSearch='';
+    }
+    if (event?.type==='closeSchools' || event?.type==='goHome') {state.view='home';state.choosingSchool=false;}
+    if (event?.type==='chooseGeneral') {state.view='general';state.choosingSchool=false;}
+    if (event?.type==='openAbout') {state.view='about';state.choosingSchool=false;}
+    if (event?.type==='continueImport') {state.view='detail';state.choosingSchool=false;}
+    if (event?.type==='backToPicker') {
+      const chosen=selectedAdapter(state);
+      state.view=chosen?(chosen.category==='GENERAL_TOOL'?'general':'schools'):'home';
+      state.choosingSchool=state.view==='schools';
+      if (formValues.url!==undefined) state.url=String(formValues.url).trim();
+    }
+    if (event?.type==='searchSchool' || event?.type==='schoolPage') {
+      state.schoolSearch=String(formValues.schoolSearch??state.schoolSearch??'').trim();
+      state.schoolPage=event.type==='searchSchool'?0:event.page;
+    }
+    if (event?.type==='selectSchool') {
+      const chosen=selectedAdapter({adapterId:event.id});
+      if (!chosen) throw new Error('学校脚本不存在，请重新选择');
+      clearSourceDraft(state);
+      state.adapterId=chosen.id;state.url=chosen.url;state.choosingSchool=false;
+      state.view='detail';state.sourceKind='browser';
+      delete state.script;delete state.error;delete state.notice;
+      replaceForms.url=chosen.url;
+    }
     // Navigation context is untrusted input, not a permission or saved draft.
     // School adapters hand off JSON only; configuration and conversion remain
     // in this module and provider review is still required for every write.
@@ -46,28 +82,30 @@ export async function render({state={},event,formValues={},context={}}) {
       const incoming=context.shiguangImport;
       if (incoming.version!==1 || !incoming.payload || typeof incoming.payload!=='object') throw new Error('学校模块的导入数据接口无效');
       const configured=await configure(Array.isArray(incoming.payload)?{courses:incoming.payload}:incoming.payload);
-      if (configured) {state.options=configured.options;state.input=configured.input;}
+      if (configured) {state.options=configured.options;state.input=configured.input;state.view='detail';state.sourceKind='handoff';}
       else state.notice='已取消学校模块的导入';
     }
     if (event?.type==='customScript') {
       const result=await ui.dialog({title:'使用拾光学校适配脚本',fields:[field('script','粘贴学校适配器完整 JavaScript',state.script||'','multiline',{required:true,maxLength:240000})]});
-      if (result) {state.script=result.script;state.notice='已选用学校脚本，仅在本次运行会话中保留';}
+      if (result) {clearSourceDraft(state);state.script=result.script;delete state.adapterId;state.view='detail';state.sourceKind='browser';state.choosingSchool=false;state.notice='已选用学校脚本，仅在本次运行会话中保留；原导入预览已清除';}
     }
-    if (event?.type==='defaultScript') {delete state.script;state.notice='已切换为正方 HTML 通用脚本';}
+    if (event?.type==='defaultScript') {clearSourceDraft(state);delete state.script;delete state.adapterId;state.view='detail';state.sourceKind='browser';state.notice='已切换为正方 HTML 通用脚本，原导入预览已清除';}
     if (event?.type==='json' || event?.type==='browser') {
       let payload;
       if (event.type==='json') {
         const raw=await files.readText();
-        if (raw==null) return {state,tree:tree(state)};
+        if (raw==null) {state.notice=state.input?'已取消文件选择，仍保留上一次导入草稿':'已取消文件选择';return {state,tree:tree(state)};}
         payload=JSON.parse(raw);
       } else {
         const url=String(formValues.url||state.url||'').trim();
         state.url=url;
-        payload=await browser.capture({url,script:captureScript(state.script||zhengfang)});
-        if (payload==null) return {state,tree:tree(state)};
+        const chosen=state.adapterId?await loadAdapter(state.adapterId):null;
+        payload=await browser.capture({url,script:captureScript(state.script||chosen?.script||zhengfang)});
+        if (payload==null) {state.notice=state.input?'已取消采集，仍保留上一次导入草稿':'已取消采集';return {state,tree:tree(state)};}
       }
       const configured=await configure(Array.isArray(payload)?{courses:payload}:payload,state.options);
-      if (configured) {state.options=configured.options;state.input=configured.input;delete state.plan;delete state.error;delete state.notice;}
+      if (configured) {state.options=configured.options;state.input=configured.input;state.view='detail';state.sourceKind=event.type==='json'?'json':'browser';state.choosingSchool=false;delete state.plan;delete state.error;delete state.notice;}
+      else state.notice=state.input?'已取消导入配置，仍保留上一次导入草稿':'已取消导入配置';
     }
     if (event?.type==='preview' && state.input) await prepare(state);
     if (event?.type==='conflicts' && state.plan?.result.conflicts?.length) {
@@ -76,24 +114,76 @@ export async function render({state={},event,formValues={},context={}}) {
     }
     if (event?.type==='clear') {delete state.input;delete state.plan;delete state.error;delete state.notice;}
   } catch(error) {state.error=error.message;delete state.plan;}
-  return {state,tree:tree(state)};
+  return {state,replaceForms,tree:tree(state)};
 }
 function tree(state) {
-  const draft=state.input?.draft;
+  const view=state.view||(state.choosingSchool?'schools':state.input||state.adapterId||state.script?'detail':'home');
+  if (view==='schools') return schoolPicker(state);
+  if (view==='general') return generalPicker();
+  if (view==='about') return aboutPage();
+  if (view==='home') return home(state);
+  return detail(state);
+}
+function messages(state) {
+  return [...(state.notice?[text(state.notice)]:[]),...(state.error?[text('无法继续：'+state.error)]:[])];
+}
+function home(state) {
+  const chosen=selectedAdapter(state);
+  const entry=(title,subtitle,icon,type)=>({type:'listTile',title,subtitle,icon,event:{type}});
   return {type:'column',children:[
-    text('拾光教务导入'),
-    text('在教务浏览器登录并打开个人课表，执行脚本后预览课程，再确认保存。'),
+    {...text('导入课表'),style:'title'},
+    text('选择学校或教务系统，登录后采集课程，再预览确认。'),
+    ...(state.input?[{type:'card',children:[entry('继续本次导入',`${state.input.draft.courses.length} 门课程 · 查看转换结果与导入预览`,'calendar','continueImport')]}]:chosen||state.script?[{type:'card',children:[entry('继续上次选择',chosen?.school||'已粘贴的学校脚本','calendar','continueImport')]}]:[]),
+    {type:'card',children:[
+      entry('按学校导入','搜索学校名称或缩写','school','chooseSchool'),
+      {type:'divider'},
+      entry('通用系统导入','正方、青果、URP、超星','importExport','chooseGeneral'),
+    ]},
+    {...text('其他导入方式'),style:'heading'},
+    {type:'card',children:[
+      entry('粘贴学校脚本','使用学校提供的完整适配脚本','list','customScript'),
+      {type:'divider'},
+      entry('导入拾光 JSON 文件','适用于桌面端和已有导出文件','importExport','json'),
+    ]},
+    entry('关于与致谢','源码地址、脚本贡献者与开源许可','info','openAbout'),
+    ...messages(state),
+  ]};
+}
+function detail(state) {
+  const draft=state.input?.draft;
+  const chosen=selectedAdapter(state);
+  const isFile=state.sourceKind==='json'||state.sourceKind==='handoff';
+  const variants=chosen?.category!=='GENERAL_TOOL'&&chosen?schoolAdapters(chosen):[];
+  return {type:'column',children:[
+    button(isFile?'返回导入首页':chosen?.category==='GENERAL_TOOL'?'返回通用系统':chosen?'返回学校列表':'返回导入首页',isFile?'goHome':'backToPicker'),
+    {...text(isFile?'确认导入结果':chosen?.category==='GENERAL_TOOL'?chosen.name:chosen?.school||'学校脚本导入'),style:'title'},
+    ...messages(state),
+    ...(!isFile&&variants.length>1?[{type:'card',children:[
+      {...text('选择导入入口'),style:'heading'},
+      ...variants.map(a=>({type:'listTile',title:a.name,subtitle:a.id===chosen.id?'当前入口':undefined,icon:'school',disabled:a.id===chosen.id,event:{type:'selectSchool',id:a.id}})),
+    ]}]:[]),
+    ...(!isFile?[
+    {type:'card',children:[
+      {...text('使用说明'),style:'heading'},
+      text(chosen?.description||'在教务网页登录，进入个人课表查询页面，选择学年学期后执行采集。'),
+      ...(chosen&&compatibilityNote(chosen)?[text(compatibilityNote(chosen))]:[]),
+      ...(chosen?.category==='GENERAL_TOOL'?[text('请填写本校教务网址。通用脚本不保证适用于该系统的所有版本。')]:[]),
+    ]},
     {type:'input',key:'url',text:'教务登录网址',inputMode:'url',value:state.url||''},
     button('打开教务浏览器','browser'),
-    text(state.script?'当前使用学校适配脚本':'当前使用正方 HTML 通用脚本，需页面支持 jQuery'),
-    button('使用学校适配脚本','customScript'),
-    ...(state.script?[button('恢复正方通用脚本','defaultScript')]:[]),
-    button('导入拾光 JSON 文件','json'),
-    text('桌面端可导入拾光导出的 JSON；内置教务浏览器当前支持 Android。'),
-    ...(state.notice?[text(state.notice)]:[]),
-    ...(state.error?[text('无法继续：'+state.error)]:[]),
+    text(state.script?'当前使用粘贴的学校脚本':chosen?'当前使用所选学校脚本':'当前使用正方 HTML 通用脚本，需页面支持 jQuery'),
+    {...text('教务浏览器当前支持 Android。'),style:'muted'},
+    ]:[]),
     ...(draft?[
       {type:'card',children:[text(`${draft.timetable.name} · ${draft.courses.length} 门课程 · ${draft.meetings.length} 个安排`),text(`第一周 ${draft.timetable.firstMonday} · ${draft.timetable.totalWeeks} 周 · ${draft.timetable.periods.length} 节`),...draft.warnings.map(text),button('预览实际变更','preview'),...(state.plan?.result.blocked?[text(`${state.plan.result.conflicts.length} 项冲突`),button('处理导入冲突','conflicts')]:[]),button('取消本次导入','clear')]}
     ]:[]),
+    ...(!isFile?[{type:'card',children:[
+      {...text('脚本来源'),style:'heading'},
+      text('维护者：'+(chosen?.maintainer||(state.script?'由你提供':'星河欲转'))),
+      ...(!state.script?[{type:'richText',text:chosen?`${repository}/blob/${snapshot.revision}/${chosen.path}`:`${repository}/blob/ff72d1f08782df965cae110034a9d87cd91e0c07/resources/zhengfang_jiaowu/zhengfang_01.js`}]:[]),
+      {...text('长按源码地址可以复制。'),style:'muted'},
+    ]}]:[]),
+    button('关于与致谢','openAbout'),
+    button('返回导入首页','goHome'),
   ]};
 }

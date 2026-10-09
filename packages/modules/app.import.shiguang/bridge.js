@@ -1,6 +1,8 @@
 // Bridge compatibility stays in the adapter; the native browser only transports JSON.
 export function captureScript(adapter) {
-  return '('+installBridge.toString()+')();\n'+adapter;
+  // Resolve named validators in the adapter's own scope, including when the
+  // host executes the full capture through new Function instead of global eval.
+  return '(function(){\n('+installBridge.toString()+')(expression=>eval(expression));\n'+adapter+'\n})();';
 }
 // Pure service for independent adapter modules. This does not run the script.
 export function compileBridge({script,bridgeVersion=1}={}) {
@@ -15,7 +17,7 @@ export function compileBridge({script,bridgeVersion=1}={}) {
   if (bytes>256*1024) throw new Error('桥接与学校脚本合计超过256 KiB');
   return {bridgeVersion:1,script:wrapped};
 }
-function installBridge() {
+function installBridge(resolveValidator) {
   const captured={courses:[],timeSlots:[],config:null,comboSchedule:null};
   let failed=false,finished=false;
   const parse=value=>typeof value==='string'?JSON.parse(value):JSON.parse(JSON.stringify(value));
@@ -36,9 +38,10 @@ function installBridge() {
         const value=window.prompt(String(title)+'\n'+String(tip),String(initial));
         if (value===null) return null;
         if (!validator) return value;
-        const validate=typeof validator==='function'?validator:(0,eval)('('+validator+')');
-        const error=validate(value);
-        if (error===true || error===undefined || error===null || error==='') return value;
+        const validate=typeof validator==='function'?validator:resolveValidator('('+validator+')');
+        if (typeof validate!=='function') throw new Error('输入校验器需为函数');
+        const error=await validate(value);
+        if (error===false || error===undefined || error===null || error==='' || error==='false') return value;
         window.alert(typeof error==='string'?error:'输入无效，请重新输入');initial=value;
       }
     },
@@ -47,7 +50,7 @@ function installBridge() {
       if (!Array.isArray(choices)) throw new Error('选项需为数组');
       for (;;) {
         const value=window.prompt(String(title)+'\n'+choices.map((item,i)=>`${i+1}. ${item}`).join('\n'),selected>=0?String(selected+1):'');
-        if (value===null) return -1;
+        if (value===null) return null;
         const index=Number(value)-1;
         if (value.trim() && Number.isInteger(index) && index>=0 && index<choices.length) return index;
         window.alert('请输入有效选项编号');
