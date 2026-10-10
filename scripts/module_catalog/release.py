@@ -5,7 +5,6 @@ import json
 import pathlib
 import shutil
 import subprocess
-import tempfile
 import urllib.parse
 import zipfile
 
@@ -38,10 +37,13 @@ def prepared_assets(catalog_path, index_dir, package_dir, repository, tag, expec
     return assets
 
 
-def gh(arguments):
-    result = subprocess.run(['gh', *arguments], capture_output=True, text=True)
+def gh(arguments, *, binary=False):
+    result = subprocess.run(['gh', *arguments], capture_output=True, text=not binary)
     if result.returncode:
-        raise ValueError(f'GitHub command failed: {result.stderr.strip() or result.stdout.strip()}. '
+        error = result.stderr.strip() or result.stdout.strip()
+        if isinstance(error, bytes):
+            error = error.decode('utf-8', errors='replace')
+        raise ValueError(f'GitHub command failed: {error}. '
                          'Check network access, gh auth login, repository access, and contents:write permissions.')
     return result.stdout
 
@@ -64,13 +66,12 @@ def verify_remote_assets(repository, tag, release, assets):
     names = [asset['name'] for asset in release['assets']]
     require(len(names) == len(set(names)), 'Existing Release has duplicate asset names')
     require(set(names) <= set(assets), 'Existing Release contains unexpected assets; refusing to change it')
-    with tempfile.TemporaryDirectory() as folder:
-        if names:
-            gh(['release', 'download', tag, '--repo', repository, '--dir', folder])
-        for name in names:
-            data = (pathlib.Path(folder) / name).read_bytes()
-            # Check package identity and service metadata in addition to the digest.
-            validate_package(data, assets[name])
+    for asset in release['assets']:
+        # Draft tag lookups can lag behind creation. Resolve each immutable asset
+        # by its authenticated API ID and preserve the ZIP's binary bytes.
+        data = gh(['api', f'repos/{repository}/releases/assets/{asset["id"]}',
+                   '-H', 'Accept: application/octet-stream'], binary=True)
+        validate_package(data, assets[asset['name']])
     return set(assets) - set(names)
 
 
@@ -86,11 +87,13 @@ def publish(repository, tag, package_dir, assets, title, notes):
     marker = f'<!-- xudian-module-release-ref:{tag_ref["object"]["sha"]} -->'
     release = find_release(repository, tag)
     if release is None:
-        gh(['release', 'create', tag, *[str(package_dir / name) for name in sorted(assets)],
-            '--repo', repository, '--verify-tag', '--draft', '--title', title,
-            '--notes', f'{notes}\n\n{marker}'])
-        release = find_release(repository, tag)
-        require(release is not None, 'Created draft Release is not visible to the authenticated publisher')
+        # Use the create response directly: the release list may not yet contain
+        # this draft, and a second tag lookup could create an ambiguous duplicate.
+        release = json.loads(gh(['api', f'repos/{repository}/releases', '--method', 'POST',
+                                 '-f', f'tag_name={tag}', '-F', 'draft=true',
+                                 '-f', f'name={title}', '-f', f'body={notes}\n\n{marker}']))
+        require(release.get('draft') is True and release.get('tag_name') == tag,
+                'Release creation did not return the expected draft')
     endpoint = f'repos/{repository}/releases/{release["id"]}'
     require(marker in (release.get('body') or ''),
             'Release tag identity is unverified or changed; refusing to modify the existing Release')
@@ -98,8 +101,11 @@ def publish(repository, tag, package_dir, assets, title, notes):
     if missing:
         require(release.get('draft') is True,
                 'Published Release is missing indexed packages; refusing to modify it')
-        gh(['release', 'upload', tag, *[str(package_dir / name) for name in sorted(missing)],
-            '--repo', repository])
+        for name in sorted(missing):
+            upload_url = (f'https://uploads.github.com/repos/{repository}/releases/{release["id"]}'
+                          f'/assets?name={urllib.parse.quote(name, safe="")}')
+            gh(['api', upload_url, '--method', 'POST', '-H', 'Content-Type: application/octet-stream',
+                '--input', str(package_dir / name)])
         release = json.loads(gh(['api', endpoint]))
         require(not verify_remote_assets(repository, tag, release, assets), 'Release upload is incomplete')
     # Recheck the remote tag before publishing, without ever changing it.

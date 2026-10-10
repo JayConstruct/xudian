@@ -6,6 +6,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
+| [首次安装](INSTALLATION.md) | Android APK、模块商店与依赖安装 |
 | [课表](SCHEDULE.md) | 当前课表、教学周、显示设置、课程与导入 |
 | [拾光导入](SHIGUANG_IMPORT.md) | 学校搜索、通用系统、采集流程、兼容范围与致谢 |
 | [设置层级](SETTINGS_HIERARCHY.md) | 分类首页、二级页与模块入口 |

@@ -1,10 +1,10 @@
 import json
-import pathlib
+import subprocess
 import unittest
 from unittest.mock import patch
 
 import test_catalog
-from release import find_release, prepared_assets, publish
+from release import find_release, gh, prepared_assets, publish
 
 
 class ReleaseTest(unittest.TestCase):
@@ -16,18 +16,20 @@ class ReleaseTest(unittest.TestCase):
                                       self.fixture.output, 'Author/example', 'modules-test', 1)
         self.names = sorted(self.assets)
         self.release = {'id': 123, 'tag_name': 'modules-test', 'draft': False,
-                        'assets': [{'name': name} for name in self.names],
+                        'assets': [{'id': 456 + i, 'name': name} for i, name in enumerate(self.names)],
                         'body': '<!-- xudian-module-release-ref:original -->'}
         self.calls = []
         self.private = False
         self.download_bad = False
         self.change_tag = False
         self.ref_reads = 0
+        self.hide_created_draft = False
+        self.created = False
 
     def tearDown(self):
         self.fixture.tearDown()
 
-    def gh(self, arguments):
+    def gh(self, arguments, *, binary=False):
         self.calls.append(arguments)
         if arguments[:2] == ['api', 'repos/Author/example']:
             return json.dumps({'private': self.private})
@@ -38,27 +40,40 @@ class ReleaseTest(unittest.TestCase):
             self.assertIn('--paginate', arguments)
             self.assertIn('--slurp', arguments)
             # An existing draft is on a later page; by-tag GET would return 404.
-            return json.dumps([[{'id': 1, 'tag_name': 'unrelated'}], [self.release] if self.release else []])
+            visible = self.release and not (self.created and self.hide_created_draft)
+            return json.dumps([[{'id': 1, 'tag_name': 'unrelated'}], [self.release] if visible else []])
+        if arguments[:2] == ['api', 'repos/Author/example/releases']:
+            self.assertEqual('POST', arguments[arguments.index('--method') + 1])
+            self.assertIn('draft=true', arguments)
+            self.assertIn('tag_name=modules-test', arguments)
+            self.release = {'id': 123, 'tag_name': 'modules-test', 'draft': True, 'assets': [],
+                            'body': next(arg.removeprefix('body=') for arg in arguments if arg.startswith('body='))}
+            self.created = True
+            return json.dumps(self.release)
         if arguments[:2] == ['api', 'repos/Author/example/releases/123']:
             if '--method' in arguments:
                 self.assertEqual('PATCH', arguments[arguments.index('--method') + 1])
                 self.assertEqual('draft=false', arguments[arguments.index('-F') + 1])
                 self.release['draft'] = False
             return json.dumps(self.release)
+        if arguments[0] == 'api' and arguments[1].startswith('repos/Author/example/releases/assets/'):
+            self.assertTrue(binary)
+            self.assertIn('Accept: application/octet-stream', arguments)
+            asset = next(asset for asset in self.release['assets'] if str(asset['id']) == arguments[1].split('/')[-1])
+            data = (self.fixture.output / asset['name']).read_bytes()
+            return data[:-1] + b'!' if self.download_bad else data
+        if arguments[0] == 'api' and arguments[1].startswith('https://uploads.github.com/'):
+            self.assertTrue(self.release['draft'])
+            self.assertEqual('POST', arguments[arguments.index('--method') + 1])
+            self.assertIn('Content-Type: application/octet-stream', arguments)
+            name = arguments[1].split('?name=')[1]
+            self.assertEqual(str(self.fixture.output / name), arguments[arguments.index('--input') + 1])
+            self.assertFalse(any(asset['name'] == name for asset in self.release['assets']))
+            self.release['assets'].append({'id': 456 + len(self.release['assets']), 'name': name})
+            return json.dumps(self.release['assets'][-1])
         if arguments[0] == 'api':
             raise ValueError('gh: Not Found (HTTP 404)')
-        if arguments[:2] == ['release', 'download']:
-            destination = pathlib.Path(arguments[arguments.index('--dir') + 1])
-            for asset in self.release['assets']:
-                data = (self.fixture.output / asset['name']).read_bytes()
-                (destination / asset['name']).write_bytes(data[:-1] + b'!' if self.download_bad else data)
-        elif arguments[:2] == ['release', 'create']:
-            self.release = {'id': 123, 'tag_name': 'modules-test', 'draft': True,
-                            'assets': [{'name': name} for name in self.names],
-                            'body': arguments[arguments.index('--notes') + 1]}
-        elif arguments[:2] == ['release', 'upload']:
-            self.release['assets'] = [{'name': name} for name in self.names]
-        return ''
+        raise AssertionError(f'Tag-based release command must not be used: {arguments}')
 
     def run_publish(self):
         with patch('release.shutil.which', return_value='/usr/bin/gh'), patch('release.gh', side_effect=self.gh):
@@ -74,22 +89,21 @@ class ReleaseTest(unittest.TestCase):
         self.download_bad = True
         with self.assertRaisesRegex(ValueError, 'digest mismatch'):
             self.run_publish()
-        self.assertFalse(any(call[:2] == ['release', 'upload'] for call in self.calls))
+        self.assertFalse(any('--method' in call for call in self.calls))
 
     def test_new_release_stays_draft_until_verified(self):
         self.release = None
         self.run_publish()
-        create = next(call for call in self.calls if call[:2] == ['release', 'create'])
-        self.assertIn('--verify-tag', create)
-        self.assertIn('--draft', create)
-        self.assertLess(next(i for i, call in enumerate(self.calls) if call[:2] == ['release', 'download']),
-                        next(i for i, call in enumerate(self.calls) if '--method' in call))
+        create = next(call for call in self.calls if call[:2] == ['api', 'repos/Author/example/releases'])
+        self.assertIn('draft=true', create)
+        self.assertLess(next(i for i, call in enumerate(self.calls) if '/releases/assets/' in call[1]),
+                        next(i for i, call in enumerate(self.calls) if 'PATCH' in call))
 
     def test_complete_draft_on_later_page_is_recovered_without_by_tag_get(self):
         self.release['draft'] = True
         self.run_publish()
         self.assertFalse(self.release['draft'])
-        self.assertFalse(any(call[:2] == ['release', 'create'] for call in self.calls))
+        self.assertFalse(any(call[:2] == ['api', 'repos/Author/example/releases'] for call in self.calls))
         self.assertFalse(any('/releases/tags/' in part for call in self.calls for part in call))
 
     def test_ambiguous_pending_tags_refuse_publication(self):
@@ -101,9 +115,32 @@ class ReleaseTest(unittest.TestCase):
         self.release['assets'] = []
         self.release['draft'] = True
         self.run_publish()
-        upload = next(call for call in self.calls if call[:2] == ['release', 'upload'])
+        upload = next(call for call in self.calls if call[1].startswith('https://uploads.github.com/'))
         self.assertNotIn('--clobber', upload)
         self.assertFalse(self.release['draft'])
+
+    def test_created_draft_missing_from_release_list_is_published_by_id(self):
+        self.release = None
+        self.hide_created_draft = True
+        self.run_publish()
+        self.assertFalse(self.release['draft'])
+        self.assertEqual(1, sum(call[1].endswith('/releases?per_page=100') for call in self.calls))
+        self.assertEqual(1, sum(call[:2] == ['api', 'repos/Author/example/releases'] for call in self.calls))
+        self.assertFalse(any(call[0] == 'release' or '/releases/tags/' in call[1] for call in self.calls))
+
+    def test_uploaded_digest_mismatch_keeps_created_release_draft(self):
+        self.release = None
+        self.download_bad = True
+        with self.assertRaisesRegex(ValueError, 'digest mismatch'):
+            self.run_publish()
+        self.assertTrue(self.release['draft'])
+        self.assertFalse(any('PATCH' in call for call in self.calls))
+
+    def test_binary_asset_download_preserves_bytes(self):
+        data = bytes(range(256))
+        with patch('release.subprocess.run', return_value=subprocess.CompletedProcess([], 0, data, b'')) as run:
+            self.assertEqual(data, gh(['api', 'repos/Author/example/releases/assets/456'], binary=True))
+        self.assertFalse(run.call_args.kwargs['text'])
 
     def test_incomplete_published_release_cannot_change(self):
         self.release['assets'] = []

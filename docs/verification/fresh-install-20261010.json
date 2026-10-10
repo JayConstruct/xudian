@@ -1,0 +1,240 @@
+{
+  "status": "passed",
+  "startedAt": "2026-10-10T03:12:33.081341+00:00",
+  "serial": "emulator-5554",
+  "androidUser": 11,
+  "adbHost": "127.0.0.1",
+  "adbPort": "5037",
+  "apk": "/home/jerry/my_app/client/build/app/outputs/flutter-apk/app-x86_64-release.apk",
+  "expectedModules": [
+    {
+      "id": "app.schedule",
+      "name": "大学课表",
+      "version": "1.7.0"
+    },
+    {
+      "id": "app.import.shiguang",
+      "name": "拾光教务导入兼容",
+      "version": "1.4.0"
+    }
+  ],
+  "steps": [
+    {
+      "name": "targetUserInitiallyUninstalled",
+      "passed": true,
+      "packageList": ""
+    },
+    {
+      "name": "apkFirstInstalled",
+      "passed": true,
+      "adbOutput": "Performing Streamed Install\nSuccess",
+      "installedApkSha256": "bcca35b77e69fbd7bf0581e8194fa6253b633b74dc3799226c721b32dad711df"
+    },
+    {
+      "name": "initialTodayEmpty",
+      "passed": true
+    },
+    {
+      "name": "expectedStoreVersionReady",
+      "passed": true,
+      "actualVersion": "1.4.0",
+      "refreshCount": 0
+    },
+    {
+      "name": "resumeOriginalFirstInstallationVerified",
+      "passed": true,
+      "installedApkSha256": "bcca35b77e69fbd7bf0581e8194fa6253b633b74dc3799226c721b32dad711df",
+      "previousAttemptReport": "fresh-install-attempt-01.json"
+    },
+    {
+      "name": "resumeTodayEmptyVerified",
+      "passed": true
+    },
+    {
+      "name": "resumeTargetModulesStillUninstalled",
+      "passed": true
+    },
+    {
+      "name": "expectedStoreVersionReady",
+      "passed": true,
+      "actualVersion": "1.4.0",
+      "refreshCount": 0
+    },
+    {
+      "name": "dependencyReviewVerified",
+      "passed": true,
+      "modules": [
+        {
+          "id": "app.schedule",
+          "name": "大学课表",
+          "version": "1.7.0",
+          "sha256": "24a2c165f6800c06e814ec7c78131dad1c6debc5d98623aede9410170b90e8d7",
+          "unsigned": true,
+          "newPermissions": [
+            "新增权限：ui、files、clock.today"
+          ],
+          "allPermissions": [
+            "全部权限：ui、files、clock.today"
+          ]
+        },
+        {
+          "id": "app.import.shiguang",
+          "name": "拾光教务导入兼容",
+          "version": "1.4.0",
+          "sha256": "a773c6f8112bfb6652a8eac478e7754a5b323ccd09d41de2a8a06aedbee8e2fa",
+          "unsigned": true,
+          "newPermissions": [
+            "新增权限：ui、files、browser.capture、services.query:app.schedule/schedule.query.timetables@1、services.command:app.schedule/schedule.import.prepare@1"
+          ],
+          "allPermissions": [
+            "全部权限：ui、files、browser.capture、services.query:app.schedule/schedule.query.timetables@1、services.command:app.schedule/schedule.import.prepare@1"
+          ]
+        }
+      ],
+      "visibleReviewLines": [
+        "AI 助手",
+        "Dismiss",
+        "SHA-256：24a2c165f6800c06e814ec7c78131dad1c6debc5d98623aede9410170b90e8d7",
+        "SHA-256：a773c6f8112bfb6652a8eac478e7754a5b323ccd09d41de2a8a06aedbee8e2fa",
+        "全部权限：ui、files、browser.capture、services.query:app.schedule/schedule.query.timetables@1、services.command:app.schedule/schedule.import.prepare@1",
+        "全部权限：ui、files、clock.today",
+        "取消",
+        "大学课表 · 1.7.0",
+        "拾光教务导入兼容 · 1.4.0",
+        "按依赖顺序统一执行；失败时恢复原版本、数据和启用状态。",
+        "按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。",
+        "操作：安装并启用",
+        "新增权限：ui、files、browser.capture、services.query:app.schedule/schedule.query.timetables@1、services.command:app.schedule/schedule.import.prepare@1",
+        "新增权限：ui、files、clock.today",
+        "未签名包；摘要验证不代表发布者签名",
+        "来源：JayConstruct/xudian",
+        "确认安装",
+        "确认模块安装计划",
+        "管理学期、作息、课程、调课记录与多个课表，支持导入和备份。"
+      ]
+    },
+    {
+      "name": "modulesInstalledFromStore",
+      "passed": true
+    },
+    {
+      "name": "05-modules-enabled",
+      "passed": true,
+      "moduleRows": {
+        "app.import.shiguang": "拾光教务导入兼容\n按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。\n1.4.0 · 已启用",
+        "app.schedule": "大学课表\n管理学期、作息、课程、调课记录与多个课表，支持导入和备份。\n1.7.0 · 已启用"
+      }
+    },
+    {
+      "name": "06-modules-enabled-after-restart",
+      "passed": true,
+      "moduleRows": {
+        "app.import.shiguang": "拾光教务导入兼容\n按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。\n1.4.0 · 已启用",
+        "app.schedule": "大学课表\n管理学期、作息、课程、调课记录与多个课表，支持导入和备份。\n1.7.0 · 已启用"
+      }
+    },
+    {
+      "name": "scheduleOpenedAfterRestart",
+      "passed": true
+    },
+    {
+      "name": "importerSettingsOpenedAfterRestart",
+      "passed": true
+    },
+    {
+      "name": "installedApkUnchangedDuringModuleInstallation",
+      "passed": true,
+      "installedApkSha256": "bcca35b77e69fbd7bf0581e8194fa6253b633b74dc3799226c721b32dad711df"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "01-today-empty",
+      "xml": "01-today-empty.xml",
+      "screenshot": "01-today-empty.png"
+    },
+    {
+      "name": "01-initial-module-manager",
+      "xml": "01-initial-module-manager.xml",
+      "screenshot": "01-initial-module-manager.png"
+    },
+    {
+      "name": "02-store-importer",
+      "xml": "02-store-importer.xml",
+      "screenshot": "02-store-importer.png"
+    },
+    {
+      "name": "attempt-02-resume-today-empty",
+      "xml": "attempt-02-resume-today-empty.xml",
+      "screenshot": "attempt-02-resume-today-empty.png"
+    },
+    {
+      "name": "attempt-02-resume-manager-before-install",
+      "xml": "attempt-02-resume-manager-before-install.xml",
+      "screenshot": "attempt-02-resume-manager-before-install.png"
+    },
+    {
+      "name": "attempt-02-02-store-importer",
+      "xml": "attempt-02-02-store-importer.xml",
+      "screenshot": "attempt-02-02-store-importer.png"
+    },
+    {
+      "name": "attempt-02-03-install-review-00",
+      "xml": "attempt-02-03-install-review-00.xml",
+      "screenshot": "attempt-02-03-install-review-00.png"
+    },
+    {
+      "name": "attempt-02-03-install-review-01",
+      "xml": "attempt-02-03-install-review-01.xml",
+      "screenshot": "attempt-02-03-install-review-01.png"
+    },
+    {
+      "name": "attempt-02-04-store-install-complete",
+      "xml": "attempt-02-04-store-install-complete.xml",
+      "screenshot": "attempt-02-04-store-install-complete.png"
+    },
+    {
+      "name": "attempt-02-05-modules-enabled-manager-00",
+      "xml": "attempt-02-05-modules-enabled-manager-00.xml",
+      "screenshot": "attempt-02-05-modules-enabled-manager-00.png"
+    },
+    {
+      "name": "attempt-02-06-modules-enabled-after-restart-manager-00",
+      "xml": "attempt-02-06-modules-enabled-after-restart-manager-00.xml",
+      "screenshot": "attempt-02-06-modules-enabled-after-restart-manager-00.png"
+    },
+    {
+      "name": "attempt-02-07-schedule-opened",
+      "xml": "attempt-02-07-schedule-opened.xml",
+      "screenshot": "attempt-02-07-schedule-opened.png"
+    },
+    {
+      "name": "attempt-02-08-importer-settings-opened",
+      "xml": "attempt-02-08-importer-settings-opened.xml",
+      "screenshot": "attempt-02-08-importer-settings-opened.png"
+    }
+  ],
+  "apkSha256": "bcca35b77e69fbd7bf0581e8194fa6253b633b74dc3799226c721b32dad711df",
+  "elapsedSeconds": 181.59,
+  "storeVersionWait": {
+    "expectedVersion": "1.4.0",
+    "observations": [
+      {
+        "elapsedSeconds": 2.31,
+        "label": "拾光教务导入兼容\n推荐\n按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。\n学习 · JayConstruct\n版本：1.4.0 · 可安装"
+      }
+    ],
+    "refreshes": []
+  },
+  "attempt": 2,
+  "attemptStartedAt": "2026-10-10T03:18:44.694125+00:00",
+  "previousFailure": "CalledProcessError: Command '['adb', '-H', '127.0.0.1', '-P', '5037', '-s', 'emulator-5554', 'shell', 'uiautomator', 'dump', '/sdcard/xudian-ui.xml']' returned non-zero exit status 137.",
+  "previousAttemptReport": "fresh-install-attempt-01.json",
+  "githubActions": {
+    "androidRun": "https://github.com/JayConstruct/xudian/actions/runs/38019329424",
+    "moduleReleaseRun": "https://github.com/JayConstruct/xudian/actions/runs/38019093517",
+    "artifact": "https://github.com/JayConstruct/xudian/actions/runs/38019329424/artifacts/11657781164",
+    "applicationSourceCommit": "7adbfe7dabfb7024af37eeef4ca0a4a04c7d097e"
+  },
+  "artifactLocation": "Screenshots, XML and the original failed attempt report are local under dist/verification/fresh-install-user11; they are excluded from Git."
+}

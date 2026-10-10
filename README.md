@@ -4,6 +4,8 @@
 
 源码仓库：[JayConstruct/xudian](https://github.com/JayConstruct/xudian)。
 
+首次安装 Android App 并从模块商店安装功能，见 [安装指南](docs/INSTALLATION.md)。[Android Actions](https://github.com/JayConstruct/xudian/actions/workflows/android.yml) 自动检查源码并构建 ARMv7、ARM64 和 x86_64 APK。
+
 ## 当前能力
 
 - 本地任务与今天视图；支持任务创建、完成、标题、优先级与日期编辑。收件箱和项目视图已移除，已有任务/项目数据保留。

@@ -6,6 +6,8 @@
 
 | 日期与范围 | 结果与证据 |
 | --- | --- |
+| 2026-10-10 Android 从零安装与商店 | 独立 Android 用户 11 原先未安装 App；build53 首装进入空白今天页，从默认在线商店安装拾光 1.4.0，并自动补齐课表 1.7.0。版本、权限、未签名提示和两包 SHA-256 审核通过；重启后两者启用、课表和拾光设置可打开，APK 摘要不变。[验收报告](verification/fresh-install-20261010.json)。采集进程曾发生 UIAutomation 连接超时，保留首轮失败记录，增强采集重试后基于原首装证据恢复并完成验收；未清除或卸载原用户数据。 |
+| 2026-10-10 GitHub Actions 干净构建 | [Android 工作流](https://github.com/JayConstruct/xudian/actions/runs/38019329424) 通过静态分析、78 文件架构检查、57 项 Python 测试及 631 项 Flutter 回归，构建 ARMv7 / ARM64 / x86_64 Release APK。[下载产物](https://github.com/JayConstruct/xudian/actions/runs/38019329424/artifacts/11657781164) 含源码版本及 SHA-256，保存至 10 月 24 日。初次 SDK `tools` 包安装失败已修复；模块发布首次草稿可见性失败在重试后成功，并补充基于 Release ID 的发布修复与 3 项回归。 |
 | 2026-10-09 完整 Android APK | 0.1.0 / build50 的 ARMv7、ARM64、x86_64 与通用 Release APK 构建完成，版本、签名、ABI/原生库及已移除模块资源核验通过；签名与模拟器 build50 一致，沿用项目测试密钥。源码未变，复用已有分析和 46 项相关回归；ARM 真机运行未验证。[构建记录](../dist/apk-build50/verification.json) / [完整下载包](../dist/xudian-0.1.0-build50-apks.zip) |
 | 2026-10-09 布局设置子页面 | 46 项布局、设置与底栏相关测试通过；静态分析及架构检查通过。build50 将导航、右上角菜单和常用/隐藏入口分到子页，共用未保存草稿；补充延迟保存期间返回的回归，防止完成保存后多退一层。模拟器验证分类摘要、子页隔离及系统返回，未保存设备布局。[验收结果](../dist/verification/layout-subpages.json) |
 | 2026-10-09 布局可视编辑 | 45 项布局、设置、底栏及新交互测试通过；静态分析与 78 文件架构检查通过。build48 展示底栏/侧栏及展开菜单，点选只编辑草稿；模拟器已验证入口检查器及高级模式往返，设备验收未保存布局配置。[验收结果](../dist/verification/layout-visual-editor.json) |

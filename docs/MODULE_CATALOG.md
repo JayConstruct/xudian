@@ -41,7 +41,7 @@ python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json \
 python3 -m unittest discover -s scripts/module_catalog -p 'test_*.py'
 ```
 
-输出为 `dist/module-releases/<id>-<version>.xmodule` 和 `module-index/<id>.json`。首批索引发布在源码仓库的 `module-catalog` 分支，保留原 `main` 分支不变；Release tag 指向这份可复现 APK 的源码快照。其他作者可以选择自己的稳定分支。作者仓库可以不同：在目录中登记自己的仓库，然后传入 `--repository Author/repo --modules <source-dir> --catalog <catalog.json> --index-dir <index-dir> --output <release-dir>`。
+输出为 `dist/module-releases/<id>-<version>.xmodule` 和 `module-index/<id>.json`。作者索引发布在源码仓库的 `module-catalog` 分支；当前完整源码也已同步到 `main`，两分支保留既有发布历史。Release tag 指向对应源码、索引及不可变包的快照。其他作者可以选择自己的稳定分支。作者仓库可以不同：在目录中登记自己的仓库，然后传入 `--repository Author/repo --modules <source-dir> --catalog <catalog.json> --index-dir <index-dir> --output <release-dir>`。
 
 已有旧版包可通过重复 `--archive-dir <历史包目录>` 收录。工具逐字节保留旧包，采用原清单和服务声明生成索引，不将新说明写回旧包。初期发布版本及资产数量见 [历史发布说明](archive/MODULE_CATALOG_20261009.md)。
 
@@ -57,7 +57,7 @@ python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json --online
 
 不要使用 `gh release upload --clobber` 覆盖已发布版本。Release tag 也不可重新指向另一份代码。已存在的版本重新运行工具时会复用原下载 URL，保留原 tag。
 
-发布脚本需要 [GitHub CLI](https://cli.github.com/)；本地先安装 `gh` 并执行 `gh auth login`。脚本先验证已准备包的摘要、清单、服务和索引，再检查仓库公开状态以及远端 tag 已存在。它使用 `gh release create --verify-tag --draft`，下载上传后的资产重新校验，最后公开 Release。重试会验证同名包的完整字节，拒绝不同摘要、额外资产、被移动的 tag 和缺少资产的已公开 Release；失败的草稿可补传缺失资产，不覆盖任何资产。Release 说明记录 tag 对象摘要，缺少记录的已有 Release 要先人工审阅，脚本不会改写。
+发布脚本需要 [GitHub CLI](https://cli.github.com/)；本地先安装 `gh` 并执行 `gh auth login`。脚本先验证已准备包的摘要、清单、服务和索引，再检查仓库公开状态以及远端 tag 已存在。它使用 GitHub REST 接口创建草稿，直接保留返回的 Release ID，再按 Release / asset ID 上传和下载复验，最后公开 Release，避免新草稿尚未进入列表时误报失败。重试会验证同名包的完整字节，拒绝不同摘要、额外资产、被移动的 tag 和缺少资产的已公开 Release；失败的草稿可补传缺失资产，不覆盖任何资产。Release 说明记录 tag 对象摘要，缺少记录的已有 Release 要先人工审阅，脚本不会改写。
 
 草稿恢复使用有写权限的身份分页查询 Release 列表，按 `tag_name` 唯一匹配，再按 Release ID 读取和公开；按 tag 查询的 REST 接口只能找到已公开版本。即使包已全部上传但公开前进程失败，重试也会复用同一草稿，完整校验资产后公开，不重复创建。[GitHub Release 接口说明](https://docs.github.com/en/rest/releases/releases#list-releases)
 
