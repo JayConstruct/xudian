@@ -50,14 +50,14 @@ bash scripts/preview-android.sh DEVICE_SERIAL
 在当前工作区的 WSL 终端执行：
 
 ```bash
-cd /home/jerry/my_app
+cd /path/to/my_app
 command -v adb
 adb version
 export ADB_SERVER_SOCKET=tcp:127.0.0.1:5037
 adb devices -l
 ```
 
-当前 `adb` 为 `/home/jerry/.local/bin/adb`，指向 Linux SDK 的 `/home/jerry/Android/Sdk/platform-tools/adb`；不要改用 Windows 的 `adb.exe`。`export` 仅对当前终端及其子进程生效，新终端需重新执行；本次没有修改用户的 Shell 配置。临时指定服务地址也可使用 `adb -H 127.0.0.1 -P 5037 devices -l`。
+当时 `adb` 为 `$HOME/.local/bin/adb`，指向 Linux SDK 的 `$HOME/Android/Sdk/platform-tools/adb`（已泛化用户目录）；不要改用 Windows 的 `adb.exe`。`export` 仅对当前终端及其子进程生效，新终端需重新执行；本次没有修改用户的 Shell 配置。临时指定服务地址也可使用 `adb -H 127.0.0.1 -P 5037 devices -l`。
 
 准备好 APK 后，在 WSL 使用 Linux 路径安装、启动并查询应用：
 

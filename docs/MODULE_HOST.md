@@ -2,7 +2,7 @@
 
 自定义 UI 包、公共组件契约、模块专属风格、模拟预览与恢复见 [公共 UI 与界面包](UI_COMPONENTS.md)。UI 包复用 v3 安装／更新流程，但不启动 JavaScript 工作线程。
 
-生产入口为 `client/lib/app/app.dart`，只注册受保护的模块管理界面。任务、基础任务视图、AI 和 UI 示例来自 `.xmodule`；课表仅在 `dist/modules/app.schedule.xmodule` 分发，不进入 Flutter 默认资源。卸载记录是持久状态，重启不会恢复已卸载模块。设置、外观、布局、安装审核、权限审核与恢复保持为宿主界面。
+生产入口为 `client/lib/app/app.dart`，只注册受保护的模块管理界面。任务、基础任务视图、AI 和 UI 示例来自 `.xmodule`；课表通过模块商店与 GitHub Release 分发，索引引用的原始包保存在 `releases/modules/`，不进入 Flutter 默认资源。本机独立打包输出为 `dist/modules/app.schedule.xmodule`。卸载记录是持久状态，重启不会恢复已卸载模块。设置、外观、布局、安装审核、权限审核与恢复保持为宿主界面。
 
 ## 构建和验证
 

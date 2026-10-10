@@ -27,6 +27,7 @@
 | [入口与页面组合](UI_COMPOSITION.md) | 布局、槽位与旧 v1/v2 source 兼容规则 |
 | [拾光适配接口](SHIGUANG_ADAPTER_API.md) | 学校模块公共桥接及导入协议 |
 | [模块目录与作者发布](MODULE_CATALOG.md) | 索引、依赖、Release 和不可变发布 |
+| [发布目录](../releases/README.md) | 索引引用的原始模块包与本机产物的保留规则 |
 
 ## 平台与交接
 

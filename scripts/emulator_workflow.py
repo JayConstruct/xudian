@@ -74,6 +74,8 @@ def checks_fingerprint(root, inputs, tests):
     # Tests may import another test's fixtures; track the entire test source tree.
     candidates += list((root / 'client/test').rglob('*.dart'))
     candidates += [root / 'scripts/module_host/check_architecture.py',
+                   root / 'scripts/check_repository.py',
+                   root / 'scripts/module_host/build_packages.py',
                    root / 'client/analysis_options.yaml',
                    root / 'scripts/update_emulator.py', Path(__file__)]
     for path in sorted(set(candidates)):

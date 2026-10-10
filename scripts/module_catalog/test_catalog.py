@@ -178,16 +178,57 @@ class PublicationTest(unittest.TestCase):
         bundle_dir = self.root / 'client/assets/modules'
         bundle_dir.mkdir(parents=True)
         old = bundle_dir / 'app.test.xmodule'
-        old.write_bytes(b'old immutable asset')
+        old.write_bytes((self.output / 'app.test-1.0.0.xmodule').read_bytes())
+        original = old.read_bytes()
         catalog_path = bundle_dir / 'catalog.json'
         catalog_path.write_text(json.dumps([{'id': 'app.test', 'asset': 'assets/modules/app.test.xmodule',
                                              'sha256': 'old', 'default': False}]))
-        bundle_catalog(catalog_path, bundle_dir, self.modules, self.output)
+        bundle_catalog(catalog_path, bundle_dir, self.modules, self.output, self.root / 'bundle-archive')
         entry = json.loads(catalog_path.read_text())[0]
         self.assertFalse(entry['default'])
         self.assertEqual('assets/modules/app.test-1.0.0.xmodule', entry['asset'])
-        self.assertEqual(b'old immutable asset', old.read_bytes())
+        self.assertFalse(old.exists())
+        self.assertEqual(original, (self.root / 'bundle-archive' / old.name).read_bytes())
         self.assertEqual(entry['sha256'], hashlib.sha256((bundle_dir / 'app.test-1.0.0.xmodule').read_bytes()).hexdigest())
+
+    def test_bundle_later_conflict_leaves_every_asset_and_catalog_unchanged(self):
+        self.publish()
+        second = copy.deepcopy(self.definition)
+        second['manifest']['id'] = 'app.second'
+        folder = self.modules / 'app.second'
+        folder.mkdir()
+        (folder / 'module.json').write_text(json.dumps(second))
+        from publish import packer
+        packer.pack(folder, self.output / 'app.second-1.0.0.xmodule')
+        bundle_dir = self.root / 'client/assets/modules'
+        bundle_dir.mkdir(parents=True)
+        conflicting = bundle_dir / 'app.second-1.0.0.xmodule'
+        conflicting.write_bytes(b'prior immutable bytes')
+        catalog_path = bundle_dir / 'catalog.json'
+        catalog_path.write_text(json.dumps([
+            {'id': 'app.test', 'default': False}, {'id': 'app.second', 'default': True}]))
+        original = {path.name: path.read_bytes() for path in bundle_dir.iterdir()}
+        with self.assertRaisesRegex(ValueError, 'immutable'):
+            bundle_catalog(catalog_path, bundle_dir, self.modules, self.output, self.root / 'bundle-archive')
+        self.assertEqual(original, {path.name: path.read_bytes() for path in bundle_dir.iterdir()})
+
+    def test_bundle_rejects_corrupt_release_before_writing(self):
+        asset = self.publish()[0]
+        with zipfile.ZipFile(asset) as archive:
+            entries = {name: archive.read(name) for name in archive.namelist()}
+        entries['main.js'] = b'changed without updating package manifest'
+        with zipfile.ZipFile(asset, 'w') as archive:
+            for name, data in entries.items():
+                archive.writestr(name, data)
+        bundle_dir = self.root / 'client/assets/modules'
+        bundle_dir.mkdir(parents=True)
+        catalog_path = bundle_dir / 'catalog.json'
+        catalog_path.write_text(json.dumps([{'id': 'app.test', 'default': True}]))
+        original = catalog_path.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'payload digest mismatch'):
+            bundle_catalog(catalog_path, bundle_dir, self.modules, self.output, self.root / 'bundle-archive')
+        self.assertEqual(original, catalog_path.read_bytes())
+        self.assertFalse(list(bundle_dir.glob('*.xmodule')))
 
 
 if __name__ == '__main__':

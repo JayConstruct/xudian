@@ -44,7 +44,7 @@ bash scripts/preview-android.sh DEVICE_SERIAL
 在当前工作区的 WSL 终端执行：
 
 ```bash
-cd /home/jerry/my_app
+cd /path/to/my_app
 source scripts/dev-env.sh
 command -v adb
 adb version

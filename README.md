@@ -50,9 +50,10 @@ packages/schemas/   版本化 JSON 契约
 packages/catalog/   统一目录仓库内容
 packages/xquickjs/  固定版本 QuickJS 原生引擎
 module-index/       作者版本索引
+releases/modules/   索引引用的版本化不可变模块包
 docs/               当前专题说明；archive/ 保存历史
 scripts/            开发、验证、打包与发布工具
 assets/brand/       品牌资源
 ```
 
-`.tools/` 和 `.cache/` 为本机 SDK 与缓存，不提交。历史实现及验收记录从 [归档索引](docs/archive/README.md) 查看。
+`.tools/`、`.cache/` 和 `dist/` 为本机 SDK、缓存与生成产物，不提交。公开模块包及保留规则见 [发布目录](releases/README.md)，历史实现及验收记录从 [归档索引](docs/archive/README.md) 查看。

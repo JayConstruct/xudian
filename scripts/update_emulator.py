@@ -126,7 +126,7 @@ def main(argv=None):
     if args.dry_run:
         print(f'模拟器：{args.serial}；仅支持 x86_64 Android 模拟器')
         print('模式：' + ('仅更新模块' if args.modules_only else mode))
-        print('流程：相关检查 → ' + ('模块打包/审核安装' if args.modules_only else '复用或构建APK → 核对安装 → 启动'))
+        print('流程：仓库与预装资源检查 → 相关检查 → ' + ('模块打包/审核安装' if args.modules_only else '复用或构建APK → 核对安装 → 启动'))
         print('模块：' + ', '.join(args.module))
         print('构建号：' + str(args.build_number or '按需自动递增'))
         print('测试：' + ('全部测试' if tests is None else ', '.join(tests)))
@@ -165,6 +165,7 @@ def main(argv=None):
             return result
 
         try:
+            perform('仓库与预装资源检查', ['python3', str(ROOT / 'scripts/check_repository.py')])
             if run([*adb, 'get-state'], capture=True, timeout=15).strip() != 'device':
                 raise ValueError('模拟器未就绪')
             qemu = run([*adb, 'shell', 'getprop', 'ro.kernel.qemu'], capture=True, timeout=15).strip()

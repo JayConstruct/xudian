@@ -133,6 +133,8 @@ class UpdateEmulatorTest(unittest.TestCase):
                 return digest + ' base.apk'
             if 'start' in command:
                 return 'Status: ok'
+            if command == ['python3', str(self.root / 'scripts/check_repository.py')]:
+                return ''
             raise AssertionError('Unexpected repeated work: ' + str(command))
 
         with patch.object(update, 'ROOT', self.root), patch.object(update, 'run', fake_run):
@@ -141,6 +143,7 @@ class UpdateEmulatorTest(unittest.TestCase):
         self.assertTrue(report['reusedBuild'])
         self.assertTrue(report['reusedChecks'])
         self.assertTrue(report['skippedInstall'])
+        self.assertIn(['python3', str(self.root / 'scripts/check_repository.py')], calls)
         self.assertFalse(any('flutter' in command or 'install' in command for command in calls))
 
 

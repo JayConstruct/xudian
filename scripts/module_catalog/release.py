@@ -5,6 +5,7 @@ import json
 import pathlib
 import shutil
 import subprocess
+import tempfile
 import urllib.parse
 import zipfile
 
@@ -13,7 +14,10 @@ from catalog import repository_name, require, validate_catalog, validate_index, 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
-def prepared_assets(catalog_path, index_dir, package_dir, repository, tag, expected_count=None):
+def _selected_assets(catalog_path, index_dir, package_dir, repository, tag, expected_count):
+    repository_name(repository)
+    require(tag and tag not in ('.', '..') and urllib.parse.quote(tag, safe='-_.') == tag,
+            'Release tag must be a URL-safe name')
     catalog = validate_catalog(json.loads(catalog_path.read_text()))
     assets = {}
     for entry in catalog['modules']:
@@ -28,13 +32,41 @@ def prepared_assets(catalog_path, index_dir, package_dir, repository, tag, expec
             require(name not in assets, f'Duplicate release asset: {name}')
             data = (package_dir / name).read_bytes()
             validate_package(data, release)
-            assets[name] = release
+            assets[name] = (release, data)
     require(assets, f'No prepared assets for {repository} tag {tag}')
-    require(set(assets) == {path.name for path in package_dir.glob('*.xmodule')},
-            'Prepared directory must contain exactly the packages indexed for this release tag')
     if expected_count is not None:
         require(len(assets) == expected_count, f'Expected {expected_count} assets, found {len(assets)}')
     return assets
+
+
+def prepared_assets(catalog_path, index_dir, package_dir, repository, tag, expected_count=None):
+    selected = _selected_assets(catalog_path, index_dir, package_dir, repository, tag, expected_count)
+    require(set(selected) == {path.name for path in package_dir.glob('*.xmodule')},
+            'Prepared directory must contain exactly the packages indexed for this release tag')
+    return {name: release for name, (release, _) in selected.items()}
+
+
+def stage_assets(catalog_path, index_dir, source_dir, repository, tag, destination, expected_count=None):
+    """Validate the complete tag selection before writing an exact immutable staging set."""
+    selected = _selected_assets(catalog_path, index_dir, source_dir, repository, tag, expected_count)
+    require(not destination.is_symlink(), 'Staging destination must not be a symlink')
+    if destination.exists():
+        require(destination.is_dir(), 'Staging destination must be a directory')
+        for path in destination.iterdir():
+            require(path.name in selected and path.is_file() and not path.is_symlink(),
+                    f'Staging directory contains unexpected content: {path.name}')
+            require(path.read_bytes() == selected[path.name][1],
+                    f'Staged asset is immutable and differs from the index: {path.name}')
+    # Keep validated bytes in memory, so a changing source cannot introduce
+    # unchecked bytes between validation and copying. Check all destinations
+    # before writing any missing asset, and never overwrite an existing file.
+    destination.mkdir(parents=True, exist_ok=True)
+    for name, (_, data) in selected.items():
+        target = destination / name
+        if not target.exists():
+            with target.open('xb') as stream:
+                stream.write(data)
+    return prepared_assets(catalog_path, index_dir, destination, repository, tag, expected_count)
 
 
 def gh(arguments, *, binary=False):
@@ -124,18 +156,27 @@ def main():
     parser.add_argument('--tag', required=True)
     parser.add_argument('--catalog', type=pathlib.Path, default=ROOT / 'packages/catalog/catalog.json')
     parser.add_argument('--index-dir', type=pathlib.Path, default=ROOT / 'module-index')
-    parser.add_argument('--package-dir', type=pathlib.Path, default=ROOT / 'dist/module-releases')
+    parser.add_argument('--package-dir', type=pathlib.Path, default=ROOT / 'releases/modules')
+    parser.add_argument('--stage-dir', type=pathlib.Path,
+                        help='Prepare and verify only this tag in this directory; do not contact GitHub')
     parser.add_argument('--expected-count', type=int)
-    parser.add_argument('--title', default='模块目录首批模块')
-    parser.add_argument('--notes', default='为模块增加作用与作者说明；新旧版本资产保持不可变。未签名包经客户端确认后安装。')
+    parser.add_argument('--title', default='序点模块发布')
+    parser.add_argument('--notes', default='本 Release 提供当前 tag 的不可变模块包，源码与版本索引保存在同一 tag。安装前由客户端核验包身份、摘要、依赖、权限与签名状态。客户端 APK 由 Android Actions 工作流构建。')
     args = parser.parse_args()
     try:
         repository = repository_name(args.repository)
         require(args.tag and args.tag not in ('.', '..') and urllib.parse.quote(args.tag, safe='-_.') == args.tag,
                 'Release tag must be a URL-safe name')
-        assets = prepared_assets(args.catalog, args.index_dir, args.package_dir, repository,
-                                 args.tag, args.expected_count)
-        url = publish(repository, args.tag, args.package_dir, assets, args.title, args.notes)
+        if args.stage_dir is not None:
+            assets = stage_assets(args.catalog, args.index_dir, args.package_dir, repository,
+                                  args.tag, args.stage_dir, args.expected_count)
+            print(f'Prepared and verified {len(assets)} assets for {args.tag}: {args.stage_dir}')
+            return
+        with tempfile.TemporaryDirectory(prefix='xudian-module-release-') as temporary:
+            package_dir = pathlib.Path(temporary)
+            assets = stage_assets(args.catalog, args.index_dir, args.package_dir, repository,
+                                  args.tag, package_dir, args.expected_count)
+            url = publish(repository, args.tag, package_dir, assets, args.title, args.notes)
     except (ValueError, OSError, KeyError, TypeError, zipfile.BadZipFile) as error:
         parser.exit(1, f'Release publication failed: {error}\n')
     print(f'Published and verified {len(assets)} immutable unsigned assets: {url}')

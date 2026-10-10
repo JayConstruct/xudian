@@ -5,7 +5,7 @@
   "androidUser": 11,
   "adbHost": "127.0.0.1",
   "adbPort": "5037",
-  "apk": "/home/jerry/my_app/client/build/app/outputs/flutter-apk/app-x86_64-release.apk",
+  "apk": "client/build/app/outputs/flutter-apk/app-x86_64-release.apk",
   "expectedModules": [
     {
       "id": "app.schedule",
@@ -228,13 +228,27 @@
   },
   "attempt": 2,
   "attemptStartedAt": "2026-10-10T03:18:44.694125+00:00",
-  "previousFailure": "CalledProcessError: Command '['adb', '-H', '127.0.0.1', '-P', '5037', '-s', 'emulator-5554', 'shell', 'uiautomator', 'dump', '/sdcard/xudian-ui.xml']' returned non-zero exit status 137.",
+  "previousFailure": "UIAutomation connection timeout during UI dump; adb exited with status 137. The original command and failure report are retained in the local first-attempt artifacts.",
   "previousAttemptReport": "fresh-install-attempt-01.json",
   "githubActions": {
     "androidRun": "https://github.com/JayConstruct/xudian/actions/runs/38019329424",
     "moduleReleaseRun": "https://github.com/JayConstruct/xudian/actions/runs/38019093517",
     "artifact": "https://github.com/JayConstruct/xudian/actions/runs/38019329424/artifacts/11657781164",
-    "applicationSourceCommit": "7adbfe7dabfb7024af37eeef4ca0a4a04c7d097e"
+    "applicationSourceCommit": "7adbfe7dabfb7024af37eeef4ca0a4a04c7d097e",
+    "finalSourceValidation": {
+      "commit": "0b8043033b70872f900f3a048da777af12653d20",
+      "androidRun": "https://github.com/JayConstruct/xudian/actions/runs/38021150220",
+      "conclusion": "success",
+      "flutterTestsPassed": 631,
+      "pythonScriptTestsPassed": 36,
+      "moduleReleaseTestsPassed": 24,
+      "flutterAnalyze": "passed",
+      "releaseApkAbis": ["armeabi-v7a", "arm64-v8a", "x86_64"],
+      "artifact": "https://github.com/JayConstruct/xudian/actions/runs/38021150220/artifacts/11657938170",
+      "artifactExpiresAt": "2026-10-24T03:43:31Z",
+      "artifactZipSha256": "bac289d832cb30ce0e15c28763422e869c2c3d87c4692efda1a85af80c7248e9",
+      "scope": "Final source CI validation; the fresh installation above used the locally built build53 APK and retains its original source commit and APK digest."
+    }
   },
-  "artifactLocation": "Screenshots, XML and the original failed attempt report are local under dist/verification/fresh-install-user11; they are excluded from Git."
+  "artifactLocation": "Screenshots, XML and the original failed attempt report are local under dist/verification/fresh-install-user11; they are excluded from Git. This exported report uses a repository-relative APK path and summarizes the failure without the local command."
 }

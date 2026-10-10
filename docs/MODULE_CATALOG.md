@@ -37,15 +37,15 @@
 ```bash
 python3 scripts/module_catalog/publish.py --tag modules-NEW_RELEASE
 python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json \
-  --index-dir module-index --package-dir dist/module-releases
+  --index-dir module-index --package-dir releases/modules
 python3 -m unittest discover -s scripts/module_catalog -p 'test_*.py'
 ```
 
-输出为 `dist/module-releases/<id>-<version>.xmodule` 和 `module-index/<id>.json`。作者索引发布在源码仓库的 `module-catalog` 分支；当前完整源码也已同步到 `main`，两分支保留既有发布历史。Release tag 指向对应源码、索引及不可变包的快照。其他作者可以选择自己的稳定分支。作者仓库可以不同：在目录中登记自己的仓库，然后传入 `--repository Author/repo --modules <source-dir> --catalog <catalog.json> --index-dir <index-dir> --output <release-dir>`。
+输出为 `releases/modules/<id>-<version>.xmodule` 和 `module-index/<id>.json`。发布目录保留当前索引引用的原始包，包括仍在索引中的历史版本；本机临时打包及验收输出在被忽略的 `dist/`，详见 [发布目录](../releases/README.md)。作者索引发布在源码仓库的 `module-catalog` 分支；当前完整源码也已同步到 `main`，两分支保留既有发布历史。Release tag 指向对应源码、索引及不可变包的快照。其他作者可以选择自己的稳定分支。作者仓库可以不同：在目录中登记自己的仓库，然后传入 `--repository Author/repo --modules <source-dir> --catalog <catalog.json> --index-dir <index-dir> --output <release-dir>`。
 
 已有旧版包可通过重复 `--archive-dir <历史包目录>` 收录。工具逐字节保留旧包，采用原清单和服务声明生成索引，不将新说明写回旧包。初期发布版本及资产数量见 [历史发布说明](archive/MODULE_CATALOG_20261009.md)。
 
-需要更新客户端首次安装的资源时添加 `--bundle-catalog client/assets/modules/catalog.json`。工具仅更新原有条目的版本化资产地址及摘要，保留 `default` 标记与所有旧包文件；现有用户的已安装模块不会因资源更新自动升级。
+需要更新客户端首次安装的资源时添加 `--bundle-catalog client/assets/modules/catalog.json`。工具仅更新原有条目的版本化资产地址及摘要，保留 `default` 标记，不自动新增商店模块；校验全部候选包与归档冲突后，将清单不再引用的旧资源包移到被忽略的 `dist/bundle-archive/`，APK 资源目录只保留当前清单引用的包。现有用户的已安装模块不会因资源更新自动升级。
 
 发布顺序：先审阅包和版本索引，创建对应固定 tag 的 GitHub Release 并上传所有包；再让作者索引公开可访问，使索引所有下载地址可用；最后提交目录 PR。首次创建统一目录仓库时，将 `packages/catalog/` 内容作为仓库根目录发布，勿将 `.xmodule` 或作者版本索引复制过去。作者仓库和目录仓库都必须公开，客户端匿名下载不会使用维护者的 GitHub 授权。需要登录 GitHub 并具备两个仓库的写权限。
 
@@ -55,13 +55,25 @@ python3 scripts/module_catalog/release.py --repository JayConstruct/xudian \
 python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json --online
 ```
 
+`release.py` 默认从 `releases/modules/` 按索引下载 URL 中的 tag 筛选资产，先验证全部候选，再写入临时目录并发布；其他 tag 的历史包不会混入本次 Release。需要先进行纯本地准备和复验时使用 `--stage-dir`，该模式不连接 GitHub：
+
+```bash
+python3 scripts/module_catalog/release.py --repository JayConstruct/xudian \
+  --tag modules-NEW_RELEASE --expected-count EXPECTED_COUNT \
+  --stage-dir dist/module-release-assets
+```
+
+同一准备目录只用于一个 tag；存在额外文件或同名不同字节时，工具拒绝写入或覆盖。重复准备会复用字节完全一致的包。完成审阅后可执行上面的普通发布命令，或传入 `--package-dir dist/module-release-assets` 发布已准备的资产。
+
 不要使用 `gh release upload --clobber` 覆盖已发布版本。Release tag 也不可重新指向另一份代码。已存在的版本重新运行工具时会复用原下载 URL，保留原 tag。
 
 发布脚本需要 [GitHub CLI](https://cli.github.com/)；本地先安装 `gh` 并执行 `gh auth login`。脚本先验证已准备包的摘要、清单、服务和索引，再检查仓库公开状态以及远端 tag 已存在。它使用 GitHub REST 接口创建草稿，直接保留返回的 Release ID，再按 Release / asset ID 上传和下载复验，最后公开 Release，避免新草稿尚未进入列表时误报失败。重试会验证同名包的完整字节，拒绝不同摘要、额外资产、被移动的 tag 和缺少资产的已公开 Release；失败的草稿可补传缺失资产，不覆盖任何资产。Release 说明记录 tag 对象摘要，缺少记录的已有 Release 要先人工审阅，脚本不会改写。
 
 草稿恢复使用有写权限的身份分页查询 Release 列表，按 `tag_name` 唯一匹配，再按 Release ID 读取和公开；按 tag 查询的 REST 接口只能找到已公开版本。即使包已全部上传但公开前进程失败，重试也会复用同一草稿，完整校验资产后公开，不重复创建。[GitHub Release 接口说明](https://docs.github.com/en/rest/releases/releases#list-releases)
 
-当前作者工程提供 `.github/workflows/module-release.yml`：推送经过审阅的 `modules-*` tag 后，Actions 从 tag 取出源码、作者索引和已准备包，校验完整目录，按索引下载 URL 筛选当前 tag 对应资产，下载复验后公开 Release。工作流仅需当前仓库的 `contents: write`，按 tag 串行执行。它不会移动 tag、覆盖已发布包或更新目录仓库；完成 Release 验证后再更新公开作者索引及目录。手动重试使用 `workflow_dispatch` 并指定已有 tag；必须先确保该 tag 已存在。
+当前作者工程提供 `.github/workflows/module-release.yml`：推送经过审阅的 `modules-*` tag 后，Actions 校验目录、通过相同 `release.py --stage-dir` 流程准备当前 tag 的资产，下载复验后公开 Release。工作流仅需当前仓库的 `contents: write`，按 tag 串行执行。它不会移动 tag、覆盖已发布包或更新目录仓库；完成 Release 验证后再更新公开作者索引及目录。
+
+手动重试使用当前分支上的 `workflow_dispatch` 并指定已有 tag；必须先确保该 tag 已存在。工作流把 tag 快照检出到 `release-source/`，把本次工作流 revision 的工具检出到 `release-tools/`，显式使用前者的目录、索引和包进行校验及发布。包目录优先采用 `releases/modules/`，旧 tag 则使用历史 `dist/module-releases/`；记录了仓库边界检查器的新快照还会执行该检查。这样重试旧 tag 可使用当前工具，而不修改旧源码、tag、下载 URL 或已有 Release。直接重新运行旧 workflow revision 会继续使用旧实现；需要目录迁移兼容时从当前分支手动发起。
 
 ## 接入与依赖
 

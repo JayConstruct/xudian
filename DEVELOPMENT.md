@@ -16,6 +16,14 @@ cd ..
 
 修改 `pubspec.yaml` 后重新执行 `flutter pub get`；`--no-pub` 用于依赖已经准备好的环境。SDK、缓存、凭据和构建输出不应进入提交。
 
+## GitHub 提交范围
+
+提交源码、测试与固定夹具、依赖锁文件、平台资源、构建脚本、工作流及可复验文档。QuickJS vendor 和拾光 warehouse 是固定版本的运行源码；`app_database.g.dart`、默认模块资源及图标也由当前构建直接读取，不能只因可生成就排除。
+
+`.gitignore` 排除工具链、缓存、APK/AAB、构建输出、截图与完整本机验收产物、凭据及本机配置；`dist/` 整体忽略。索引对应的版本化不可变包保存在 `releases/modules/`，供干净检出的目录校验和发布工作流使用，保留规则见 [发布目录](releases/README.md)。没有当前索引引用的旧包不纳入该目录。
+
+验收文档保留日期、版本、摘要、步骤、失败原因和 CI 链接，机器绝对路径改为项目相对路径或示例路径；不提交用户业务数据、账号和密钥。提交前运行 `python3 scripts/check_repository.py`、`git status --short` 和 `git diff --check`；仓库检查拒绝本机产物、没有索引引用的发布包及未被预装清单引用的客户端包，同时校验预装包身份与内外摘要。新增忽略规则不会自动移除已经跟踪的文件。APK 通过 Actions 产物分发，公开模块通过 GitHub Releases 分发。
+
 ## 日常更新
 
 | 改动 | 命令 |
@@ -31,6 +39,7 @@ cd ..
 
 ```bash
 source scripts/dev-env.sh
+python3 scripts/check_repository.py
 python3 scripts/module_host/check_architecture.py
 python3 -m unittest discover -s scripts/tests -v
 cd client
@@ -40,7 +49,7 @@ flutter test --no-pub --concurrency=2
 
 按功能选择相关测试；涉及数据、生命周期、权限和依赖时扩大回归范围。网络冒烟另可运行 `dart test/openai_compatible_provider_network_smoke.dart`。测试结果和平台范围见 [验证记录](docs/VERIFICATION.md)，Widget 测试不代表真机帧率。
 
-独立模块打包使用 `python3 scripts/module_host/build_packages.py`，输出到 `dist/modules/`。修改内容时提升 `module.json` 版本。仅需改变首次安装资源时加 `--defaults`，审阅 `client/assets/modules/catalog.json` 及资源差异，再重建 APK；该资源更新不会自动升级用户已安装的模块。目录发布使用 [作者发布流程](docs/MODULE_CATALOG.md)。
+独立模块打包使用 `python3 scripts/module_host/build_packages.py`，输出到 `dist/modules/`。修改内容时提升 `module.json` 版本。仅需改变首次安装资源时加 `--defaults`：工具只更新现有清单条目，保留 `default` 标记，写入 `<模块 ID>-<版本>.xmodule`，不自动将课表、拾光等商店模块加入资源；旧资源归档到被忽略的 `dist/bundle-archive/`。候选包、同版本冲突及归档冲突全部校验通过后才写入。审阅 `client/assets/modules/catalog.json` 及资源差异，再运行仓库检查并重建 APK；该资源更新不会自动升级用户已安装的模块。新增预装条目须明确编辑清单并审核，目录发布使用 [作者发布流程](docs/MODULE_CATALOG.md)。
 
 ## 客户端构建与分享
 

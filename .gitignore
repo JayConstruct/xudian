@@ -1,3 +1,4 @@
+# Local toolchains, caches and editor state.
 .tools/
 .cache/
 .aws/
@@ -8,17 +9,41 @@
 .packages
 .idea/
 .vscode/
-build/
-*.log
+.pytest_cache/
+node_modules/
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+
+# Credentials and machine-specific configuration.
 .env
 .env.*
 !.env.example
 *.keystore
 *.jks
-__pycache__/
-*.py[cod]
-tmp/
-dist/*
-!dist/module-releases/
-dist/module-releases/*
-!dist/module-releases/*.xmodule
+*.p12
+*.pfx
+key.properties
+local.properties
+
+# Generated output and local runtime data.
+build/
+*.log
+*.apk
+*.aab
+*.apks
+*.idsig
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+/coverage/
+/tmp/
+/dist/
+
+# Only catalog-pinned client bundles and immutable release snapshots are tracked.
+*.xmodule
+!client/assets/modules/*-*.xmodule
+!releases/modules/*.xmodule

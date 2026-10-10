@@ -57,6 +57,16 @@ class WorkflowTest(unittest.TestCase):
         apk.write_text('corrupted')
         self.assertFalse(workflow.reusable(cache, 'source', 'release', 4044, self.root))
 
+    def test_repository_and_package_checks_invalidate_cached_validation(self):
+        for name in ['scripts/check_repository.py', 'scripts/module_host/build_packages.py']:
+            with self.subTest(name=name):
+                self.write(name, 'before')
+                inputs = workflow.snapshot(self.root)
+                before = workflow.checks_fingerprint(self.root, inputs, [])
+                self.write(name, 'after')
+                self.assertNotEqual(workflow.checks_fingerprint(self.root, inputs, []), before)
+                self.assertEqual(workflow.snapshot(self.root), inputs)
+
     def test_core_changes_expand_checks_and_module_mode_stays_targeted(self):
         self.assertIsNone(workflow.select_tests(['client/lib/data/app_database.dart']))
         self.assertIsNone(workflow.select_tests(['client/pubspec.lock']))

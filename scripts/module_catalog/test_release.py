@@ -1,10 +1,14 @@
+import contextlib
+import copy
+import io
 import json
 import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
 import test_catalog
-from release import find_release, gh, prepared_assets, publish
+from release import find_release, gh, main, prepared_assets, publish, stage_assets
 
 
 class ReleaseTest(unittest.TestCase):
@@ -171,6 +175,146 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'exactly the packages'):
             prepared_assets(self.fixture.catalog_path, self.fixture.index_dir,
                             self.fixture.output, 'Author/example', 'modules-test')
+
+
+class ReleaseStagingTest(unittest.TestCase):
+    def setUp(self):
+        self.fixture = test_catalog.PublicationTest()
+        self.fixture.setUp()
+        self.old_asset = self.fixture.publish()[0]
+        self.destination = self.fixture.root / 'stage'
+
+    def tearDown(self):
+        self.fixture.tearDown()
+
+    def stage(self, tag='modules-test', expected_count=None):
+        return stage_assets(self.fixture.catalog_path, self.fixture.index_dir,
+                            self.fixture.output, 'Author/example', tag,
+                            self.destination, expected_count)
+
+    def next_version(self):
+        self.fixture.definition['manifest']['version'] = '1.0.1'
+        self.fixture.write_definition()
+        return self.fixture.publish('modules-next')[0]
+
+    def second_module(self):
+        definition = copy.deepcopy(self.fixture.definition)
+        definition['manifest']['id'] = 'app.second'
+        folder = self.fixture.modules / 'app.second'
+        folder.mkdir()
+        (folder / 'module.json').write_text(json.dumps(definition))
+        (folder / 'main.js').write_bytes((self.fixture.source / 'main.js').read_bytes())
+        entry = copy.deepcopy(self.fixture.entry)
+        entry['id'] = 'app.second'
+        entry['indexUrl'] = entry['indexUrl'].replace('app.test.json', 'app.second.json')
+        self.fixture.catalog['modules'].append(entry)
+        self.fixture.catalog_path.write_text(json.dumps(self.fixture.catalog))
+        return self.fixture.publish()[1]
+
+    def test_selects_only_requested_tag_from_shared_history(self):
+        new_asset = self.next_version()
+        assets = self.stage('modules-next', expected_count=1)
+        self.assertEqual({new_asset.name}, set(assets))
+        self.assertEqual({new_asset.name}, {path.name for path in self.destination.iterdir()})
+        self.assertEqual(new_asset.read_bytes(), (self.destination / new_asset.name).read_bytes())
+        with self.assertRaisesRegex(ValueError, 'exactly the packages'):
+            prepared_assets(self.fixture.catalog_path, self.fixture.index_dir,
+                            self.fixture.output, 'Author/example', 'modules-next')
+
+    def test_later_corrupt_candidate_creates_no_staging_directory(self):
+        second = self.second_module()
+        data = second.read_bytes()
+        second.write_bytes(data[:-1] + bytes([data[-1] ^ 1]))
+        with self.assertRaisesRegex(ValueError, 'digest mismatch'):
+            self.stage()
+        self.assertFalse(self.destination.exists())
+
+    def test_unexpected_destination_content_is_not_mixed_into_release(self):
+        self.destination.mkdir()
+        unexpected = self.destination / 'unexpected.xmodule'
+        unexpected.write_bytes(b'unrelated package')
+        with self.assertRaisesRegex(ValueError, 'unexpected content'):
+            self.stage()
+        self.assertEqual([unexpected], list(self.destination.iterdir()))
+        self.assertEqual(b'unrelated package', unexpected.read_bytes())
+
+    def test_unexpected_nonpackage_content_and_symlinks_are_refused(self):
+        self.destination.mkdir()
+        unexpected = self.destination / '.local-note'
+        unexpected.write_bytes(b'local state')
+        with self.assertRaisesRegex(ValueError, 'unexpected content'):
+            self.stage()
+        unexpected.unlink()
+        (self.destination / self.old_asset.name).symlink_to(self.old_asset)
+        with self.assertRaisesRegex(ValueError, 'unexpected content'):
+            self.stage()
+
+    def test_repeat_stage_reuses_identical_bytes_without_rewriting(self):
+        self.stage()
+        target = self.destination / self.old_asset.name
+        before = target.stat().st_mtime_ns
+        self.stage()
+        self.assertEqual(before, target.stat().st_mtime_ns)
+        self.assertEqual(self.old_asset.read_bytes(), target.read_bytes())
+
+    def test_repeat_stage_refuses_changed_bytes_without_overwriting(self):
+        self.stage()
+        target = self.destination / self.old_asset.name
+        target.write_bytes(b'prior different bytes')
+        with self.assertRaisesRegex(ValueError, 'immutable'):
+            self.stage()
+        self.assertEqual(b'prior different bytes', target.read_bytes())
+
+    def test_later_destination_conflict_leaves_missing_earlier_asset_unwritten(self):
+        second = self.second_module()
+        self.destination.mkdir()
+        target = self.destination / second.name
+        target.write_bytes(b'prior different bytes')
+        with self.assertRaisesRegex(ValueError, 'immutable'):
+            self.stage()
+        self.assertFalse((self.destination / self.old_asset.name).exists())
+        self.assertEqual(b'prior different bytes', target.read_bytes())
+
+    def test_expected_count_mismatch_does_not_create_staging_directory(self):
+        with self.assertRaisesRegex(ValueError, 'Expected 2 assets'):
+            self.stage(expected_count=2)
+        self.assertFalse(self.destination.exists())
+
+    def cli_args(self, tag):
+        return ['release.py', '--repository', 'Author/example', '--tag', tag,
+                '--catalog', str(self.fixture.catalog_path),
+                '--index-dir', str(self.fixture.index_dir),
+                '--package-dir', str(self.fixture.output)]
+
+    def test_stage_cli_exits_without_contacting_github(self):
+        arguments = self.cli_args('modules-test') + ['--stage-dir', str(self.destination)]
+        with patch.object(sys, 'argv', arguments), patch('release.gh') as github, \
+                patch('release.publish') as publication, contextlib.redirect_stdout(io.StringIO()):
+            main()
+        github.assert_not_called()
+        publication.assert_not_called()
+        self.assertEqual(self.old_asset.read_bytes(),
+                         (self.destination / self.old_asset.name).read_bytes())
+
+    def test_publish_cli_automatically_stages_only_current_tag(self):
+        new_asset = self.next_version()
+        staged = []
+
+        def publication(repository, tag, package_dir, assets, title, notes):
+            self.assertEqual('modules-next', tag)
+            self.assertNotEqual(self.fixture.output, package_dir)
+            self.assertEqual({new_asset.name}, set(assets))
+            self.assertEqual({new_asset.name}, {path.name for path in package_dir.iterdir()})
+            self.assertEqual(new_asset.read_bytes(), (package_dir / new_asset.name).read_bytes())
+            staged.append(package_dir)
+            return 'https://github.com/Author/example/releases/tag/modules-next'
+
+        with patch.object(sys, 'argv', self.cli_args('modules-next')), \
+                patch('release.publish', side_effect=publication), contextlib.redirect_stdout(io.StringIO()):
+            main()
+        self.assertEqual(1, len(staged))
+        self.assertFalse(staged[0].exists())
+        self.assertEqual(2, len(list(self.fixture.output.glob('*.xmodule'))))
 
 
 if __name__ == '__main__':

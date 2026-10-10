@@ -6,6 +6,8 @@
 
 打开 [Android Actions](https://github.com/JayConstruct/xudian/actions/workflows/android.yml)，选择成功运行，下载 `xudian-android-release-<commit>` 产物并解压。多数手机使用 `app-arm64-v8a-release.apk`；x86_64 模拟器使用 `app-x86_64-release.apk`。压缩包附带 `SOURCE_COMMIT` 和 `SHA256SUMS`，可核对源码版本和文件摘要。
 
+2026-10-10 已验证的构建为提交 `0b80430`：[成功运行](https://github.com/JayConstruct/xudian/actions/runs/38021150220) / [下载 APK](https://github.com/JayConstruct/xudian/actions/runs/38021150220/artifacts/11657938170)。该产物保存至 2026-10-24 03:43 UTC，过期后可使用后续成功构建或手动触发工作流。首装与商店安装的具体证据见 [验证记录](VERIFICATION.md)。
+
 将对应 APK 传到 Android 设备并打开，按系统安装提示完成安装。开发设备也可使用 `adb install <APK路径>`。首次打开进入“今天”，默认安装任务、今天和 AI 助手模块；课表与教务导入从商店选择。
 
 当前 APK 使用测试签名，GitHub runner 的测试密钥可能与本机不同，覆盖已有安装需要相同签名。正式稳定签名仍待配置。本文验证 Android 安装流程；ARM 真机和 Windows 的运行验收另行记录。

@@ -107,22 +107,20 @@ def prepare(modules, catalog_path, repository, tag, output, index_dir, archive_d
     return [asset for asset, _, _, _ in prepared]
 
 
-def bundle_catalog(catalog_path, asset_dir, modules, releases):
-    """Pin new assets for existing bundle entries, preserving default flags and old assets."""
+def bundle_catalog(catalog_path, asset_dir, modules, releases, archive_dir):
+    """Pin existing entries and archive obsolete assets after validating all candidates."""
     entries = json.loads(catalog_path.read_text())
-    updates = []
+    candidates = {}
     for entry in entries:
-        manifest = json.loads((modules / entry['id'] / 'module.json').read_text())['manifest']
-        name = f'{entry["id"]}-{manifest["version"]}.xmodule'
-        data = (releases / name).read_bytes()
-        destination = asset_dir / name
-        if destination.exists():
-            require(destination.read_bytes() == data, f'Bundled asset is immutable: {destination}')
-        updated = dict(entry, asset=f'assets/modules/{name}', sha256=hashlib.sha256(data).hexdigest())
-        updates.append((destination, data, updated))
-    for destination, data, _ in updates:
-        immutable_write(destination, data)
-    catalog_path.write_bytes(json_bytes([updated for _, _, updated in updates]))
+        module_id, version = packer.identity(
+            json.loads((modules / entry['id'] / 'module.json').read_text()))
+        require(module_id == entry['id'], 'source module identity mismatch')
+        name = f'{module_id}-{version}.xmodule'
+        candidates[module_id] = (version, (releases / name).read_bytes())
+    updates = packer.bundle_updates(catalog_path, asset_dir, candidates)
+    archives = packer.bundle_archives(asset_dir, updates, archive_dir)
+    packer.write_bundle(catalog_path, updates, archives)
+
 
 
 def main():
@@ -131,7 +129,7 @@ def main():
     parser.add_argument('--catalog', type=pathlib.Path, default=ROOT / 'packages/catalog/catalog.json')
     parser.add_argument('--repository', default='JayConstruct/xudian')
     parser.add_argument('--tag', required=True)
-    parser.add_argument('--output', type=pathlib.Path, default=ROOT / 'dist/module-releases')
+    parser.add_argument('--output', type=pathlib.Path, default=ROOT / 'releases/modules')
     parser.add_argument('--index-dir', type=pathlib.Path, default=ROOT / 'module-index')
     parser.add_argument('--archive-dir', type=pathlib.Path, action='append', default=[],
                         help='Include byte-identical historical packages, never rewrite their metadata (repeatable)')
@@ -141,7 +139,8 @@ def main():
     try:
         assets = prepare(args.modules, args.catalog, args.repository, args.tag, args.output, args.index_dir, args.archive_dir)
         if args.bundle_catalog:
-            bundle_catalog(args.bundle_catalog, args.bundle_catalog.parent, args.modules, args.output)
+            bundle_catalog(args.bundle_catalog, args.bundle_catalog.parent, args.modules, args.output,
+                           ROOT / 'dist/bundle-archive')
     except (ValueError, OSError, KeyError, TypeError) as error:
         parser.exit(1, f'Release preparation failed: {error}\n')
     for asset in assets:
