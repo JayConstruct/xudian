@@ -19,7 +19,7 @@ WSL 镜像网络模式示例：
   XUDIAN_ADB_PORT=5037 XUDIAN_VM_SERVICE_PORT=8182 bash scripts/preview-android.sh 设备序列号
 设备序列号从电脑上的 adb devices -l 获取。
 运行后按 r 热重载、R 热重启、q 退出。
-完整说明见 DEVELOPMENT.md 的“通过 SSH 远程预览 Android”。
+完整说明见 docs/REMOTE_ANDROID_DEVELOPMENT.md。
 多机配置见 docs/MULTI_MACHINE_DEVELOPMENT.md。
 EOF
   exit 0

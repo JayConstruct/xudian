@@ -1,0 +1,53 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.ui.contributions",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.0.2",
+      "manifest": {
+        "id": "app.ui.contributions",
+        "name": "UI 示例贡献",
+        "version": "1.0.2",
+        "hostApi": "^1.0.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui"
+        ],
+        "dependencies": [
+          "app.ui.examples"
+        ],
+        "defaultInstall": false,
+        "description": "展示可向其他页面贡献的界面组件和入口。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.ui.contributions-1.0.2.xmodule",
+      "size": 1361,
+      "sha256": "02bda9957f59f8f5cb8507abd381aebe74dff940142d49245aaedcbfde167d17",
+      "signature": null
+    },
+    {
+      "version": "1.0.1",
+      "manifest": {
+        "id": "app.ui.contributions",
+        "name": "UI 示例贡献",
+        "version": "1.0.1",
+        "hostApi": "^1.0.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui"
+        ],
+        "dependencies": [
+          "app.ui.examples"
+        ],
+        "defaultInstall": false
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.ui.contributions-1.0.1.xmodule",
+      "size": 1284,
+      "sha256": "ea845f026a3514447e2be0e1ee9f5da0e1f6b697cd0e11b89aafd7fb78ba9358",
+      "signature": null
+    }
+  ]
+}

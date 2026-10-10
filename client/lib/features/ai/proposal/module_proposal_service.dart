@@ -20,11 +20,13 @@ class ModuleProposalService {
   final ModuleRegistry registry;
   final DeclarativeRuntimeController runtime;
   final DeclarativeModuleParser _parser = const DeclarativeModuleParser();
+  final Expando<String> _preparedSources = Expando<String>();
 
   Future<ModuleProposal> prepare(
     Map<String, Object?> source, {
     ModuleInstallProvenance provenance = const ModuleInstallProvenance(),
   }) async {
+    source = _decode(jsonEncode(source));
     final module = _parser.parse(source);
     _validatePermissions(module);
 
@@ -53,16 +55,25 @@ class ModuleProposalService {
         ? null
         : _parser.parse(_decode(current.sourceJson));
 
-    return ModuleProposal(
+    final proposal = ModuleProposal(
       source: source,
       module: module,
       expectedCurrentVersion: current?.version,
       provenance: provenance,
       diff: _diff(previous, module),
     );
+    _preparedSources[proposal] = _canonical(source);
+    return proposal;
   }
 
   Future<void> apply(ModuleProposal proposal) async {
+    final preparedSource = _preparedSources[proposal];
+    if (preparedSource == null ||
+        preparedSource != _canonical(proposal.source)) {
+      throw StateError(
+        'Proposal changed after review preparation; regenerate diff',
+      );
+    }
     final current = await store.getInstalled(proposal.module.manifest.id);
     if (current?.version != proposal.expectedCurrentVersion) {
       throw StateError(

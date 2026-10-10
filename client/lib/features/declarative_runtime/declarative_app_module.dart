@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../core/declarative/declarative_module.dart';
+import '../../core/declarative/declarative_module_parser.dart';
 import '../../core/modules/app_module.dart';
 import '../../core/modules/module_context.dart';
 import '../../core/modules/module_manifest.dart';
 import '../../core/ui/app_destination.dart';
+import '../../core/ui/ui_composition.dart';
 import '../../core/ui/ui_registration.dart';
 import 'declarative_task_page.dart';
 
@@ -22,32 +24,142 @@ class DeclarativeAppModule implements AppModule {
       ModuleContext(moduleId: manifest.id, permissions: manifest.permissions);
 
   @override
-  List<UiRegistration> get ui => [
-    for (final page in module.pages)
-      NavigationRegistration(
-        AppDestination(
-          id: '${manifest.id}.${page['id']}',
-          label: page['title'] as String,
+  List<UiRegistration> get ui => module.formatVersion == 2
+      ? _compositionUi
+      : [
+          for (final page in module.pages)
+            NavigationRegistration(
+              AppDestination(
+                id: '${manifest.id}.${page['id']}',
+                label: page['title'] as String,
+                icon: _icon(page['icon'] as String?),
+                selectedIcon: _icon(
+                  (page['selectedIcon'] ?? page['icon']) as String?,
+                  selected: true,
+                ),
+                quickAdd: page['quickAdd'] == true,
+                quickAddDefaults:
+                    (page['quickAddDefaults'] as Map?)
+                        ?.cast<String, Object?>() ??
+                    const {},
+                builder: (_) => DeclarativeTaskPage(
+                  key: ValueKey('${manifest.id}:${page['id']}'),
+                  module: module,
+                  moduleContext: _context,
+                  page: page,
+                ),
+              ),
+            ),
+        ];
+
+  String _pageId(String reference) =>
+      reference.contains('.') ? reference : '${manifest.id}.$reference';
+
+  UiMount _mount(Map<String, Object?> value, String hostKey) => UiMount(
+    placement: UiPlacement.values.byName(
+      value['placement'] as String? ?? 'main',
+    ),
+    pageId: value[hostKey] == null ? null : _pageId(value[hostKey] as String),
+    slotId: value['slotId'] as String?,
+    order: value['order'] as int? ?? 0,
+  );
+
+  List<UiRegistration> get _compositionUi {
+    final registrations = <UiRegistration>[];
+    for (final page in module.pages) {
+      final id = _pageId(page['id'] as String);
+      final container = page['kind'] == 'container';
+      registrations.add(
+        UiPageRegistration(
+          id: id,
+          moduleId: manifest.id,
+          title: page['title'] as String,
+          container: container,
+          requiredContext:
+              (page['requiredContext'] as List?)?.cast<String>() ?? const [],
+          retainPosition: page['retainPosition'] == true,
+          quickAdd: page['quickAdd'] == true,
+          quickAddDefaults:
+              (page['quickAddDefaults'] as Map?)?.cast<String, Object?>() ??
+              const {},
+          slots: [
+            for (final rawSlot in page['slots'] as List? ?? const [])
+              PageSlotDefinition(
+                id: (rawSlot as Map)['id'] as String,
+                label: rawSlot['label'] as String,
+                kind: PageSlotKind.values.byName(
+                  rawSlot['kind'] as String? ?? 'entries',
+                ),
+                isPublic: rawSlot['public'] == true,
+                editable: rawSlot['editable'] != false,
+                capacity: rawSlot['capacity'] as int?,
+                requiredContext:
+                    (rawSlot['requiredContext'] as List?)?.cast<String>() ??
+                    const [],
+              ),
+          ],
+          builder: (_, pageContext) => container
+              ? const SizedBox.shrink()
+              : DeclarativeTaskPage(
+                  key: ValueKey('$id:${pageContext.identity}'),
+                  module: module,
+                  moduleContext: _context,
+                  page: page,
+                  pageContext: pageContext,
+                ),
+        ),
+      );
+      if (page['entry'] == null || page['entry'] == false) {
+        continue;
+      }
+      final entry =
+          (page['entry'] as Map?)?.cast<String, Object?>() ??
+          const <String, Object?>{};
+      registrations.add(
+        UiEntryRegistration(
+          id: _pageId(entry['id'] as String? ?? page['id'] as String),
+          moduleId: manifest.id,
+          pageId: id,
+          label: entry['label'] as String? ?? page['title'] as String,
           icon: _icon(page['icon'] as String?),
           selectedIcon: _icon(
             (page['selectedIcon'] ?? page['icon']) as String?,
             selected: true,
           ),
-          quickAdd: page['quickAdd'] == true,
-          quickAddDefaults:
-              (page['quickAddDefaults'] as Map?)?.cast<String, Object?>() ??
-              const {},
-          builder: (_) => DeclarativeTaskPage(
-            key: ValueKey('${manifest.id}:${page['id']}'),
-            module: module,
-            moduleContext: _context,
-            page: page,
+          opening: UiOpening.values.byName(
+            entry['opening'] as String? ?? 'workspace',
           ),
+          defaultMount: _mount(entry, 'targetPageId'),
+          content: entry['content'] == true,
         ),
-      ),
-  ];
+      );
+    }
+    for (final layout in module.layouts) {
+      registrations.add(
+        UiEntryRegistration(
+          id: _pageId(layout['id'] as String),
+          moduleId: manifest.id,
+          pageId: _pageId(layout['pageId'] as String),
+          label: layout['label'] as String,
+          icon: _icon(null),
+          opening: UiOpening.values.byName(
+            layout['opening'] as String? ?? 'workspace',
+          ),
+          defaultMount: _mount(layout, 'hostPageId'),
+          content: layout['content'] == true,
+        ),
+      );
+    }
+    return List.unmodifiable(registrations);
+  }
 
   void _validate() {
+    if (module.formatVersion != 1 && module.formatVersion != 2) {
+      throw const FormatException('Unsupported formatVersion');
+    }
+    if (module.formatVersion == 2) {
+      const DeclarativeModuleParser().validateComposition(module);
+    }
     if (module.pages.isNotEmpty) {
       if (!module.manifest.requiresCapabilities.contains('ui.registry') ||
           !module.manifest.permissions.contains('ui.register')) {
@@ -64,7 +176,7 @@ class DeclarativeAppModule implements AppModule {
         );
       }
     }
-    if (module.layouts.isNotEmpty) {
+    if (module.formatVersion == 1 && module.layouts.isNotEmpty) {
       throw const FormatException(
         'layouts are not executable in runtime v1 yet',
       );
@@ -104,6 +216,7 @@ class DeclarativeAppModule implements AppModule {
     }
 
     for (final page in module.pages) {
+      if (module.formatVersion == 2 && page['kind'] == 'container') continue;
       if (page['title'] is! String || page['view'] is! String) {
         throw FormatException('Page requires title and view');
       }

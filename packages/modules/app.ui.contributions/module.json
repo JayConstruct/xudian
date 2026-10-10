@@ -1,0 +1,65 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "app.ui.contributions",
+    "name": "UI 示例贡献",
+    "version": "1.0.2",
+    "hostApi": "^1.0.0",
+    "dataVersion": 1,
+    "permissions": [
+      "ui"
+    ],
+    "dependencies": [
+      "app.ui.examples"
+    ],
+    "defaultInstall": false,
+    "description": "展示可向其他页面贡献的界面组件和入口。",
+    "author": "JayConstruct"
+  },
+  "entryPoint": "main.js",
+  "collections": [],
+  "services": [],
+  "pages": [
+    {
+      "id": "app.ui.contributions.info",
+      "title": "跨模块贡献",
+      "handler": "render",
+      "entries": [
+        {
+          "id": "app.ui.contributions.tab",
+          "label": "跨模块页签",
+          "content": true,
+          "placement": "page",
+          "targetPageId": "app.ui.examples.composition",
+          "slotId": "tabs",
+          "order": 1
+        },
+        {
+          "id": "app.ui.contributions.section",
+          "label": "跨模块内容区",
+          "content": true,
+          "placement": "page",
+          "targetPageId": "app.ui.examples.composition",
+          "slotId": "sections"
+        }
+      ]
+    },
+    {
+      "id": "app.ui.contributions.context",
+      "title": "上下文示例",
+      "handler": "render",
+      "requiredContext": [
+        "projectId"
+      ],
+      "entry": {
+        "id": "app.ui.contributions.invalid",
+        "label": "缺少上下文示例",
+        "content": true,
+        "placement": "page",
+        "targetPageId": "app.ui.examples.composition",
+        "slotId": "tabs",
+        "order": 2
+      }
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.ai",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.0.1",
+      "manifest": {
+        "id": "app.ai",
+        "name": "AI 助手",
+        "version": "1.0.1",
+        "hostApi": "^1.0.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "http",
+          "secrets",
+          "grants.request",
+          "grants.revoke",
+          "packages.prepare",
+          "packages.review",
+          "clock.today"
+        ],
+        "dependencies": [],
+        "defaultInstall": true,
+        "httpOrigins": [],
+        "description": "提供 AI 助手入口和宿主服务接口。",
+        "author": "JayConstruct"
+      },
+      "services": [
+        {
+          "id": "ai.connection.save",
+          "major": 1,
+          "handler": "saveConnection",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "ai.history.save",
+          "major": 1,
+          "handler": "saveHistory",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.ai-1.0.1.xmodule",
+      "size": 5331,
+      "sha256": "6981bcad078a08134f28901c1e9837a7ddde09c581b53021e0048be97d9fe51c",
+      "signature": null
+    },
+    {
+      "version": "1.0.0",
+      "manifest": {
+        "id": "app.ai",
+        "name": "AI 助手",
+        "version": "1.0.0",
+        "hostApi": "^1.0.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "http",
+          "secrets",
+          "grants.request",
+          "grants.revoke",
+          "packages.prepare",
+          "packages.review",
+          "clock.today"
+        ],
+        "dependencies": [],
+        "defaultInstall": true,
+        "httpOrigins": []
+      },
+      "services": [
+        {
+          "id": "ai.connection.save",
+          "major": 1,
+          "handler": "saveConnection",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "ai.history.save",
+          "major": 1,
+          "handler": "saveHistory",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.ai-1.0.0.xmodule",
+      "size": 5248,
+      "sha256": "f117eb4a25a69ec4cb931c46d714e9ee759c7d2d9391f43035702c1ab3e72dd7",
+      "signature": null
+    }
+  ]
+}

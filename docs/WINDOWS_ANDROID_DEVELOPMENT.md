@@ -2,6 +2,8 @@
 
 Windows 负责本地 Flutter 编译和模拟器运行，源码通过 [JayConstruct/xudian](https://github.com/JayConstruct/xudian) 与 VPS 同步。客户端位于 `client/`，启动入口为 `lib/main.dart`。本流程直接在 Windows PowerShell 和 Android Studio 中操作。
 
+使用 **WSL 开发 + Windows Android Studio 模拟器** 时，Windows 负责模拟器和 ADB server，设备查询、APK 安装、启动和日志在 WSL 使用 Linux 版 `adb`，连接命令见 [WSL 原生 ADB](MULTI_MACHINE_DEVELOPMENT.md#wsl-原生-adb连接与安装-apk)。以下 Windows Flutter 安装和编译步骤用于纯 Windows 开发；WSL 使用自己的 Linux SDK。
+
 ## 1. 安装开发工具
 
 安装 [Git for Windows](https://git-scm.com/downloads/win) 和 [Flutter SDK](https://docs.flutter.dev/install)。当前项目验证版本为 Flutter stable **3.47.5 / Dart 3.13.4**，建议从 [Flutter SDK 归档](https://docs.flutter.dev/install/archive) 安装相同 Windows 版本；Dart 随 Flutter 提供。`client/pubspec.yaml` 要求 Dart `^3.13.4`。
@@ -28,7 +30,7 @@ flutter doctor --android-licenses
 flutter doctor -v
 ```
 
-Android toolchain 和 Android Studio 应通过检查。Flutter 通常使用 Android Studio 自带的 JDK，具体路径以 `flutter doctor -v` 为准；当前 VPS 使用 Java 21。仅调试 Android 时，`flutter doctor` 中缺少 Visual Studio 的提示不影响本流程；Windows 桌面构建另见 [开发环境](../DEVELOPMENT.md#windows-桌面构建)。
+Android toolchain 和 Android Studio 应通过检查。Flutter 通常使用 Android Studio 自带的 JDK，具体路径以 `flutter doctor -v` 为准；当前 VPS 使用 Java 21。仅调试 Android 时，`flutter doctor` 中缺少 Visual Studio 的提示不影响本流程；Windows 桌面构建另见 [开发环境](../DEVELOPMENT.md#windows-桌面)。
 
 如果 Flutter 未识别 Android SDK，先在 SDK Manager 查明 SDK 安装位置，再指定实际路径，例如：
 
@@ -85,7 +87,7 @@ flutter run -d emulator-5554
 
 ## 5. 与 VPS 同步源码
 
-VPS 已通过 SSH 配置 `origin`，`main` 跟踪 `origin/main`。VPS 修改并推送后，在 Windows 的仓库根目录更新：
+先确认当前分支与上游，作者索引源码分支见 [模块目录](MODULE_CATALOG.md)。开发端修改并推送后，在 Windows 的仓库根目录更新同一工作分支：
 
 ```powershell
 cd C:\dev\xudian

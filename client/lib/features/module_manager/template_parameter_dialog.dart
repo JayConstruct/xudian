@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/design_system.dart';
+
 Future<Map<String, Object?>?> showTemplateParameterDialog({
   required BuildContext context,
   required Map<String, Object?> template,
@@ -86,7 +88,7 @@ class _TemplateParameterDialogState
         ),
         FilledButton(
           onPressed: _submit,
-          child: const Text('应用模板'),
+          child: const Text('创建任务'),
         ),
       ],
     );
@@ -111,6 +113,7 @@ class _TemplateParameterDialogState
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: DropdownButtonFormField<String>(
+            borderRadius: AppDesign.selectionBorderRadius,
             initialValue: values[id] as String?,
             decoration: InputDecoration(
               labelText: required ? '$label *' : label,

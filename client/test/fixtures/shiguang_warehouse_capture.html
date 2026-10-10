@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>拾光仓库兼容测试</title>
+<body><h1>拾光仓库兼容测试</h1><p>本地模拟课表，无学校登录及真实账号。</p>
+<script>
+// Only fixture data. The unchanged selected adapter is injected by the host.
+// Prevent all requests to its hard-coded school URL.
+window.fixtureRequests=[];
+window.fetch=async function(url,options){
+  window.fixtureRequests.push({url:String(url),method:options?.method});
+  const payload={kbList:[{kcmc:'兼容测试数学',xm:'测试老师',cdmc:'A101',xqj:'2',jcs:'1-2',zcd:'1-5周(单)'}]};
+  return {ok:true,status:200,statusText:'OK',text:async()=>JSON.stringify(payload),json:async()=>payload};
+};
+</script></body></html>

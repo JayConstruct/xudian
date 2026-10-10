@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xudian.app/schemas/declarative-module-v2.schema.json",
+  "title": "Xudian Executable Declarative Module v1 / v2",
+  "description": "Module source, not a module package. Keeps v1 compatibility and adds semantic UI composition in v2; arbitrary visual styles and executable UI code are not supported.",
+  "oneOf": [
+    { "$ref": "declarative-module-v1.schema.json" },
+    { "$ref": "#/$defs/sourceV2" }
+  ],
+  "$defs": {
+    "sourceV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formatVersion", "manifest"],
+      "properties": {
+        "formatVersion": { "const": 2 },
+        "manifest": { "$ref": "#/$defs/manifest" },
+        "pages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/page" }
+        },
+        "views": {
+          "type": "array",
+          "items": { "$ref": "declarative-module-v1.schema.json#/$defs/view" }
+        },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "declarative-module-v1.schema.json#/$defs/field" }
+        },
+        "templates": {
+          "type": "array",
+          "items": { "$ref": "declarative-module-v1.schema.json#/$defs/template" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "declarative-module-v1.schema.json#/$defs/rule" }
+        },
+        "layouts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/layout" }
+        }
+      }
+    },
+    "manifest": {
+      "allOf": [
+        { "$ref": "declarative-module-v1.schema.json#/$defs/manifest" },
+        {
+          "required": ["requiresCapabilities", "permissions"],
+          "properties": {
+            "requiresCapabilities": {
+              "allOf": [
+                { "contains": { "const": "ui.composition" } },
+                { "contains": { "const": "ui.registry" } }
+              ]
+            },
+            "permissions": {
+              "contains": { "const": "ui.register" }
+            }
+          }
+        }
+      ]
+    },
+    "pageReference": {
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9_-]*(\\.[a-z][a-zA-Z0-9_-]*)*$",
+      "description": "A local page ID, or a fully qualified module ID followed by its page ID. Reference existence and cross-module slot compatibility are runtime checks."
+    },
+    "requiredContext": {
+      "type": "array",
+      "items": { "enum": ["taskId", "projectId"] },
+      "description": "Context requirements only; this declaration does not grant data permissions."
+    },
+    "opening": {
+      "enum": ["workspace", "detail", "adaptivePanel"],
+      "default": "workspace"
+    },
+    "placement": {
+      "enum": ["main", "header", "more", "settings", "hidden", "page"],
+      "default": "main"
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "$ref": "declarative-module-v1.schema.json#/$defs/resourceId" },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["view", "container"], "default": "view" },
+        "view": { "$ref": "declarative-module-v1.schema.json#/$defs/resourceId" },
+        "icon": { "type": "string", "minLength": 1 },
+        "selectedIcon": { "type": "string", "minLength": 1 },
+        "quickAdd": { "type": "boolean", "default": false },
+        "quickAddDefaults": { "type": "object" },
+        "slots": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/slot" }
+        },
+        "requiredContext": { "$ref": "#/$defs/requiredContext" },
+        "retainPosition": { "type": "boolean", "default": false },
+        "entry": {
+          "description": "Only an explicit object (including {}) creates an entry. Omission, null and false create no entry; true is invalid. Defaults apply inside an explicit entry, not to an omitted entry.",
+          "oneOf": [
+            { "type": "null" },
+            { "const": false },
+            { "$ref": "#/$defs/entry" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["kind"],
+            "properties": { "kind": { "const": "container" } }
+          },
+          "then": { "not": { "required": ["view"] } },
+          "else": { "required": ["view"] }
+        }
+      ]
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "$ref": "declarative-module-v1.schema.json#/$defs/resourceId" },
+        "label": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["entries", "tabs", "sections"], "default": "entries" },
+        "public": { "type": "boolean", "default": false },
+        "editable": { "type": "boolean", "default": true },
+        "capacity": { "type": "integer", "minimum": 1 },
+        "requiredContext": { "$ref": "#/$defs/requiredContext" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "declarative-module-v1.schema.json#/$defs/resourceId" },
+        "label": { "type": "string", "minLength": 1 },
+        "opening": { "$ref": "#/$defs/opening" },
+        "placement": { "$ref": "#/$defs/placement" },
+        "content": { "type": "boolean", "default": false },
+        "targetPageId": { "$ref": "#/$defs/pageReference" },
+        "slotId": { "$ref": "declarative-module-v1.schema.json#/$defs/resourceId" },
+        "order": { "type": "integer", "default": 0 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["placement"],
+            "properties": { "placement": { "const": "page" } }
+          },
+          "then": { "required": ["targetPageId", "slotId"] },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["targetPageId"] },
+                { "required": ["slotId"] },
+                { "required": ["content"], "properties": { "content": { "const": true } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pageId", "label"],
+      "properties": {
+        "id": { "$ref": "declarative-module-v1.schema.json#/$defs/resourceId" },
+        "pageId": { "$ref": "#/$defs/pageReference" },
+        "label": { "type": "string", "minLength": 1 },
+        "content": { "type": "boolean", "default": false },
+        "opening": { "$ref": "#/$defs/opening" },
+        "placement": { "$ref": "#/$defs/placement" },
+        "hostPageId": { "$ref": "#/$defs/pageReference" },
+        "slotId": { "$ref": "declarative-module-v1.schema.json#/$defs/resourceId" },
+        "order": { "type": "integer", "default": 0 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["placement"],
+            "properties": { "placement": { "const": "page" } }
+          },
+          "then": { "required": ["hostPageId", "slotId"] },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["hostPageId"] },
+                { "required": ["slotId"] },
+                { "required": ["content"], "properties": { "content": { "const": true } } }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

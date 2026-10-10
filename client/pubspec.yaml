@@ -7,6 +7,11 @@ environment:
   sdk: ^3.13.4
 
 dependencies:
+  archive: ^3.6.1
+  sqlite3: ^3.5.2
+  timezone: ^0.10.1
+  xquickjs:
+    path: ../packages/xquickjs
   cryptography: ^2.9.0
   drift: ^2.35.0
   file_selector: ^1.1.0
@@ -17,6 +22,8 @@ dependencies:
   intl: ^0.20.3
   path: ^1.9.1
   path_provider: ^2.1.6
+  pub_semver: ^2.2.0
+  url_launcher: ^6.3.3
   uuid: ^4.6.0
 
 dev_dependencies:
@@ -30,3 +37,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/trusted_publishers.json
+    - assets/modules/
+    - assets/module-sdk/

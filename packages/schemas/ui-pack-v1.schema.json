@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "序点声明式 UI 包 v1",
+  "type": "object",
+  "required": [
+    "contractVersion"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": 1
+    },
+    "tokens": {
+      "type": "object",
+      "properties": {
+        "light": {
+          "type": "object",
+          "properties": {
+            "primary": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "surface": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "canvas": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "onSurface": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "outline": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "radius": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 48
+            },
+            "spacing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 48
+            },
+            "fontScale": {
+              "type": "number",
+              "minimum": 0.8,
+              "maximum": 1.6
+            }
+          },
+          "additionalProperties": false
+        },
+        "dark": {
+          "type": "object",
+          "properties": {
+            "primary": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "surface": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "canvas": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "onSurface": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "outline": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+            },
+            "radius": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 48
+            },
+            "spacing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 48
+            },
+            "fontScale": {
+              "type": "number",
+              "minimum": 0.8,
+              "maximum": 1.6
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "components": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-zA-Z0-9_.-]*@[1-9][0-9]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/recipe"
+      }
+    },
+    "templates": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-zA-Z0-9_.-]*@[1-9][0-9]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/recipe"
+      }
+    },
+    "chrome": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-zA-Z0-9_.-]*@[1-9][0-9]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/recipe"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "required": [
+        "bind"
+      ],
+      "properties": {
+        "bind": {
+          "type": "array",
+          "minItems": 1,
+          "prefixItems": [
+            {
+              "enum": [
+                "props",
+                "item",
+                "index",
+                "environment"
+              ]
+            }
+          ],
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "node": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "base"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "slot"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "primitive"
+            },
+            "name": {
+              "enum": [
+                "column",
+                "row",
+                "wrap",
+                "card",
+                "text",
+                "button",
+                "icon",
+                "divider",
+                "spacer",
+                "padding",
+                "expanded",
+                "scroll",
+                "list"
+              ]
+            },
+            "props": {
+              "type": "object"
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/node"
+              }
+            },
+            "event": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "event"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "name": {
+                    "const": "button"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "name": {
+                    "enum": [
+                      "text",
+                      "button",
+                      "icon",
+                      "divider",
+                      "spacer"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "children": {
+                    "maxItems": 0
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "name": {
+                    "enum": [
+                      "padding",
+                      "expanded",
+                      "scroll"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "children": {
+                    "maxItems": 1
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "ref"
+          ],
+          "properties": {
+            "type": {
+              "const": "component"
+            },
+            "ref": {
+              "type": "string",
+              "pattern": "^[a-z][a-zA-Z0-9_.-]*@[1-9][0-9]*$"
+            },
+            "props": {
+              "type": "object"
+            },
+            "slots": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/node"
+              }
+            },
+            "events": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "condition",
+            "then",
+            "else"
+          ],
+          "properties": {
+            "type": {
+              "const": "if"
+            },
+            "condition": {},
+            "then": {
+              "$ref": "#/$defs/node"
+            },
+            "else": {
+              "$ref": "#/$defs/node"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "items",
+            "child"
+          ],
+          "properties": {
+            "type": {
+              "const": "repeat"
+            },
+            "items": {},
+            "child": {
+              "$ref": "#/$defs/node"
+            },
+            "key": {}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "narrow",
+            "wide"
+          ],
+          "properties": {
+            "type": {
+              "const": "responsive"
+            },
+            "narrow": {
+              "$ref": "#/$defs/node"
+            },
+            "wide": {
+              "$ref": "#/$defs/node"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "recipe": {
+      "type": "object",
+      "required": [
+        "tree"
+      ],
+      "properties": {
+        "tree": {
+          "$ref": "#/$defs/node"
+        },
+        "propsSchema": {
+          "type": "object"
+        },
+        "requiredSlots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

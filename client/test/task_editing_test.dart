@@ -2,7 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:task_app/app/app.dart';
+import 'support/legacy_app.dart';
 import 'package:task_app/core/declarative/declarative_module_parser.dart';
 import 'package:task_app/core/declarative/runtime/declarative_module_store.dart';
 import 'package:task_app/data/app_database.dart';
@@ -48,8 +48,20 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('学习计划'));
         await tester.pumpAndSettle();
+        expect(
+          tester
+              .getRect(find.byKey(const ValueKey('assistant-bubble')))
+              .overlaps(tester.getRect(find.byTooltip('添加任务'))),
+          isFalse,
+        );
         await tester.enterText(find.byType(TextField), '阅读第一章');
         await tester.pump();
+        expect(
+          tester
+              .getRect(find.byKey(const ValueKey('assistant-bubble')))
+              .overlaps(tester.getRect(find.byTooltip('添加任务'))),
+          isFalse,
+        );
         await tester.tap(find.byTooltip('添加任务'));
         await tester.pumpAndSettle();
         final created = (await db.select(db.tasks).get()).single;

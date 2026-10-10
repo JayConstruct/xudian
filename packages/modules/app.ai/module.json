@@ -1,0 +1,106 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "app.ai",
+    "name": "AI 助手",
+    "version": "1.0.1",
+    "hostApi": "^1.0.0",
+    "dataVersion": 1,
+    "permissions": [
+      "ui",
+      "http",
+      "secrets",
+      "grants.request",
+      "grants.revoke",
+      "packages.prepare",
+      "packages.review",
+      "clock.today"
+    ],
+    "dependencies": [],
+    "defaultInstall": true,
+    "httpOrigins": [],
+    "description": "提供 AI 助手入口和宿主服务接口。",
+    "author": "JayConstruct"
+  },
+  "entryPoint": "main.js",
+  "collections": [
+    {
+      "id": "connections",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "id": "history",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "services": [
+    {
+      "id": "ai.connection.save",
+      "major": 1,
+      "handler": "saveConnection",
+      "kind": "command",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "ai.history.save",
+      "major": 1,
+      "handler": "saveHistory",
+      "kind": "command",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "id": "app.ai.page",
+      "title": "AI 助手",
+      "icon": "ai",
+      "handler": "render",
+      "entry": {
+        "id": "app.ai.entry",
+        "opening": "adaptivePanel",
+        "placement": "header"
+      }
+    }
+  ],
+  "interruptHandlers": [
+    "cancel"
+  ],
+  "contributions": [
+    {
+      "id": "app.ai.launcher",
+      "slot": "globalOverlay",
+      "handler": "render",
+      "label": "AI 助手"
+    }
+  ]
+}

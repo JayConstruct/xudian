@@ -1,3 +1,5 @@
+import '../../../data/providers.dart';
+export '../../../data/providers.dart';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
@@ -23,12 +25,6 @@ import '../integration/task_command_bindings.dart';
 import '../integration/task_query_bindings.dart';
 import 'task_command_service.dart';
 import 'task_query_service.dart';
-
-final databaseProvider = FutureProvider<AppDatabase>((ref) async {
-  final database = await AppDatabase.open();
-  ref.onDispose(database.close);
-  return database;
-});
 
 final eventBusProvider = Provider<EventBus>((ref) {
   final bus = EventBus();

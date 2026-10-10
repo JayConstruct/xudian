@@ -3,6 +3,10 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqlite3/sqlite3.dart' as sqlite;
+
+import '../core/module_host/host_schema.dart';
+
 import 'package:path_provider/path_provider.dart';
 
 part 'app_database.g.dart';
@@ -119,8 +123,7 @@ class RuleExecutions extends Table {
   TextColumn get eventType => text()();
   TextColumn get entityType => text()();
   TextColumn get entityId => text()();
-  TextColumn get eventPayloadJson =>
-      text().withDefault(const Constant('{}'))();
+  TextColumn get eventPayloadJson => text().withDefault(const Constant('{}'))();
   IntColumn get sourceExecutionId => integer().nullable()();
   TextColumn get status => text()();
   TextColumn get message => text().nullable()();
@@ -174,15 +177,42 @@ class AppDatabase extends _$AppDatabase {
     final directory = await getApplicationSupportDirectory();
     await directory.create(recursive: true);
     final file = File(p.join(directory.path, 'xudian_v9.sqlite'));
+    if (await file.exists()) {
+      final source = sqlite.sqlite3.open(file.path);
+      try {
+        final version =
+            source.select('PRAGMA user_version').single.values.single as int;
+        if (version == 1) {
+          final snapshot = File('${file.path}.before-host-v2.sqlite');
+          if (!await snapshot.exists()) {
+            final candidate = sqlite.sqlite3.open('${snapshot.path}.candidate');
+            try {
+              await source.backup(candidate).drain<void>();
+            } finally {
+              candidate.close();
+            }
+            await File('${snapshot.path}.candidate').rename(snapshot.path);
+          }
+        }
+      } finally {
+        source.close();
+      }
+    }
     return AppDatabase(NativeDatabase.createInBackground(file));
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (migrator) async => migrator.createAll(),
+    onCreate: (migrator) async {
+      await migrator.createAll();
+      await createHostSchema(this);
+    },
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) await createHostSchema(this);
+    },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
       await customStatement(

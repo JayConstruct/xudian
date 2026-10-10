@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>正方课表查询测试页</title>
+<h1>课表查询 · 本地测试页面</h1>
+<p>仅用于验证正方通用脚本和浏览器桥接，不连接学校或账号。</p>
+<input id="shcPDF" data-type="table" hidden>
+<table id="kbgrid_table_0"><tr><td id="1-1" class="td_wrap">
+  <div class="timetable_con text-left">
+    <div class="title"><font>浏览器兼容测试</font></div>
+    <p><font>时间</font><font>(1-2节)1-5周(单)</font></p>
+    <p><font>教学楼 测试教室</font></p>
+    <p><font>测试教师</font></p>
+  </div>
+</td></tr></table>
+<script>
+// Small fixture-only implementation of the jQuery calls used by the upstream parser.
+// This is not a substitute for jQuery in production or a real-school fixture.
+class Selection {
+  constructor(nodes) {this.nodes=nodes;nodes.forEach((node,i)=>this[i]=node);this.length=nodes.length;}
+  each(callback) {this.nodes.forEach((node,i)=>callback(i,node));return this;}
+  hasClass(name) {return this.nodes[0]?.classList.contains(name)??false;}
+  text() {return this.nodes.map(node=>node.textContent).join('');}
+  attr(name) {return this.nodes[0]?.getAttribute(name);}
+  find(selector) {return new Selection(this.nodes.flatMap(node=>[...node.querySelectorAll(selector)]));}
+  eq(index) {return new Selection(this.nodes[index]?[this.nodes[index]]:[]);}
+}
+window.jQuery=value=>new Selection(typeof value==='string'?[...document.querySelectorAll(value)]:value?[value]:[]);
+</script></html>

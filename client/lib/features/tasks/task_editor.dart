@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/design_system.dart';
 import '../../core/modules/module_context.dart';
 import 'application/providers.dart';
 
@@ -233,6 +234,7 @@ class _TaskEditorState extends ConsumerState<TaskEditor> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
+              borderRadius: AppDesign.selectionBorderRadius,
               initialValue: priority,
               decoration: const InputDecoration(labelText: '优先级'),
               items: const [

@@ -3,6 +3,8 @@ class ModuleManifest {
     required this.id,
     required this.version,
     required this.coreApi,
+    this.description,
+    this.author,
     this.dependencies = const [],
     this.requiresCapabilities = const [],
     this.permissions = const [],
@@ -11,6 +13,8 @@ class ModuleManifest {
   final String id;
   final String version;
   final String coreApi;
+  final String? description;
+  final String? author;
   final List<String> dependencies;
   final List<String> requiresCapabilities;
   final List<String> permissions;

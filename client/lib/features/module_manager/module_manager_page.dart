@@ -8,6 +8,9 @@ import '../../app/design_system.dart';
 import '../../core/modules/module_registry.dart';
 import '../../core/modules/builtin_module_registration.dart';
 import '../../core/declarative/package/module_package.dart';
+import '../../core/ui/module_ui_labels.dart';
+import '../../core/ui/ui_registration.dart';
+import '../../core/ui/ui_slot.dart';
 import '../ai/proposal/module_proposal_coordinator.dart';
 import '../ai/proposal/module_proposal_service.dart';
 import '../../data/app_database.dart';
@@ -65,7 +68,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
           action: FilledButton.tonalIcon(
             onPressed: _importPackage,
             icon: const Icon(Icons.upload_file_outlined, size: 18),
-            label: const Text('导入包'),
+            label: const Text('导入模块包'),
           ),
         ),
         Expanded(
@@ -120,6 +123,23 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
 
   Widget _builtinCard(BuiltinModuleRegistration module) {
     final enabled = widget.registry.isEnabled(module.id);
+    final page = enabled
+        ? module.module.ui
+              .whereType<WidgetRegistration>()
+              .where((item) => item.slot == UiSlot.workspacePage)
+              .firstOrNull
+        : null;
+    void openPage() {
+      if (page == null) return;
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              DetailPage(title: module.title, child: page.builder(context)),
+        ),
+      );
+    }
+
     return Card(
       key: ValueKey('builtin-module-${module.id}'),
       child: ListTile(
@@ -128,25 +148,38 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
           'app.views.inbox' => Icons.inbox_outlined,
           'app.views.projects' => Icons.folder_outlined,
           'app.ai' => Icons.auto_awesome_outlined,
+          'app.ui.examples' => Icons.widgets_outlined,
           _ => Icons.extension_outlined,
         }),
         title: Text(module.title),
         subtitle: Text(
-          '${module.description}\n${module.canDisable ? '${module.kind == BuiltinModuleKind.native ? '原生' : '声明式'} · ${enabled ? '已启用' : '已关闭，数据保留'}' : '基础功能 · 保持可用'}',
+          '${module.description}\n${module.canDisable ? '内置功能 · ${enabled ? '已启用' : '已关闭，数据保留'}' : '基础功能 · 保持可用'}',
         ),
         isThreeLine: true,
-        trailing: module.canDisable
-            ? Switch(
-                key: ValueKey('builtin-switch-${module.id}'),
-                value: enabled,
-                onChanged: changingBuiltin
-                    ? null
-                    : (value) => _setBuiltinEnabled(module, value),
-              )
-            : const Tooltip(
-                message: '模块管理必须保持可用',
-                child: Icon(Icons.lock_outline_rounded),
+        onTap: page == null ? null : openPage,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (page != null)
+              IconButton(
+                tooltip: '打开${module.title}',
+                onPressed: openPage,
+                icon: const Icon(Icons.open_in_new_rounded),
               ),
+            module.canDisable
+                ? Switch(
+                    key: ValueKey('builtin-switch-${module.id}'),
+                    value: enabled,
+                    onChanged: changingBuiltin
+                        ? null
+                        : (value) => _setBuiltinEnabled(module, value),
+                  )
+                : const Tooltip(
+                    message: '模块管理必须保持可用',
+                    child: Icon(Icons.lock_outline_rounded),
+                  ),
+          ],
+        ),
       ),
     );
   }
@@ -194,7 +227,10 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
               onSelected: (value) => _action(module, value),
               itemBuilder: (_) => [
                 if (module.installed && module.enabled)
-                  const PopupMenuItem(value: 'templates', child: Text('应用模板')),
+                  const PopupMenuItem(
+                    value: 'templates',
+                    child: Text('从模板创建任务'),
+                  ),
                 if (module.installed)
                   const PopupMenuItem(value: 'ruleLogs', child: Text('规则运行记录')),
                 if (module.installed)
@@ -310,13 +346,14 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
                   if (permissions.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text('声明权限', style: Theme.of(context).textTheme.titleSmall),
-                    for (final permission in permissions) Text('• $permission'),
+                    for (final permission in permissions)
+                      Text('• ${modulePermissionLabel(permission)}'),
                   ],
                   if (!package.trusted) ...[
                     const SizedBox(height: 12),
                     const Text(
                       '仅在你明确知道此文件来源时继续。'
-                      '后续仍会进行 Schema、语义、权限和 Diff 校验。',
+                      '后续仍会检查模块格式、功能支持和权限，并展示变更供你确认。',
                     ),
                   ],
                 ],
@@ -372,19 +409,21 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
     final templates = engine.templatesFor(module.id);
     if (!mounted) return;
     if (templates.isEmpty) {
-      _message('该模块没有可应用的模板');
+      _message('该模块没有任务模板');
       return;
     }
 
     final selected = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('应用模板 · ${module.id}'),
+        title: Text('从模板创建任务 · ${module.id}'),
         content: SizedBox(
           width: 440,
           child: ListView(
             shrinkWrap: true,
             children: [
+              const Text('根据模板创建任务；模板包含项目时，也会创建项目。'),
+              const SizedBox(height: 12),
               for (final template in templates)
                 ListTile(
                   title: Text(template['title'] as String),
@@ -392,7 +431,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
                   trailing: TextButton(
                     onPressed: () =>
                         Navigator.pop(context, template['id'] as String),
-                    child: const Text('应用'),
+                    child: const Text('创建任务'),
                   ),
                 ),
             ],
@@ -426,7 +465,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
         '${result.projectId == null ? '' : '，并创建项目'}',
       );
     } catch (error) {
-      _message('模板应用失败：$error');
+      _message('从模板创建任务失败：$error');
     }
   }
 
@@ -595,6 +634,8 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
           child: ListView(
             shrinkWrap: true,
             children: [
+              const Text('恢复所选版本的模块配置，不会撤销已创建的任务或已执行的自动化操作。'),
+              const SizedBox(height: 12),
               for (final version in versions)
                 ListTile(
                   title: Text(version.version),
@@ -607,7 +648,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
                       : TextButton(
                           onPressed: () =>
                               Navigator.pop(context, version.version),
-                          child: const Text('回退'),
+                          child: const Text('恢复配置'),
                         ),
                 ),
             ],
@@ -627,7 +668,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
       await (await _runtime()).rollback(module.id, selected);
       _reload();
     } catch (error) {
-      _message('回退失败：$error');
+      _message('恢复模块配置失败：$error');
     }
   }
 
@@ -637,7 +678,8 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
       builder: (context) => AlertDialog(
         title: const Text('彻底删除模块'),
         content: Text(
-          '将删除 ${module.id} 的版本历史、字段定义和字段值。'
+          '将删除 ${module.id} 的安装记录、版本历史、自定义字段定义和字段值，'
+          '以及规则运行记录。任务和项目会保留。'
           '此操作不可撤销。',
         ),
         actions: [

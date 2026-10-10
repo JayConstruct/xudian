@@ -8,6 +8,12 @@ import '../ai/settings/ai_settings_store.dart';
 import '../module_manager/module_manager_page.dart';
 import '../tasks/application/providers.dart';
 import 'app_preferences.dart';
+import 'ui_layout_page.dart';
+import 'ui_layout.dart';
+import '../../core/ui/ui_composition.dart';
+import '../../core/ui/ui_annotation.dart';
+import '../../core/ui/ui_page_host.dart';
+import '../../core/ui/ui_layout_resolver.dart';
 
 String themeModeLabel(ThemeMode mode) => switch (mode) {
   ThemeMode.system => '跟随系统',
@@ -16,9 +22,10 @@ String themeModeLabel(ThemeMode mode) => switch (mode) {
 };
 
 class SettingsPage extends ConsumerStatefulWidget {
-  const SettingsPage({super.key, required this.registry});
+  const SettingsPage({super.key, required this.registry, this.onOpenEntry});
 
   final ModuleRegistry registry;
+  final void Function(UiEntryRegistration entry)? onOpenEntry;
 
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
@@ -111,6 +118,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appPreferencesProvider);
+    final profile = (ref.watch(uiLayoutProvider).asData?.value ?? UiLayout())
+        .profile(MediaQuery.sizeOf(context).width >= 820);
+    final shortcuts = orderedEntries(
+      widget.registry.ui,
+      profile.mountFor,
+      (entry) => profile.mountFor(entry).placement == UiPlacement.settings,
+    );
     return DetailPage(
       title: '设置',
       child: state.when(
@@ -173,6 +187,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ContentSurface(
               child: Column(
                 children: [
+                  ListTile(
+                    leading: const Icon(Icons.dashboard_customize_outlined),
+                    title: const Text('入口与页面布局'),
+                    subtitle: const Text('编排导航、公开槽位及手机和电脑布局'),
+                    onTap: () => Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UiLayoutPage(registry: widget.registry),
+                      ),
+                    ),
+                  ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.label_outline),
+                    title: const Text('界面标注模式'),
+                    subtitle: const Text('标记关键 UI，复制标识用于准确描述界面'),
+                    value: ref.watch(uiAnnotationProvider),
+                    onChanged: (enabled) => ref
+                        .read(uiAnnotationProvider.notifier)
+                        .setEnabled(enabled),
+                  ),
                   if (widget.registry.isEnabled('app.ai')) ...[
                     FutureBuilder<AiSettings>(
                       future: connection,
@@ -213,6 +247,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
             const SizedBox(height: 12),
+            if (shortcuts.isNotEmpty) ...[
+              const SectionHeading(title: '常用入口'),
+              for (final entry in shortcuts)
+                ListTile(
+                  leading: Icon(entry.icon),
+                  title: Text(entry.label),
+                  onTap: () {
+                    if (widget.onOpenEntry != null) {
+                      widget.onOpenEntry!(entry);
+                    } else {
+                      Navigator.push<void>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DetailPage(
+                            title: entry.label,
+                            child: UiPageHost(
+                              registry: widget.registry,
+                              pageId: entry.pageId,
+                              pageContext: profile.mountFor(entry).context,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+            ],
             const SectionHeading(title: '关于'),
             ContentSurface(
               child: Column(

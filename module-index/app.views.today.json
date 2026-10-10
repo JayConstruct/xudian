@@ -1,0 +1,71 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.views.today",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.1.1",
+      "manifest": {
+        "id": "app.views.today",
+        "name": "今天",
+        "version": "1.1.1",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.query:app.tasks/task.list@1",
+          "services.query:app.tasks/task.get@1",
+          "services.query:app.tasks/project.list@1",
+          "services.command:app.tasks/project.create@1",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/task.updateFields@1",
+          "services.command:app.tasks/task.setCompleted@1",
+          "extensions.command:app.tasks/tasks"
+        ],
+        "dependencies": [
+          "app.tasks"
+        ],
+        "defaultInstall": true,
+        "description": "查看今天的任务和计划。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.views.today-1.1.1.xmodule",
+      "size": 2953,
+      "sha256": "bf7ebd6896f24a5828660bc275cb7406a18aa4ca0a87608ba4bf51b05e7a40e6",
+      "signature": null
+    },
+    {
+      "version": "1.1.0",
+      "manifest": {
+        "id": "app.views.today",
+        "name": "今天",
+        "version": "1.1.0",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.query:app.tasks/task.list@1",
+          "services.query:app.tasks/task.get@1",
+          "services.query:app.tasks/project.list@1",
+          "services.command:app.tasks/project.create@1",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/task.updateFields@1",
+          "services.command:app.tasks/task.setCompleted@1",
+          "extensions.command:app.tasks/tasks"
+        ],
+        "dependencies": [
+          "app.tasks"
+        ],
+        "defaultInstall": true
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/app.views.today-1.1.0.xmodule",
+      "size": 2881,
+      "sha256": "b7279f84bbde347dfac80a1fb2587f3276380ea582a39a156c2bfa0b4aa0dc03",
+      "signature": null
+    }
+  ]
+}

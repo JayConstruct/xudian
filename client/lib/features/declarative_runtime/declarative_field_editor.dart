@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/design_system.dart';
 import '../../core/declarative/declarative_module.dart';
 
 Future<Map<String, Object?>?> showDeclarativeFieldEditor({
@@ -131,6 +132,7 @@ class _DeclarativeFieldEditorState extends State<_DeclarativeFieldEditor> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: DropdownButtonFormField<String>(
+            borderRadius: AppDesign.selectionBorderRadius,
             initialValue: options.contains(selections[id])
                 ? selections[id]
                 : null,

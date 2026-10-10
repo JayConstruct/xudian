@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/ui/ui_component.dart';
+
 class AppDesign {
   static const brand = Color(0xFF52699C);
   static const lightCanvas = Color(0xFFF1F3F5);
@@ -11,6 +13,9 @@ class AppDesign {
   static const controlRadius = 14.0;
   static const radius = 16.0;
   static const selectionRadius = 20.0;
+  static const selectionBorderRadius = BorderRadius.all(
+    Radius.circular(selectionRadius),
+  );
   static const floatingRadius = 24.0;
   static const dockRadius = 28.0;
 
@@ -24,9 +29,7 @@ class AppDesign {
   );
 
   static Color canvas(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-      ? darkCanvas
-      : lightCanvas;
+      Theme.of(context).scaffoldBackgroundColor;
 
   static Color surface(BuildContext context) =>
       Theme.of(context).colorScheme.surface;
@@ -66,23 +69,39 @@ class ContentSurface extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppDesign.surface(context),
-    shape: AppDesign.smoothShape(),
-    clipBehavior: Clip.antiAlias,
-    child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+  Widget build(BuildContext context) => UiComponent(
+    ref: 'ui.card@1',
+    slots: {
+      'content': Padding(padding: padding ?? EdgeInsets.zero, child: child),
+    },
+    fallback: Material(
+      color: AppDesign.surface(context),
+      shape: Theme.of(context).cardTheme.shape ?? AppDesign.smoothShape(),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+    ),
   );
 }
 
 class DetailPage extends StatelessWidget {
-  const DetailPage({super.key, required this.title, required this.child});
+  const DetailPage({
+    super.key,
+    required this.title,
+    required this.child,
+    this.leading,
+  });
 
   final String title;
   final Widget child;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(title), centerTitle: false),
+    appBar: AppBar(
+      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      leading: leading,
+      centerTitle: false,
+    ),
     body: SafeArea(
       top: false,
       child: Align(

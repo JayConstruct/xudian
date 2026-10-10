@@ -1,0 +1,47 @@
+{
+  "indexFormat": 1,
+  "moduleId": "example.ui.compact",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.0.1",
+      "manifest": {
+        "id": "example.ui.compact",
+        "kind": "uiPack",
+        "name": "紧凑界面示例",
+        "version": "1.0.1",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [],
+        "dependencies": [],
+        "defaultInstall": false,
+        "description": "提供紧凑布局的可选界面包。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/example.ui.compact-1.0.1.xmodule",
+      "size": 1054,
+      "sha256": "380d67193f4843614b13befe8e47deb7a6147ecc306e5fa4c47902cb702d2e19",
+      "signature": null
+    },
+    {
+      "version": "1.0.0",
+      "manifest": {
+        "id": "example.ui.compact",
+        "kind": "uiPack",
+        "name": "紧凑界面示例",
+        "version": "1.0.0",
+        "hostApi": "^1.6.0",
+        "dataVersion": 1,
+        "permissions": [],
+        "dependencies": [],
+        "defaultInstall": false
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-2026-10-08/example.ui.compact-1.0.0.xmodule",
+      "size": 966,
+      "sha256": "c81cc2b9d6665df166bc636c40f817572f1529bdd3c55bedc611da759811474e",
+      "signature": null
+    }
+  ]
+}

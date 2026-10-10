@@ -1,0 +1,71 @@
+name: Publish immutable module release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable modules tag to publish
+        required: true
+        type: string
+  push:
+    tags:
+      - 'modules-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: module-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate prepared indexes and packages
+        run: >-
+          python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json
+          --index-dir module-index --package-dir dist/module-releases
+      - name: Select packages for this immutable release tag
+        env:
+          MODULE_RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          MODULE_RELEASE_DIR: ${{ runner.temp }}/module-release-assets
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, shutil, urllib.parse
+          tag = os.environ['MODULE_RELEASE_TAG']
+          assert tag.startswith('modules-') and '/' not in tag
+          destination = pathlib.Path(os.environ['MODULE_RELEASE_DIR'])
+          destination.mkdir()
+          selected = set()
+          for entry in json.loads(pathlib.Path('packages/catalog/catalog.json').read_text())['modules']:
+              index = json.loads(pathlib.Path(f'module-index/{entry["id"]}.json').read_text())
+              for version in index['versions']:
+                  parts = urllib.parse.urlsplit(version['url']).path.split('/')
+                  if parts[-2] == tag:
+                      name = parts[-1]
+                      assert name not in selected
+                      selected.add(name)
+                      shutil.copyfile(pathlib.Path('dist/module-releases') / name, destination / name)
+          assert selected, 'No prepared packages for this tag'
+          print(f'Prepared {len(selected)} packages for {tag}')
+          PY
+      - name: Publish verified packages without replacing existing assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODULE_RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          MODULE_RELEASE_REPOSITORY: ${{ github.repository }}
+          MODULE_RELEASE_DIR: ${{ runner.temp }}/module-release-assets
+        run: >-
+          python3 scripts/module_catalog/release.py
+          --repository "$MODULE_RELEASE_REPOSITORY" --tag "$MODULE_RELEASE_TAG"
+          --package-dir "$MODULE_RELEASE_DIR"
+          --title "序点模块：$MODULE_RELEASE_TAG"
+          --notes "本 Release 提供当前 tag 的不可变模块包，源码与版本索引保存在同一 tag。课表 1.7.0 与拾光教务导入 1.4.0；安装前由客户端核验包身份、摘要、依赖和权限。客户端 APK 由 Android Actions 工作流构建。"

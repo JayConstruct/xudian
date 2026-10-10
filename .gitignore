@@ -15,3 +15,10 @@ build/
 !.env.example
 *.keystore
 *.jks
+__pycache__/
+*.py[cod]
+tmp/
+dist/*
+!dist/module-releases/
+dist/module-releases/*
+!dist/module-releases/*.xmodule

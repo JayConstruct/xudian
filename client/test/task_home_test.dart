@@ -3,13 +3,61 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/data/app_database.dart';
-import 'package:task_app/app/app.dart';
+import 'support/legacy_app.dart';
 import 'package:task_app/app/design_system.dart';
+import 'package:task_app/features/ai/assistant_panel.dart';
+import 'package:task_app/features/ai/assistant_runtime.dart';
 import 'package:task_app/features/ai/settings/ai_secret_store.dart';
 import 'package:task_app/features/tasks/application/providers.dart';
 import 'package:task_app/features/module_manager/builtin_module_controller.dart';
 
 void main() {
+  testWidgets(
+    'collapsed assistant leaves the large-text mobile More dock usable',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((ref) async => database),
+            aiSecretStoreProvider.overrideWithValue(_TestAiSecretStore()),
+          ],
+          child: XudianApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final bubble = tester.getRect(
+        find.byKey(const ValueKey('assistant-bubble')),
+      );
+      final dock = tester.getRect(
+        find.byKey(const ValueKey('mobile-bottom-dock')),
+      );
+      expect(bubble.bottom, lessThan(dock.top));
+      final app = tester.widget<XudianApp>(find.byType(XudianApp));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(XudianApp)),
+      );
+      await tester.tap(find.text('更多'));
+      await tester.pumpAndSettle();
+      expect(find.text('更多入口'), findsOneWidget);
+      expect(find.text('模块'), findsWidgets);
+      expect(
+        container.read(assistantControllerProvider(app.registry)).expanded,
+        isFalse,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
   testWidgets('quick add writes a task and inbox displays it', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -41,8 +89,22 @@ void main() {
 
     await tester.tap(find.byTooltip('打开 AI 助手'));
     await tester.pumpAndSettle();
-    expect(find.text('AI 工作区'), findsOneWidget);
-    expect(find.text('作用范围 · 私有模块功能'), findsOneWidget);
+    expect(find.byType(AssistantPanel), findsOneWidget);
+    expect(find.text('对话'), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant-input')), findsOneWidget);
+    expect(find.text('AI 模块生成'), findsNothing);
+    await tester.tap(find.text('高级开发'));
+    await tester.pumpAndSettle();
+    expect(find.text('AI 模块生成'), findsOneWidget);
+    expect(find.text('生成任务视图、自定义字段、任务模板和自动化规则'), findsOneWidget);
+    expect(find.text('生成并查看变更'), findsOneWidget);
+    expect(
+      find.text(
+        '生成时会向你配置的模型服务发送功能描述和已安装模块的标识、版本；'
+        '确认变更后才会安装或更新模块。',
+      ),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -72,8 +134,10 @@ void main() {
 
     await tester.tap(find.byTooltip('打开 AI 助手'));
     await tester.pumpAndSettle();
-    expect(find.text('AI 工作区'), findsOneWidget);
-    expect(find.text('今天已经安排妥当'), findsOneWidget);
+    expect(find.byType(AssistantPanel), findsOneWidget);
+    expect(find.text('对话'), findsOneWidget);
+    expect(find.text('AI 模块生成'), findsNothing);
+    expect(find.text('暂无今天待办或逾期任务'), findsOneWidget);
 
     final app = tester.widget<XudianApp>(find.byType(XudianApp));
     final container = ProviderScope.containerOf(
@@ -84,16 +148,66 @@ void main() {
     );
     await modules.setEnabled('app.ai', false);
     await tester.pumpAndSettle();
-    expect(find.text('AI 工作区'), findsNothing);
+    expect(find.byType(AssistantPanel), findsNothing);
+    expect(find.text('AI 模块生成'), findsNothing);
     expect(find.byTooltip('打开 AI 助手'), findsNothing);
     await modules.setEnabled('app.ai', true);
     await tester.pumpAndSettle();
-    expect(find.text('AI 工作区'), findsNothing);
+    expect(find.byKey(const ValueKey('assistant-bubble')), findsOneWidget);
+    expect(find.text('AI 模块生成'), findsNothing);
     expect(find.byTooltip('打开 AI 助手'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  testWidgets(
+    'global assistant keeps its draft across root routes and minimizing',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 820);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((ref) async => database),
+            aiSecretStoreProvider.overrideWithValue(_TestAiSecretStore()),
+          ],
+          child: XudianApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('assistant-bubble')));
+      await tester.pumpAndSettle();
+      final input = find.byKey(const ValueKey('assistant-input'));
+      await tester.ensureVisible(input);
+      await tester.enterText(input, '跨全局页面的草稿');
+      final rootNavigator = tester.state<NavigatorState>(
+        find.byType(Navigator).first,
+      );
+      rootNavigator.push<void>(
+        MaterialPageRoute(builder: (_) => const Scaffold(body: Text('全局测试页面'))),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('全局测试页面'), findsOneWidget);
+      expect(find.byType(AssistantPanel), findsOneWidget);
+      expect(tester.widget<TextField>(input).controller!.text, '跨全局页面的草稿');
+      await tester.tap(find.byKey(const ValueKey('assistant-minimize')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('assistant-bubble')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(input).controller!.text, '跨全局页面的草稿');
+      rootNavigator.pop();
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(input).controller!.text, '跨全局页面的草稿');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('floating dock keeps the last task reachable with large text', (
     tester,

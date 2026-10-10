@@ -1,0 +1,49 @@
+{
+  "formatVersion": 2,
+  "manifest": {
+    "id": "example.ui.contributor",
+    "version": "1.0.0",
+    "coreApi": "1",
+    "dependencies": [],
+    "requiresCapabilities": ["ui.composition", "ui.registry", "tasks.query"],
+    "permissions": ["ui.register", "tasks.read"]
+  },
+  "pages": [
+    {
+      "id": "tasks",
+      "title": "只读任务视图",
+      "kind": "view",
+      "view": "taskList",
+      "entry": false
+    }
+  ],
+  "views": [
+    {
+      "id": "taskList",
+      "source": "task.list",
+      "emptyText": "暂无任务；此示例只读取，不创建或修改任务。"
+    }
+  ],
+  "layouts": [
+    {
+      "id": "taskTab",
+      "pageId": "tasks",
+      "label": "任务页签",
+      "content": true,
+      "placement": "page",
+      "hostPageId": "example.ui.host.workspace",
+      "slotId": "tabs",
+      "order": 0
+    },
+    {
+      "id": "taskSection",
+      "pageId": "tasks",
+      "label": "任务内容区",
+      "content": true,
+      "placement": "page",
+      "hostPageId": "example.ui.host.workspace",
+      "slotId": "sections",
+      "order": 0
+    }
+  ]
+}

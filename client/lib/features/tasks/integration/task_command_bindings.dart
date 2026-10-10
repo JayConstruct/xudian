@@ -1,11 +1,9 @@
 import '../../../core/contracts/command_bus.dart';
 import '../application/task_command_service.dart';
 import '../domain/task_input.dart';
+import '../domain/task_snapshot.dart';
 
-void registerTaskCommands(
-  CommandBus bus,
-  TaskCommandService service,
-) {
+void registerTaskCommands(CommandBus bus, TaskCommandService service) {
   bus.register(
     'project.create',
     permission: 'tasks.write',
@@ -49,11 +47,15 @@ void registerTaskCommands(
       if (id is! String || changes is! Map) {
         throw ArgumentError('task.updateFields requires id and changes');
       }
-      await service.updateFields(
+      final task = await service.updateFields(
         id,
         changes.map((key, value) => MapEntry('$key', value)),
+        expectedUpdatedAt: _expectedRevision(payload),
+        expectedValues: _expectedValues(payload),
       );
-      return null;
+      return payload.containsKey('expectedValues')
+          ? taskStateSnapshot(task)
+          : null;
     },
   );
 
@@ -66,8 +68,31 @@ void registerTaskCommands(
       if (id is! String || completed is! bool) {
         throw ArgumentError('task.setCompleted requires id and completed');
       }
-      await service.setCompleted(id, completed);
-      return null;
+      final task = await service.setCompleted(
+        id,
+        completed,
+        expectedUpdatedAt: _expectedRevision(payload),
+        expectedValues: _expectedValues(payload),
+      );
+      return payload.containsKey('expectedValues')
+          ? taskStateSnapshot(task)
+          : null;
     },
   );
+}
+
+DateTime? _expectedRevision(Map<String, Object?> payload) {
+  final value = payload['expectedUpdatedAt'];
+  if (value == null) return null;
+  if (value is! String) throw ArgumentError('Invalid expected task revision');
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) throw ArgumentError('Invalid expected task revision');
+  return parsed;
+}
+
+Map<String, Object?>? _expectedValues(Map<String, Object?> payload) {
+  final value = payload['expectedValues'];
+  if (value == null) return null;
+  if (value is! Map) throw ArgumentError('Invalid expected task snapshot');
+  return value.cast<String, Object?>();
 }
