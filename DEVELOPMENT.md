@@ -24,6 +24,8 @@ cd ..
 
 验收文档保留日期、版本、摘要、步骤、失败原因和 CI 链接，机器绝对路径改为项目相对路径或示例路径；不提交用户业务数据、账号和密钥。提交前运行 `python3 scripts/check_repository.py`、`git status --short` 和 `git diff --check`；仓库检查拒绝本机产物、没有索引引用的发布包及未被预装清单引用的客户端包，同时校验预装包身份与内外摘要。新增忽略规则不会自动移除已经跟踪的文件。APK 通过 Actions 产物分发，公开模块通过 GitHub Releases 分发。
 
+修改工作流时还须检查 Actions 表达式上下文；仅解析 YAML 无法发现这类错误。CI 在构建前执行固定版本 actionlint。已安装 Go 的开发机可运行 `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes= .github/workflows/*.yml packages/catalog/.github/workflows/*.yml`，工具与编译缓存不纳入源码。
+
 ## 日常更新
 
 | 改动 | 命令 |

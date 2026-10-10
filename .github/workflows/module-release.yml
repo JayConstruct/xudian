@@ -24,7 +24,6 @@ jobs:
     env:
       MODULE_RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
       MODULE_RELEASE_REPOSITORY: ${{ github.repository }}
-      MODULE_RELEASE_DIR: ${{ runner.temp }}/module-release-assets
     steps:
       - name: Check out immutable release source
         uses: actions/checkout@v4
@@ -43,6 +42,7 @@ jobs:
           python-version: '3.12'
       - name: Locate current or historical prepared packages
         run: |
+          echo "MODULE_RELEASE_DIR=$RUNNER_TEMP/module-release-assets" >> "$GITHUB_ENV"
           if [ -d release-source/releases/modules ]; then
             echo 'MODULE_PACKAGE_DIR=release-source/releases/modules' >> "$GITHUB_ENV"
           elif [ -d release-source/dist/module-releases ]; then
