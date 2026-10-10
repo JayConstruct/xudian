@@ -22,6 +22,8 @@ Future<void> _settleNative(WidgetTester tester) async {
     );
     await tester.pump(const Duration(milliseconds: 20));
   }
+  // A native reply can start a route transition on the final pump.
+  await tester.pumpAndSettle();
 }
 
 // Exercise the editable module source, independently of distribution rebuilds.
