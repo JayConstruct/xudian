@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -117,19 +118,120 @@ void main() {
   Finder verticalGrid() =>
       find.byKey(const PageStorageKey('time-grid-vertical'));
   Finder dock() => find.byKey(const ValueKey('mobile-bottom-dock'));
+  Finder header() => find.byKey(const ValueKey('workspace-header-region'));
+  ScrollPosition verticalPosition() => find
+      .descendant(of: verticalGrid(), matching: find.byType(Scrollable))
+      .evaluate()
+      .whereType<StatefulElement>()
+      .map((element) => element.state)
+      .whereType<ScrollableState>()
+      .singleWhere((state) => state.widget.axisDirection == AxisDirection.down)
+      .position;
+
+  Future<void> frame(WidgetTester tester) async {
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump();
+  }
+
   bool dockVisible(WidgetTester tester) {
-    final opacity = find.ancestor(
-      of: dock(),
-      matching: find.byType(AnimatedOpacity),
-    );
+    final opacity = find.ancestor(of: dock(), matching: find.byType(Opacity));
     return opacity.evaluate().isEmpty ||
-        tester.widget<AnimatedOpacity>(opacity.first).opacity > 0;
+        tester.widget<Opacity>(opacity.first).opacity > 0;
   }
 
   Future<void> scrollDown(WidgetTester tester) async {
     await tester.drag(verticalGrid(), const Offset(0, -260));
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'partial chrome tracks finger distance and ignores release inertia and jumps',
+    (tester) async {
+      await pumpApp(tester);
+      final full = tester.getSize(header()).height;
+      final position = verticalPosition();
+      final gesture = await tester.startGesture(
+        tester.getCenter(verticalGrid()),
+      );
+      await gesture.moveBy(const Offset(0, -24));
+      await frame(tester);
+      final firstHeight = tester.getSize(header()).height;
+      final firstOffset = position.pixels;
+      expect(firstHeight, greaterThan(0));
+      expect(firstHeight, lessThan(full));
+      for (var i = 0; i < 2; i++) {
+        final previousHeight = tester.getSize(header()).height;
+        final previousOffset = position.pixels;
+        await gesture.moveBy(const Offset(0, -8));
+        await frame(tester);
+        expect(
+          tester.getSize(header()).height,
+          closeTo(previousHeight - 8, .1),
+        );
+        expect(position.pixels, closeTo(previousOffset + 8, .1));
+      }
+      expect(position.pixels, greaterThan(firstOffset));
+      final released = tester.getSize(header()).height;
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.getSize(header()).height, closeTo(released, .1));
+      expect(
+        find.byKey(const ValueKey('workspace-chrome-reveal')),
+        findsNothing,
+      );
+      position.jumpTo(180);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(header()).height, closeTo(released, .1));
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: tester.getCenter(verticalGrid()),
+          scrollDelta: const Offset(0, 8),
+        ),
+      );
+      await frame(tester);
+      expect(tester.getSize(header()).height, closeTo(released - 8, .1));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'an upward finger closes the real top gap before moving the toolbar',
+    (tester) async {
+      await pumpApp(tester);
+      final full = tester.getSize(header()).height;
+      final position = verticalPosition();
+      final gesture = await tester.startGesture(
+        tester.getCenter(verticalGrid()),
+      );
+      await gesture.moveBy(const Offset(0, 70));
+      await frame(tester);
+      expect(position.pixels, lessThan(0));
+      expect(tester.getSize(header()).height, closeTo(full, .1));
+      await gesture.moveBy(Offset(0, position.pixels / 2));
+      await frame(tester);
+      expect(position.pixels, lessThan(0));
+      expect(tester.getSize(header()).height, closeTo(full, .1));
+      for (var i = 0; i < 20 && position.pixels <= 0; i++) {
+        await gesture.moveBy(const Offset(0, -10));
+        await frame(tester);
+        if (position.pixels <= 0) {
+          expect(tester.getSize(header()).height, closeTo(full, .1));
+        }
+      }
+      expect(position.pixels, greaterThan(0));
+      expect(
+        tester.getSize(header()).height,
+        closeTo(full - position.pixels, .1),
+      );
+      final released = tester.getSize(header()).height;
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.getSize(header()).height, closeTo(released, .1));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'vertical reading hides both phone bars and reveal or upward scrolling restores them',
@@ -213,11 +315,12 @@ void main() {
         );
         final opacity = find.ancestor(
           of: dock(),
-          matching: find.byType(AnimatedOpacity),
+          matching: find.byType(Opacity),
         );
+        expect(tester.widget<Opacity>(opacity.first).opacity, 0);
         expect(
-          tester.widget<AnimatedOpacity>(opacity.first).duration,
-          Duration.zero,
+          find.ancestor(of: dock(), matching: find.byType(AnimatedOpacity)),
+          findsNothing,
         );
         expect(find.bySemanticsLabel('展开工具栏'), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('workspace-chrome-reveal')));

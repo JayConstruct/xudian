@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'ui_registration.dart';
+import 'page_runtime_context.dart';
 import '../contracts/json_values.dart';
 import 'ui_slot.dart';
 
@@ -32,6 +33,9 @@ class PageContext {
 
   String get identity =>
       '${taskId ?? ''}:${projectId ?? ''}:${canonicalJson(values)}';
+
+  String get navigationIdentity =>
+      '${taskId ?? ''}:${projectId ?? ''}:${canonicalJson(withoutRuntimePageContext(values))}';
 
   PageContext merge(PageContext other) => PageContext(
     taskId: other.taskId ?? taskId,
@@ -116,15 +120,17 @@ class PageSlotDefinition {
     this.kind = PageSlotKind.entries,
     this.isPublic = false,
     this.editable = true,
+    this.inline = false,
     this.capacity,
     this.requiredContext = const [],
-  });
+  }) : assert(!inline || kind == PageSlotKind.sections);
 
   final String id;
   final String label;
   final PageSlotKind kind;
   final bool isPublic;
   final bool editable;
+  final bool inline;
   final int? capacity;
   final List<String> requiredContext;
 }
@@ -147,6 +153,7 @@ class UiPageRegistration extends UiRegistration {
     this.container = false,
     this.quickAddDefaults = const {},
     this.headerMode = 'standard',
+    this.initializesRuntimeContext = false,
   }) : super(UiSlot.workspacePage);
 
   final String id;
@@ -160,6 +167,9 @@ class UiPageRegistration extends UiRegistration {
   final bool container;
   final Map<String, Object?> quickAddDefaults;
   final String headerMode;
+
+  /// The container renders its initializer before mounting date contributions.
+  final bool initializesRuntimeContext;
 }
 
 class UiEntryRegistration extends UiRegistration {
@@ -210,4 +220,26 @@ class UiEntryActivationScope extends InheritedWidget {
   @override
   bool updateShouldNotify(UiEntryActivationScope oldWidget) =>
       open != oldWidget.open;
+}
+
+/// Contributions in an inline section use their natural height and share the
+/// enclosing page's scrollable instead of creating a separate page viewport.
+class UiPageContentScope extends InheritedWidget {
+  const UiPageContentScope({
+    super.key,
+    required this.inline,
+    required super.child,
+  });
+
+  final bool inline;
+
+  static bool inlineOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<UiPageContentScope>()
+          ?.inline ??
+      false;
+
+  @override
+  bool updateShouldNotify(UiPageContentScope oldWidget) =>
+      inline != oldWidget.inline;
 }

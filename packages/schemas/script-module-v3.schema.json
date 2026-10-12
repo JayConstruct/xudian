@@ -251,9 +251,10 @@
           "headerMode": {
             "enum": [
               "standard",
-              "contributed"
+              "contributed",
+              "date"
             ],
-            "description": "contributed publishes a header through the active workspace lease; host settings remain protected."
+            "description": "contributed publishes a script header; date renders the root composition selectedDate through an active workspace lease; host settings remain protected."
           }
         }
       }

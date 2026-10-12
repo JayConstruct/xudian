@@ -35,12 +35,12 @@ export function schoolPicker(state) {
   return {type:'column',children:[
     ...(state.error?[{type:'text',text:state.error}]:[]),
     {type:'input',key:'schoolSearch',text:'搜索学校名称或缩写',inputMode:'search',clearable:true,value:state.schoolSearch||'',onChangeEvent:{type:'searchSchool'}},
-    {type:'text',text:`找到 ${result.total} 所学校 · 第 ${result.page+1}/${result.pages} 页`,style:'muted'},
+    {type:'sectionHeader',title:'搜索结果',count:result.total,subtitle:`第 ${result.page+1}/${result.pages} 页`},
     ...(result.items.length?result.items.map(s=>({
-      type:'listTile',title:s.school,icon:'school',
+      type:'listTile',title:s.school,
       subtitle:s.adapters.length>1?`${s.adapters.length} 个导入入口`:categories[s.adapters[0].category],
       event:{type:'selectSchool',id:s.adapters[0].id},
-    })):[{type:'card',children:[
+    })):[{type:'column',children:[
       {type:'text',text:'没有找到学校',style:'heading'},
       {type:'text',text:'可以换用学校全名或缩写搜索；也可以尝试正方、青果、URP、超星等通用脚本。'},
       {type:'button',text:'尝试通用系统导入',event:{type:'chooseGeneral'}},
@@ -52,13 +52,13 @@ export function schoolPicker(state) {
         {type:'button',text:'下一页',disabled:result.page+1>=result.pages,event:{type:'schoolPage',page:result.page+1}},
       ],
     }]:[]),
-    ...(result.items.length?[{type:'listTile',title:'找不到学校？',subtitle:'尝试通用教务系统脚本',icon:'importExport',event:{type:'chooseGeneral'}}]:[]),
+    ...(result.items.length?[{type:'listTile',title:'找不到学校？',subtitle:'尝试通用教务系统脚本',event:{type:'chooseGeneral'}}]:[]),
   ]};
 }
 export function generalPicker() {
   return {type:'column',children:[
-    {type:'text',text:'根据学校使用的教务系统选择脚本。具体说明和网址在下一页填写。'},
-    ...matches('','general').map(a=>({type:'listTile',title:a.name.replace('html通用获取','').replace('通用获取',''),icon:'importExport',event:{type:'selectSchool',id:a.id}})),
+    {type:'sectionHeader',title:'教务系统',subtitle:'根据学校使用的教务系统选择脚本。具体说明和网址在下一页填写。'},
+    ...matches('','general').map(a=>({type:'listTile',title:a.name.replace('html通用获取','').replace('通用获取',''),event:{type:'selectSchool',id:a.id}})),
     {type:'text',text:'通用脚本适用于对应系统的部分版本；如果不匹配，可按学校导入或粘贴学校脚本。',style:'muted'},
     {type:'row',children:[
       {type:'button',text:'按学校导入',event:{type:'chooseSchool'}},

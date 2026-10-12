@@ -1250,6 +1250,30 @@ void main() {
     );
   });
 
+  test('More page migrates defaults and survives mount updates', () {
+    final old = UiLayoutProfile.fromJson({'mainLimit': 2, 'mounts': {}});
+    expect(old.morePageEnabled, isTrue);
+    final disabled = old.withMorePageEnabled(false);
+    final moved = disabled.withMount(
+      'test',
+      const UiMount(placement: UiPlacement.main),
+    );
+    expect(moved.morePageEnabled, isFalse);
+    expect(moved.withoutMount('test').morePageEnabled, isFalse);
+    final restored = UiLayoutProfile.fromJson(moved.toJson());
+    expect(restored.morePageEnabled, isFalse);
+    expect(restored.mainLimit, 2);
+    expect(restored.mounts.containsKey('test'), isTrue);
+    expect(
+      () => UiLayoutProfile.fromJson({
+        'mainLimit': 2,
+        'mounts': {},
+        'morePageEnabled': 'false',
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('navigation cap excludes More and respects physical capacity', () {
     expect(
       navigationVisibleCount(

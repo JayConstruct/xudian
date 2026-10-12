@@ -1,3 +1,6 @@
+import '../core/ui/native_ui.dart';
+import '../core/ui/ui_icon.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -17,6 +20,7 @@ import '../core/module_host/host_control_services.dart';
 import '../core/module_host/collection_store.dart';
 import '../core/ui/ui_slot.dart';
 import '../core/ui/ui_registration.dart';
+import '../core/ui/code_preview_dialog.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,8 +41,13 @@ import '../features/settings/ui_layout.dart';
 import '../features/settings/ui_layout_page.dart';
 import '../features/settings/app_preferences.dart';
 import 'design_system.dart';
+import 'app_toast.dart';
 import 'mobile_bottom_dock.dart';
 import 'frosted_toolbar_surface.dart';
+import 'workspace_popup_menu.dart';
+import 'workspace_page_transition.dart';
+import 'more_workspace_page.dart';
+import 'workspace_date_title.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.registry});
@@ -49,6 +58,16 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
+  static const _moreEntry = UiEntryRegistration(
+    id: 'app.shell.more',
+    moduleId: 'app.core.system',
+    pageId: 'app.shell.more',
+    label: '更多',
+    icon: Icons.grid_view_rounded,
+  );
+  final workspaceContexts = <String, PageContext>{};
+  List<UiEntryRegistration> visibleWorkspaceEntries = const [];
+  List<UiEntryRegistration> extraEntries = const [];
   int index = 0;
   UiEntryRegistration? panelEntry;
   PageContext? panelContext;
@@ -137,6 +156,17 @@ class _AppShellState extends ConsumerState<AppShell> {
   ) async {
     if (!mounted) throw StateError('Host interaction unavailable');
     switch (method) {
+      case 'ui.showCode':
+        await showCodePreviewDialog(context, args);
+        return null;
+      case 'ui.notify':
+        AppToast.show(
+          context,
+          message: args['message'] as String,
+          kind: args['kind'] as String,
+          duration: Duration(milliseconds: args['duration'] as int),
+        );
+        return null;
       case 'ui.review':
         return reviewDialog(context, '确认实际数据变更', args);
       case 'packages.review':
@@ -243,6 +273,31 @@ class _AppShellState extends ConsumerState<AppShell> {
         final page = widget.registry.ui.page(pageId);
         if (page == null) throw StateError('Page unavailable');
         final values = object(args['context'] ?? {});
+        if (method == 'ui.navigate') {
+          final workspaceEntries = visibleWorkspaceEntries.where(
+            (entry) =>
+                entry.pageId == pageId &&
+                entry.opening == UiOpening.workspace &&
+                !entry.content,
+          );
+          if (workspaceEntries.isNotEmpty) {
+            final entry = workspaceEntries.first;
+            final pageContext = _profile
+                .mountFor(entry)
+                .context
+                .merge(PageContext(values: values));
+            if (mountProblem(
+                  widget.registry.ui,
+                  entry,
+                  _profile.mountFor(entry),
+                  context: pageContext,
+                ) ==
+                null) {
+              _openEntry(entry, pageContext: pageContext);
+              return true;
+            }
+          }
+        }
         final child = UiPackScope(
           moduleId: page.moduleId,
           child: UiPageHost(
@@ -274,10 +329,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                               automaticallyImplyLeading: false,
                               title: Text(page.title),
                               actions: [
-                                IconButton(
-                                  tooltip: '关闭面板',
-                                  onPressed: () => Navigator.pop(panelContext),
-                                  icon: const Icon(Icons.close),
+                                NativeUi(
+                                  child: IconButton(
+                                    tooltip: '关闭面板',
+                                    onPressed: () =>
+                                        Navigator.pop(panelContext),
+                                    icon: const UiIcon(Icons.close),
+                                  ),
                                 ),
                               ],
                             ),
@@ -330,36 +388,42 @@ class _AppShellState extends ConsumerState<AppShell> {
   void _showRestoreFailures() {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('模块恢复详情'),
-        content: SingleChildScrollView(
-          child: Text(
-            restoreFailures.entries
-                .map((failure) => '${failure.key}\n${failure.value}')
-                .join('\n\n'),
+      builder: (dialogContext) => NativeUi(
+        child: AlertDialog(
+          title: const Text('模块恢复详情'),
+          content: SingleChildScrollView(
+            child: Text(
+              restoreFailures.entries
+                  .map((failure) => '${failure.key}\n${failure.value}')
+                  .join('\n\n'),
+            ),
           ),
+          actions: [
+            NativeUi(
+              child: TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('关闭'),
+              ),
+            ),
+            NativeUi(
+              child: TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('模块管理')),
+                        body: const HostManagerPage(),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('管理模块'),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('关闭'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              Navigator.push<void>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    appBar: AppBar(title: const Text('模块管理')),
-                    body: const HostManagerPage(),
-                  ),
-                ),
-              );
-            },
-            child: const Text('管理模块'),
-          ),
-        ],
       ),
     );
   }
@@ -404,6 +468,14 @@ class _AppShellState extends ConsumerState<AppShell> {
       );
 
   void _openEntry(UiEntryRegistration entry, {PageContext? pageContext}) {
+    if (entry.id == _moreEntry.id) {
+      if (_profile.morePageEnabled) {
+        _navigationFeedback();
+        FocusManager.instance.primaryFocus?.unfocus();
+        setState(() => selectedDestinationId = entry.id);
+      }
+      return;
+    }
     final mount = _profile.mountFor(entry);
     final problem = mountProblem(
       widget.registry.ui,
@@ -414,34 +486,43 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (problem != null) {
       showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('入口失效'),
-          content: Text(problem),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('暂时保留'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                Navigator.push<void>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => UiLayoutPage(registry: widget.registry),
-                  ),
-                );
-              },
-              child: const Text('处理挂载'),
-            ),
-          ],
+        builder: (dialogContext) => NativeUi(
+          child: AlertDialog(
+            title: const Text('入口失效'),
+            content: Text(problem),
+            actions: [
+              NativeUi(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('暂时保留'),
+                ),
+              ),
+              NativeUi(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UiLayoutPage(registry: widget.registry),
+                      ),
+                    );
+                  },
+                  child: const Text('处理挂载'),
+                ),
+              ),
+            ],
+          ),
         ),
       );
       return;
     }
     _navigationFeedback();
     if (entry.opening == UiOpening.workspace) {
-      setState(() => selectedDestinationId = entry.id);
+      setState(() {
+        if (pageContext != null) workspaceContexts[entry.id] = pageContext;
+        selectedDestinationId = entry.id;
+      });
     } else if (entry.opening == UiOpening.adaptivePanel &&
         MediaQuery.sizeOf(context).width >= 1100) {
       setState(() {
@@ -487,7 +568,10 @@ class _AppShellState extends ConsumerState<AppShell> {
             key: ValueKey(entry.id),
             registry: widget.registry,
             pageId: entry.pageId,
-            pageContext: pageContext ?? _profile.mountFor(entry).context,
+            pageContext:
+                pageContext ??
+                workspaceContexts[entry.id] ??
+                _profile.mountFor(entry).context,
             mountPath: [entry.id],
           ),
         ),
@@ -507,46 +591,53 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _chromeWorkspace({required Widget child, required bool collapsed}) =>
-      NotificationListener<ScrollNotification>(
-        onNotification: workspaceChrome.handleScroll,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            child,
-            if (collapsed)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (MediaQuery.sizeOf(context).width < 820)
-                        _chromeRevealButton()
-                      else
+      Listener(
+        onPointerSignal: workspaceChrome.handlePointerSignal,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: workspaceChrome.handleScroll,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              child,
+              if (collapsed)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (MediaQuery.sizeOf(context).width < 820)
+                          _chromeRevealButton()
+                        else
+                          UiPackScope(
+                            defaultOnly: true,
+                            child: NativeUi(
+                              child: IconButton(
+                                tooltip: '展开工具栏',
+                                onPressed: workspaceChrome.reveal,
+                                icon: const UiIcon(Icons.unfold_more),
+                              ),
+                            ),
+                          ),
                         UiPackScope(
                           defaultOnly: true,
-                          child: IconButton(
-                            tooltip: '展开工具栏',
-                            onPressed: workspaceChrome.reveal,
-                            icon: const Icon(Icons.unfold_more),
+                          child: NativeUi(
+                            child: IconButton(
+                              tooltip: '界面风格与恢复',
+                              onPressed: _openUiRecovery,
+                              icon: const UiIcon(Icons.palette_outlined),
+                            ),
                           ),
                         ),
-                      UiPackScope(
-                        defaultOnly: true,
-                        child: IconButton(
-                          tooltip: '界面风格与恢复',
-                          onPressed: _openUiRecovery,
-                          icon: const Icon(Icons.palette_outlined),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       );
 
@@ -554,28 +645,37 @@ class _AppShellState extends ConsumerState<AppShell> {
     message: '展开顶栏和导航',
     child: FrostedToolbarSurface(
       radius: 28,
-      child: TextButton.icon(
-        key: const ValueKey('workspace-chrome-reveal'),
-        onPressed: workspaceChrome.reveal,
-        style: TextButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: NativeUi(
+        child: TextButton.icon(
+          key: const ValueKey('workspace-chrome-reveal'),
+          onPressed: workspaceChrome.reveal,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+          icon: const UiIcon(Icons.unfold_more, size: 20),
+          label: const Text('展开工具栏'),
         ),
-        icon: const Icon(Icons.unfold_more, size: 20),
-        label: const Text('展开工具栏'),
       ),
     ),
   );
 
   Widget _workspaceHeader(
     String fallbackTitle,
-    List<UiEntryRegistration> entries,
-  ) {
+    List<UiEntryRegistration> entries, {
+    VoidCallback? onAssistant,
+  }) {
     final textTheme = Theme.of(context).textTheme;
+    final dateTitle = workspaceHeader.lease?.mode == 'date';
+    final titleStyle = textTheme.headlineSmall!.copyWith(
+      fontSize: dateTitle ? 24 : 28,
+      height: 1.15,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -.6,
+    );
     var controlHeight = kMinInteractiveDimension;
     for (final (style, padding) in [
-      (textTheme.headlineSmall!, 0.0),
-      (textTheme.titleMedium!, 16.0),
+      (titleStyle, 16.0),
       (textTheme.labelLarge!, 16.0),
     ]) {
       final painter = TextPainter(
@@ -601,98 +701,116 @@ class _AppShellState extends ConsumerState<AppShell> {
         .map(object)
         .toList();
     final leadingWidget = contribution != null && leading['label'] is String
-        ? TextButton(
-            onPressed: leading['event'] == null
-                ? null
-                : () => contribution.dispatch(leading['event']),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    leading['label'] as String,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+        ? NativeUi(
+            child: TextButton(
+              onPressed: leading['event'] == null
+                  ? null
+                  : () => contribution.dispatch(leading['event']),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      leading['label'] as String,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-                const Icon(Icons.expand_more, size: 18),
-              ],
+                  const UiIcon(Icons.expand_more, size: 18),
+                ],
+              ),
             ),
           )
         : const SizedBox.shrink();
     final titleContent = spec?['titleEvent'] == null
         ? Text(
             title,
-            maxLines: 1,
+            maxLines: dateTitle ? 3 : 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style: titleStyle,
           )
-        : TextButton(
-            onPressed: () => contribution!.dispatch(spec!['titleEvent']),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
+        : NativeUi(
+            child: TextButton(
+              onPressed: () => contribution!.dispatch(spec!['titleEvent']),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
+                    ),
                   ),
-                ),
-                const Icon(Icons.expand_more, size: 18),
-              ],
+                  const UiIcon(Icons.expand_more, size: 18),
+                ],
+              ),
             ),
           );
-    // Every workspace reserves the same title height, including first renders.
-    // Large text expands all headers together rather than only button titles.
-    final titleWidget = SizedBox(
-      height: controlHeight,
+    // Standard and contributed titles keep a uniform single-line height.
+    // Date titles can wrap so large text retains the full civil date.
+    Widget titleAtHeight(double height) => SizedBox(
+      height: height,
       child: Align(
-        alignment: moduleOwnsHeader ? Alignment.center : Alignment.centerLeft,
+        alignment: leading['label'] is String
+            ? Alignment.center
+            : Alignment.centerLeft,
         child: titleContent,
       ),
     );
+    final titleWidget = dateTitle
+        ? WorkspaceDateTitle(
+            title: title,
+            date: spec?['selectedDate'] as String?,
+            style: titleStyle,
+            onEvent: spec?['dateNavigation'] == true && contribution != null
+                ? (type) => unawaited(contribution.dispatch({'type': type}))
+                : null,
+          )
+        : titleAtHeight(controlHeight);
     Widget menuLabel(String label, IconData icon) => Row(
       children: [
-        Icon(icon, size: 20),
-        const SizedBox(width: 12),
+        UiIcon(icon, size: 18),
+        const SizedBox(width: 10),
         Expanded(child: Text(label)),
       ],
     );
+    final menuPreferences = ref.watch(appPreferencesProvider).asData?.value;
     final menu = UiAnnotation(
       id: 'app.shell.menu',
       name: '页面菜单',
       purpose: '打开页面操作、模块入口及设置',
-      child: PopupMenuButton<int>(
+      child: WorkspacePopupMenu(
         key: const ValueKey('workspace-menu'),
-        tooltip: '页面菜单',
-        icon: const Icon(Icons.more_vert),
-        position: PopupMenuPosition.under,
-        shape: AppDesign.smoothShape(radius: 20),
-        constraints: const BoxConstraints(minWidth: 224, maxWidth: 320),
+        haptics: menuPreferences?.haptics ?? true,
+        reduceMotion: menuPreferences?.reduceMotion ?? false,
         onSelected: (index) {
           if (index == -1) {
             _openSettings();
+          } else if (index == -2) {
+            _showAllEntries(extraEntries);
           } else if (index < actions.length) {
             contribution?.dispatch(actions[index]['event']);
           } else {
             _openEntry(entries[index - actions.length]);
           }
         },
-        itemBuilder: (_) => [
+        items: [
           for (var i = 0; i < actions.length; i++)
             PopupMenuItem(
               value: i,
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Text('${actions[i]['label'] ?? ''}'),
             ),
           if (actions.isNotEmpty && entries.isNotEmpty)
-            const PopupMenuDivider(),
+            const PopupMenuDivider(height: 8),
           for (var i = 0; i < entries.length; i++)
             PopupMenuItem(
               value: actions.length + i,
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               child: UiAnnotation(
                 id: entries[i].id,
                 name: entries[i].label,
@@ -703,9 +821,17 @@ class _AppShellState extends ConsumerState<AppShell> {
               ),
             ),
           if (actions.isNotEmpty || entries.isNotEmpty)
-            const PopupMenuDivider(),
+            const PopupMenuDivider(height: 8),
+          if (!_profile.morePageEnabled)
+            PopupMenuItem(
+              value: -2,
+              height: 44,
+              child: menuLabel('全部入口', Icons.grid_view_outlined),
+            ),
           PopupMenuItem(
             value: -1,
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: UiAnnotation(
               id: 'app.shell.settings',
               name: '设置',
@@ -717,7 +843,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
     );
     final fallback = Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+      padding: const EdgeInsetsDirectional.only(end: 12),
       child: Row(
         children: [
           if (contribution != null && leading['label'] is String)
@@ -727,26 +853,38 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
     );
     // The unified menu is owned by the host and cannot be removed by a recipe.
-    return Row(
-      children: [
-        if (spec?['backEvent'] != null)
-          BackButton(
-            onPressed: () => contribution!.dispatch(spec!['backEvent']),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Row(
+        children: [
+          if (spec?['backEvent'] != null)
+            BackButton(
+              onPressed: () => contribution!.dispatch(spec!['backEvent']),
+            ),
+          Expanded(
+            child: UiComponent(
+              ref: 'ui.chrome.header@1',
+              props: {'title': title},
+              slots: {
+                'title': titleWidget,
+                'leading': leadingWidget,
+                'actions': const SizedBox.shrink(),
+              },
+              fallback: fallback,
+            ),
           ),
-        Expanded(
-          child: UiComponent(
-            ref: 'ui.chrome.header@1',
-            props: {'title': title},
-            slots: {
-              'title': titleWidget,
-              'leading': leadingWidget,
-              'actions': const SizedBox.shrink(),
-            },
-            fallback: fallback,
-          ),
-        ),
-        UiPackScope(defaultOnly: true, child: menu),
-      ],
+          if (onAssistant != null)
+            NativeUi(
+              child: IconButton(
+                key: const ValueKey('desktop-workspace-assistant'),
+                tooltip: 'AI 助手',
+                onPressed: onAssistant,
+                icon: const UiIcon(Icons.auto_awesome_outlined),
+              ),
+            ),
+          UiPackScope(defaultOnly: true, child: menu),
+        ],
+      ),
     );
   }
 
@@ -778,47 +916,104 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (preferences?.haptics ?? true) HapticFeedback.selectionClick();
   }
 
-  void _showMore(List<UiEntryRegistration> entries) {
-    showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('更多入口', style: Theme.of(sheetContext).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    for (final entry in entries)
-                      ListTile(
-                        shape: AppDesign.smoothShape(),
-                        leading: Icon(entry.icon),
-                        title: Text(entry.label),
-                        selected: entry.id == selectedDestinationId,
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _openEntry(entry);
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+  void _showAllEntries(List<UiEntryRegistration> entries) {
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (routeContext) => DetailPage(
+          title: '全部入口',
+          child: MoreWorkspacePage(
+            entries: entries,
+            onOpen: (entry) {
+              Navigator.pop(routeContext);
+              _openEntry(entry);
+            },
+            onSettings: () {
+              Navigator.pop(routeContext);
+              _openSettings();
+            },
+          ),
         ),
       ),
     );
   }
 
+  Set<String> _assistantModules(UiEntryRegistration root) {
+    final modules = <String>{root.moduleId};
+    final rootContext =
+        workspaceContexts[root.id] ?? _profile.mountFor(root).context;
+    final pages = <String, PageContext>{
+      root.pageId: rootContext.merge(
+        PageContext(
+          values: {
+            if (workspaceHeader.content?.spec['selectedDate'] != null)
+              'selectedDate': workspaceHeader.content!.spec['selectedDate'],
+          },
+        ),
+      ),
+    };
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final entry in widget.registry.ui.entries) {
+        final mount = _profile.mountFor(entry);
+        final parentContext = pages[mount.pageId];
+        if (!entry.content ||
+            mount.placement != UiPlacement.page ||
+            parentContext == null) {
+          continue;
+        }
+        final parent = widget.registry.ui.page(mount.pageId!);
+        final slots = parent?.slots.where((slot) => slot.id == mount.slotId);
+        if (slots == null || slots.isEmpty) continue;
+        final slot = slots.first;
+        if (!slot.inline ||
+            slot.kind != PageSlotKind.sections ||
+            mountDiagnostic(
+                  widget.registry.ui,
+                  entry,
+                  mount,
+                  context: parentContext,
+                ) !=
+                null) {
+          continue;
+        }
+        if (slot.capacity != null) {
+          final siblings = orderedEntries(
+            widget.registry.ui,
+            _profile.mountFor,
+            (candidate) {
+              final target = _profile.mountFor(candidate);
+              return target.placement == UiPlacement.page &&
+                  target.pageId == mount.pageId &&
+                  target.slotId == mount.slotId;
+            },
+          );
+          if (siblings.indexOf(entry) >= slot.capacity!) continue;
+        }
+        if (!pages.containsKey(entry.pageId)) {
+          pages[entry.pageId] = parentContext.merge(mount.context);
+          changed = true;
+        }
+        modules.add(entry.moduleId);
+      }
+      for (final moduleId in modules.toList()) {
+        for (final dependency
+            in host?.instances[moduleId]?.package.dependencies ??
+                const <String>[]) {
+          changed = modules.add(dependency) || changed;
+        }
+      }
+    }
+    return modules;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (restoring) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: NativeUi(child: CircularProgressIndicator())),
+      );
     }
     if (restoreError != null) {
       return Scaffold(
@@ -827,19 +1022,28 @@ class _AppShellState extends ConsumerState<AppShell> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(restoreError!),
-              TextButton(
-                onPressed: () {
-                  setState(() => restoring = true);
-                  _restoreInstalledModules();
-                },
-                child: const Text('重试'),
+              NativeUi(
+                child: TextButton(
+                  onPressed: () {
+                    setState(() => restoring = true);
+                    _restoreInstalledModules();
+                  },
+                  child: const Text('重试'),
+                ),
               ),
-              TextButton(onPressed: _openSettings, child: const Text('打开设置')),
+              NativeUi(
+                child: TextButton(
+                  onPressed: _openSettings,
+                  child: const Text('打开设置'),
+                ),
+              ),
               UiPackScope(
                 defaultOnly: true,
-                child: TextButton(
-                  onPressed: _openUiRecovery,
-                  child: const Text('界面风格与恢复'),
+                child: NativeUi(
+                  child: TextButton(
+                    onPressed: _openUiRecovery,
+                    child: const Text('界面风格与恢复'),
+                  ),
                 ),
               ),
             ],
@@ -851,17 +1055,11 @@ class _AppShellState extends ConsumerState<AppShell> {
     final desktop = width >= 820;
     final layout = ref.watch(uiLayoutProvider).asData?.value;
     final profile = (layout ?? UiLayout()).profile(desktop);
-    final entries = widget.registry.ui.entries;
-    final workspace =
-        entries
-            .where(
-              (entry) => entry.opening == UiOpening.workspace && !entry.content,
-            )
-            .toList()
-          ..sort(
-            (a, b) =>
-                profile.mountFor(a).order.compareTo(profile.mountFor(b).order),
-          );
+    final workspace = orderedEntries(
+      widget.registry.ui,
+      profile.mountFor,
+      (entry) => entry.opening == UiOpening.workspace && !entry.content,
+    );
     if (workspace.isEmpty) {
       return Scaffold(
         body: Center(
@@ -869,15 +1067,19 @@ class _AppShellState extends ConsumerState<AppShell> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text('没有可用工作区'),
-              TextButton(
-                onPressed: _openSettings,
-                child: const Text('打开设置并恢复模块'),
+              NativeUi(
+                child: TextButton(
+                  onPressed: _openSettings,
+                  child: const Text('打开设置并恢复模块'),
+                ),
               ),
               UiPackScope(
                 defaultOnly: true,
-                child: TextButton(
-                  onPressed: _openUiRecovery,
-                  child: const Text('界面风格与恢复'),
+                child: NativeUi(
+                  child: TextButton(
+                    onPressed: _openUiRecovery,
+                    child: const Text('界面风格与恢复'),
+                  ),
                 ),
               ),
             ],
@@ -888,17 +1090,39 @@ class _AppShellState extends ConsumerState<AppShell> {
     final selected = workspace.where(
       (entry) => entry.id == selectedDestinationId,
     );
-    final activeEntry = selected.isEmpty ? workspace.first : selected.first;
+    final showingMore =
+        profile.morePageEnabled && selectedDestinationId == _moreEntry.id;
+    final activeEntry = showingMore
+        ? _moreEntry
+        : selected.isEmpty
+        ? workspace.first
+        : selected.first;
+    final activeOrder = showingMore ? -1 : workspace.indexOf(activeEntry);
     selectedDestinationId = activeEntry.id;
-    final current = _destination(activeEntry);
+    final current = showingMore
+        ? AppDestination(
+            id: _moreEntry.id,
+            label: '更多',
+            icon: _moreEntry.icon,
+            selectedIcon: _moreEntry.icon,
+            builder: (_) => MoreWorkspacePage(
+              entries: extraEntries,
+              onOpen: _openEntry,
+              onSettings: _openSettings,
+            ),
+          )
+        : _destination(activeEntry);
     final activePage = widget.registry.ui.page(activeEntry.pageId);
     final instance = host?.instances[activeEntry.moduleId];
     final lease = workspaceHeader.activate(
       identity:
-          '${activeEntry.id}:${activeEntry.pageId}:${profile.mountFor(activeEntry).context.identity}:${instance?.actor.generation}',
+          '${activeEntry.id}:${activeEntry.pageId}:${(workspaceContexts[activeEntry.id] ?? profile.mountFor(activeEntry).context).identity}:${instance?.actor.generation}',
       moduleId: activeEntry.moduleId,
       pageId: activeEntry.pageId,
-      enabled: activePage?.headerMode == 'contributed' && instance != null,
+      enabled:
+          {'contributed', 'date'}.contains(activePage?.headerMode) &&
+          (instance != null || activePage?.headerMode == 'date'),
+      mode: activePage?.headerMode ?? 'standard',
       isActive: () =>
           mounted &&
           selectedDestinationId == activeEntry.id &&
@@ -912,9 +1136,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           MediaQuery.viewInsetsOf(context).bottom == 0,
     );
     final chromeCollapsed = workspaceChrome.collapsed;
-    final chromeDuration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 180);
+    final chromeProgress = workspaceChrome.progress;
     Widget workspaceContent() => WorkspaceHeaderScope(
       controller: workspaceHeader,
       lease: lease,
@@ -927,22 +1149,61 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
     final main = at(UiPlacement.main);
     final header = at(UiPlacement.header);
+    final contextModules = showingMore
+        ? <String>{}
+        : _assistantModules(activeEntry);
+    final assistant = showingMore
+        ? null
+        : widget.registry.ui
+              .forSlot(UiSlot.workspaceAssistant)
+              .whereType<WorkspaceAssistantRegistration>()
+              .where((registration) => registration.supports(contextModules))
+              .firstOrNull;
+    void openAssistant() {
+      if (assistant == null) return;
+      final pageContext =
+          workspaceContexts[activeEntry.id] ??
+          profile.mountFor(activeEntry).context;
+      final values = <String, Object?>{
+        ...pageContext.values,
+        if (workspaceHeader.content?.spec['selectedDate'] != null)
+          'selectedDate': workspaceHeader.content!.spec['selectedDate'],
+      };
+      unawaited(
+        assistant.onOpen(
+          context,
+          pageContext.merge(PageContext(values: values)),
+        ),
+      );
+    }
+
     final mainCount = navigationVisibleCount(
       total: main.length,
       limit: profile.mainLimit,
-      width: width - 24,
+      width: width - 24 - (profile.morePageEnabled && !desktop ? 72 : 0),
       textScale: MediaQuery.textScalerOf(context).scale(12) / 12,
       desktop: desktop,
     );
     final more = [...at(UiPlacement.more), ...main.skip(mainCount)];
     final visibleMain = main.take(mainCount).toList();
-    final destinations = visibleMain.map(_destination).toList();
-    index = visibleMain.indexWhere((entry) => entry.id == activeEntry.id);
-    final moreSelected = more.any((entry) => entry.id == activeEntry.id);
+    visibleWorkspaceEntries = visibleMain;
+    extraEntries = more;
+    final navigationEntries = [
+      if (profile.morePageEnabled) _moreEntry,
+      ...visibleMain,
+    ];
+    final destinations = navigationEntries.map(_destination).toList();
+    index = navigationEntries.indexWhere((entry) => entry.id == activeEntry.id);
+    if (index < 0 &&
+        profile.morePageEnabled &&
+        more.any((entry) => entry.id == activeEntry.id)) {
+      index = 0;
+    }
     final showPanel = desktop && panelEntry != null && width >= 1100;
     final showNavigation = MediaQuery.viewInsetsOf(context).bottom == 0;
     final showDock =
-        (showNavigation && (visibleMain.isNotEmpty || more.isNotEmpty)) ||
+        (showNavigation &&
+            (navigationEntries.isNotEmpty || assistant != null)) ||
         current.quickAdd;
     final dockInset = !desktop && showDock
         ? (_measuredDockHeight ??
@@ -953,166 +1214,162 @@ class _AppShellState extends ConsumerState<AppShell> {
                   )) +
               24
         : 0.0;
-    final contentInset = chromeCollapsed && !desktop && showDock
+    final collapsedInset = !desktop && showDock
         ? 60.0 + (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, 100)
         : dockInset;
+    final contentInset =
+        dockInset + (collapsedInset - dockInset) * chromeProgress;
     return Scaffold(
       backgroundColor: AppDesign.canvas(context),
       body: SafeArea(
         child: Row(
           children: [
             if (desktop)
-              _sidebar(destinations, visibleMain, more, moreSelected),
+              _sidebar(destinations, navigationEntries, const [], false),
             Expanded(
-              child: Column(
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  KeyedSubtree(
-                    key: const ValueKey('workspace-header-region'),
-                    child: chromeDuration == Duration.zero
-                        ? (chromeCollapsed
-                              ? const SizedBox(
-                                  width: double.infinity,
-                                  height: 0,
-                                )
-                              : _workspaceHeader(current.label, header))
-                        : AnimatedSize(
-                            duration: chromeDuration,
-                            alignment: Alignment.topCenter,
-                            child: chromeCollapsed
-                                ? const SizedBox(
-                                    width: double.infinity,
-                                    height: 0,
-                                  )
-                                : _workspaceHeader(current.label, header),
+                  WorkspacePageTransition(
+                    key: const ValueKey('workspace-page-transition'),
+                    destinationId: activeEntry.id,
+                    order: activeOrder,
+                    backgroundColor: AppDesign.canvas(context),
+                    child: Column(
+                      children: [
+                        WorkspaceChromeHeader(
+                          key: const ValueKey('workspace-header-region'),
+                          controller: workspaceChrome,
+                          child: _workspaceHeader(
+                            current.label,
+                            header,
+                            onAssistant: desktop && assistant != null
+                                ? openAssistant
+                                : null,
                           ),
-                  ),
-                  if (layout?.warning != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Text(layout!.warning!),
-                    ),
-                  if (ref.watch(uiLayoutProvider).hasError)
-                    TextButton(
-                      onPressed: () => ref.invalidate(uiLayoutProvider),
-                      child: const Text('布局读取失败，暂用默认布局，点击重试'),
-                    ),
-                  if (restoreFailures.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${restoreFailures.length} 个扩展模块恢复失败，已停用，数据保留',
-                              style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        if (layout?.warning != null)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Text(layout!.warning!),
+                          ),
+                        if (ref.watch(uiLayoutProvider).hasError)
+                          NativeUi(
+                            child: TextButton(
+                              onPressed: () => ref.invalidate(uiLayoutProvider),
+                              child: const Text('布局读取失败，暂用默认布局，点击重试'),
                             ),
                           ),
-                          TextButton(
-                            onPressed: _showRestoreFailures,
-                            child: const Text('查看详情'),
-                          ),
-                          IconButton(
-                            tooltip: '关闭恢复提示',
-                            onPressed: () =>
-                                setState(() => restoreFailures = const {}),
-                            icon: const Icon(Icons.close, size: 18),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Expanded(
-                    child: _chromeWorkspace(
-                      collapsed: chromeCollapsed,
-                      child: desktop
-                          ? Align(
-                              alignment: Alignment.topCenter,
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 1040,
-                                ),
-                                child: workspaceContent(),
-                              ),
-                            )
-                          : Stack(
-                              fit: StackFit.expand,
+                        if (restoreFailures.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Row(
                               children: [
-                                RepaintBoundary(
-                                  child: TweenAnimationBuilder<double>(
-                                    tween: Tween(end: contentInset),
-                                    duration: chromeDuration,
-                                    child: workspaceContent(),
-                                    builder: (_, inset, child) =>
-                                        WorkspaceContentInsets(
-                                          bottom: inset,
-                                          child: child!,
-                                        ),
+                                Expanded(
+                                  child: Text(
+                                    '${restoreFailures.length} 个扩展模块恢复失败，已停用，数据保留',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
                                   ),
                                 ),
-                                if (showDock)
-                                  Positioned(
-                                    left: 12,
-                                    right: 12,
-                                    bottom: 12,
-                                    child: IgnorePointer(
-                                      ignoring: chromeCollapsed,
-                                      child: ExcludeSemantics(
-                                        excluding: chromeCollapsed,
-                                        child: AnimatedSlide(
-                                          offset: chromeCollapsed
-                                              ? const Offset(0, 1.5)
-                                              : Offset.zero,
-                                          duration: chromeDuration,
-                                          child: AnimatedOpacity(
-                                            opacity: chromeCollapsed ? 0 : 1,
-                                            duration: chromeDuration,
-                                            child: MobileBottomDock(
-                                              onSizeChanged: _dockSizeChanged,
-                                              destinations: destinations,
-                                              selectedIndex: index,
-                                              visibleCount: destinations.length,
-                                              hasMore: more.isNotEmpty,
-                                              moreSelected: moreSelected,
-                                              annotate: true,
-                                              entryModuleIds: {
-                                                for (final entry in visibleMain)
-                                                  entry.id: entry.moduleId,
-                                              },
-                                              showNavigation: showNavigation,
-                                              onSelected: (value) {
-                                                if (value >=
-                                                    visibleMain.length) {
-                                                  _navigationFeedback();
-                                                  _showMore(more);
-                                                } else {
-                                                  _openEntry(
-                                                    visibleMain[value],
-                                                  );
-                                                }
-                                              },
-                                              input: current.quickAdd
-                                                  ? _quickInputContent(current)
-                                                  : null,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                                NativeUi(
+                                  child: TextButton(
+                                    onPressed: _showRestoreFailures,
+                                    child: const Text('查看详情'),
                                   ),
+                                ),
+                                NativeUi(
+                                  child: IconButton(
+                                    tooltip: '关闭恢复提示',
+                                    onPressed: () => setState(
+                                      () => restoreFailures = const {},
+                                    ),
+                                    icon: const UiIcon(Icons.close, size: 18),
+                                  ),
+                                ),
                               ],
                             ),
+                          ),
+                        Expanded(
+                          child: _chromeWorkspace(
+                            collapsed: chromeCollapsed,
+                            child: desktop
+                                ? Align(
+                                    alignment: Alignment.topCenter,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 1040,
+                                      ),
+                                      child: workspaceContent(),
+                                    ),
+                                  )
+                                : RepaintBoundary(
+                                    child: WorkspaceContentInsets(
+                                      bottom: contentInset,
+                                      child: workspaceContent(),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        if (desktop && current.quickAdd)
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              desktop ? 20 : 12,
+                              4,
+                              desktop ? 20 : 12,
+                              desktop ? 18 : 8,
+                            ),
+                            child: FloatingSurface(
+                              padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+                              child: _quickInputContent(current),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                  if (desktop && current.quickAdd)
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        desktop ? 20 : 12,
-                        4,
-                        desktop ? 20 : 12,
-                        desktop ? 18 : 8,
-                      ),
-                      child: FloatingSurface(
-                        padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
-                        child: _quickInputContent(current),
+                  if (!desktop && showDock)
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 12,
+                      child: IgnorePointer(
+                        ignoring: chromeCollapsed,
+                        child: ExcludeSemantics(
+                          excluding: chromeCollapsed,
+                          child: FractionalTranslation(
+                            translation: Offset(0, chromeProgress * 1.5),
+                            child: Opacity(
+                              opacity: 1 - chromeProgress,
+                              child: MobileBottomDock(
+                                onSizeChanged: _dockSizeChanged,
+                                destinations: destinations,
+                                selectedIndex: index,
+                                visibleCount: destinations.length,
+                                hasMore: false,
+                                moreSelected: false,
+                                onAssistant: assistant == null
+                                    ? null
+                                    : openAssistant,
+                                annotate: true,
+                                entryModuleIds: {
+                                  for (final entry in navigationEntries)
+                                    entry.id: entry.moduleId,
+                                },
+                                showNavigation: showNavigation,
+                                onSelected: (value) {
+                                  if (value >= 0 &&
+                                      value < navigationEntries.length) {
+                                    _openEntry(navigationEntries[value]);
+                                  }
+                                },
+                                input: current.quickAdd
+                                    ? _quickInputContent(current)
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -1146,7 +1403,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       padding: const EdgeInsets.fromLTRB(16, 8, 8, 28),
       child: Row(
         children: [
-          Icon(Icons.grid_view_outlined, color: theme.colorScheme.primary),
+          UiIcon(Icons.grid_view_outlined, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
           Text(
             '序点',
@@ -1162,11 +1419,13 @@ class _AppShellState extends ConsumerState<AppShell> {
       separatorBuilder: (_, _) => const SizedBox(height: 4),
       itemBuilder: (_, i) => i < destinations.length
           ? _sidebarDestination(destinations[i], i, entries[i])
-          : ListTile(
-              leading: const Icon(Icons.more_horiz),
-              title: const Text('更多'),
-              selected: moreSelected,
-              onTap: () => _showMore(more),
+          : NativeUi(
+              child: ListTile(
+                leading: const UiIcon(Icons.more_horiz),
+                title: const Text('更多'),
+                selected: moreSelected,
+                onTap: () => _showAllEntries(more),
+              ),
             ),
     );
     final settings = Padding(
@@ -1175,11 +1434,13 @@ class _AppShellState extends ConsumerState<AppShell> {
         id: 'app.shell.settings',
         name: '设置',
         purpose: '受保护的设置与恢复入口',
-        child: ListTile(
-          shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
-          leading: const Icon(Icons.settings_outlined, size: 21),
-          title: const Text('设置'),
-          onTap: _openSettings,
+        child: NativeUi(
+          child: ListTile(
+            shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
+            leading: const UiIcon(Icons.settings_outlined, size: 21),
+            title: const Text('设置'),
+            onTap: _openSettings,
+          ),
         ),
       ),
     );
@@ -1229,7 +1490,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             _openEntry(entries[value]);
           }
         },
-        'more': (_) => _showMore(more),
+        'more': (_) => _showAllEntries(more),
       },
       fallback: fallback,
     );
@@ -1262,7 +1523,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                Icon(
+                UiIcon(
                   destination.icon,
                   size: 21,
                   color: selected ? scheme.primary : AppDesign.muted(context),

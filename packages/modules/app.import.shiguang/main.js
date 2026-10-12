@@ -163,17 +163,18 @@ function messages(state) {
 }
 function home(state) {
   const chosen=selectedAdapter(state);
-  const entry=(title,subtitle,icon,type)=>({type:'listTile',title,subtitle,icon,event:{type}});
+  const entry=(title,subtitle,icon,type)=>({type:'listTile',title,subtitle,event:{type}});
   return {type:'column',children:[
     text('选择学校或教务系统，登录后采集课程，再预览确认。'),
-    ...(state.input?[{type:'card',children:[entry('继续本次导入',`${state.input.draft.courses.length} 门课程 · 查看转换结果与导入预览`,'calendar','continueImport')]}]:chosen||state.script?[{type:'card',children:[entry('继续上次选择',chosen?.school||'已粘贴的学校脚本','calendar','continueImport')]}]:[]),
-    {type:'card',children:[
+    ...(state.input?[{type:'column',children:[entry('继续本次导入',`${state.input.draft.courses.length} 门课程 · 查看转换结果与导入预览`,'calendar','continueImport')]}]:chosen||state.script?[{type:'column',children:[entry('继续上次选择',chosen?.school||'已粘贴的学校脚本','calendar','continueImport')]}]:[]),
+    {type:'column',children:[
+      {type:'sectionHeader',title:'教务导入'},
       entry('按学校导入','搜索学校名称或缩写','school','chooseSchool'),
       {type:'divider'},
       entry('通用系统导入','正方、青果、URP、超星','importExport','chooseGeneral'),
     ]},
-    {...text('其他导入方式'),style:'heading'},
-    {type:'card',children:[
+    {type:'sectionHeader',title:'其他导入方式'},
+    {type:'column',children:[
       entry('粘贴学校脚本','使用学校提供的完整适配脚本','list','customScript'),
       {type:'divider'},
       entry('导入拾光 JSON 文件','适用于桌面端和已有导出文件','importExport','json'),
@@ -189,13 +190,13 @@ function detail(state) {
   const variants=chosen?.category!=='GENERAL_TOOL'&&chosen?schoolAdapters(chosen):[];
   return {type:'column',children:[
     ...messages(state),
-    ...(!isFile&&variants.length>1?[{type:'card',children:[
-      {...text('选择导入入口'),style:'heading'},
-      ...variants.map(a=>({type:'listTile',title:a.name,subtitle:a.id===chosen.id?'当前入口':undefined,icon:'school',disabled:a.id===chosen.id,event:{type:'selectSchool',id:a.id}})),
+    ...(!isFile&&variants.length>1?[{type:'column',children:[
+      {type:'sectionHeader',title:'选择导入入口'},
+      ...variants.map(a=>({type:'listTile',title:a.name,subtitle:a.id===chosen.id?'当前入口':undefined,disabled:a.id===chosen.id,event:{type:'selectSchool',id:a.id}})),
     ]}]:[]),
     ...(!isFile?[
-    {type:'card',children:[
-      {...text('使用说明'),style:'heading'},
+    {type:'column',children:[
+      {type:'sectionHeader',title:'使用说明'},
       text(chosen?.description||'在教务网页登录，进入个人课表查询页面，选择学年学期后执行采集。'),
       ...(chosen&&compatibilityNote(chosen)?[text(compatibilityNote(chosen))]:[]),
       ...(chosen?.category==='GENERAL_TOOL'?[text('请填写本校教务网址。通用脚本不保证适用于该系统的所有版本。')]:[]),
@@ -206,10 +207,10 @@ function detail(state) {
     {...text('教务浏览器当前支持 Android。'),style:'muted'},
     ]:[]),
     ...(draft?[
-      {type:'card',children:[text(`${draft.timetable.name} · ${draft.courses.length} 门课程 · ${draft.meetings.length} 个安排`),text(`第一周 ${draft.timetable.firstMonday} · ${draft.timetable.totalWeeks} 周 · ${draft.timetable.periods.length} 节`),...draft.warnings.map(text),button('预览实际变更','preview'),...(state.plan?.result.blocked?[text(`${state.plan.result.conflicts.length} 项冲突`),button('处理导入冲突','conflicts')]:[]),button('取消本次导入','clear')]}
+      {type:'column',children:[{type:'sectionHeader',title:'导入预览'},text(`${draft.timetable.name} · ${draft.courses.length} 门课程 · ${draft.meetings.length} 个安排`),text(`第一周 ${draft.timetable.firstMonday} · ${draft.timetable.totalWeeks} 周 · ${draft.timetable.periods.length} 节`),...draft.warnings.map(text),button('预览实际变更','preview'),...(state.plan?.result.blocked?[text(`${state.plan.result.conflicts.length} 项冲突`),button('处理导入冲突','conflicts')]:[]),button('取消本次导入','clear')]}
     ]:[]),
-    ...(!isFile?[{type:'card',children:[
-      {...text('脚本来源'),style:'heading'},
+    ...(!isFile?[{type:'column',children:[
+      {type:'sectionHeader',title:'脚本来源'},
       text('维护者：'+(chosen?.maintainer||(state.script?'由你提供':'星河欲转'))),
       ...(!state.script?[{type:'richText',text:chosen?`${repository}/blob/${snapshot.revision}/${chosen.path}`:`${repository}/blob/ff72d1f08782df965cae110034a9d87cd91e0c07/resources/zhengfang_jiaowu/zhengfang_01.js`}]:[]),
       {...text('长按源码地址可以复制。'),style:'muted'},

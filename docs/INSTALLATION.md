@@ -4,6 +4,8 @@
 
 ## 安装 App
 
+有正式 App Release 时，可从 [发布页](https://github.com/JayConstruct/xudian/releases) 下载对应设备的 APK。安装后在“设置 → 关于序点 → 检查更新”查询新版本，详见 [App 更新](APP_UPDATES.md)。模块 Release 不作为 App 更新。
+
 打开 [Android Actions](https://github.com/JayConstruct/xudian/actions/workflows/android.yml)，选择成功运行，下载 `xudian-android-release-<commit>` 产物并解压。多数手机使用 `app-arm64-v8a-release.apk`；x86_64 模拟器使用 `app-x86_64-release.apk`。压缩包附带 `SOURCE_COMMIT` 和 `SHA256SUMS`，可核对源码版本和文件摘要。
 
 2026-10-10 已验证的构建为提交 `0b80430`：[成功运行](https://github.com/JayConstruct/xudian/actions/runs/38021150220) / [下载 APK](https://github.com/JayConstruct/xudian/actions/runs/38021150220/artifacts/11657938170)。该产物保存至 2026-10-24 03:43 UTC，过期后可使用后续成功构建或手动触发工作流。首装与商店安装的具体证据见 [验证记录](VERIFICATION.md)。

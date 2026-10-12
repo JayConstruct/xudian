@@ -3,6 +3,7 @@ name: Android checks and release APKs
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -43,6 +44,26 @@ jobs:
       - name: Resolve locked dependencies
         working-directory: client
         run: flutter pub get --enforce-lockfile
+      - name: Validate app release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/validate_app_release.py "$RELEASE_TAG"
+      - name: Prepare stable signing
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for credential in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!credential}" ]; then
+              echo "Missing stable Android signing secret: $credential" >&2
+              exit 1
+            fi
+          done
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/xudian-release.jks"
       - name: Check production architecture and Python tooling
         run: |
           python3 scripts/check_repository.py
@@ -61,6 +82,10 @@ jobs:
         working-directory: client
         env:
           BUILD_NUMBER: ${{ github.run_number }}
+          XUDIAN_KEYSTORE_PATH: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') && format('{0}/xudian-release.jks', runner.temp) || '' }}
+          XUDIAN_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          XUDIAN_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          XUDIAN_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release --split-per-abi --build-number="$((BUILD_NUMBER + 100))" --no-pub
       - name: Record APK checksums and source revision
         working-directory: client/build/app/outputs/flutter-apk
@@ -78,3 +103,27 @@ jobs:
             client/build/app/outputs/flutter-apk/SOURCE_COMMIT
           if-no-files-found: error
           retention-days: 14
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: xudian-android-release-${{ github.sha }}
+          path: apk
+      - name: Publish app release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          release_flags=(--latest)
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            release_flags=(--prerelease --latest=false --notes '测试版：包含日程界面、任务动画和运行时优化。使用 CI 开发签名，不保证能覆盖已有安装；安装前请备份数据，签名不匹配时不要直接卸载现有应用。正式版更新检查不会推荐此版本。真机性能仍待验证。')
+          fi
+          gh release create "$RELEASE_TAG" apk/*-release.apk apk/SHA256SUMS apk/SOURCE_COMMIT \
+            --verify-tag --title "序点 $RELEASE_TAG" --generate-notes "${release_flags[@]}"

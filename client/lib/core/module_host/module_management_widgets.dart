@@ -1,3 +1,6 @@
+import '../ui/ui_icon.dart';
+import '../ui/native_ui.dart';
+
 import 'package:flutter/material.dart';
 
 import 'module_package.dart';
@@ -49,17 +52,21 @@ List<Map<String, Object?>> manifestServiceRequirements(
 void showHostService(BuildContext context, Map<String, Object?> service) =>
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('宿主内置服务'),
-        content: Text(
-          '${service['serviceId']} @ ${service['majorVersion']} 由宿主提供，无需安装。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
+      builder: (context) => NativeUi(
+        child: AlertDialog(
+          title: const Text('宿主内置服务'),
+          content: Text(
+            '${service['serviceId']} @ ${service['majorVersion']} 由宿主提供，无需安装。',
           ),
-        ],
+          actions: [
+            NativeUi(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('关闭'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -88,19 +95,23 @@ class ModuleSummaryTile extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    leading: Icon(uiPack ? Icons.palette_outlined : Icons.extension_outlined),
-    title: Text(name),
-    subtitle: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(description),
-        const SizedBox(height: 4),
-        Text('$version · $status'),
-      ],
+  Widget build(BuildContext context) => NativeUi(
+    child: ListTile(
+      leading: UiIcon(
+        uiPack ? Icons.palette_outlined : Icons.extension_outlined,
+      ),
+      title: Text(name),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(description),
+          const SizedBox(height: 4),
+          Text('$version · $status'),
+        ],
+      ),
+      onTap: onTap,
+      trailing: trailing,
     ),
-    onTap: onTap,
-    trailing: trailing,
   );
 }
 
@@ -129,84 +140,94 @@ class ModuleDetailsDialog extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(package.title),
-    content: SizedBox(
-      width: 620,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _field('作用', package.description),
-            _field('模块 ID', package.id),
-            _field('版本与状态', '${package.version} · ${status ?? '待安装'}'),
-            _field('作者', package.author),
-            _field('来源', repository ?? package.origin),
-            _field(
-              '签名',
-              package.release['channel'] == 'market'
-                  ? '发布者签名已验证'
-                  : '未签名包；SHA-256 摘要校验不代表作者签名',
-            ),
-            _field('SHA-256', package.packageDigest),
-            _field('宿主兼容性', '${package.manifest['hostApi']}'),
-            _field(
-              '权限',
-              package.permissions.isEmpty
-                  ? '无'
-                  : package.permissions.join('\n'),
-            ),
-            const Text('模块依赖（点击查看或安装）'),
-            for (final raw in package.manifest['dependencies'] as List? ?? [])
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(raw is String ? raw : '${object(raw)['moduleId']}'),
-                subtitle: Text(
-                  raw is String ? '任意兼容版本' : '${object(raw)['version']}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => onDependency(
-                  raw is String ? raw : object(raw)['moduleId'] as String,
-                ),
-              ),
-            if ((package.manifest['dependencies'] as List? ?? []).isEmpty)
-              const Text('无模块依赖'),
-            const SizedBox(height: 12),
-            const Text('服务依赖（点击查看或安装提供模块）'),
-            for (final raw in deduplicateServices(package.requiredServices))
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('${raw['moduleId']}'),
-                subtitle: Text(
-                  '${raw['serviceId']} @ ${raw['majorVersion']} ${raw['kind'] ?? ''}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: raw['moduleId'] == 'app.host'
-                    ? () => showHostService(context, raw)
-                    : () => onDependency(raw['moduleId'] as String),
-              ),
-            if (package.requiredServices.isEmpty) const Text('无服务依赖'),
-            const SizedBox(height: 12),
-            if (allDependents != null)
+  Widget build(BuildContext context) => NativeUi(
+    child: AlertDialog(
+      title: Text(package.title),
+      content: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _field('作用', package.description),
+              _field('模块 ID', package.id),
+              _field('版本与状态', '${package.version} · ${status ?? '待安装'}'),
+              _field('作者', package.author),
+              _field('来源', repository ?? package.origin),
               _field(
-                '被依赖情况（所有已安装模块）',
-                allDependents!.isEmpty ? '无' : allDependents!.join('\n'),
+                '签名',
+                package.release['channel'] == 'market'
+                    ? '发布者签名已验证'
+                    : '未签名包；SHA-256 摘要校验不代表作者签名',
               ),
-            _field(
-              '受影响的已启用模块',
-              dependents.isEmpty ? '无' : dependents.join('\n'),
-            ),
-          ],
+              _field('SHA-256', package.packageDigest),
+              _field('宿主兼容性', '${package.manifest['hostApi']}'),
+              _field(
+                '权限',
+                package.permissions.isEmpty
+                    ? '无'
+                    : package.permissions.join('\n'),
+              ),
+              const Text('模块依赖（点击查看或安装）'),
+              for (final raw in package.manifest['dependencies'] as List? ?? [])
+                NativeUi(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      raw is String ? raw : '${object(raw)['moduleId']}',
+                    ),
+                    subtitle: Text(
+                      raw is String ? '任意兼容版本' : '${object(raw)['version']}',
+                    ),
+                    trailing: const UiIcon(Icons.chevron_right),
+                    onTap: () => onDependency(
+                      raw is String ? raw : object(raw)['moduleId'] as String,
+                    ),
+                  ),
+                ),
+              if ((package.manifest['dependencies'] as List? ?? []).isEmpty)
+                const Text('无模块依赖'),
+              const SizedBox(height: 12),
+              const Text('服务依赖（点击查看或安装提供模块）'),
+              for (final raw in deduplicateServices(package.requiredServices))
+                NativeUi(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${raw['moduleId']}'),
+                    subtitle: Text(
+                      '${raw['serviceId']} @ ${raw['majorVersion']} ${raw['kind'] ?? ''}',
+                    ),
+                    trailing: const UiIcon(Icons.chevron_right),
+                    onTap: raw['moduleId'] == 'app.host'
+                        ? () => showHostService(context, raw)
+                        : () => onDependency(raw['moduleId'] as String),
+                  ),
+                ),
+              if (package.requiredServices.isEmpty) const Text('无服务依赖'),
+              const SizedBox(height: 12),
+              if (allDependents != null)
+                _field(
+                  '被依赖情况（所有已安装模块）',
+                  allDependents!.isEmpty ? '无' : allDependents!.join('\n'),
+                ),
+              _field(
+                '受影响的已启用模块',
+                dependents.isEmpty ? '无' : dependents.join('\n'),
+              ),
+            ],
+          ),
         ),
       ),
+      actions: [
+        NativeUi(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ),
+      ],
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('关闭'),
-      ),
-    ],
   );
 }
 
@@ -219,39 +240,46 @@ Future<bool> confirmModuleImpact(
 }) async =>
     await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 620,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(moduleId),
-                const SizedBox(height: 12),
-                Text(affected.isEmpty ? '没有其他模块会停用。' : '以下模块会一起停用：'),
-                for (final id in affected)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(id),
-                  ),
-                const SizedBox(height: 12),
-                Text(dataEffect),
-              ],
+      builder: (context) => NativeUi(
+        protected: true,
+        child: AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 620,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(moduleId),
+                  const SizedBox(height: 12),
+                  Text(affected.isEmpty ? '没有其他模块会停用。' : '以下模块会一起停用：'),
+                  for (final id in affected)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(id),
+                    ),
+                  const SizedBox(height: 12),
+                  Text(dataEffect),
+                ],
+              ),
             ),
           ),
+          actions: [
+            NativeUi(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('取消'),
+              ),
+            ),
+            NativeUi(
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('确认'),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认'),
-          ),
-        ],
       ),
     ) ??
     false;

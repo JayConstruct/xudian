@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../module_host/json_schema.dart';
+import '../../app/app_ui_feedback.dart';
+import '../../app/app_icons.dart';
 import 'ui_pack.dart';
+import 'daily_widgets.dart';
 import 'ui_pack_providers.dart';
 
 class UiResolvedRecipe {
@@ -50,6 +53,11 @@ class UiComponentRegistry {
     _resolved[ref] = result;
     return result;
   }
+
+  /// The built-in native implementation is the default provider, including
+  /// recovery when the selected module is absent or does not export a ref.
+  String implementationProvider(String ref) =>
+      resolve(ref)?.pack.moduleId ?? defaultUiPackId;
 
   Map<String, Object?> tokens(Brightness brightness) {
     final result = <String, Object?>{};
@@ -478,6 +486,7 @@ class _UiRecipeView extends StatelessWidget {
                   );
                   final needsViewport =
                       resolved.recipe.contract.ref == 'ui.page.list@1' ||
+                      resolved.recipe.contract.ref == 'ui.page.native@1' ||
                       resolved.recipe.contract.ref == 'ui.page.timeGrid@1' ||
                       resolved.recipe.contract.ref == 'ui.chrome.sidebar@1';
                   if (vertical &&
@@ -491,6 +500,7 @@ class _UiRecipeView extends StatelessWidget {
                             n.type == 'slot' &&
                                 {
                                   'items',
+                                  'body',
                                   'grid',
                                   'navigation',
                                 }.contains(n.values['name']),
@@ -533,9 +543,12 @@ class _UiRecipeView extends StatelessWidget {
                   : null,
             );
           case 'icon':
-            widget = Icon(
-              uiIcon(p['name']),
+            widget = AppSymbolIcon(
+              p['name'],
               size: _dimension(p['size'], fallback: 24, max: 64),
+              color: _color(p['color']),
+              selected: p['selected'] == true,
+              semanticLabel: p['semanticLabel'] as String?,
             );
           case 'button':
             final onPressed =
@@ -547,10 +560,8 @@ class _UiRecipeView extends StatelessWidget {
             final label = Text(
               '${p['label'] ?? p['text'] ?? props['label'] ?? ''}',
             );
-            final style = ButtonStyle(
-              minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
-            );
-            widget = switch (p['variant']) {
+            const style = appUiButtonStyle;
+            widget = switch (p['variant'] ?? props['variant']) {
               'outlined' => OutlinedButton(
                 onPressed: onPressed,
                 style: style,
@@ -655,17 +666,7 @@ double _dimension(
 }) =>
     value is num && value.isFinite ? value.toDouble().clamp(0, max) : fallback;
 
-IconData uiIcon(Object? name) => switch (name) {
-  'add' => Icons.add,
-  'settings' => Icons.settings_outlined,
-  'calendar' => Icons.calendar_month_outlined,
-  'info' => Icons.info_outline,
-  'check' => Icons.check,
-  'inbox' => Icons.inbox_outlined,
-  'list' => Icons.list_alt_outlined,
-  'delete' => Icons.delete_outline,
-  _ => Icons.circle_outlined,
-};
+IconData uiIcon(Object? name) => appIconData(name) ?? Icons.circle_outlined;
 
 /// Default public templates accept already-owned business widgets in slots.
 /// They never query data or dispatch a service themselves.
@@ -675,19 +676,50 @@ Widget defaultUiComponent(
   Map<String, Widget> slots,
   Map<String, void Function(Object?)> events,
 ) {
+  final daily = dailyUiComponent(ref, props, slots, events);
+  if (daily != null) {
+    return daily;
+  }
   Widget slot(String name) => slots[name] ?? const SizedBox.shrink();
   switch (ref) {
     case 'ui.button@1':
-      return FilledButton.tonal(
-        onPressed: props['disabled'] == true || events['press'] == null
-            ? null
-            : () => events['press']!(null),
-        child: Text('${props['label'] ?? ''}'),
-      );
+      final VoidCallback? press =
+          props['disabled'] == true || events['press'] == null
+          ? null
+          : () => events['press']!(null);
+      final label = Text('${props['label'] ?? ''}');
+      return switch (props['variant']) {
+        'text' => TextButton(
+          style: appUiButtonStyle,
+          onPressed: press,
+          child: label,
+        ),
+        'outlined' => OutlinedButton(
+          style: appUiButtonStyle,
+          onPressed: press,
+          child: label,
+        ),
+        'filled' => FilledButton(
+          style: appUiButtonStyle,
+          onPressed: press,
+          child: label,
+        ),
+        _ => FilledButton.tonal(
+          style: appUiButtonStyle,
+          onPressed: press,
+          child: label,
+        ),
+      };
     case 'ui.text@1':
       return Text('${props['text'] ?? props['label'] ?? ''}');
     case 'ui.icon@1':
-      return Icon(uiIcon(props['name']));
+      return AppSymbolIcon(
+        props['name'],
+        size: (props['size'] as num?)?.toDouble(),
+        color: _color(props['color']),
+        selected: props['selected'] == true,
+        semanticLabel: props['semanticLabel'] as String?,
+      );
     case 'ui.divider@1':
       return const Divider();
     case 'ui.card@1':
@@ -744,6 +776,8 @@ Widget defaultUiComponent(
           ],
         ),
       );
+    case 'ui.page.native@1':
+      return slot('body');
     case 'ui.list@1':
       return slot('items');
     case 'ui.empty@1':
@@ -751,21 +785,15 @@ Widget defaultUiComponent(
     case 'ui.loading@1':
       return const Center(child: CircularProgressIndicator());
     case 'ui.progress@1':
-      return LinearProgressIndicator(
+      return AppProgressIndicator(
         value: props['value'] is num
             ? (props['value'] as num).toDouble().clamp(0, 1)
             : null,
       );
     case 'ui.error@1':
-      return Column(
-        children: [
-          Text('${props['message'] ?? '加载失败'}'),
-          if (events['retry'] != null)
-            TextButton(
-              onPressed: () => events['retry']!(null),
-              child: const Text('重试'),
-            ),
-        ],
+      return AppErrorState(
+        message: '${props['message'] ?? '加载失败'}',
+        onRetry: events['retry'] == null ? null : () => events['retry']!(null),
       );
     default:
       return slots['control'] ?? slots['content'] ?? const SizedBox.shrink();

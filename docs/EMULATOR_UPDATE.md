@@ -1,5 +1,65 @@
 # 一键更新模拟器
 
+在 WSL 先启动 Windows 模拟器并等待 Android 就绪：
+
+```bash
+scripts/start-emulator.sh
+```
+
+默认使用本机 `Medium_Phone_API_37.0`，设备为 `emulator-5554`；已运行时直接复用，保留应用和数据。脚本用 PowerShell 启动 Windows 模拟器进程，设备查询和启动完成检查均使用项目 Linux ADB。无需先打开 Android Studio。Windows SDK 与 AVD 需提前安装、创建；脚本不下载 SDK 或创建 AVD。
+
+其他机器可覆盖 Windows 可执行文件路径、AVD、端口和启动等待时间：
+
+```bash
+scripts/start-emulator.sh --avd YOUR_AVD \
+  --emulator 'C:\Users\YOUR_USER\AppData\Local\Android\Sdk\emulator\emulator.exe' \
+  --port 5556 --timeout 240
+scripts/start-emulator.sh --dry-run
+```
+
+需要以 120fps 的 8.33ms 帧预算测量时，可在退出当前模拟器后临时冷启动：
+
+```bash
+scripts/start-emulator.sh --refresh-rate 120
+```
+
+`--refresh-rate` 接受 30～240 Hz 的整数；指定时新进程附加 `-vsync-rate HZ -no-snapshot`，不修改 AVD 配置、不加载或保存 Quick Boot 快照。此参数只改变 Android 客体的刷新节拍，保持原有分辨率和清晰度；所选刷新率不能高于显示模拟器窗口的主机屏幕当前刷新率，120Hz 要求主机至少为 120Hz。已运行设备仅核对 `ro.boot.qemu.vsync`，不匹配或无法读取时会报错，需先退出再冷启动，脚本不会自动重启。未指定参数时保留原有启动和复用行为。
+
+脚本核对启动属性后，还需用 `adb -s emulator-5554 shell dumpsys display` 检查当前显示模式的分辨率、刷新率与 `supportedModes`，并测量实际呈现间隔。客体报告 120Hz 不保证 Windows 窗口显示了每一个 Flutter 帧，60Hz 测量中的同步等待也不能直接视为未满足 120fps 的计算预算。恢复 60Hz 时，退出后运行 `scripts/start-emulator.sh --refresh-rate 60`；无需降低分辨率。
+
+即使 `ro.boot.qemu.vsync=120`、`supportedModes` 为 120Hz，Android 的默认刷新率策略仍可能使 `mActiveRenderFrameRate` 和 `mDisplayModeSpecs` 的 render 上限保持 60Hz。此时先记录当前用户的设置原值，再临时调整最高、最低刷新率；启动脚本不会自动修改这些设置：
+
+```bash
+peak_before="$(adb -s emulator-5554 shell settings --user current get system peak_refresh_rate | tr -d '\r')"
+min_before="$(adb -s emulator-5554 shell settings --user current get system min_refresh_rate | tr -d '\r')"
+mkdir -p dist/verification
+refresh_record="dist/verification/refresh-settings-$(date +%Y%m%d-%H%M%S).txt"
+printf 'peak_refresh_rate=%s\nmin_refresh_rate=%s\n' "$peak_before" "$min_before" > "$refresh_record"
+adb -s emulator-5554 shell settings --user current put system peak_refresh_rate 120
+adb -s emulator-5554 shell settings --user current put system min_refresh_rate 120
+adb -s emulator-5554 shell dumpsys display
+adb -s emulator-5554 shell dumpsys SurfaceFlinger --latency
+```
+
+保留原值记录及调整前后的显示模式输出，与本次性能结果一并保存。调整后核对应用实际 render rate 为约 120Hz，SurfaceFlinger 的周期约为 8,333,333ns，并测量动画实际帧数；其他策略仍可能限速，不能仅凭设置成功就认定达到 120fps。实验结束后恢复两项原值，原值为 `null` 表示未设置，应删除覆盖值，不能写入字符串 `null`：
+
+```bash
+if [[ "$peak_before" == null ]]; then
+  adb -s emulator-5554 shell settings --user current delete system peak_refresh_rate
+else
+  adb -s emulator-5554 shell settings --user current put system peak_refresh_rate "$peak_before"
+fi
+if [[ "$min_before" == null ]]; then
+  adb -s emulator-5554 shell settings --user current delete system min_refresh_rate
+else
+  adb -s emulator-5554 shell settings --user current put system min_refresh_rate "$min_before"
+fi
+```
+
+恢复命令使用同一终端中的原值变量；若换了终端，先根据保存的记录恢复这两个变量。随后再核对显示策略；需要恢复客体 60Hz 时，退出模拟器后按前述命令冷启动。
+
+ADB 默认连接 `127.0.0.1:5037`，支持 `XUDIAN_ADB_HOST`（本机 loopback）和 `XUDIAN_ADB_PORT`。不同端口启动后，更新脚本也需指定对应 `--serial` 和 `--adb-port`。启动超时或连接失败会报错，不继续更新；新启动的模拟器保留运行，可排查后重试。在 Codex 沙箱中启动 Windows 窗口需申请在沙箱外执行同一脚本。
+
 在项目根目录按本次改动选择模式：
 
 | 场景 | 命令 | 行为 |

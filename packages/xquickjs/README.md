@@ -16,4 +16,12 @@ Default stack: 512 KiB. Continuous execution deadline: 1 second. Dart requests h
 10-second computation deadline. Cancellation interrupts native execution and joins the
 worker. This runs in the Flutter process; it is not an OS sandbox.
 
+Dart polls native messages with one-shot timers: 8 ms after a post or received message,
+then exponential empty-poll backoff capped at 32 ms while an invocation is pending and
+64 ms when idle. Host replies and subscription notifications reset the delay to 8 ms;
+repeated posts retain an already imminent poll. Closing cancels the timer before native
+teardown. A long pure-JavaScript invocation can therefore wait up to roughly 32 ms for
+its result to be detected, excluding Dart event-loop delays. This trades that bounded
+latency for fewer empty polls; it is not a measured device CPU or battery benchmark.
+
 See `docs/MODULE_SDK.md` and real-engine `client/test/script_worker_test.dart`.

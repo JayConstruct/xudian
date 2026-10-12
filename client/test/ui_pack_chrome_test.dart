@@ -198,7 +198,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(sizes.last.height, 112);
+    expect(sizes.last.height, 102);
     await tester.tap(find.text('导航 1'));
     expect(selected, 1);
     expect(tester.takeException(), isNull);
@@ -287,7 +287,7 @@ void main() {
           await tester.tap(last);
           await tester.pumpAndSettle();
           expect(find.text('模块入口内容 4'), findsOneWidget);
-          await tester.pageBack();
+          await tester.binding.handlePopRoute();
           await tester.pumpAndSettle();
           await tester.tap(find.byTooltip('页面菜单'));
           await tester.pumpAndSettle();
@@ -339,7 +339,7 @@ void main() {
         final workspace = tester.element(
           find.byKey(const ValueKey('test-list')),
         );
-        expect(WorkspaceContentInsets.bottomOf(workspace), closeTo(136, .01));
+        expect(WorkspaceContentInsets.bottomOf(workspace), closeTo(126, .01));
         expect(AppDesign.canvas(workspace), const Color(0xFFEEEECC));
         await tester.tap(find.byKey(const ValueKey('workspace-menu')));
         await tester.pumpAndSettle();
@@ -357,7 +357,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('已恢复默认界面，业务数据保留'), findsOneWidget);
         for (var i = 0; i < 3; i++) {
-          await tester.pageBack();
+          await tester.binding.handlePopRoute();
           await tester.pumpAndSettle();
         }
         expect(find.text('自定义顶栏'), findsNothing);
@@ -408,7 +408,7 @@ void main() {
         await tester.tap(find.text('模块'));
         await tester.pumpAndSettle();
         expect(find.byType(HostManagerPage), findsOneWidget);
-        await tester.pageBack();
+        await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('workspace-menu')));
         await tester.pumpAndSettle();

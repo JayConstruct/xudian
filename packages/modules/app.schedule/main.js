@@ -2,6 +2,7 @@ import {data,services,ui,clock,ids,files} from '@xudian/sdk';
 import {civil,date,dayMs,addDays,teachingWeek,weekday,normalizeWeeks,validateTimetable,validateMeeting,validateChange,validOriginal,occurrences,overlaps} from './calendar.js';
 import {draftFromBackup,importPlan} from './import.js';
 export {importPlan};
+export {createDemo} from './demo.js';
 let selectedTimetableId=null,selectionRevision=0,displayRequest=0;
 function selectTimetable(id) { if(selectedTimetableId!==id) { selectedTimetableId=id; selectionRevision++; } }
 const ref=id=>({moduleId:'app.schedule',serviceId:id,majorVersion:1});
@@ -24,9 +25,43 @@ export async function queryWeek({timetableId,teachingWeek:week}) {
     blocks:items.map(x=>({id:x.occurrenceId,column:x.date,start:x.startPeriod-1,end:x.endPeriod,title:x.title,
       subtitle:[x.location,x.teacher].filter(Boolean).join('\n'),color:x.color,event:{type:'occurrence',item:x}})),warnings:overlaps(items)};
 }
-export async function queryToday({timetableId}) {
-  const {t,courses,meetings,changes}=await snapshot(timetableId),today=await clock.today(t.timezone);
-  return {date:today,teachingWeek:teachingWeek(t,today),items:occurrences(t,courses,meetings,changes,today,addDays(today,1))};
+function feedDate(value) {
+  if(typeof value!=='string'||Number(value.slice(0,4))<1)throw new Error('日期不存在');
+  civil(value);return value;
+}
+export async function queryToday({timetableId,date:selectedDate}) {
+  const {t,courses,meetings,changes}=await snapshot(timetableId),today=selectedDate===undefined?await clock.today(t.timezone):feedDate(selectedDate);
+  // A civil-date prefix upper bound also includes 9999-12-31 without creating
+  // an unsupported five-digit year for the exclusive next-day boundary.
+  return {date:today,teachingWeek:teachingWeek(t,today),items:occurrences(t,courses,meetings,changes,today,today+'\uffff')};
+}
+export async function queryTodayFeed({date:selectedDate}={}) {
+  const date=selectedDate===undefined?await clock.today():feedDate(selectedDate),items=[];
+  for(const timetable of await data.query('timetables')) {
+    const today=await queryToday({timetableId:timetable.id,...(selectedDate===undefined?{}:{date})}),local=await clock.local(timetable.timezone);
+    for(const item of today.items) {
+      const startTime=timetable.periods[item.startPeriod-1].start,endTime=timetable.periods[item.endPeriod-1].end;
+      items.push({...item,timetableId:timetable.id,timetableName:timetable.name,timezone:timetable.timezone,startTime,endTime,
+        // Compare course times relative to now so different timetable timezones
+        // still sort chronologically, including when their civil dates differ.
+        startOffset:(civil(item.date)-civil(local.date))/dayMs*1440+timeMinutes(startTime)-timeMinutes(local.time),isLocalToday:item.date===local.date});
+    }
+  }
+  items.sort((a,b)=>(selectedDate===undefined?a.startOffset-b.startOffset:a.startTime.localeCompare(b.startTime))||a.title.localeCompare(b.title)||a.timetableId.localeCompare(b.timetableId));
+  return {date,items};
+}
+export async function renderTodayFeed({state={},event,context={}}={}) {
+  if(event?.type==='viewSchedule')await ui.navigate('app.schedule.home');
+  if(event?.type==='openCourse')await ui.navigate('app.schedule.occurrence',{timetableId:event.timetableId,...event.reference});
+  const today=await queryTodayFeed(context.selectedDate===undefined?{}:{date:context.selectedDate}),currentDate=await clock.today(),multipleTables=new Set(today.items.map(item=>item.timetableId)).size>1;
+  const children=[{type:'sectionHeader',title:today.date===currentDate?'今日课程':'当日课程',count:today.items.length,action:{label:'查看课表',event:{type:'viewSchedule'}}}];
+  if(!today.items.length)children.push({type:'text',text:today.date===currentDate?'今天没有课程':`${today.date} 没有课程`,style:'muted'});
+  for(const item of today.items)children.push({type:'agendaItem',key:item.occurrenceId+'|'+item.timetableId,title:item.title,
+    startTime:item.startTime,endTime:item.endTime,color:item.color,
+    subtitle:[`第 ${item.startPeriod}–${item.endPeriod} 节`,[item.location,item.teacher].filter(Boolean).join(' · '),multipleTables?item.timetableName:null,item.date!==today.date?`${item.date} · ${item.timezone}`:null].filter(Boolean).join(' · '),
+    ...(item.isLocalToday&&item.startOffset>0&&item.startOffset<=30?{badge:'即将开始'}: {}),event:{type:'openCourse',timetableId:item.timetableId,reference:occurrenceReference(item)},
+  });
+  return {state,tree:{type:'column',children}};
 }
 function normalized(value) { if(Array.isArray(value))return value.map(normalized);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(key=>[key,normalized(value[key])]));return value; }
 export async function saveTimetable({timetable,expectedTimetable}) {
@@ -115,6 +150,13 @@ export async function render({state={},context={},event,formValues={}}) {
   if(state.selectionRevision!==undefined && state.selectionRevision<selectionRevision) { state.timetableId=selectedTimetableId; delete state.week; }
   if(event?.type==='select') { state.timetableId=event.id; delete state.week; selectTimetable(event.id); }
   if(event?.type==='week') state.week=event.week;
+  if(event?.type==='createDemo') {
+    const plan=await services.prepare(ref('schedule.demo.create'),{});
+    if(plan.result.alreadyExists)state.notice='示例课表已存在，保留了现有内容';
+    else if(await ui.review(plan.planId)) {
+      const saved=await services.commit(plan.planId);state.timetableId=saved.timetableId;selectTimetable(saved.timetableId);state.notice='已添加示例课表，今天会显示对应课程';
+    }
+  }
   let timetables=await data.query('timetables');
   let t=timetables.find(x=>x.id===(state.timetableId||context.timetableId||selectedTimetableId)) || timetables[0];
   const page=context.pageId||'app.schedule.home';
@@ -322,7 +364,7 @@ export async function render({state={},context={},event,formValues={}}) {
     ]));
     children.push(group('课表配置',[go('学期设置','semester','名称、学期日期、周数与时区','tune'),go('作息设置','periods',t?`${t.periods.length} 个节次，按上午、下午和晚间编辑`:'设置各节次起止时间','schedule'),go('显示设置','display',t?`${scheduleShowWeekends(t)?'显示周末':'仅工作日'} · 课表总高度 ${48+t.periods.length*scheduleRowHeight(t)}`:'周末显示与课表总高度','tune'),go('课表管理','timetables',`${timetables.length} 张课表，可切换、新建或删除`,'list')]));
     children.push(group('课程与调课',[go('课程管理','courses','课程信息与周期上课安排','school'),go('调课记录','changes','取消、移动与临时加课','history')]));
-    children.push(group('数据管理',[go('导入与备份','imports','JSON 备份与教务导入','importExport')]));
+    children.push(group('数据管理',[go('导入与备份','imports','JSON 备份与教务导入','importExport'),listTile('添加示例课表','独立课表，每天 3 门课程；重复添加会保留现有内容','school',{type:'createDemo'})]));
     return {state,tree:{type:'column',children}};
   }
   if(page==='app.schedule.imports') {
@@ -355,7 +397,7 @@ export async function render({state={},context={},event,formValues={}}) {
     return {state,tree:{type:'column',children}};
   }
   if(page==='app.schedule.timetables') {
-    children.push(listTile('新建课表','默认使用12节作息，可在作息设置中调整','calendar',{type:'newTimetable'}));
+    children.push({type:'sectionHeader',title:'我的课表',count:timetables.length,action:{label:'新建课表',icon:'add',event:{type:'newTimetable'}}});
     for(const table of timetables) children.push(group(table.name,[listTile(table.id===t?.id?'当前课表':'选择课表',`${table.firstMonday} 起 · ${table.totalWeeks} 周 · ${table.timezone}`,'calendar',{type:'select',id:table.id}),listTile('删除课表','删除前展示实际变更并确认','history',{type:'delete',collection:'timetables',id:table.id})]));
     return {state,tree:{type:'column',children}};
   }
@@ -366,6 +408,7 @@ export async function render({state={},context={},event,formValues={}}) {
   state.timetableId=t.id;
   if(page==='app.schedule.semester') {
     const draft=semesterDraft(t),labels={name:'课表名称',firstMonday:'第一教学周周一（YYYY-MM-DD）',totalWeeks:'总教学周数',timezone:'IANA 时区',displayWeekStart:'显示起始（1=周一，7=周日）'};
+    children.push({type:'sectionHeader',title:'学期信息',subtitle:t.name});
     for(const [key,label] of Object.entries(labels))children.push({type:'input',key:`semester.${t.id}.${key}`,text:label,value:draft.values[key],onChangeEvent:{type:'semesterField',field:key}});
     const dirty=JSON.stringify(draft.values)!==draft.baseline;
     state.semesterDraft={...draft,dirty};
@@ -422,26 +465,26 @@ export async function render({state={},context={},event,formValues={}}) {
   }
   if(page==='app.schedule.courses') {
     const {courses,meetings}=await snapshot(t.id);
-    children.push(listTile('添加课程','填写课程信息与上课安排','school',{type:'course'}));
+    children.push({type:'sectionHeader',title:'课程与安排',count:courses.length,action:{label:'添加课程',icon:'add',event:{type:'course'}}});
     if(!courses.length)children.push(text('还没有课程，添加课程后配置上课安排。'));
     for(const course of courses) {
       const arrangements=meetings.filter(m=>m.courseId===course.id);
-      children.push(group(course.name,[text([course.code,course.notes].filter(Boolean).join(' · ')),...arrangements.map(m=>group(`星期${m.weekday} · 第 ${m.startPeriod}–${m.endPeriod} 节`,[
+      children.push(group(course.name,[text([course.code,course.notes].filter(Boolean).join(' · ')),...arrangements.map(m=>({type:'disclosure',key:'arrangement:'+m.id,text:`星期${m.weekday} · 第 ${m.startPeriod}–${m.endPeriod} 节`,children:[
         text(`${m.weeks.join(',')} 周 · ${m.location||'未填地点'} · ${m.teacher||'未填教师'}`),listTile('编辑安排',null,'schedule',{type:'course',course,meeting:m}),listTile('删除安排',null,'history',{type:'delete',collection:'meetings',id:m.id})
-      ])),listTile('增加安排',null,'schedule',{type:'course',course}),listTile('删除课程',null,'history',{type:'delete',collection:'courses',id:course.id})]));
+      ]})),listTile('增加安排',null,'schedule',{type:'course',course}),listTile('删除课程',null,'history',{type:'delete',collection:'courses',id:course.id})]));
     }
   } else if(page==='app.schedule.changes') {
     const {courses,meetings,changes}=await snapshot(t.id);
-    children.push(listTile('临时加课','在指定日期添加一次课程','calendar',{type:'extra'}));
+    children.push({type:'sectionHeader',title:'单次课程变更',count:changes.length,action:{label:'临时加课',icon:'add',event:{type:'extra'}}});
     if(!changes.length)children.push(text('暂无单次调课记录。点击周视图中的课程可查看与调整本次上课。'));
     for(const change of changes) {
       const course=courses.find(c=>c.id===(change.courseId||meetings.find(m=>m.id===change.meetingId)?.courseId));
       children.push(group(course?.name||'单次课程变更',[text(`${change.originalDate} → ${change.kind==='cancel'?'取消':change.date}${change.kind==='extra'?' · 临时课':''}`),listTile('撤销变更',null,'history',{type:'delete',collection:'occurrenceChanges',id:change.id})]));
     }
   } else if(page==='app.schedule.today') {
-    const today=await queryToday({timetableId:t.id});children.push(text(`${today.date} · 第${today.teachingWeek}教学周`));
+    const today=await queryToday({timetableId:t.id});children.push({type:'sectionHeader',title:today.date,subtitle:`第 ${today.teachingWeek} 教学周`,count:today.items.length});
     if(!today.items.length)children.push(text('今天没有课程'));
-    for(const item of today.items)children.push(listTile(item.title,`第 ${item.startPeriod}–${item.endPeriod} 节 · ${item.location||'未填地点'} · ${item.teacher||'未填教师'}`,'school',{type:'occurrence',item}));
+    for(const item of today.items)children.push({type:'agendaItem',key:item.occurrenceId,title:item.title,startTime:t.periods[item.startPeriod-1].start,endTime:t.periods[item.endPeriod-1].end,color:item.color,subtitle:`第 ${item.startPeriod}–${item.endPeriod} 节 · ${item.location||'未填地点'} · ${item.teacher||'未填教师'}`,event:{type:'occurrence',item}});
   } else {
     const today=await clock.today(t.timezone),week=Math.max(1,Math.min(t.totalWeeks,state.week||teachingWeek(t,today)));
     state.week=week;const result=await queryWeek({timetableId:t.id,teachingWeek:week}),local=await clock.local(t.timezone);

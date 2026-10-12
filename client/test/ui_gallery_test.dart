@@ -14,6 +14,7 @@ import 'package:task_app/core/module_host/script_page.dart';
 import 'package:task_app/core/ui/ui_component.dart';
 import 'package:task_app/core/ui/ui_pack.dart';
 import 'package:task_app/core/ui/ui_pack_providers.dart';
+import 'package:task_app/core/ui/script_transition.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
@@ -36,6 +37,7 @@ void main() {
     store = CollectionStore(db);
     directory = await Directory.systemTemp.createTemp('ui-gallery-');
     host = ModuleHost(store: store, directory: directory);
+    host.clockNow = () => DateTime.utc(2026, 10, 10, 6);
     await host.initialize();
     final folder = Directory('../packages/modules/app.ui.examples');
     final files = <String, String>{};
@@ -65,6 +67,7 @@ void main() {
   Future<ProviderContainer> show(
     WidgetTester tester, {
     Brightness brightness = Brightness.light,
+    String? demo,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -77,10 +80,15 @@ void main() {
           home: UiPackScope(
             child: Scaffold(
               body: ScriptPage(
+                key: ValueKey('gallery-${demo ?? 'home'}'),
                 host: host,
                 moduleId: 'app.ui.examples',
                 handler: 'render',
-                pageContext: const {'pageId': 'app.ui.examples.page'},
+                pageContext: {
+                  'pageId': demo == null
+                      ? 'app.ui.examples.page'
+                      : 'app.ui.examples.demo.$demo',
+                },
               ),
             ),
           ),
@@ -91,146 +99,143 @@ void main() {
     return ProviderScope.containerOf(tester.element(find.byType(ScriptPage)));
   }
 
-  Finder card(String id) => find.byKey(ValueKey('example-$id'));
-  Finder inCard(String id, Finder child) =>
-      find.descendant(of: card(id), matching: child);
-  Future<void> category(WidgetTester tester, String label) async {
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, label).first);
-    await tester.tap(find.widgetWithText(ChoiceChip, label).first);
-    await settle(tester);
-  }
-
   Future<void> reveal(WidgetTester tester, Finder child) async {
+    if (child.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        child,
+        250,
+        scrollable: find.byType(Scrollable).first,
+        maxScrolls: 60,
+      );
+    }
     await tester.ensureVisible(child);
     await tester.pump();
   }
 
-  test('source gallery resets one example and all values without losing browse filters', () async {
-    final initial = object(
-      await host.invokePage('app.ui.examples', 'render', {
-        'context': {'pageId': 'app.ui.examples.page'},
-      }),
-    );
-    var page = object(
-      await host.invokePage('app.ui.examples', 'render', {
-        'state': initial['state'],
-        'event': {'type': 'section', 'section': 'dates'},
-      }),
-    );
-    page = object(
-      await host.invokePage('app.ui.examples', 'render', {
-        'state': page['state'],
-        'event': {'type': 'changeDemo', 'id': 'date', 'value': '2026-10-08'},
-      }),
-    );
-    page = object(
-      await host.invokePage('app.ui.examples', 'render', {
-        'state': page['state'],
-        'event': {
-          'type': 'changeDemo',
-          'id': 'tags',
-          'value': ['工作'],
-        },
-      }),
-    );
-    page = object(
-      await host.invokePage('app.ui.examples', 'render', {
-        'state': page['state'],
-        'event': {'type': 'resetOne', 'id': 'date'},
-      }),
-    );
-    expect(object(page['replaceForms']), {'demo.date': null});
-    expect(object(object(page['state'])['examples'])['tags'], ['工作']);
-    page = object(
-      await host.invokePage('app.ui.examples', 'render', {
-        'state': page['state'],
-        'event': {'type': 'resetAll'},
-        'formValues': {'gallery.search': '日期'},
-      }),
-    );
-    expect(object(page['state'])['section'], 'dates');
-    expect(object(page['replaceForms']).containsKey('gallery.search'), false);
-    expect(await store.sql('SELECT * FROM host_operations'), isEmpty);
-  });
+  testWidgets(
+    'button events preserve sibling appearance and reject repeat clicks while busy',
+    (tester) async {
+      await show(tester, demo: 'button');
+      final filled = find.widgetWithText(FilledButton, '填充按钮');
+      final outlined = find.widgetWithText(OutlinedButton, '描边按钮');
+      final before = tester.state(filled);
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      host.instances['app.ui.examples']!.workflowTail = gate.future;
+      await tester.tap(outlined);
+      await tester.pump();
+      final button = tester.widget<FilledButton>(filled);
+      expect(
+        button.onPressed,
+        isNotNull,
+        reason: 'Refreshing another action must not switch this button to disabled colors',
+      );
+      expect(identical(tester.state(filled), before), isTrue);
+      await tester.tap(filled);
+      await tester.tap(outlined);
+      await tester.pump();
+      gate.complete();
+      await settle(tester);
+      expect(find.text('已执行：outlined'), findsOneWidget);
+      expect(find.text('已执行：filled'), findsNothing);
+      expect(identical(tester.state(filled), before), isTrue);
+      await tester.tap(filled);
+      await settle(tester);
+      expect(find.text('已执行：filled'), findsOneWidget);
+      await tester.ensureVisible(find.widgetWithText(ChoiceChip, '禁用'));
+      await tester.tap(find.widgetWithText(ChoiceChip, '禁用'));
+      await settle(tester);
+      expect(
+        tester.widget<FilledButton>(filled).onPressed,
+        isNull,
+        reason: 'Explicitly disabled buttons must still be disabled',
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
   for (final config in [
-    (width: 320.0, height: 640.0, scale: 1.0, dark: false),
-    (width: 390.0, height: 844.0, scale: 1.5, dark: false),
-    (width: 320.0, height: 640.0, scale: 2.0, dark: true),
-    (width: 760.0, height: 820.0, scale: 1.0, dark: false),
-    (width: 1280.0, height: 900.0, scale: 1.5, dark: true),
+    (width: 320.0, scale: 1.5, brightness: Brightness.light),
+    (width: 390.0, scale: 1.0, brightness: Brightness.light),
+    (width: 1280.0, scale: 1.5, brightness: Brightness.dark),
   ]) {
     testWidgets(
-      'production gallery adapts at ${config.width}px / ${config.scale}x',
+      'settings catalog and date demo adapt at ${config.width}px / ${config.scale}x',
       (tester) async {
-        tester.view.physicalSize = Size(config.width, config.height);
+        tester.view.physicalSize = Size(config.width, 900);
         tester.view.devicePixelRatio = 1;
         tester.platformDispatcher.textScaleFactorTestValue = config.scale;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        await show(
-          tester,
-          brightness: config.dark ? Brightness.dark : Brightness.light,
+        await show(tester, brightness: config.brightness);
+        expect(find.text('基础操作'), findsOneWidget);
+        expect(find.byType(TextField), findsOneWidget);
+        expect(find.text('38 个基础演示 · 0 个模块注册 UI'), findsOneWidget);
+        expect(find.byType(ListView), findsOneWidget);
+        expect(find.byType(ListTile).evaluate().length, lessThan(38));
+        final calls = <Map<String, Object?>>[];
+        host.interaction = (_, method, args) async {
+          calls.add({'method': method, ...args});
+          return null;
+        };
+        await reveal(tester, find.widgetWithText(ListTile, '日期选择器'));
+        await tester.tap(find.widgetWithText(ListTile, '日期选择器'));
+        await settle(tester);
+        expect(calls.single['page'], 'app.ui.examples.demo.date');
+        await show(tester, demo: 'date', brightness: config.brightness);
+        expect(find.text('查看调用方式'), findsOneWidget);
+        expect(find.byType(ExpansionTile), findsNothing);
+        await reveal(tester, find.widgetWithText(ChoiceChip, '已选'));
+        await tester.tap(find.widgetWithText(ChoiceChip, '已选'));
+        await settle(tester);
+        expect(find.text('当前值：2026-10-10'), findsOneWidget);
+        await reveal(tester, find.text('查看调用方式'));
+        await tester.tap(find.text('查看调用方式'));
+        await settle(tester);
+        expect(
+          (calls.last['sections'] as List)
+              .map((value) => object(value)['code'])
+              .join('\n'),
+          contains("ui.component('ui.dateInput@1'"),
         );
+        expect(calls.last['method'], 'ui.showCode');
         expect(find.textContaining('模块界面无效'), findsNothing);
-        await category(tester, '日期与时间');
-        final first = card('date'), second = card('time');
-        final a = tester.getTopLeft(first), b = tester.getTopLeft(second);
-        final twoColumns = config.width - 32 >= 680 * config.scale;
-        if (twoColumns) {
-          expect(a.dy, b.dy);
-          expect(b.dx, greaterThan(a.dx));
-        } else {
-          expect(b.dy, greaterThan(a.dy));
-        }
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
       },
     );
   }
+
   testWidgets(
-    'date clearing and multi-select sync formValues, drafts survive category and pack changes',
+    'real date clearing, multi-select, drafts and selected UI stay synchronized',
     (tester) async {
-      final container = await show(tester);
-      await category(tester, '日期与时间');
-      final mode = inCard('date', find.widgetWithText(ChoiceChip, '已选'));
-      await reveal(tester, mode);
-      await tester.tap(mode);
+      await show(tester, demo: 'date');
+      await tester.tap(find.widgetWithText(ChoiceChip, '已选'));
       await settle(tester);
-      expect(inCard('date', find.text('当前值：2026-10-08')), findsOneWidget);
-      final clear = find.byTooltip('清除日期选择器');
-      await reveal(tester, clear);
-      await tester.tap(clear);
+      await tester.tap(find.byTooltip('清除日期选择器'));
       await settle(tester);
-      expect(inCard('date', find.text('当前值：未选择')), findsOneWidget);
-      await category(tester, '选择控件');
-      final work = inCard('tags', find.widgetWithText(FilterChip, '工作'));
-      await reveal(tester, work);
-      await tester.tap(work);
+      expect(find.text('当前值：未选择'), findsOneWidget);
+      await show(tester, demo: 'tags');
+      await tester.tap(find.widgetWithText(FilterChip, '工作'));
       await settle(tester);
-      expect(inCard('tags', find.text('当前值：["学习","工作"]')), findsOneWidget);
-      final reset = inCard('tags', find.text('重置此项'));
-      await reveal(tester, reset);
-      await tester.tap(reset);
+      expect(find.text('当前值：["学习","工作"]'), findsOneWidget);
+      await tester.tap(find.text('重置此项'));
       await settle(tester);
-      expect(inCard('tags', find.text('当前值：["学习"]')), findsOneWidget);
-      await reveal(tester, work);
-      await tester.tap(work);
+      expect(find.text('当前值：["学习"]'), findsOneWidget);
+      await show(tester, demo: 'title');
+      await tester.enterText(find.byType(TextField), '本地未提交草稿');
       await settle(tester);
-      await category(tester, '输入与表单');
-      final title = inCard('title', find.byType(TextField));
-      await reveal(tester, title);
-      await tester.enterText(title, '本地未提交草稿');
-      await settle(tester);
-      FocusManager.instance.primaryFocus?.unfocus();
-      await category(tester, '选择控件');
-      await category(tester, '输入与表单');
-      expect(tester.widget<TextField>(title).controller!.text, '本地未提交草稿');
-      final before = tester.widget<TextField>(title);
-      before.controller!.selection = const TextSelection(
-        baseOffset: 1,
-        extentOffset: 4,
+      await show(tester, demo: 'tags');
+      await show(tester, demo: 'title');
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '本地未提交草稿',
       );
       await tester.runAsync(() async {
         await host.install(
@@ -241,54 +246,261 @@ void main() {
           ),
         );
       });
-      await settle(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ScriptPage)),
+      );
       await tester.runAsync(
         () => container
             .read(uiSelectionProvider.notifier)
             .save(UiSelection(globalPackId: 'example.ui.compact')),
       );
       await settle(tester);
-      final after = tester.widget<TextField>(title);
-      expect(identical(before.controller, after.controller), true);
       expect(
-        after.controller!.selection,
-        const TextSelection(baseOffset: 1, extentOffset: 4),
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '本地未提交草稿',
       );
-      expect(tester.takeException(), isNull);
       expect(
         await tester.runAsync(() => store.sql('SELECT * FROM host_operations')),
         isEmpty,
       );
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-    },
-  );
-  testWidgets(
-    'search filters static metadata and can recover from no results',
-    (tester) async {
-      await show(tester);
-      final search = find.byKey(const ValueKey('gallery.search'));
-      final field = find.descendant(
-        of: search,
-        matching: find.byType(TextField),
-      );
-      await tester.enterText(field, 'dateRangeInput');
-      await settle(tester);
-      expect(card('range'), findsOneWidget);
-      expect(card('date'), findsNothing);
-      await tester.enterText(field, '不存在的组件');
-      await settle(tester);
-      expect(find.text('没有匹配的组件'), findsOneWidget);
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.tap(find.text('清除搜索／查看全部'));
-      await settle(tester);
-      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
-      expect(card('date'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
     },
   );
+
+  testWidgets(
+    'buttons in one row, real error retry, loading and floating close remain interactive',
+    (tester) async {
+      await show(tester, demo: 'notification');
+      final calls = <Map<String, Object?>>[];
+      host.interaction = (_, method, args) async {
+        calls.add({'method': method, ...args});
+        return null;
+      };
+      await tester.tap(find.text('成功提示'));
+      await settle(tester);
+      expect(calls.single['method'], 'ui.notify');
+      expect(calls.single['kind'], 'success');
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Multiple public buttons need independent keys',
+      );
+      await show(tester, demo: 'error');
+      await tester.tap(find.text('重试'));
+      await settle(tester);
+      expect(find.text('重试成功，已恢复示例内容'), findsOneWidget);
+      await show(tester, demo: 'loading');
+      await tester.tap(find.text('开始加载'));
+      await settle(tester);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      await tester.tap(find.text('停止加载'));
+      await settle(tester);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await show(tester, demo: 'floating');
+      final before = tester.getRect(find.text('显示悬浮窗'));
+      await tester.tap(find.text('显示悬浮窗'));
+      await settle(tester);
+      expect(find.text('悬浮窗示例'), findsOneWidget);
+      expect(tester.getRect(find.text('显示悬浮窗')), before);
+      await tester.tap(find.byTooltip('关闭悬浮窗'));
+      await settle(tester);
+      expect(find.text('悬浮窗示例'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'script animation page accepts JS durations, changes effect and replays',
+    (tester) async {
+      await show(tester, demo: 'animation');
+      expect(find.byType(ScriptTransition), findsOneWidget);
+      expect(find.textContaining('Invalid transition node'), findsNothing);
+      final transition = tester.widget<ScriptTransition>(
+        find.byType(ScriptTransition),
+      );
+      expect(transition.duration, const Duration(milliseconds: 350));
+      for (final label in ['缩放', '滑动', '淡入']) {
+        await tester.tap(find.widgetWithText(ChoiceChip, label));
+        await settle(tester);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.tap(find.text('重播动画'));
+      await settle(tester);
+      expect(
+        tester
+            .widget<ScriptTransition>(find.byType(ScriptTransition))
+            .replayKey,
+        1,
+      );
+      await tester.tap(find.text('隐藏'));
+      await settle(tester);
+      expect(
+        tester.widget<ScriptTransition>(find.byType(ScriptTransition)).visible,
+        false,
+      );
+      await tester.tap(find.text('显示'));
+      await settle(tester);
+      expect(
+        tester.widget<ScriptTransition>(find.byType(ScriptTransition)).visible,
+        true,
+      );
+      expect(find.textContaining('Invalid transition node'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets('home search filters metadata and recovers from no results', (
+    tester,
+  ) async {
+    await show(tester);
+    final field = find.byType(TextField);
+    await tester.enterText(field, 'dateRangeInput');
+    await settle(tester);
+    expect(find.widgetWithText(ListTile, '起止日期'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, '日期选择器'), findsNothing);
+    await tester.enterText(field, '不存在的组件');
+    await settle(tester);
+    expect(find.text('没有匹配的示例'), findsOneWidget);
+    await tester.tap(find.text('清除搜索'));
+    await settle(tester);
+    expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+    await reveal(tester, find.widgetWithText(ListTile, '日期选择器'));
+    expect(find.widgetWithText(ListTile, '日期选择器'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+  testWidgets(
+    'pinning and unpinning in a detail refresh the retained home immediately',
+    (tester) async {
+      final navigation = GlobalKey<NavigatorState>();
+      final homeKey = GlobalKey();
+      final interactions = <String>[];
+      host.interaction = (_, method, args) async {
+        interactions.add(method);
+        if (method == 'ui.navigate') {
+          unawaited(
+            navigation.currentState!.push<void>(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  appBar: AppBar(title: const Text('日期演示')),
+                  body: ScriptPage(
+                    host: host,
+                    moduleId: 'app.ui.examples',
+                    handler: 'render',
+                    pageContext: {
+                      'pageId': args['page'],
+                      ...object(args['context']),
+                    },
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        return null;
+      };
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
+          ],
+          child: MaterialApp(
+            navigatorKey: navigation,
+            home: Scaffold(
+              body: ScriptPage(
+                key: homeKey,
+                host: host,
+                moduleId: 'app.ui.examples',
+                handler: 'render',
+                pageContext: const {'pageId': 'app.ui.examples.page'},
+              ),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+      final retained = homeKey.currentState;
+      await tester.enterText(find.byType(TextField), '日期选择器');
+      await settle(tester);
+      await tester.tap(find.widgetWithText(ListTile, '日期选择器'));
+      await settle(tester);
+      await tester.tap(find.text('固定到首页'));
+      await settle(tester);
+      expect(find.text('取消固定'), findsOneWidget);
+      navigation.currentState!.pop();
+      await settle(tester);
+      expect(homeKey.currentState, same(retained));
+      expect(find.text('已固定'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, '日期选择器'), findsNWidgets(2));
+      await tester.tap(find.widgetWithText(ListTile, '日期选择器').first);
+      await settle(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ScriptPage).last,
+          matching: find.text('取消固定'),
+        ),
+      );
+      await settle(tester);
+      navigation.currentState!.pop();
+      await settle(tester);
+      expect(homeKey.currentState, same(retained));
+      expect(find.text('已固定'), findsNothing);
+      expect(find.widgetWithText(ListTile, '日期选择器'), findsOneWidget);
+      expect(interactions, ['ui.navigate', 'ui.navigate']);
+      expect(
+        await tester.runAsync(() => store.sql('SELECT * FROM host_operations')),
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets('every built-in example renders supported interactive controls', (
+    tester,
+  ) async {
+    final initial = object(
+      await tester.runAsync(
+        () async => object(
+          await host.invokePage('app.ui.examples', 'render', {
+            'context': {'pageId': 'app.ui.examples.page'},
+          }),
+        ),
+      ),
+    );
+    List<Map<String, Object?>> all(Object? value) {
+      if (value is Map) {
+        return [object(value), for (final child in value.values) ...all(child)];
+      }
+      if (value is List) {
+        return [for (final child in value) ...all(child)];
+      }
+      return [];
+    }
+
+    final ids = all(initial['tree'])
+        .where((node) => node['type'] == 'listTile')
+        .map((node) => object(node['event'])['id'] as String)
+        .toList();
+    expect(ids, hasLength(38));
+    for (final id in ids) {
+      await show(tester, demo: id);
+      expect(find.textContaining('模块界面无效'), findsNothing, reason: id);
+      expect(find.textContaining('不支持的组件'), findsNothing, reason: id);
+      expect(tester.takeException(), isNull, reason: id);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets(
     'reset respects edits during execution, including text changed back to its old value',
     (tester) async {

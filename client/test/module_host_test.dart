@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pub_semver/pub_semver.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/module_host.dart';
@@ -238,11 +239,21 @@ void main() {
     final original = await package('app.schedule');
     final definition =
         jsonDecode(jsonEncode(original.definition)) as Map<String, dynamic>;
-    object(definition['manifest'])['version'] = '1.9.1';
+    object(definition['manifest'])['version'] = Version.parse(original.version)
+        .nextPatch
+        .toString();
     final scripts = {...original.scripts};
-    scripts['main.js'] = scripts['main.js']!.replaceFirst(
-      "export async function queryToday({timetableId}) {",
-      "export async function queryToday({timetableId}) { return {date:'2030-01-01', teachingWeek:99, items:[]};",
+    final declaration = RegExp(r'export async function queryToday\([^)]*\) \{');
+    final source = scripts['main.js']!;
+    final matches = declaration.allMatches(source).toList();
+    expect(
+      matches,
+      hasLength(1),
+      reason: 'Patch exactly the queryToday handler',
+    );
+    scripts['main.js'] = source.replaceFirst(
+      declaration,
+      "${matches.single.group(0)} return {date:'2030-01-01', teachingWeek:99, items:[]};",
     );
     final bytes = await ScriptPackage.build(definition, scripts);
     await host.install(

@@ -8,6 +8,8 @@ import 'package:pub_semver/pub_semver.dart';
 import '../modules/module_registry.dart';
 import '../security/capability_registry.dart';
 import 'script_app_module.dart';
+import 'ui_preferences.dart';
+import 'host_schema.dart';
 
 import 'package:drift/native.dart';
 
@@ -188,6 +190,7 @@ class ModuleHost {
   Future<void> initialize() async {
     zones.initializeTimeZones();
     await directory.create(recursive: true);
+    await store.db.customStatement(hostUiPreferencesSchema);
     await migrateLegacyData(store);
     store.activate(nativeActor);
     await store.db.customStatement(
@@ -1081,6 +1084,7 @@ class ModuleHost {
           'host_outbox',
           'host_packages',
           'host_installations',
+          'host_ui_preferences',
         ]) {
           await store.db.customStatement(
             'DELETE FROM $table WHERE module_id=?',
@@ -1525,6 +1529,7 @@ class ModuleHost {
           'clock.now',
           'clock.today',
           'ui.catalog',
+          'ui.examples',
           'services.directory',
         ].contains(method)) {
       throw StateError(
@@ -1538,6 +1543,23 @@ class ModuleHost {
       throw StateError('Migration cannot use external capabilities');
     }
     switch (method) {
+      case 'ui.examples':
+        if (args.isNotEmpty) {
+          throw const FormatException('ui.examples takes no arguments');
+        }
+        pageReads?.add(uiExamplesReadDependency);
+        return [
+          for (final provider in instances.values)
+            if (provider.package.uiPack != null)
+              for (final recipe in provider.package.uiPack!.components.entries)
+                if (recipe.value.example != null)
+                  {
+                    'providerId': provider.actor.moduleId,
+                    'ref': recipe.key,
+                    ...recipe.value.example!,
+                    'contract': recipe.value.contract.toJson(),
+                  },
+        ];
       case 'ui.catalog':
         return [
           for (final contract in uiContracts.values) contract.toJson(),
@@ -1717,6 +1739,93 @@ class ModuleHost {
       throw StateError('Preview forbids external capabilities: $method');
     }
     switch (method) {
+      case 'ui.preferences.get':
+      case 'ui.preferences.set':
+        if (!workflow || !actor.permissions.contains('ui')) {
+          throw StateError('UI preferences require a UI page workflow');
+        }
+        final allowed = method == 'ui.preferences.get'
+            ? const {'key'}
+            : const {'key', 'value'};
+        if (args.keys.any((key) => !allowed.contains(key)) ||
+            method == 'ui.preferences.set' && !args.containsKey('value')) {
+          throw const FormatException('Invalid UI preference arguments');
+        }
+        final preferences = ModuleUiPreferences(store);
+        final key = string(args['key'], 'UI preference key');
+        if (method == 'ui.preferences.get') {
+          final result = await preferences.get(actor, key);
+          pageReads?.add(uiPreferencesReadDependency(actor.moduleId));
+          return result;
+        }
+        return preferences.set(actor, key, args['value']);
+      case 'ui.showCode':
+        if (!workflow || !actor.permissions.contains('ui')) {
+          throw StateError('Code previews require a UI page workflow');
+        }
+        final title = string(args['title'], 'code preview title');
+        final sections = args['sections'];
+        if (args.keys.any(
+              (key) => !const {'title', 'sections'}.contains(key),
+            ) ||
+            title.trim().isEmpty ||
+            title.length > 120 ||
+            sections is! List ||
+            sections.isEmpty ||
+            sections.length > 12) {
+          throw const FormatException('Invalid code preview arguments');
+        }
+        final normalized = <Map<String, Object?>>[];
+        var total = 0;
+        for (final raw in sections) {
+          final section = object(raw);
+          final heading = string(section['title'], 'code section title');
+          final code = string(section['code'], 'code section');
+          total += code.length;
+          if (section.keys.any(
+                (key) => !const {'title', 'code'}.contains(key),
+              ) ||
+              heading.trim().isEmpty ||
+              heading.length > 120 ||
+              code.trim().isEmpty ||
+              total > 100000) {
+            throw const FormatException('Invalid code preview section');
+          }
+          normalized.add({'title': heading, 'code': code});
+        }
+        final result = await interaction?.call(actor, method, {
+          'title': title,
+          'sections': normalized,
+        });
+        store.requireActive(actor);
+        return result;
+      case 'ui.notify':
+        if (!workflow || !actor.permissions.contains('ui')) {
+          throw StateError('Notifications require a UI page workflow');
+        }
+        final message = string(args['message'], 'notification message');
+        final kind = args['kind'] ?? 'info';
+        final duration = args['duration'] ?? 3000;
+        if (args.keys.any(
+              (key) => !const {'message', 'kind', 'duration'}.contains(key),
+            ) ||
+            message.trim().isEmpty ||
+            message.length > 200 ||
+            !const ['info', 'success', 'error'].contains(kind) ||
+            duration is! num ||
+            !duration.isFinite ||
+            duration != duration.roundToDouble() ||
+            duration < 1000 ||
+            duration > 10000) {
+          throw const FormatException('Invalid notification arguments');
+        }
+        final result = await interaction?.call(actor, method, {
+          'message': message,
+          'kind': kind,
+          'duration': duration.toInt(),
+        });
+        store.requireActive(actor);
+        return result;
       case 'services.adopt':
         final plan = store.adoptProviderPlan(
           string(args['planId'], 'planId'),

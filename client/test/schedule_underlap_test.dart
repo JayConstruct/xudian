@@ -232,6 +232,67 @@ void main() {
   );
 
   testWidgets(
+    'collapsing chrome near the last period never reverses the scroll or lesson position',
+    (tester) async {
+      await pumpApp(tester);
+      final position = verticalPosition();
+      position.jumpTo(position.maxScrollExtent - 90);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
+      final offsets = <double>[position.pixels];
+      void record() => offsets.add(position.pixels);
+      position.addListener(record);
+      final initialViewport = position.viewportDimension;
+      final gesture = await tester.startGesture(
+        tester.getCenter(verticalGrid()),
+      );
+      // Check every finger-driven frame, including completion of the collapse;
+      // no overscroll spring or ballistic motion can mask layout corrections.
+      var previousTop = tester.getTopLeft(lastCourseBlock()).dy;
+      for (var i = 0; i < 7; i++) {
+        await gesture.moveBy(const Offset(0, -10));
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.pump();
+        final currentTop = tester.getTopLeft(lastCourseBlock()).dy;
+        expect(
+          currentTop,
+          lessThanOrEqualTo(previousTop + .5),
+          reason: 'Each upward finger frame must move the lesson upwards.',
+        );
+        previousTop = currentTop;
+      }
+      final whileHeld = position.pixels;
+      for (var i = 0; i < 18; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final currentTop = tester.getTopLeft(lastCourseBlock()).dy;
+        expect(
+          currentTop,
+          lessThanOrEqualTo(previousTop + .5),
+          reason:
+              'Header collapse must not move a lesson back down the screen.',
+        );
+        previousTop = currentTop;
+      }
+      expect(position.viewportDimension, greaterThan(initialViewport));
+      expect(position.pixels, closeTo(whileHeld, .5));
+      for (var i = 1; i < offsets.length; i++) {
+        expect(
+          offsets[i],
+          greaterThanOrEqualTo(offsets[i - 1] - .5),
+          reason: 'An upward drag must not acquire a reverse ScrollPosition correction.',
+        );
+      }
+      position.removeListener(record);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('页面菜单'), findsNothing);
+      expect(reveal(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'collapsed reveal remains a blurred floating capsule with a full-size tap target',
     (tester) async {
       await pumpApp(tester);
@@ -278,8 +339,13 @@ void main() {
         of: dock(),
         matching: find.byType(BackdropFilter),
       );
-      expect(dockFilters, findsOneWidget);
-      expect(tester.widget<BackdropFilter>(dockFilters).enabled, isFalse);
+      expect(dockFilters, findsWidgets);
+      expect(
+        tester
+            .widgetList<BackdropFilter>(dockFilters)
+            .every((filter) => !filter.enabled),
+        isTrue,
+      );
       await collapse(tester);
       final filters = find.ancestor(
         of: reveal(),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -13,11 +14,32 @@ import 'package:task_app/core/module_host/script_app_module.dart';
 import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
 import 'package:task_app/core/ui/module_detail_page.dart';
+import 'package:task_app/core/ui/daily_widgets.dart';
 import 'package:task_app/core/ui/ui_page_host.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
 import 'module_host_test.dart' as fixtures;
+
+Future<ScriptPackage> _sourcePackage(String id) async {
+  final directory = Directory('../packages/modules/$id');
+  final files = <String, String>{};
+  await for (final entry in directory.list(recursive: true)) {
+    if (entry is File && entry.path.endsWith('.js')) {
+      files[entry.path.substring(directory.path.length + 1)] = await entry
+          .readAsString();
+    }
+  }
+  return ScriptPackage.verify(
+    await ScriptPackage.build(
+      object(
+        jsonDecode(await File('${directory.path}/module.json').readAsString()),
+      ),
+      files,
+    ),
+    allowUnsignedLocal: true,
+  );
+}
 
 Future<void> _settleNative(WidgetTester tester) async {
   for (var i = 0; i < 20; i++) {
@@ -51,12 +73,7 @@ void main() {
           host = ModuleHost(store: store, directory: directory);
           await host.initialize();
           for (final id in ['app.schedule', 'app.import.shiguang']) {
-            await host.install(
-              await ScriptPackage.verify(
-                await File('../dist/modules/$id.xmodule').readAsBytes(),
-                allowUnsignedLocal: true,
-              ),
-            );
+            await host.install(await _sourcePackage(id));
           }
           final actor = host.instances['app.schedule']!.actor;
           Future<void> save(String service, Map<String, Object?> args) async {
@@ -219,7 +236,12 @@ void main() {
         await tester.ensureVisible(search);
         await tester.enterText(search, 'AUFE WebVPN');
         await _settleNative(tester);
-        expect(find.text('找到 1 所学校 · 第 1/1 页'), findsOneWidget);
+        final resultHeader = find.byWidgetPredicate(
+          (widget) => widget is DailySectionHeader && widget.title == '搜索结果',
+        );
+        expect(resultHeader, findsOneWidget);
+        expect(tester.widget<DailySectionHeader>(resultHeader).count, 1);
+        expect(find.text('第 1/1 页'), findsOneWidget);
         expect(find.textContaining('进入教务系统后点击开始导入'), findsNothing);
         await tap('安徽财经大学');
         expectTitle('安徽财经大学');

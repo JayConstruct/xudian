@@ -3,15 +3,18 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/app/app.dart';
+import 'package:task_app/app/mobile_bottom_dock.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/script_page.dart';
 import 'package:task_app/core/module_host/time_grid.dart';
+import 'package:task_app/core/ui/draggable_floating_panel.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
@@ -65,6 +68,20 @@ Future<void> _settle(WidgetTester tester) async {
     );
     await tester.pump(const Duration(milliseconds: 20));
   }
+}
+
+Future<void> _expectNoHeaderAssistant(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('页面菜单'));
+  await tester.pumpAndSettle();
+  expect(
+    find.descendant(
+      of: find.byType(PopupMenuItem<int>),
+      matching: find.text('AI 助手'),
+    ),
+    findsNothing,
+  );
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -386,9 +403,7 @@ void main() {
       await _settle(tester);
       expect(find.byType(TimeGrid), findsOneWidget);
       final gridRect = tester.getRect(find.byType(TimeGrid));
-      final panelRect = tester.getRect(
-        find.byKey(const ValueKey('script-floating-panel')),
-      );
+      final panelRect = tester.getRect(find.byType(DraggableFloatingPanel));
       expect(panelRect.width, lessThanOrEqualTo(420));
       expect(panelRect.bottom, lessThanOrEqualTo(gridRect.bottom));
       expect(panelRect.top, greaterThan(gridRect.top));
@@ -421,7 +436,7 @@ void main() {
       expect(tester.getRect(find.byType(TimeGrid)), gridRect);
       await tester.tap(find.byTooltip('关闭显示调整'));
       await _settle(tester);
-      expect(find.byKey(const ValueKey('script-floating-panel')), findsNothing);
+      expect(find.byType(DraggableFloatingPanel), findsNothing);
       expect(
         tester.widget<TimeGrid>(find.byType(TimeGrid)).options['rowHeight'],
         72,
@@ -964,6 +979,45 @@ void main() {
               allowUnsignedLocal: true,
             ),
           );
+          if (width < 820) {
+            await host.install(
+              await ScriptPackage.verify(
+                await ScriptPackage.build(
+                  {
+                    'formatVersion': 3,
+                    'manifest': {
+                      'id': 'private.notools',
+                      'version': '1.0.0',
+                      'hostApi': '^1.18.0',
+                      'dataVersion': 1,
+                      'permissions': [],
+                      'dependencies': [],
+                    },
+                    'entryPoint': 'main.js',
+                    'collections': [],
+                    'services': [],
+                    'pages': [
+                      {
+                        'id': 'private.notools.home',
+                        'title': '不支持 AI',
+                        'handler': 'render',
+                        'entry': {
+                          'id': 'private.notools.entry',
+                          'order': 999,
+                          'opening': 'workspace',
+                          'placement': 'main',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    'main.js': "export function render(){return {tree:{type:'text',text:'没有服务工具的页面'}};}",
+                  },
+                ),
+                allowUnsignedLocal: true,
+              ),
+            );
+          }
         });
         await tester.pumpWidget(
           ProviderScope(
@@ -979,17 +1033,36 @@ void main() {
         expect(find.byTooltip('页面菜单'), findsOneWidget);
         expect(find.byTooltip('打开设置'), findsNothing);
         expect(find.byType(TimeGrid), findsOneWidget);
-        await tester.tap(find.byTooltip('页面菜单'));
-        await tester.pumpAndSettle();
-        expect(
-          find.descendant(
-            of: find.byType(PopupMenuItem<int>),
-            matching: find.text('AI 助手'),
-          ),
-          findsOneWidget,
-        );
-        await tester.tapAt(const Offset(10, 850));
-        await tester.pumpAndSettle();
+        await _expectNoHeaderAssistant(tester);
+        if (width < 820) {
+          final assistant = find.byKey(
+            const ValueKey('mobile-navigation-assistant'),
+          );
+          expect(assistant, findsOneWidget);
+          Finder dockLabel(String label) => find.descendant(
+            of: find.byType(MobileBottomDock),
+            matching: find.text(label),
+          );
+          await tester.tap(dockLabel('不支持 AI'));
+          await _settle(tester);
+          expect(find.text('没有服务工具的页面'), findsOneWidget);
+          expect(assistant, findsNothing);
+          await _expectNoHeaderAssistant(tester);
+          await tester.tap(dockLabel('更多'));
+          await _settle(tester);
+          expect(assistant, findsNothing);
+          await _expectNoHeaderAssistant(tester);
+          await tester.tap(dockLabel('课表'));
+          await _settle(tester);
+          expect(assistant, findsOneWidget);
+          expect(find.byType(TimeGrid), findsOneWidget);
+        }
+        if (width >= 820) {
+          expect(
+            find.byKey(const ValueKey('desktop-workspace-assistant')),
+            findsOneWidget,
+          );
+        }
         final before = await tester.runAsync(
           () => store.query(actor, 'occurrenceChanges', {}),
         );
@@ -1032,24 +1105,18 @@ void main() {
           expect(find.text('保存作息设置'), findsNothing);
           await tester.tap(find.text('07:50'));
           await tester.pumpAndSettle();
-          final picker = find.byType(TimePickerDialog);
-          expect(picker, findsOneWidget);
-          final localization = MaterialLocalizations.of(tester.element(picker));
-          expect(
-            MediaQuery.of(tester.element(picker)).alwaysUse24HourFormat,
-            isTrue,
-          );
-          await tester.tap(
-            find.byTooltip(localization.inputTimeModeButtonLabel),
-          );
+          final wheels = find.byType(CupertinoPicker);
+          expect(wheels, findsNWidgets(2));
+          tester
+              .widget<CupertinoPicker>(wheels.at(0))
+              .scrollController!
+              .jumpToItem(8);
+          tester
+              .widget<CupertinoPicker>(wheels.at(1))
+              .scrollController!
+              .jumpToItem(0);
           await tester.pumpAndSettle();
-          final fields = find.descendant(
-            of: picker,
-            matching: find.byType(TextField),
-          );
-          await tester.enterText(fields.at(0), '08');
-          await tester.enterText(fields.at(1), '00');
-          await tester.tap(find.text(localization.okButtonLabel));
+          await tester.tap(find.text('确定'));
           await _settle(tester);
           expect(find.text('08:00'), findsOneWidget);
           expect(find.text('保存作息设置'), findsOneWidget);
@@ -1063,7 +1130,7 @@ void main() {
             ).first['start'],
             '07:50',
           );
-          await tester.pageBack();
+          await tester.binding.handlePopRoute();
           await _settle(tester);
           await tester.ensureVisible(find.text('作息设置'));
           await tester.tap(find.text('作息设置'));
@@ -1145,7 +1212,7 @@ void main() {
       await _settle(tester);
       expect(find.text('外观与交互'), findsOneWidget);
       expect(find.text('模块与连接'), findsOneWidget);
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await _settle(tester);
       await tester.runAsync(() => host.disable('private.header'));
       await _settle(tester);

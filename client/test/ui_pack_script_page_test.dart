@@ -213,6 +213,46 @@ export async function render({state={},event}) {
     await settle(tester);
   }
 
+  for (final packed in [false, true]) {
+    testWidgets(
+      'legacy button retains enabled appearance during execution, UI pack=$packed',
+      (tester) async {
+        final container = await show(tester);
+        if (packed) {
+          await installUi(tester);
+          await tester.runAsync(
+            () => container
+                .read(uiSelectionProvider.notifier)
+                .save(UiSelection(globalPackId: 'test.presentation')),
+          );
+          await settle(tester);
+        }
+        final button = packed
+            ? find.widgetWithText(OutlinedButton, '执行')
+            : find.widgetWithText(FilledButton, '执行');
+        final before = tester.state(button);
+        final gate = Completer<void>();
+        addTearDown(() {
+          if (!gate.isCompleted) gate.complete();
+        });
+        host.instances['test.page']!.workflowTail = gate.future;
+        await tester.tap(button);
+        await tester.pump();
+        expect(tester.widget<ButtonStyleButton>(button).onPressed, isNotNull);
+        expect(identical(tester.state(button), before), isTrue);
+        await tester.tap(button);
+        await tester.pump();
+        gate.complete();
+        await settle(tester);
+        expect(find.text('render 2'), findsOneWidget);
+        expect(find.text('render 3'), findsNothing);
+        expect(identical(tester.state(button), before), isTrue);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      },
+    );
+  }
+
   testWidgets(
     'live recipe switch preserves production input state without executing page scripts',
     (tester) async {

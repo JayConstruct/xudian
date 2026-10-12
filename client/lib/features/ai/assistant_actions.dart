@@ -699,6 +699,7 @@ class AssistantActions {
       }
       profile = UiLayoutProfile(
         mainLimit: limit as int?,
+        morePageEnabled: profile.morePageEnabled,
         mounts: profile.mounts,
       );
     }

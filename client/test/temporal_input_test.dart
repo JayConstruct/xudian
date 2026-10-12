@@ -1,10 +1,69 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:task_app/app/design_system.dart';
 import 'package:task_app/core/ui/temporal_input.dart';
 import 'package:task_app/core/ui/input_validation.dart';
 import 'package:task_app/core/module_host/host_dialogs.dart';
 
+Widget temporalTestApp({required Widget home, ThemeData? theme}) => MaterialApp(
+  locale: const Locale('zh', 'CN'),
+  localizationsDelegates: GlobalMaterialLocalizations.delegates,
+  supportedLocales: const [Locale('zh', 'CN')],
+  theme: theme,
+  home: home,
+);
+
 void main() {
+  for (final brightness in Brightness.values) {
+    testWidgets('date selection uses the shared $brightness surface', (
+      tester,
+    ) async {
+      final theme = AppDesign.theme(brightness);
+      final changes = <Object?>[];
+      await tester.pumpWidget(
+        temporalTestApp(
+          theme: theme,
+          home: Scaffold(
+            body: TemporalInput(
+              kind: TemporalInputKind.date,
+              label: '日期',
+              value: '2026-10-08',
+              minDate: '2026-10-01',
+              maxDate: '2026-10-31',
+              onChanged: changes.add,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('选择日期'));
+      await tester.pumpAndSettle();
+      final picker = tester.element(find.byType(DatePickerDialog));
+      final style = DatePickerTheme.of(picker);
+      expect(style.backgroundColor, theme.colorScheme.surface);
+      expect(style.shape, isA<RoundedSuperellipseBorder>());
+      expect(
+        style.dayBackgroundColor!.resolve({WidgetState.selected}),
+        theme.colorScheme.primaryContainer,
+      );
+      expect(
+        style.dayForegroundColor!.resolve({WidgetState.selected}),
+        theme.colorScheme.onPrimaryContainer,
+      );
+      expect(
+        style.dayForegroundColor!.resolve({WidgetState.disabled}),
+        isNot(style.dayForegroundColor!.resolve({})),
+      );
+      expect(find.text('选择日期'), findsWidgets);
+      await tester.tap(find.text('15').last);
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(changes, ['2026-10-15']);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   test(
     'civil dates, time, ranges and numeric limits reject invalid values',
     () {
@@ -57,7 +116,7 @@ void main() {
     Object? value = '2026-10-08';
     final changes = <Object?>[];
     await tester.pumpWidget(
-      MaterialApp(
+      temporalTestApp(
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) => TemporalInput(
@@ -112,7 +171,7 @@ void main() {
     addTearDown(controller.dispose);
     final changes = <Object?>[];
     await tester.pumpWidget(
-      MaterialApp(
+      temporalTestApp(
         home: Scaffold(
           body: TemporalInput(
             kind: TemporalInputKind.dateTime,
@@ -131,62 +190,148 @@ void main() {
     );
     await tester.tap(find.text(labels.okButtonLabel));
     await tester.pumpAndSettle();
-    expect(find.byType(TimePickerDialog), findsOneWidget);
-    labels = MaterialLocalizations.of(
-      tester.element(find.byType(TimePickerDialog)),
-    );
-    await tester.tap(find.text(labels.cancelButtonLabel));
+    expect(find.byType(CupertinoPicker), findsNWidgets(2));
+    await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(controller.text, '2026-10-08T09:30');
     expect(changes, isEmpty);
   });
 
-  testWidgets('cross-month range confirms an object and ignores stale result', (
-    tester,
-  ) async {
-    Object? value = {'start': '2026-09-30', 'end': '2026-10-02'};
-    final changes = <Object?>[];
-    var current = true;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: StatefulBuilder(
-            builder: (context, setState) => TemporalInput(
-              kind: TemporalInputKind.dateRange,
-              label: '日期范围',
-              value: value,
-              isCurrent: () => current,
-              onChanged: (next) => setState(() {
-                value = next;
-                changes.add(next);
-              }),
+  testWidgets(
+    '24-hour wheels reopen the current value and only confirm commits',
+    (tester) async {
+      final controller = TextEditingController(text: '23:59');
+      addTearDown(controller.dispose);
+      final changes = <Object?>[];
+      await tester.pumpWidget(
+        temporalTestApp(
+          home: Scaffold(
+            body: TemporalInput(
+              kind: TemporalInputKind.time,
+              label: '时间',
+              controller: controller,
+              onChanged: changes.add,
             ),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.byTooltip('选择日期范围'));
-    await tester.pumpAndSettle();
-    final labels = MaterialLocalizations.of(
-      tester.element(find.byType(DateRangePickerDialog)),
-    );
-    await tester.tap(find.text(labels.saveButtonLabel));
-    await tester.pumpAndSettle();
-    expect(changes.single, {'start': '2026-09-30', 'end': '2026-10-02'});
-    await tester.tap(find.byTooltip('选择日期范围'));
-    await tester.pumpAndSettle();
-    current = false;
-    await tester.tap(find.text(labels.saveButtonLabel));
-    await tester.pumpAndSettle();
-    expect(changes, hasLength(1));
-  });
+      );
+      Future<void> open() async {
+        await tester.tap(find.byTooltip('选择时间'));
+        await tester.pumpAndSettle();
+      }
+
+      await open();
+      final wheels = tester
+          .widgetList<CupertinoPicker>(find.byType(CupertinoPicker))
+          .toList();
+      expect(wheels[0].scrollController!.selectedItem, 23);
+      expect(wheels[1].scrollController!.selectedItem, 59);
+      await tester.drag(
+        find.byKey(const ValueKey('time-wheel-小时')),
+        const Offset(0, 48),
+      );
+      await tester.pumpAndSettle();
+      expect(wheels[0].scrollController!.selectedItem, lessThan(23));
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(controller.text, '23:59');
+      expect(changes, isEmpty);
+      await open();
+      final current = tester
+          .widgetList<CupertinoPicker>(find.byType(CupertinoPicker))
+          .toList();
+      expect(current[0].scrollController!.selectedItem, 23);
+      current[0].scrollController!.jumpToItem(0);
+      current[1].scrollController!.jumpToItem(5);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(controller.text, '00:05');
+      expect(changes.single, '00:05');
+      await open();
+      final reopened = tester
+          .widgetList<CupertinoPicker>(find.byType(CupertinoPicker))
+          .toList();
+      expect(reopened[0].scrollController!.selectedItem, 0);
+      expect(reopened[1].scrollController!.selectedItem, 5);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'range uses two dates, preserves cancelled and stale values, and clears',
+    (tester) async {
+      Object? value = {'start': '2026-09-30', 'end': '2026-10-02'};
+      final changes = <Object?>[];
+      var current = true;
+      await tester.pumpWidget(
+        temporalTestApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => TemporalInput(
+                kind: TemporalInputKind.dateRange,
+                label: '日期范围',
+                value: value,
+                isCurrent: () => current,
+                onChanged: (next) => setState(() {
+                  value = next;
+                  changes.add(next);
+                }),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('开始日期'), findsOneWidget);
+      expect(find.text('结束日期'), findsOneWidget);
+      await tester.tap(find.byTooltip('选择结束日期'));
+      await tester.pumpAndSettle();
+      expect(find.byType(DateRangePickerDialog), findsNothing);
+      final picker = tester.widget<DatePickerDialog>(
+        find.byType(DatePickerDialog),
+      );
+      expect(picker.firstDate, DateTime(2026, 9, 30));
+      expect(picker.initialDate, DateTime(2026, 10, 2));
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(changes, isEmpty);
+      await tester.tap(find.byTooltip('选择结束日期'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('15').last);
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(changes.single, {'start': '2026-09-30', 'end': '2026-10-15'});
+      await tester.tap(find.byTooltip('选择开始日期'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<DatePickerDialog>(find.byType(DatePickerDialog)).lastDate,
+        DateTime(2026, 10, 15),
+      );
+      current = false;
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(changes, hasLength(1));
+      current = true;
+      await tester.tap(find.byTooltip('清除开始日期'));
+      await tester.pumpAndSettle();
+      expect(value, isNull);
+      expect(find.text('2026-10-15'), findsNothing);
+      await tester.tap(find.byTooltip('选择开始日期'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('15').last);
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(value, {'start': '2026-10-15', 'end': '2026-10-15'});
+    },
+  );
 
   testWidgets(
     'host typed form shares pickers and preserves legacy return types',
     (tester) async {
       Object? result;
       await tester.pumpWidget(
-        MaterialApp(
+        temporalTestApp(
           home: Builder(
             builder: (context) => TextButton(
               onPressed: () async {
@@ -236,6 +381,8 @@ void main() {
       await tester.tap(find.text('打开'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('清除计划日'));
+      await tester.ensureVisible(find.widgetWithText(FilterChip, '工作'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilterChip, '工作'));
       await tester.tap(find.text('继续'));
       await tester.pumpAndSettle();
@@ -272,7 +419,7 @@ void main() {
                   text: kind == TemporalInputKind.time ? '09:30' : '2026-10-08',
                 );
           await tester.pumpWidget(
-            MaterialApp(
+            temporalTestApp(
               theme: ThemeData(brightness: Brightness.dark),
               home: Scaffold(
                 body: TemporalInput(
@@ -287,37 +434,20 @@ void main() {
               ),
             ),
           );
-          await tester.tap(find.byTooltip('选择选择演示'));
+          await tester.tap(
+            find.byTooltip(
+              kind == TemporalInputKind.dateRange ? '选择开始日期' : '选择选择演示',
+            ),
+          );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
-          if (kind == TemporalInputKind.dateRange) {
-            final labels = MaterialLocalizations.of(
-              tester.element(find.byType(DateRangePickerDialog)),
-            );
-            await tester.tap(find.byTooltip(labels.inputDateModeButtonLabel));
-            await tester.pumpAndSettle();
-            expect(tester.takeException(), isNull);
-            await tester.tap(find.byTooltip(labels.calendarModeButtonLabel));
-            await tester.pumpAndSettle();
-            expect(tester.takeException(), isNull);
-            await tester.tap(
-              find.byTooltip(
-                MaterialLocalizations.of(
-                  tester.element(find.byType(DateRangePickerDialog)),
-                ).closeButtonTooltip,
-              ),
-            );
+          if (kind == TemporalInputKind.time) {
+            expect(find.byType(CupertinoPicker), findsNWidgets(2));
           } else {
-            final dialog = kind == TemporalInputKind.time
-                ? find.byType(TimePickerDialog)
-                : find.byType(DatePickerDialog);
-            await tester.tap(
-              find.text(
-                MaterialLocalizations.of(tester.element(dialog))
-                    .cancelButtonLabel,
-              ),
-            );
+            expect(find.byType(DatePickerDialog), findsOneWidget);
+            expect(find.text('取消'), findsOneWidget);
           }
+          await tester.tap(find.text('取消'));
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());

@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.schedule",
     "name": "大学课表",
-    "version": "1.7.0",
-    "hostApi": "^1.10.0",
+    "version": "1.11.0",
+    "hostApi": "^1.16.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -253,6 +253,21 @@
       "icon": "calendar",
       "handler": "render",
       "retainPosition": true
+    },
+    {
+      "id": "app.schedule.todayFeed",
+      "title": "每日课程",
+      "icon": "calendar",
+      "handler": "renderTodayFeed",
+      "entry": {
+        "id": "app.schedule.today.feed",
+        "label": "每日课程",
+        "placement": "page",
+        "targetPageId": "app.views.today.home",
+        "slotId": "daily",
+        "content": true,
+        "order": 0
+      }
     }
   ],
   "services": [
@@ -290,7 +305,12 @@
       "handler": "queryToday",
       "kind": "query",
       "input": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          }
+        }
       },
       "output": {
         "type": "object"
@@ -370,6 +390,36 @@
       "major": 1,
       "handler": "exportBackup",
       "kind": "query",
+      "input": {
+        "type": "object"
+      },
+      "output": {
+        "type": "object"
+      },
+      "confirmation": "host"
+    },
+    {
+      "id": "schedule.query.todayFeed",
+      "major": 1,
+      "handler": "queryTodayFeed",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "schedule.demo.create",
+      "major": 1,
+      "handler": "createDemo",
+      "kind": "command",
       "input": {
         "type": "object"
       },

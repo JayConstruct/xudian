@@ -3,15 +3,16 @@
   "manifest": {
     "id": "app.ui.examples",
     "name": "UI 示例",
-    "version": "1.1.1",
-    "hostApi": "^1.7.0",
+    "version": "1.4.1",
+    "hostApi": "^1.15.0",
     "dataVersion": 1,
     "permissions": [
-      "ui"
+      "ui",
+      "clock.today"
     ],
     "dependencies": [],
     "defaultInstall": false,
-    "description": "浏览模块界面组件、布局和交互示例。",
+    "description": "分类浏览真实 UI、控件与动画，查看调用方式并固定常用演示。",
     "author": "JayConstruct"
   },
   "entryPoint": "main.js",
@@ -22,9 +23,10 @@
       "id": "app.ui.examples.page",
       "title": "UI 示例",
       "handler": "render",
+      "retainPosition": true,
       "entry": {
         "id": "app.ui.examples.entry",
-        "opening": "detail",
+        "opening": "workspace",
         "placement": "hidden"
       }
     },
@@ -73,6 +75,240 @@
         "targetPageId": "app.ui.examples.composition",
         "slotId": "tabs"
       }
+    },
+    {
+      "id": "app.ui.examples.demo.button",
+      "title": "按钮",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.confirm",
+      "title": "确认对话框",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.entry",
+      "title": "普通条目",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.content",
+      "title": "文字、图标与分割线",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.title",
+      "title": "文本输入",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.notes",
+      "title": "多行备注",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.number",
+      "title": "数字输入",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.search",
+      "title": "搜索输入",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.validation",
+      "title": "表单校验",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.priority",
+      "title": "单项选择",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.tags",
+      "title": "多项选择",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.toggle",
+      "title": "开关",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.checkbox",
+      "title": "复选框",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.slider",
+      "title": "滑块",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.date",
+      "title": "日期选择器",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.time",
+      "title": "时间选择器",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.datetime",
+      "title": "日期时间选择器",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.range",
+      "title": "起止日期",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.status",
+      "title": "空状态",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.loading",
+      "title": "加载动画",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.progress",
+      "title": "进度指示",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.error",
+      "title": "错误提示与重试",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.notification",
+      "title": "消息提示",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.panel",
+      "title": "操作面板",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.floating",
+      "title": "悬浮窗",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.animation",
+      "title": "过渡动画",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.tasks",
+      "title": "任务卡片",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.card",
+      "title": "内容卡片",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.list",
+      "title": "列表",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.tabs",
+      "title": "页签",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.grid",
+      "title": "响应式网格",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.disclosure",
+      "title": "折叠内容",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.timeGrid",
+      "title": "时间网格",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.composition",
+      "title": "页面槽位与跨模块嵌套",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.registered",
+      "title": "模块 UI 示例",
+      "handler": "render",
+      "retainPosition": true,
+      "requiredContext": [
+        "providerId",
+        "componentRef"
+      ]
+    },
+    {
+      "id": "app.ui.examples.demo.dailyOverview",
+      "title": "每日概览",
+      "handler": "render"
+    },
+    {
+      "id": "app.ui.examples.demo.dailyHeader",
+      "title": "分区标题",
+      "handler": "render"
+    },
+    {
+      "id": "app.ui.examples.demo.dailyAgenda",
+      "title": "日程条目",
+      "handler": "render"
+    },
+    {
+      "id": "app.ui.examples.demo.dailyTask",
+      "title": "待办条目",
+      "handler": "render"
     }
   ]
 }

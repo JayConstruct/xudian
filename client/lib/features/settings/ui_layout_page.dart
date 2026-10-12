@@ -1,3 +1,6 @@
+import '../../core/ui/ui_icon.dart';
+import '../../core/ui/native_ui.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -248,6 +251,13 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
             baseline!.profile(wide).mainLimit?.toString() ?? '不限制',
             draft!.profile(wide).mainLimit?.toString() ?? '不限制',
           ),
+        if (baseline!.profile(wide).morePageEnabled !=
+            draft!.profile(wide).morePageEnabled)
+          (
+            '${wide ? '宽屏' : '窄屏'} · 更多页面',
+            baseline!.profile(wide).morePageEnabled ? '启用' : '关闭',
+            draft!.profile(wide).morePageEnabled ? '启用' : '关闭',
+          ),
         for (final id in {
           ...baseline!.profile(wide).mounts.keys,
           ...draft!.profile(wide).mounts.keys,
@@ -270,32 +280,38 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
     final changes = _changes();
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('草稿变更 · ${changes.length} 项'),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('包括两套屏幕配置和所有编排范围；尚未保存。'),
-                if (changes.isEmpty) const Text('与进入编辑器时的配置一致。'),
-                for (final change in changes)
-                  ListTile(
-                    title: Text(change.$1),
-                    subtitle: Text('原：${change.$2}\n新：${change.$3}'),
-                  ),
-              ],
+      builder: (dialogContext) => NativeUi(
+        child: AlertDialog(
+          title: Text('草稿变更 · ${changes.length} 项'),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('包括两套屏幕配置和所有编排范围；尚未保存。'),
+                  if (changes.isEmpty) const Text('与进入编辑器时的配置一致。'),
+                  for (final change in changes)
+                    NativeUi(
+                      child: ListTile(
+                        title: Text(change.$1),
+                        subtitle: Text('原：${change.$2}\n新：${change.$3}'),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
+          actions: [
+            NativeUi(
+              child: TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('返回编辑'),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('返回编辑'),
-          ),
-        ],
       ),
     );
   }
@@ -316,6 +332,7 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
       });
     final value = UiLayoutProfile(
       mainLimit: pageId == null ? (desktop ? null : 4) : profile.mainLimit,
+      morePageEnabled: pageId == null ? true : profile.morePageEnabled,
       mounts: mounts,
     );
     _setProfile(value);
@@ -393,68 +410,85 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
       final result = await showDialog<PageContext>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
-          builder: (context, update) => AlertDialog(
-            title: const Text('补充上下文'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('未指定的上下文由宿主提供；选择具体对象不会增加模块权限。'),
-                  DropdownButtonFormField<String>(
-                    borderRadius: AppDesign.selectionBorderRadius,
-                    initialValue: taskId ?? '',
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: '任务'),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('由宿主提供')),
-                      for (final task in tasks)
-                        DropdownMenuItem(
-                          value: task.id,
-                          child: Text(
-                            task.title,
-                            overflow: TextOverflow.ellipsis,
+          builder: (context, update) => NativeUi(
+            child: AlertDialog(
+              title: const Text('补充上下文'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('未指定的上下文由宿主提供；选择具体对象不会增加模块权限。'),
+                    NativeUi(
+                      child: DropdownButtonFormField<String>(
+                        borderRadius: AppDesign.selectionBorderRadius,
+                        initialValue: taskId ?? '',
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: '任务'),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('由宿主提供'),
                           ),
-                        ),
-                    ],
-                    onChanged: (value) =>
-                        update(() => taskId = value == '' ? null : value),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    borderRadius: AppDesign.selectionBorderRadius,
-                    initialValue: projectId ?? '',
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: '项目'),
-                    items: [
-                      const DropdownMenuItem(value: '', child: Text('由宿主提供')),
-                      for (final project in projects)
-                        DropdownMenuItem(
-                          value: project.id,
-                          child: Text(
-                            project.name,
-                            overflow: TextOverflow.ellipsis,
+                          for (final task in tasks)
+                            DropdownMenuItem(
+                              value: task.id,
+                              child: Text(
+                                task.title,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) =>
+                            update(() => taskId = value == '' ? null : value),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    NativeUi(
+                      child: DropdownButtonFormField<String>(
+                        borderRadius: AppDesign.selectionBorderRadius,
+                        initialValue: projectId ?? '',
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: '项目'),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('由宿主提供'),
                           ),
+                          for (final project in projects)
+                            DropdownMenuItem(
+                              value: project.id,
+                              child: Text(
+                                project.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) => update(
+                          () => projectId = value == '' ? null : value,
                         ),
-                    ],
-                    onChanged: (value) =>
-                        update(() => projectId = value == '' ? null : value),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(
-                  dialogContext,
-                  PageContext(taskId: taskId, projectId: projectId),
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Text('使用此上下文'),
               ),
-            ],
+              actions: [
+                NativeUi(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('取消'),
+                  ),
+                ),
+                NativeUi(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(
+                      dialogContext,
+                      PageContext(taskId: taskId, projectId: projectId),
+                    ),
+                    child: const Text('使用此上下文'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -626,14 +660,16 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
           ),
           Text(_location(mount)),
           const Text('模块或入口不可用，配置已保留；恢复模块后可重新使用。'),
-          TextButton.icon(
-            onPressed: saving
-                ? null
-                : () {
-                    _setProfile(profile.withoutMount(selectedId!));
-                  },
-            icon: const Icon(Icons.delete_outline),
-            label: const Text('清理失效配置'),
+          NativeUi(
+            child: TextButton.icon(
+              onPressed: saving
+                  ? null
+                  : () {
+                      _setProfile(profile.withoutMount(selectedId!));
+                    },
+              icon: const UiIcon(Icons.delete_outline),
+              label: const Text('清理失效配置'),
+            ),
           ),
         ],
       );
@@ -680,89 +716,111 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
             '${diagnostic.issue == UiMountIssue.missingContext ? '上下文待检查' : '失效'}：${diagnostic.message}\n${diagnostic.suggestion}',
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
-          TextButton(
-            onPressed: () => ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('配置保持不变，条件恢复后可重新使用'))),
-            child: const Text('暂时保留'),
+          NativeUi(
+            child: TextButton(
+              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('配置保持不变，条件恢复后可重新使用')),
+              ),
+              child: const Text('暂时保留'),
+            ),
           ),
         ],
         const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: editable ? () => _target(entry) : null,
-          icon: const Icon(Icons.place_outlined),
-          label: const Text('调整位置'),
+        NativeUi(
+          child: OutlinedButton.icon(
+            onPressed: editable ? () => _target(entry) : null,
+            icon: const UiIcon(Icons.place_outlined),
+            label: const Text('调整位置'),
+          ),
         ),
         const SizedBox(height: 16),
         Text('分组顺序 · ${index + 1} / ${siblings.length}'),
         Wrap(
           spacing: 4,
           children: [
-            IconButton(
-              tooltip: '上移',
-              onPressed: editable && !filtered && index > 0
-                  ? () => _placeAt(entry, index - 1)
-                  : null,
-              icon: const Icon(Icons.arrow_upward),
+            NativeUi(
+              child: IconButton(
+                tooltip: '上移',
+                onPressed: editable && !filtered && index > 0
+                    ? () => _placeAt(entry, index - 1)
+                    : null,
+                icon: const UiIcon(Icons.arrow_upward),
+              ),
             ),
-            IconButton(
-              tooltip: '下移',
-              onPressed: editable && !filtered && index < siblings.length - 1
-                  ? () => _placeAt(entry, index + 1)
-                  : null,
-              icon: const Icon(Icons.arrow_downward),
+            NativeUi(
+              child: IconButton(
+                tooltip: '下移',
+                onPressed: editable && !filtered && index < siblings.length - 1
+                    ? () => _placeAt(entry, index + 1)
+                    : null,
+                icon: const UiIcon(Icons.arrow_downward),
+              ),
             ),
-            TextButton(
-              onPressed: editable && index > 0
-                  ? () => _placeAt(entry, 0)
-                  : null,
-              child: const Text('置顶'),
+            NativeUi(
+              child: TextButton(
+                onPressed: editable && index > 0
+                    ? () => _placeAt(entry, 0)
+                    : null,
+                child: const Text('置顶'),
+              ),
             ),
-            TextButton(
-              onPressed: editable && index < siblings.length - 1
-                  ? () => _placeAt(entry, siblings.length - 1)
-                  : null,
-              child: const Text('置底'),
+            NativeUi(
+              child: TextButton(
+                onPressed: editable && index < siblings.length - 1
+                    ? () => _placeAt(entry, siblings.length - 1)
+                    : null,
+                child: const Text('置底'),
+              ),
             ),
-            TextButton(
-              onPressed: editable && siblings.length > 1
-                  ? () => _anchor(entry, false)
-                  : null,
-              child: const Text('移到指定项之前'),
+            NativeUi(
+              child: TextButton(
+                onPressed: editable && siblings.length > 1
+                    ? () => _anchor(entry, false)
+                    : null,
+                child: const Text('移到指定项之前'),
+              ),
             ),
-            TextButton(
-              onPressed: editable && siblings.length > 1
-                  ? () => _anchor(entry, true)
-                  : null,
-              child: const Text('移到指定项之后'),
+            NativeUi(
+              child: TextButton(
+                onPressed: editable && siblings.length > 1
+                    ? () => _anchor(entry, true)
+                    : null,
+                child: const Text('移到指定项之后'),
+              ),
             ),
           ],
         ),
         if (filtered) const Text('筛选时暂停相邻上移 / 下移；置顶、置底及指定锚点始终基于完整分组。'),
         const SizedBox(height: 12),
-        TextButton(
-          onPressed: editable ? () => _context(entry) : null,
-          child: const Text('补充上下文'),
+        NativeUi(
+          child: TextButton(
+            onPressed: editable ? () => _context(entry) : null,
+            child: const Text('补充上下文'),
+          ),
         ),
         if (profile.mounts.containsKey(entry.id))
-          TextButton(
-            onPressed: editable
-                ? () => _setProfile(profile.withoutMount(entry.id))
-                : null,
-            child: const Text('恢复此项默认'),
+          NativeUi(
+            child: TextButton(
+              onPressed: editable
+                  ? () => _setProfile(profile.withoutMount(entry.id))
+                  : null,
+              child: const Text('恢复此项默认'),
+            ),
           ),
         if (mount.placement == UiPlacement.page)
-          TextButton(
-            onPressed: editable
-                ? () => _move(
-                    entry,
-                    UiMount(
-                      placement: UiPlacement.hidden,
-                      context: mount.context,
-                    ),
-                  )
-                : null,
-            child: const Text('移除挂载'),
+          NativeUi(
+            child: TextButton(
+              onPressed: editable
+                  ? () => _move(
+                      entry,
+                      UiMount(
+                        placement: UiPlacement.hidden,
+                        context: mount.context,
+                      ),
+                    )
+                  : null,
+              child: const Text('移除挂载'),
+            ),
           ),
       ],
     );
@@ -771,81 +829,99 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
   void _status() {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('草稿状态'),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('变更仅在保存后生效；失效项可以暂时保留，条件恢复后重新使用。'),
-                if (baseline?.warning != null) Text(baseline!.warning!),
-                if (error != null) Text(error!),
-                for (final warning in warnings) Text(warning),
-                for (final entry in widget.registry.ui.entries)
-                  if (entryDiagnostics[entry.id] != null)
-                    ListTile(
-                      title: Text(entry.label),
-                      subtitle: Text(
-                        '${entryDiagnostics[entry.id]!.message}\n${entryDiagnostics[entry.id]!.suggestion}',
+      builder: (dialogContext) => NativeUi(
+        child: AlertDialog(
+          title: const Text('草稿状态'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('变更仅在保存后生效；失效项可以暂时保留，条件恢复后重新使用。'),
+                  if (baseline?.warning != null) Text(baseline!.warning!),
+                  if (error != null) Text(error!),
+                  for (final warning in warnings) Text(warning),
+                  for (final entry in widget.registry.ui.entries)
+                    if (entryDiagnostics[entry.id] != null)
+                      NativeUi(
+                        child: ListTile(
+                          title: Text(entry.label),
+                          subtitle: Text(
+                            '${entryDiagnostics[entry.id]!.message}\n${entryDiagnostics[entry.id]!.suggestion}',
+                          ),
+                        ),
                       ),
-                    ),
-              ],
+                ],
+              ),
             ),
           ),
+          actions: [
+            NativeUi(
+              child: TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('返回编辑'),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('返回编辑'),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _limitField() => TextField(
-    key: ValueKey('navigation-limit-$desktop'),
-    controller: limitControllers[desktop],
-    enabled: !saving,
-    keyboardType: TextInputType.number,
-    decoration: const InputDecoration(
-      labelText: '主导航直显上限',
-      hintText: '留空不限制',
-      isDense: true,
+  Widget _limitField() => NativeUi(
+    child: TextField(
+      key: ValueKey('navigation-limit-$desktop'),
+      controller: limitControllers[desktop],
+      enabled: !saving,
+      keyboardType: TextInputType.number,
+      decoration: const InputDecoration(
+        labelText: '主导航直显上限',
+        hintText: '留空不限制',
+        isDense: true,
+      ),
+      onChanged: (text) {
+        final limit = text.isEmpty ? null : int.tryParse(text);
+        if (text.isEmpty || (limit != null && limit > 0)) {
+          _setProfile(
+            UiLayoutProfile(
+              mainLimit: limit,
+              morePageEnabled: profile.morePageEnabled,
+              mounts: profile.mounts,
+            ),
+          );
+        }
+        _markDirty();
+      },
     ),
-    onChanged: (text) {
-      final limit = text.isEmpty ? null : int.tryParse(text);
-      if (text.isEmpty || (limit != null && limit > 0)) {
-        _setProfile(UiLayoutProfile(mainLimit: limit, mounts: profile.mounts));
-      }
-      _markDirty();
-    },
   );
 
   void _editLimit() {
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('主导航直显上限'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _limitField(),
-              const SizedBox(height: 8),
-              const Text('不包含“更多”；留空不限制，空间不足时自动减少。'),
-            ],
+      builder: (dialogContext) => NativeUi(
+        child: AlertDialog(
+          title: const Text('主导航直显上限'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _limitField(),
+                const SizedBox(height: 8),
+                const Text('不包含“更多”；留空不限制，空间不足时自动减少。'),
+              ],
+            ),
           ),
+          actions: [
+            NativeUi(
+              child: TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('返回编辑'),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('返回编辑'),
-          ),
-        ],
       ),
     );
   }
@@ -871,15 +947,19 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
       _markDirty();
     }
     if (draft == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('入口与页面布局')),
-        body: Center(
-          child: state.hasError
-              ? TextButton(
-                  onPressed: () => ref.invalidate(uiLayoutProvider),
-                  child: const Text('读取失败，重试'),
-                )
-              : const CircularProgressIndicator(),
+      return NativeUi(
+        child: Scaffold(
+          appBar: AppBar(title: const Text('入口与页面布局')),
+          body: Center(
+            child: state.hasError
+                ? NativeUi(
+                    child: TextButton(
+                      onPressed: () => ref.invalidate(uiLayoutProvider),
+                      child: const Text('读取失败，重试'),
+                    ),
+                  )
+                : const NativeUi(child: CircularProgressIndicator()),
+          ),
         ),
       );
     }
@@ -980,50 +1060,56 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
       final total = groupTotals[group.key]!;
       final collapsed = collapsedGroups.contains(group.key);
       rows.add(
-        () => ListTile(
-          key: ValueKey('layout-group-${group.key}'),
-          dense: true,
-          title: Text('$label · ${group.value.length} / $total'),
-          leading: Icon(collapsed ? Icons.chevron_right : Icons.expand_more),
-          onTap: () => _update(() {
-            if (collapsed) {
-              collapsedGroups.remove(group.key);
-            } else {
-              collapsedGroups.add(group.key);
-            }
-          }),
+        () => NativeUi(
+          child: ListTile(
+            key: ValueKey('layout-group-${group.key}'),
+            dense: true,
+            title: Text('$label · ${group.value.length} / $total'),
+            leading: UiIcon(
+              collapsed ? Icons.chevron_right : Icons.expand_more,
+            ),
+            onTap: () => _update(() {
+              if (collapsed) {
+                collapsedGroups.remove(group.key);
+              } else {
+                collapsedGroups.add(group.key);
+              }
+            }),
+          ),
         ),
       );
       if (!collapsed) {
         for (final entry in group.value) {
           final diagnostic = entryDiagnostics[entry.id];
           rows.add(
-            () => ListTile(
-              key: ValueKey('layout-row-${entry.id}'),
-              dense: true,
-              selected: selectedId == entry.id,
-              selectedTileColor: Theme.of(context)
-                  .colorScheme
-                  .secondaryContainer,
-              leading: Icon(
-                diagnostic == null
-                    ? entry.icon
-                    : diagnostic.issue == UiMountIssue.missingContext
-                    ? Icons.info_outline
-                    : Icons.warning_amber_outlined,
+            () => NativeUi(
+              child: ListTile(
+                key: ValueKey('layout-row-${entry.id}'),
+                dense: true,
+                selected: selectedId == entry.id,
+                selectedTileColor: Theme.of(context)
+                    .colorScheme
+                    .secondaryContainer,
+                leading: UiIcon(
+                  diagnostic == null
+                      ? entry.icon
+                      : diagnostic.issue == UiMountIssue.missingContext
+                      ? Icons.info_outline
+                      : Icons.warning_amber_outlined,
+                ),
+                title: Text(entry.label),
+                subtitle: Text(
+                  '${showIdentifiers ? '模块：${entry.moduleId} · ${entry.id}\n' : ''}'
+                  '${_location(profile.mountFor(entry), position: entryPositions[entry.id])}'
+                  '${diagnostic == null ? '' : ' · ${diagnostic.issue == UiMountIssue.missingContext ? '上下文待检查' : '失效'}'}',
+                  maxLines: showIdentifiers ? 3 : 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: UiIcon(
+                  _editable(entry) ? Icons.chevron_right : Icons.lock_outline,
+                ),
+                onTap: saving ? null : () => _select(entry.id, split),
               ),
-              title: Text(entry.label),
-              subtitle: Text(
-                '${showIdentifiers ? '模块：${entry.moduleId} · ${entry.id}\n' : ''}'
-                '${_location(profile.mountFor(entry), position: entryPositions[entry.id])}'
-                '${diagnostic == null ? '' : ' · ${diagnostic.issue == UiMountIssue.missingContext ? '上下文待检查' : '失效'}'}',
-                maxLines: showIdentifiers ? 3 : 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: Icon(
-                _editable(entry) ? Icons.chevron_right : Icons.lock_outline,
-              ),
-              onTap: saving ? null : () => _select(entry.id, split),
             ),
           );
         }
@@ -1033,30 +1119,36 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
       const orphanKey = (UiPlacement.hidden, null, '__orphans');
       final collapsed = collapsedGroups.contains(orphanKey);
       rows.add(
-        () => ListTile(
-          dense: true,
-          title: Text('不可用贡献 · ${orphans.length}'),
-          leading: Icon(collapsed ? Icons.chevron_right : Icons.expand_more),
-          onTap: () => _update(() {
-            if (collapsed) {
-              collapsedGroups.remove(orphanKey);
-            } else {
-              collapsedGroups.add(orphanKey);
-            }
-          }),
+        () => NativeUi(
+          child: ListTile(
+            dense: true,
+            title: Text('不可用贡献 · ${orphans.length}'),
+            leading: UiIcon(
+              collapsed ? Icons.chevron_right : Icons.expand_more,
+            ),
+            onTap: () => _update(() {
+              if (collapsed) {
+                collapsedGroups.remove(orphanKey);
+              } else {
+                collapsedGroups.add(orphanKey);
+              }
+            }),
+          ),
         ),
       );
       if (!collapsed) {
         for (final orphan in orphans) {
           rows.add(
-            () => ListTile(
-              key: ValueKey('layout-row-${orphan.key}'),
-              dense: true,
-              selected: selectedId == orphan.key,
-              leading: const Icon(Icons.warning_amber_outlined),
-              title: Text(orphan.key),
-              subtitle: const Text('模块或入口不可用，配置已保留'),
-              onTap: saving ? null : () => _select(orphan.key, split),
+            () => NativeUi(
+              child: ListTile(
+                key: ValueKey('layout-row-${orphan.key}'),
+                dense: true,
+                selected: selectedId == orphan.key,
+                leading: const UiIcon(Icons.warning_amber_outlined),
+                title: Text(orphan.key),
+                subtitle: const Text('模块或入口不可用，配置已保留'),
+                onTap: saving ? null : () => _select(orphan.key, split),
+              ),
             ),
           );
         }
@@ -1090,9 +1182,11 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
               if (_changes().isNotEmpty)
                 Align(
                   alignment: AlignmentDirectional.centerStart,
-                  child: TextButton(
-                    onPressed: _reviewChanges,
-                    child: Text('查看变更（${_changes().length}）'),
+                  child: NativeUi(
+                    child: TextButton(
+                      onPressed: _reviewChanges,
+                      child: Text('查看变更（${_changes().length}）'),
+                    ),
                   ),
                 ),
               const SizedBox(height: 20),
@@ -1106,6 +1200,11 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
                   onEditLimit: saving || area != UiLayoutPreviewArea.navigation
                       ? null
                       : _editLimit,
+                  onMorePageChanged:
+                      saving || area != UiLayoutPreviewArea.navigation
+                      ? null
+                      : (value) =>
+                            _setProfile(profile.withMorePageEnabled(value)),
                   area: area,
                 ),
               if (!childPage)
@@ -1152,233 +1251,288 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
                   ],
                 ),
               if (!childPage && problemCount > 0)
-                ListTile(
-                  leading: const Icon(Icons.info_outline),
-                  title: Text('$problemCount 项配置需要检查'),
-                  subtitle: const Text('可在高级编辑中查看和修复'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _update(() => advanced = true),
+                NativeUi(
+                  child: ListTile(
+                    leading: const UiIcon(Icons.info_outline),
+                    title: Text('$problemCount 项配置需要检查'),
+                    subtitle: const Text('可在高级编辑中查看和修复'),
+                    trailing: const UiIcon(Icons.chevron_right),
+                    onTap: () => _update(() => advanced = true),
+                  ),
                 ),
               if (!childPage)
-                TextButton.icon(
-                  onPressed: () => _update(() => advanced = true),
-                  icon: const Icon(Icons.tune),
-                  label: const Text('高级编辑'),
+                NativeUi(
+                  child: TextButton.icon(
+                    onPressed: () => _update(() => advanced = true),
+                    icon: const UiIcon(Icons.tune),
+                    label: const Text('高级编辑'),
+                  ),
                 ),
             ],
           )
         : entryList;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _areaTitle(area),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          if (!showTools)
-            IconButton(
-              tooltip: '预览草稿',
-              onPressed: saving ? null : _preview,
-              icon: const Icon(Icons.visibility_outlined),
-            ),
-          if (pageId == null && !childPage)
-            IconButton(
-              tooltip: advanced ? '返回可视编辑' : '高级编辑',
-              onPressed: saving ? null : _toggleAdvanced,
-              icon: Icon(advanced ? Icons.dashboard_outlined : Icons.tune),
-            ),
-          TextButton(
-            onPressed: saving ? null : () => _save(context),
-            child: Text(saving ? '保存中…' : '保存'),
+    return NativeUi(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            _areaTitle(area),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (!childPage)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
-                children: [
-                  SegmentedButton<bool>(
-                    showSelectedIcon: !compactToolbar,
-                    segments: [
-                      ButtonSegment(
-                        value: false,
-                        tooltip: '手机 / 窄屏',
-                        label: compactToolbar ? null : const Text('手机 / 窄屏'),
-                        icon: compactToolbar
-                            ? const Icon(Icons.phone_android)
-                            : null,
-                      ),
-                      ButtonSegment(
-                        value: true,
-                        tooltip: '电脑 / 宽屏',
-                        label: compactToolbar ? null : const Text('电脑 / 宽屏'),
-                        icon: compactToolbar ? const Icon(Icons.laptop) : null,
-                      ),
-                    ],
-                    selected: {desktop},
-                    onSelectionChanged: saving
-                        ? null
-                        : (value) => _update(() {
-                            desktop = value.single;
-                            selectedId = null;
-                            collapsedGroups.clear();
-                          }),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      borderRadius: AppDesign.selectionBorderRadius,
-                      key: ValueKey('layout-scope-$pageId'),
-                      initialValue: pageId ?? '',
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: '编辑区域',
-                        isDense: true,
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: '',
-                          child: Text('导航与菜单', overflow: TextOverflow.ellipsis),
-                        ),
-                        for (final page in pages)
-                          DropdownMenuItem(
-                            value: page.id,
-                            child: Text(
-                              '${page.title}${showIdentifiers ? ' · ${page.id}' : ''}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        for (final id in dormantPageIds)
-                          DropdownMenuItem(
-                            value: id,
-                            child: Text(
-                              '失效页面配置 · $id',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: saving
-                          ? null
-                          : (value) => _update(() {
-                              pageId = value == '' ? null : value;
-                              selectedId = null;
-                            }),
-                    ),
-                  ),
-                  if (pageId == null && showTools) ...[
-                    const SizedBox(width: 8),
-                    if (compactToolbar)
-                      IconButton(
-                        tooltip: '主导航直显上限',
-                        onPressed: saving ? null : _editLimit,
-                        icon: const Icon(Icons.tune),
-                      )
-                    else
-                      SizedBox(width: 160 * textScale, child: _limitField()),
-                  ],
-                ],
-              ),
-            ),
-          if (showTools)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: TextField(
-                key: const ValueKey('layout-search'),
-                controller: searchController,
-                enabled: !saving,
-                decoration: InputDecoration(
-                  labelText: '搜索入口、模块、页面或位置',
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: search.isEmpty
-                      ? null
-                      : IconButton(
-                          tooltip: '清空搜索',
-                          onPressed: () {
-                            searchController.clear();
-                            _update(() => search = '');
-                          },
-                          icon: const Icon(Icons.clear),
-                        ),
+          actions: [
+            if (!showTools)
+              NativeUi(
+                child: IconButton(
+                  tooltip: '预览草稿',
+                  onPressed: saving ? null : _preview,
+                  icon: const UiIcon(Icons.visibility_outlined),
                 ),
-                onChanged: (value) => _update(() => search = value),
+              ),
+            if (pageId == null && !childPage)
+              NativeUi(
+                child: IconButton(
+                  tooltip: advanced ? '返回可视编辑' : '高级编辑',
+                  onPressed: saving ? null : _toggleAdvanced,
+                  icon: UiIcon(
+                    advanced ? Icons.dashboard_outlined : Icons.tune,
+                  ),
+                ),
+              ),
+            NativeUi(
+              child: TextButton(
+                onPressed: saving ? null : () => _save(context),
+                child: Text(saving ? '保存中…' : '保存'),
               ),
             ),
-          if (showTools)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: _reviewChanges,
-                    child: Text('查看变更（${_changes().length}）'),
-                  ),
-                  TextButton(
-                    onPressed: _status,
-                    child: Text('状态（$problemCount）'),
-                  ),
-                  FilterChip(
-                    label: const Text('仅失效 / 待检查'),
-                    selected: onlyProblems,
-                    onSelected: saving
-                        ? null
-                        : (value) => _update(() => onlyProblems = value),
-                  ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('显示技术标识'),
-                    selected: showIdentifiers,
-                    onSelected: (value) =>
-                        _update(() => showIdentifiers = value),
-                  ),
-                  TextButton.icon(
-                    onPressed: saving ? null : _preview,
-                    icon: const Icon(Icons.visibility_outlined),
-                    label: const Text('预览草稿'),
-                  ),
-                  if (pageId != null)
-                    TextButton(
-                      onPressed: saving ? null : _add,
-                      child: const Text('添加入口或内容'),
+          ],
+        ),
+        body: Column(
+          children: [
+            if (!childPage)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                child: Row(
+                  children: [
+                    NativeUi(
+                      child: SegmentedButton<bool>(
+                        showSelectedIcon: !compactToolbar,
+                        segments: [
+                          ButtonSegment(
+                            value: false,
+                            tooltip: '手机 / 窄屏',
+                            label: compactToolbar
+                                ? null
+                                : const Text('手机 / 窄屏'),
+                            icon: compactToolbar
+                                ? const UiIcon(Icons.phone_android)
+                                : null,
+                          ),
+                          ButtonSegment(
+                            value: true,
+                            tooltip: '电脑 / 宽屏',
+                            label: compactToolbar
+                                ? null
+                                : const Text('电脑 / 宽屏'),
+                            icon: compactToolbar
+                                ? const UiIcon(Icons.laptop)
+                                : null,
+                          ),
+                        ],
+                        selected: {desktop},
+                        onSelectionChanged: saving
+                            ? null
+                            : (value) => _update(() {
+                                desktop = value.single;
+                                selectedId = null;
+                                collapsedGroups.clear();
+                              }),
+                      ),
                     ),
-                  TextButton(
-                    onPressed: saving ? null : _reset,
-                    child: const Text('恢复当前范围默认'),
-                  ),
-                  TextButton(
-                    onPressed: saving ? null : () => Navigator.pop(context),
-                    child: const Text('取消'),
-                  ),
-                ],
-              ),
-            ),
-          if (error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-          const Divider(height: 1),
-          Expanded(
-            child: split && (showTools || (childPage && selectedId != null))
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: list),
-                      const VerticalDivider(width: 1),
-                      SizedBox(width: 360 * textScale, child: _inspector()),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: NativeUi(
+                        child: DropdownButtonFormField<String>(
+                          borderRadius: AppDesign.selectionBorderRadius,
+                          key: ValueKey('layout-scope-$pageId'),
+                          initialValue: pageId ?? '',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: '编辑区域',
+                            isDense: true,
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: '',
+                              child: Text(
+                                '导航与菜单',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            for (final page in pages)
+                              DropdownMenuItem(
+                                value: page.id,
+                                child: Text(
+                                  '${page.title}${showIdentifiers ? ' · ${page.id}' : ''}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            for (final id in dormantPageIds)
+                              DropdownMenuItem(
+                                value: id,
+                                child: Text(
+                                  '失效页面配置 · $id',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: saving
+                              ? null
+                              : (value) => _update(() {
+                                  pageId = value == '' ? null : value;
+                                  selectedId = null;
+                                }),
+                        ),
+                      ),
+                    ),
+                    if (pageId == null && showTools) ...[
+                      const SizedBox(width: 8),
+                      if (compactToolbar)
+                        NativeUi(
+                          child: IconButton(
+                            tooltip: '主导航直显上限',
+                            onPressed: saving ? null : _editLimit,
+                            icon: const UiIcon(Icons.tune),
+                          ),
+                        )
+                      else
+                        SizedBox(width: 160 * textScale, child: _limitField()),
                     ],
-                  )
-                : list,
-          ),
-        ],
+                  ],
+                ),
+              ),
+            if (showTools)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                child: NativeUi(
+                  child: TextField(
+                    key: const ValueKey('layout-search'),
+                    controller: searchController,
+                    enabled: !saving,
+                    decoration: InputDecoration(
+                      labelText: '搜索入口、模块、页面或位置',
+                      isDense: true,
+                      prefixIcon: const UiIcon(Icons.search),
+                      suffixIcon: search.isEmpty
+                          ? null
+                          : NativeUi(
+                              child: IconButton(
+                                tooltip: '清空搜索',
+                                onPressed: () {
+                                  searchController.clear();
+                                  _update(() => search = '');
+                                },
+                                icon: const UiIcon(Icons.clear),
+                              ),
+                            ),
+                    ),
+                    onChanged: (value) => _update(() => search = value),
+                  ),
+                ),
+              ),
+            if (showTools)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    NativeUi(
+                      child: TextButton(
+                        onPressed: _reviewChanges,
+                        child: Text('查看变更（${_changes().length}）'),
+                      ),
+                    ),
+                    NativeUi(
+                      child: TextButton(
+                        onPressed: _status,
+                        child: Text('状态（$problemCount）'),
+                      ),
+                    ),
+                    NativeUi(
+                      child: FilterChip(
+                        label: const Text('仅失效 / 待检查'),
+                        selected: onlyProblems,
+                        onSelected: saving
+                            ? null
+                            : (value) => _update(() => onlyProblems = value),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    NativeUi(
+                      child: FilterChip(
+                        label: const Text('显示技术标识'),
+                        selected: showIdentifiers,
+                        onSelected: (value) =>
+                            _update(() => showIdentifiers = value),
+                      ),
+                    ),
+                    NativeUi(
+                      child: TextButton.icon(
+                        onPressed: saving ? null : _preview,
+                        icon: const UiIcon(Icons.visibility_outlined),
+                        label: const Text('预览草稿'),
+                      ),
+                    ),
+                    if (pageId != null)
+                      NativeUi(
+                        child: TextButton(
+                          onPressed: saving ? null : _add,
+                          child: const Text('添加入口或内容'),
+                        ),
+                      ),
+                    NativeUi(
+                      child: TextButton(
+                        onPressed: saving ? null : _reset,
+                        child: const Text('恢复当前范围默认'),
+                      ),
+                    ),
+                    NativeUi(
+                      child: TextButton(
+                        onPressed: saving ? null : () => Navigator.pop(context),
+                        child: const Text('取消'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            const Divider(height: 1),
+            Expanded(
+              child: split && (showTools || (childPage && selectedId != null))
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: list),
+                        const VerticalDivider(width: 1),
+                        SizedBox(width: 360 * textScale, child: _inspector()),
+                      ],
+                    )
+                  : list,
+            ),
+          ],
+        ),
       ),
     );
   }

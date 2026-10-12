@@ -1,3 +1,5 @@
+import '../../core/ui/ui_icon.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../app/design_system.dart';
@@ -20,25 +22,27 @@ class SettingsGroup extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (title != null) SectionHeading(title: title!),
-        ContentSurface(
-          child: Column(
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) const Divider(indent: 56, endIndent: 18),
-                children[i],
-              ],
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final content = Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null) SectionHeading(title: title!),
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const Divider(indent: 20, endIndent: 20),
+            children[i],
+          ],
+        ],
+      ),
+    );
+    return UiComponent(
+      ref: 'ui.nativeSection@1',
+      props: {'title': title ?? ''},
+      slots: {'content': content},
+      fallback: content,
+    );
+  }
 }
 
 class SettingsEntry extends StatelessWidget {
@@ -69,10 +73,10 @@ class SettingsEntry extends StatelessWidget {
       },
     },
     fallback: ListTile(
-      leading: Icon(icon),
+      leading: UiIcon(icon),
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle!),
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: const UiIcon(Icons.chevron_right_rounded),
       enabled: enabled,
       onTap: enabled ? onTap : null,
     ),

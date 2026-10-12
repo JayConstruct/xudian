@@ -4,6 +4,8 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
+import 'src/worker_poll_scheduler.dart';
+
 @Native<Pointer<Void> Function(Int64)>(symbol: 'xm_create')
 external Pointer<Void> _create(int memoryLimit);
 @Native<Int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>)>(
@@ -60,13 +62,16 @@ class JavaScriptWorker {
       _destroy(_handle);
       rethrow;
     }
-    _timer = Timer.periodic(const Duration(milliseconds: 8), (_) => _drain());
+    _polling = WorkerPollScheduler(
+      drain: _drain,
+      hasPending: () => _pending.values.any((request) => !request.isCompleted),
+    );
     _post(bootstrap);
   }
 
   final HostHandler host;
   late Pointer<Void> _handle;
-  late Timer _timer;
+  late final WorkerPollScheduler _polling;
   final _pending = <int, Completer<Object?>>{};
   int _sequence = 0;
   bool _closed = false;
@@ -117,13 +122,16 @@ class JavaScriptWorker {
     } finally {
       calloc.free(value);
     }
+    _polling.wake();
   }
 
-  void _drain() {
-    if (_closed) return;
+  bool _drain() {
+    if (_closed) return false;
+    var received = false;
     while (!_closed) {
       final raw = _poll(_handle);
       if (raw == nullptr) break;
+      received = true;
       Map<String, dynamic> message;
       try {
         message = jsonDecode(raw.toDartString()) as Map<String, dynamic>;
@@ -146,6 +154,7 @@ class JavaScriptWorker {
         }
       }
     }
+    return received;
   }
 
   Future<void> _host(Map<String, dynamic> message) async {
@@ -165,7 +174,7 @@ class JavaScriptWorker {
   void close([Object? error]) {
     if (_closed) return;
     _closed = true;
-    _timer.cancel();
+    _polling.close();
     _cancel(_handle);
     for (final completer in _pending.values) {
       if (!completer.isCompleted)
@@ -229,8 +238,18 @@ export const services = Object.freeze({
 export const extensions = Object.freeze({query: entity => call('extensions.query', {entity}),queryMany: entities => call('extensions.queryMany',{entities})});
 export const events = Object.freeze({subscribe: (source,listener) => globalThis.__watch('events.subscribe',source,listener)});
 export const ui = Object.freeze({
+  // Pure render metadata. The host validates and applies it to this page's
+  // composition only; no bridge request, preferences or business write.
+  runtimeContextPatch: patch => ({...patch}),
+  preferences: Object.freeze({
+    get: key => call('ui.preferences.get', {key}),
+    set: (key, value) => call('ui.preferences.set', {key, value}),
+  }),
+  notify: spec => call('ui.notify', spec),
+  showCode: spec => call('ui.showCode', spec),
   component: (ref, {key, props = {}, slots = {}, events = {}} = {}) => ({type: 'component', ref, ...(key === undefined ? {} : {key}), props, slots, events}),
   catalog: () => call('ui.catalog', {}),
+  examples: () => call('ui.examples', {}),
   navigate: (page, context = {}) => call('ui.navigate', {page, context}),
   panel: (page, context = {}, presentation = {}) => call('ui.panel', {page, context, presentation}),
   dialog: spec => call('ui.dialog', spec),

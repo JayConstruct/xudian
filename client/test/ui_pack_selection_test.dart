@@ -76,7 +76,15 @@ void main() {
           find.widgetWithText(MenuItemButton, '$missing（不可用，自动回退）'),
           findsOneWidget,
         );
-        expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.check_rounded), findsNothing);
+        final current = tester.widget<MenuItemButton>(
+          find.widgetWithText(MenuItemButton, '$missing（不可用，自动回退）'),
+        );
+        expect(current.trailingIcon, isNull);
+        expect(
+          current.style!.backgroundColor!.resolve({}),
+          isNot(Colors.transparent),
+        );
         expect(tester.testTextInput.isVisible, isFalse);
         expect(tester.takeException(), isNull);
         await tester.tap(find.widgetWithText(MenuItemButton, '内置默认'));

@@ -1,3 +1,6 @@
+import '../../core/ui/ui_icon.dart';
+import '../../core/ui/native_ui.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -22,6 +25,7 @@ class UiLayoutNavigationPreview extends StatelessWidget {
     this.selectedId,
     this.onSelected,
     this.onEditLimit,
+    this.onMorePageChanged,
     this.area = UiLayoutPreviewArea.all,
   });
 
@@ -31,6 +35,7 @@ class UiLayoutNavigationPreview extends StatelessWidget {
   final String? selectedId;
   final ValueChanged<String>? onSelected;
   final VoidCallback? onEditLimit;
+  final ValueChanged<bool>? onMorePageChanged;
   final UiLayoutPreviewArea area;
 
   List<UiEntryRegistration> _at(UiPlacement placement) => orderedEntries(
@@ -39,54 +44,42 @@ class UiLayoutNavigationPreview extends StatelessWidget {
     (entry) => profile.mountFor(entry).placement == placement,
   );
 
-  Widget _entry(UiEntryRegistration entry) => ListTile(
-    key: ValueKey('layout-row-${entry.id}'),
-    shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
-    leading: Icon(entry.icon, size: 22),
-    title: Text(entry.label),
-    selected: entry.id == selectedId,
-    onTap: onSelected == null ? null : () => onSelected!(entry.id),
+  Widget _entry(UiEntryRegistration entry) => NativeUi(
+    child: ListTile(
+      key: ValueKey('layout-row-${entry.id}'),
+      shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
+      leading: UiIcon(entry.icon, size: 22),
+      title: Text(entry.label),
+      selected: entry.id == selectedId,
+      onTap: onSelected == null ? null : () => onSelected!(entry.id),
+    ),
   );
 
   void _more(BuildContext context, List<UiEntryRegistration> entries) {
-    showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(sheetContext).height * .7,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('更多入口', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: entries.length,
-                  itemBuilder: (_, index) {
-                    final entry = entries[index];
-                    return ListTile(
-                      key: ValueKey('layout-more-${entry.id}'),
-                      shape: AppDesign.smoothShape(),
-                      leading: Icon(entry.icon),
-                      title: Text(entry.label),
-                      onTap: onSelected == null
-                          ? null
-                          : () {
-                              Navigator.pop(sheetContext);
-                              onSelected!(entry.id);
-                            },
-                    );
-                  },
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (pageContext) => Scaffold(
+          appBar: AppBar(title: const Text('更多入口')),
+          body: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            itemCount: entries.length,
+            itemBuilder: (_, index) {
+              final entry = entries[index];
+              return NativeUi(
+                child: ListTile(
+                  key: ValueKey('layout-more-${entry.id}'),
+                  shape: AppDesign.smoothShape(),
+                  leading: UiIcon(entry.icon),
+                  title: Text(entry.label),
+                  onTap: onSelected == null
+                      ? null
+                      : () {
+                          Navigator.pop(pageContext);
+                          onSelected!(entry.id);
+                        },
                 ),
-              ),
-            ],
+              );
+            },
           ),
         ),
       ),
@@ -115,12 +108,30 @@ class UiLayoutNavigationPreview extends StatelessWidget {
       final count = navigationVisibleCount(
         total: main.length,
         limit: profile.mainLimit,
-        width: width - 24,
+        width: width - 24 - (profile.morePageEnabled && !desktop ? 72 : 0),
         textScale: MediaQuery.textScalerOf(context).scale(12) / 12,
         desktop: desktop,
       );
       final visible = main.take(count).toList();
       final more = [..._at(UiPlacement.more), ...main.skip(count)];
+      final destinations = [
+        if (profile.morePageEnabled)
+          AppDestination(
+            id: 'app.shell.more',
+            label: '更多',
+            icon: Icons.apps_rounded,
+            selectedIcon: Icons.apps_rounded,
+            builder: (_) => const SizedBox.shrink(),
+          ),
+        for (final entry in visible)
+          AppDestination(
+            id: entry.id,
+            label: entry.label,
+            icon: entry.icon,
+            selectedIcon: entry.icon,
+            builder: (_) => const SizedBox.shrink(),
+          ),
+      ];
       final header = _at(UiPlacement.header);
       final scheme = Theme.of(context).colorScheme;
       final nav = desktop
@@ -129,39 +140,32 @@ class UiLayoutNavigationPreview extends StatelessWidget {
               shape: AppDesign.smoothShape(),
               child: Column(
                 children: [
-                  for (final entry in visible) _entry(entry),
-                  if (more.isNotEmpty)
-                    ListTile(
-                      key: const ValueKey('layout-preview-more'),
-                      leading: const Icon(Icons.more_horiz_rounded),
-                      title: const Text('更多'),
-                      onTap: () => _more(context, more),
+                  if (profile.morePageEnabled)
+                    NativeUi(
+                      child: ListTile(
+                        key: const ValueKey('layout-preview-more'),
+                        leading: const UiIcon(Icons.more_horiz_rounded),
+                        title: const Text('更多'),
+                        onTap: () => _more(context, more),
+                      ),
                     ),
+                  for (final entry in visible) _entry(entry),
                 ],
               ),
             )
           : MobileBottomDock(
               key: const ValueKey('layout-preview-bottom-bar'),
-              destinations: [
-                for (final entry in visible)
-                  AppDestination(
-                    id: entry.id,
-                    label: entry.label,
-                    icon: entry.icon,
-                    selectedIcon: entry.icon,
-                    builder: (_) => const SizedBox.shrink(),
-                  ),
-              ],
-              selectedIndex: visible.indexWhere((e) => e.id == selectedId),
-              visibleCount: visible.length,
-              hasMore: more.isNotEmpty,
-              moreSelected: more.any((e) => e.id == selectedId),
+              destinations: destinations,
+              selectedIndex: destinations.indexWhere((e) => e.id == selectedId),
+              visibleCount: destinations.length,
+              hasMore: false,
+              onAssistant: () {},
               showNavigation: true,
               onSelected: (index) {
-                if (index >= visible.length) {
+                if (destinations[index].id == 'app.shell.more') {
                   _more(context, more);
                 } else {
-                  onSelected?.call(visible[index].id);
+                  onSelected?.call(destinations[index].id);
                 }
               },
             );
@@ -176,7 +180,18 @@ class UiLayoutNavigationPreview extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (visible.isEmpty && more.isEmpty)
+                  if (onMorePageChanged != null)
+                    NativeUi(
+                      child: SwitchListTile.adaptive(
+                        key: const ValueKey('layout-more-page-enabled'),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('启用“更多”页面'),
+                        subtitle: const Text('在导航左侧集中显示常用工具和设置'),
+                        value: profile.morePageEnabled,
+                        onChanged: onMorePageChanged,
+                      ),
+                    ),
+                  if (visible.isEmpty && !profile.morePageEnabled)
                     const Padding(
                       padding: EdgeInsets.all(16),
                       child: Text('暂无导航入口，可从隐藏入口中添加。'),
@@ -186,13 +201,15 @@ class UiLayoutNavigationPreview extends StatelessWidget {
                   if (onEditLimit != null)
                     Align(
                       alignment: AlignmentDirectional.centerEnd,
-                      child: TextButton.icon(
-                        onPressed: onEditLimit,
-                        icon: const Icon(Icons.tune, size: 18),
-                        label: Text(
-                          profile.mainLimit == null
-                              ? '显示数量：自动'
-                              : '最多显示 ${profile.mainLimit} 项',
+                      child: NativeUi(
+                        child: TextButton.icon(
+                          onPressed: onEditLimit,
+                          icon: const UiIcon(Icons.tune, size: 18),
+                          label: Text(
+                            profile.mainLimit == null
+                                ? '显示数量：自动'
+                                : '最多显示 ${profile.mainLimit} 项',
+                          ),
                         ),
                       ),
                     ),
@@ -200,7 +217,31 @@ class UiLayoutNavigationPreview extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
-                        '“更多”中有 ${more.length} 个入口，超出显示数量的导航也会放在这里。',
+                        profile.morePageEnabled
+                            ? '“更多”页面中有 ${more.length} 个入口，超出显示数量的导航也会放在这里。'
+                            : '“更多”页面已关闭，${more.length} 个入口可从右上角的“全部入口”访问。',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  if (!profile.morePageEnabled && more.isNotEmpty)
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: NativeUi(
+                        child: TextButton.icon(
+                          key: const ValueKey(
+                            'layout-preview-all-entries-open',
+                          ),
+                          onPressed: () => _more(context, more),
+                          icon: const UiIcon(Icons.apps_rounded, size: 18),
+                          label: const Text('预览全部入口'),
+                        ),
+                      ),
+                    ),
+                  if (!desktop)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '右侧 AI 按钮仅在当前页面支持 AI 功能时显示。',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -225,7 +266,7 @@ class UiLayoutNavigationPreview extends StatelessWidget {
                       ),
                       const Padding(
                         padding: EdgeInsets.all(12),
-                        child: Icon(Icons.more_vert),
+                        child: UiIcon(Icons.more_vert),
                       ),
                     ],
                   ),
@@ -243,13 +284,32 @@ class UiLayoutNavigationPreview extends StatelessWidget {
                           children: [
                             for (final entry in header) _entry(entry),
                             if (header.isNotEmpty) const Divider(height: 16),
-                            const ListTile(
-                              key: ValueKey('layout-preview-fixed-settings'),
-                              leading: Icon(Icons.settings_outlined, size: 22),
-                              title: Text('设置'),
-                              trailing: Tooltip(
-                                message: '固定入口，始终保留',
-                                child: Icon(Icons.lock_outline, size: 16),
+                            if (!profile.morePageEnabled && more.isNotEmpty)
+                              NativeUi(
+                                child: ListTile(
+                                  key: const ValueKey(
+                                    'layout-preview-all-entries',
+                                  ),
+                                  leading: const UiIcon(
+                                    Icons.apps_rounded,
+                                    size: 22,
+                                  ),
+                                  title: const Text('全部入口'),
+                                  onTap: () => _more(context, more),
+                                ),
+                              ),
+                            const NativeUi(
+                              child: ListTile(
+                                key: ValueKey('layout-preview-fixed-settings'),
+                                leading: UiIcon(
+                                  Icons.settings_outlined,
+                                  size: 22,
+                                ),
+                                title: Text('设置'),
+                                trailing: Tooltip(
+                                  message: '固定入口，始终保留',
+                                  child: UiIcon(Icons.lock_outline, size: 16),
+                                ),
                               ),
                             ),
                           ],

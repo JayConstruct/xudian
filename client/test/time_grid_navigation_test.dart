@@ -4,6 +4,145 @@ import 'package:task_app/core/module_host/time_grid.dart';
 
 void main() {
   testWidgets(
+    'chrome cycles retain scroll position but window and timetable changes reset the range',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final state = ValueNotifier((
+        header: 88.0,
+        inset: 168.0,
+        rows: 16,
+        rowHeight: 72.0,
+        keyboard: 0.0,
+      ));
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ValueListenableBuilder(
+            valueListenable: state,
+            builder: (context, value, _) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                viewInsets: EdgeInsets.only(bottom: value.keyboard),
+                disableAnimations: true,
+              ),
+              child: Scaffold(
+                resizeToAvoidBottomInset: false,
+                body: Padding(
+                  padding: EdgeInsets.only(
+                    top: value.header,
+                    bottom: value.keyboard,
+                  ),
+                  child: TimeGrid(
+                    columns: const [
+                      {'id': 'mon', 'label': '周一'},
+                    ],
+                    rows: [
+                      for (var i = 0; i < value.rows; i++)
+                        {'id': '$i', 'label': '节次 $i'},
+                    ],
+                    blocks: const [],
+                    onEvent: (_) {},
+                    bottomInset: value.inset,
+                    options: {'rowHeight': value.rowHeight, 'headerHeight': 48},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      ScrollPosition position() => find
+          .descendant(
+            of: find.byKey(const PageStorageKey('time-grid-vertical')),
+            matching: find.byType(Scrollable),
+          )
+          .evaluate()
+          .whereType<StatefulElement>()
+          .map((e) => e.state)
+          .whereType<ScrollableState>()
+          .singleWhere((s) => s.widget.axisDirection == AxisDirection.down)
+          .position;
+      await tester.pump();
+      final scroll = position();
+      final extent = scroll.maxScrollExtent;
+      scroll.jumpTo(extent - 20);
+      await tester.pump();
+      final readingOffset = scroll.pixels;
+      for (var i = 0; i < 4; i++) {
+        state.value = (
+          header: 0,
+          inset: 60,
+          rows: 16,
+          rowHeight: 72,
+          keyboard: 0,
+        );
+        await tester.pump();
+        expect(scroll.pixels, closeTo(readingOffset, .01));
+        expect(scroll.maxScrollExtent, closeTo(extent, .01));
+        state.value = (
+          header: 88,
+          inset: 168,
+          rows: 16,
+          rowHeight: 72,
+          keyboard: 0,
+        );
+        await tester.pump();
+        expect(scroll.pixels, closeTo(readingOffset, .01));
+        expect(scroll.maxScrollExtent, closeTo(extent, .01));
+      }
+      Future<void> checkNaturalRange() async {
+        await tester.pump();
+        final natural =
+            (state.value.rows * state.value.rowHeight +
+                    state.value.inset -
+                    scroll.viewportDimension)
+                .clamp(0, double.infinity);
+        expect(
+          scroll.maxScrollExtent,
+          closeTo(natural, .01),
+          reason:
+              'A genuine geometry change must discard previous chrome padding.',
+        );
+        expect(scroll.pixels, lessThanOrEqualTo(scroll.maxScrollExtent));
+      }
+
+      tester.view.physicalSize = const Size(360, 840);
+      await checkNaturalRange();
+      state.value = (header: 0, inset: 60, rows: 8, rowHeight: 72, keyboard: 0);
+      await checkNaturalRange();
+      expect(scroll.maxScrollExtent, 0);
+      state.value = (
+        header: 0,
+        inset: 60,
+        rows: 8,
+        rowHeight: 120,
+        keyboard: 0,
+      );
+      await checkNaturalRange();
+      state.value = (
+        header: 0,
+        inset: 60,
+        rows: 8,
+        rowHeight: 120,
+        keyboard: 220,
+      );
+      await checkNaturalRange();
+      state.value = (
+        header: 0,
+        inset: 60,
+        rows: 8,
+        rowHeight: 120,
+        keyboard: 0,
+      );
+      await checkNaturalRange();
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'column requests locate courses and retain subsequent manual scroll',
     (tester) async {
       final options = ValueNotifier<Map<String, Object?>>({

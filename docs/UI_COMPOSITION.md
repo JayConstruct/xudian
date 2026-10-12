@@ -34,6 +34,16 @@ UI 组合把模块提供的页面、入口和挂载位置分开，底栏与侧�
 - `UiLayoutPage(initialDraft: ...)` 可接收待审阅的布局草稿；两套直显上限控件从该草稿初始化，“查看变更”仍与进入编辑器时的持久化配置对比，而非与传入草稿对比。传入草稿、预览、上下文修改和默认恢复均不自动保存。
 - 保存使用 `saveIfUnchanged(draft, expected: baseline)` 核对数据库中的基线，不仅检查可能过期的 provider 状态。保存冲突或失败时保留草稿，不覆盖其他操作已保存的配置；编辑会话通过 `uiLayoutEditorSessionsProvider` 登记，规范化配置与基线不同或直显上限输入无效时标记为未提交，退出时注销。
 
+## v3 内联内容区
+
+宿主 API 1.11.0 支持 v3 页面槽位声明 `{id:"daily",label:"今日内容",kind:"sections",public:true,inline:true}`。`inline` 默认 `false`；设置为 `true` 时，各内容贡献按挂载顺序使用自然高度，整组共享一根纵向滚动，空组不显示占位内容。默认的非内联 `sections` 保持原有定高内容区和各贡献独立的页面滚动。
+
+只有 `sections` 支持 `inline: true`，定义此能力的模块需要 `hostApi: "^1.11.0"`。内联内容贡献返回普通自然高度 `column`，避免 `fillHeight`、`timeGrid`、`ui.page.*` 整页模板和独立纵向滚动节点。贡献入口仍可在布局设置中排序、隐藏或移动；挂载到普通槽位时恢复完整页面渲染。公开性、容量、上下文和循环检查继续适用。完整开发说明见 [SDK](MODULE_SDK.md)。
+
+API 1.16 将原“今天”入口改名为“每日”，原页面与 `daily` 槽 ID 不变。容器内贡献可读取 `context.selectedDate`，用该日查询自身内容；日期切换通过 render 返回 `runtimeContextPatch` 传递，不需要贡献依赖课表模块，也不写入导航或业务记录。局部上下文作用域与保护规则见 [每日日期上下文](MODULE_SDK.md#api-116-的每日日期上下文)。
+
+API 1.17 将入口名调整为“日程”，并通过根页面 `headerMode: 'date'` 显示共享选中日期，底栏仍显示固定入口名。模块、页面与槽位标识保持不变；内联概览使用 `dateHeading: false` 避免重复日期。详见 [日期顶栏](MODULE_SDK.md#api-117-的日期顶栏)。
+
 ## 旧 v1/v2 source 与 Schema 兼容契约
 
 公开契约为 [declarative-module-v2.schema.json](../packages/schemas/declarative-module-v2.schema.json)，通过标准引用保留 [版本 1](../packages/schemas/declarative-module-v1.schema.json)，并复用其 `views / fields / templates / rules` 资源定义。这些契约用于旧 source 解析、测试及迁移；语义以 `DeclarativeModuleParser` 和转换器为准，不能替代 v3 的宿主验证。

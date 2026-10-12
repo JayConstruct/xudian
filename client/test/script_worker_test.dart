@@ -1,7 +1,47 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xquickjs/xquickjs.dart';
 
 void main() {
+  test(
+    'idle worker wakes for concurrent invokes, delayed host replies and events',
+    () async {
+      final delivered = Completer<Object?>();
+      final subscribed = Completer<void>();
+      final reply = Completer<Object?>();
+      final worker = JavaScriptWorker(
+        {
+          'main.js': "import {data} from '@xudian/sdk'; let value; export async function watch(){await data.watch('things',{},v=>{value=v;});} export function latest(){return value;} export async function delayed(){return data.get('things','1');} export function echo(v){return v;}",
+        },
+        host: (method, args) async {
+          if (method == 'data.watch') {
+            subscribed.complete();
+            return 'subscription';
+          }
+          if (method == 'data.get') {
+            delivered.complete();
+            return reply.future;
+          }
+          return null;
+        },
+      );
+      addTearDown(worker.close);
+      await worker.load('main.js');
+      await worker.invoke('watch', {});
+      await subscribed.future;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      final pending = worker.invoke('delayed', {});
+      await delivered.future;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      final echoes = List.generate(8, (i) => worker.invoke('echo', i));
+      worker.emit('subscription', {'name': '变更'});
+      reply.complete('已返回');
+      expect(await pending, '已返回');
+      expect(await Future.wait(echoes), List.generate(8, (i) => i));
+      expect(await worker.invoke('latest', {}), {'name': '变更'});
+    },
+  );
   test('native worker executes package ESM, Chinese and asynchronous host promises', () async {
     final worker = JavaScriptWorker({
       'main.js': "import {data} from '@xudian/sdk'; import {text} from './text.js'; export async function test() { return text + (await data.get('things','1')).name; }",

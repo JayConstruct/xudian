@@ -1,3 +1,6 @@
+import '../../core/ui/ui_icon.dart';
+import '../../core/ui/native_ui.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -56,13 +59,15 @@ class _AppearanceSettingsPageState
             children: [
               const SectionHeading(title: '外观主题'),
               for (final mode in ThemeMode.values)
-                ListTile(
-                  title: Text(appearanceThemeLabel(mode)),
-                  selected: mode == preferences.themeMode,
-                  trailing: mode == preferences.themeMode
-                      ? const Icon(Icons.check_rounded)
-                      : null,
-                  onTap: () => Navigator.pop(context, mode),
+                NativeUi(
+                  child: ListTile(
+                    title: Text(appearanceThemeLabel(mode)),
+                    selected: mode == preferences.themeMode,
+                    trailing: mode == preferences.themeMode
+                        ? const UiIcon(Icons.check_rounded)
+                        : null,
+                    onTap: () => Navigator.pop(context, mode),
+                  ),
                 ),
             ],
           ),
@@ -76,21 +81,24 @@ class _AppearanceSettingsPageState
 
   @override
   Widget build(BuildContext context) => UiPackScope(
-    defaultOnly: true,
     child: DetailPage(
       title: '外观与交互',
       child: ref
           .watch(appPreferencesProvider)
           .when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(
+              child: NativeUi(child: CircularProgressIndicator()),
+            ),
             error: (_, _) => Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('读取外观设置失败'),
-                  TextButton(
-                    onPressed: () => ref.invalidate(appPreferencesProvider),
-                    child: const Text('重试'),
+                  NativeUi(
+                    child: TextButton(
+                      onPressed: () => ref.invalidate(appPreferencesProvider),
+                      child: const Text('重试'),
+                    ),
                   ),
                 ],
               ),
@@ -126,26 +134,30 @@ class _AppearanceSettingsPageState
                 SettingsGroup(
                   title: '交互反馈',
                   children: [
-                    SwitchListTile(
-                      secondary: const Icon(Icons.animation_rounded),
-                      title: const Text('减少动画'),
-                      subtitle: const Text('减少位移与按压动效；系统减少动画偏好始终生效'),
-                      value: preferences.reduceMotion,
-                      onChanged: saving
-                          ? null
-                          : (value) => _update(
-                              preferences.copyWith(reduceMotion: value),
-                            ),
+                    NativeUi(
+                      child: SwitchListTile(
+                        secondary: const UiIcon(Icons.animation_rounded),
+                        title: const Text('减少动画'),
+                        subtitle: const Text('减少位移与按压动效；系统减少动画偏好始终生效'),
+                        value: preferences.reduceMotion,
+                        onChanged: saving
+                            ? null
+                            : (value) => _update(
+                                preferences.copyWith(reduceMotion: value),
+                              ),
+                      ),
                     ),
-                    SwitchListTile(
-                      secondary: const Icon(Icons.vibration_rounded),
-                      title: const Text('触感反馈'),
-                      subtitle: const Text('切换底部导航时轻触振动'),
-                      value: preferences.haptics,
-                      onChanged: saving
-                          ? null
-                          : (value) =>
-                                _update(preferences.copyWith(haptics: value)),
+                    NativeUi(
+                      child: SwitchListTile(
+                        secondary: const UiIcon(Icons.vibration_rounded),
+                        title: const Text('触感反馈'),
+                        subtitle: const Text('切换底部导航时轻触振动'),
+                        value: preferences.haptics,
+                        onChanged: saving
+                            ? null
+                            : (value) =>
+                                  _update(preferences.copyWith(haptics: value)),
+                      ),
                     ),
                   ],
                 ),

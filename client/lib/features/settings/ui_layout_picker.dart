@@ -1,3 +1,6 @@
+import '../../core/ui/ui_icon.dart';
+import '../../core/ui/native_ui.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../app/design_system.dart';
@@ -36,53 +39,61 @@ class _UiLayoutPickerState<Value> extends State<UiLayoutPicker<Value>> {
           .toLowerCase()
           .contains(query.trim().toLowerCase());
     }).toList();
-    return AlertDialog(
-      insetPadding: const EdgeInsets.all(16),
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 520,
-        height: MediaQuery.sizeOf(context).height * .55,
-        child: Column(
-          children: [
-            TextField(
-              key: const ValueKey('layout-picker-search'),
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: '搜索名称、模块或标识',
-                prefixIcon: Icon(Icons.search),
+    return NativeUi(
+      child: AlertDialog(
+        insetPadding: const EdgeInsets.all(16),
+        title: Text(widget.title),
+        content: SizedBox(
+          width: 520,
+          height: MediaQuery.sizeOf(context).height * .55,
+          child: Column(
+            children: [
+              NativeUi(
+                child: TextField(
+                  key: const ValueKey('layout-picker-search'),
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: '搜索名称、模块或标识',
+                    prefixIcon: UiIcon(Icons.search),
+                  ),
+                  onChanged: (value) => setState(() => query = value),
+                ),
               ),
-              onChanged: (value) => setState(() => query = value),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: choices.isEmpty
-                  ? const Center(child: Text('没有符合条件的兼容选项'))
-                  : ListView.builder(
-                      itemCount: choices.length,
-                      itemBuilder: (context, index) {
-                        final choice = choices[index];
-                        return ListTile(
-                          shape: AppDesign.smoothShape(
-                            radius: AppDesign.controlRadius,
-                          ),
-                          title: Text(choice.label),
-                          subtitle: choice.detail.isEmpty
-                              ? null
-                              : Text(choice.detail),
-                          onTap: () => Navigator.pop(context, choice.value),
-                        );
-                      },
-                    ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Expanded(
+                child: choices.isEmpty
+                    ? const Center(child: Text('没有符合条件的兼容选项'))
+                    : ListView.builder(
+                        itemCount: choices.length,
+                        itemBuilder: (context, index) {
+                          final choice = choices[index];
+                          return NativeUi(
+                            child: ListTile(
+                              shape: AppDesign.smoothShape(
+                                radius: AppDesign.controlRadius,
+                              ),
+                              title: Text(choice.label),
+                              subtitle: choice.detail.isEmpty
+                                  ? null
+                                  : Text(choice.detail),
+                              onTap: () => Navigator.pop(context, choice.value),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
+        actions: [
+          NativeUi(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-      ],
     );
   }
 }

@@ -1,3 +1,6 @@
+import '../../core/ui/ui_icon.dart';
+import '../../core/ui/native_ui.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/ui/ui_composition.dart';
@@ -35,111 +38,123 @@ class UiLayoutPreview extends StatelessWidget {
     final visible = navigationVisibleCount(
       total: main.length,
       limit: profile.mainLimit,
-      width: width - 24,
+      width: width - 24 - (profile.morePageEnabled && !desktop ? 72 : 0),
       textScale: textScale,
       desktop: desktop,
     );
     final host = registry.page(pageId ?? '');
-    return AlertDialog(
-      title: const Text('草稿结构预览'),
-      content: SizedBox(
-        width: 560,
-        // Keep dialog intrinsic sizing out of the responsive preview builder.
-        height: MediaQuery.sizeOf(context).height * .6,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('仅展示入口和槽位结构，不加载模块页面、不执行业务操作，也不保存草稿。'),
-              const SizedBox(height: 12),
-              if (pageId == null) ...[
-                Text(
-                  '${desktop ? '宽屏' : '窄屏'}示意宽度 ${width.toInt()}px；实际显示数量以屏幕空间和文字缩放为准。',
-                ),
-                UiLayoutNavigationPreview(
-                  registry: registry,
-                  profile: profile,
-                  desktop: desktop,
-                  area: area,
-                ),
-                if (area == UiLayoutPreviewArea.all)
-                  _group(context, '主导航直显', main.take(visible).toList()),
-                if (area == UiLayoutPreviewArea.all)
-                  _group(context, '更多（含溢出入口）', [
-                    ...at(UiPlacement.more),
-                    ...main.skip(visible),
-                  ]),
-                if (area == UiLayoutPreviewArea.all)
-                  _group(context, '设置常用入口', at(UiPlacement.settings)),
-                if (area == UiLayoutPreviewArea.all)
-                  _group(context, '隐藏（不显示）', at(UiPlacement.hidden)),
-                if (area == UiLayoutPreviewArea.all ||
-                    area == UiLayoutPreviewArea.header)
-                  const Text('右上角菜单始终保留设置，不占用主导航显示数量。'),
-              ] else ...[
-                Text(host?.title ?? '宿主页面不可用，配置仍保留'),
-                for (final slot in host?.slots ?? const <PageSlotDefinition>[])
+    return NativeUi(
+      child: AlertDialog(
+        title: const Text('草稿结构预览'),
+        content: SizedBox(
+          width: 560,
+          // Keep dialog intrinsic sizing out of the responsive preview builder.
+          height: MediaQuery.sizeOf(context).height * .6,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('仅展示入口和槽位结构，不加载模块页面、不执行业务操作，也不保存草稿。'),
+                const SizedBox(height: 12),
+                if (pageId == null) ...[
+                  Text(
+                    '${desktop ? '宽屏' : '窄屏'}示意宽度 ${width.toInt()}px；实际显示数量以屏幕空间和文字缩放为准。',
+                  ),
+                  UiLayoutNavigationPreview(
+                    registry: registry,
+                    profile: profile,
+                    desktop: desktop,
+                    area: area,
+                  ),
+                  if (area == UiLayoutPreviewArea.all)
+                    _group(context, '主导航直显', main.take(visible).toList()),
+                  if (area == UiLayoutPreviewArea.all)
+                    _group(
+                      context,
+                      profile.morePageEnabled ? '更多（含溢出入口）' : '全部入口（右上角菜单）',
+                      [...at(UiPlacement.more), ...main.skip(visible)],
+                    ),
+                  if (area == UiLayoutPreviewArea.all)
+                    _group(context, '设置常用入口', at(UiPlacement.settings)),
+                  if (area == UiLayoutPreviewArea.all)
+                    _group(context, '隐藏（不显示）', at(UiPlacement.hidden)),
+                  if (area == UiLayoutPreviewArea.all ||
+                      area == UiLayoutPreviewArea.header)
+                    const Text('右上角菜单始终保留设置，不占用主导航显示数量。'),
+                ] else ...[
+                  Text(host?.title ?? '宿主页面不可用，配置仍保留'),
+                  for (final slot
+                      in host?.slots ?? const <PageSlotDefinition>[])
+                    _group(
+                      context,
+                      '${slot.label} · ${slotKindLabel(slot.kind)} · '
+                      '${slot.isPublic ? '公开' : '私有'}'
+                      '${slot.capacity == null ? '' : ' · 容量 ${slot.capacity}'}',
+                      orderedEntries(registry, profile.mountFor, (entry) {
+                        final mount = profile.mountFor(entry);
+                        return mount.placement == UiPlacement.page &&
+                            mount.pageId == pageId &&
+                            mount.slotId == slot.id;
+                      }),
+                    ),
                   _group(
                     context,
-                    '${slot.label} · ${slotKindLabel(slot.kind)} · '
-                    '${slot.isPublic ? '公开' : '私有'}'
-                    '${slot.capacity == null ? '' : ' · 容量 ${slot.capacity}'}',
+                    '失效槽位挂载',
                     orderedEntries(registry, profile.mountFor, (entry) {
                       final mount = profile.mountFor(entry);
                       return mount.placement == UiPlacement.page &&
                           mount.pageId == pageId &&
-                          mount.slotId == slot.id;
+                          !(host?.slots.any(
+                                (slot) => slot.id == mount.slotId,
+                              ) ??
+                              false);
                     }),
+                    showEmpty: false,
                   ),
-                _group(
-                  context,
-                  '失效槽位挂载',
-                  orderedEntries(registry, profile.mountFor, (entry) {
-                    final mount = profile.mountFor(entry);
-                    return mount.placement == UiPlacement.page &&
-                        mount.pageId == pageId &&
-                        !(host?.slots.any((slot) => slot.id == mount.slotId) ??
-                            false);
-                  }),
-                  showEmpty: false,
-                ),
-                const Text('子页面可能继续提供槽位；可切换编排范围查看。上下文有效性在运行时核验。'),
-              ],
-              if (area == UiLayoutPreviewArea.all)
-                for (final orphan in profile.mounts.entries.where(
-                  (item) =>
-                      !registry.entries.any((entry) => entry.id == item.key) &&
-                      (pageId == null
-                          ? item.value.placement != UiPlacement.page
-                          : item.value.pageId == pageId),
-                ))
-                  ListTile(
-                    leading: const Icon(Icons.warning_amber_outlined),
-                    title: Text(orphan.key),
-                    subtitle: const Text('模块或入口不可用，配置已保留'),
-                  ),
-              if (area == UiLayoutPreviewArea.all)
-                for (final warning in compositionWarnings(
-                  registry,
-                  profile.mountFor,
-                ))
-                  Text(
-                    warning,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                  const Text('子页面可能继续提供槽位；可切换编排范围查看。上下文有效性在运行时核验。'),
+                ],
+                if (area == UiLayoutPreviewArea.all)
+                  for (final orphan in profile.mounts.entries.where(
+                    (item) =>
+                        !registry.entries.any(
+                          (entry) => entry.id == item.key,
+                        ) &&
+                        (pageId == null
+                            ? item.value.placement != UiPlacement.page
+                            : item.value.pageId == pageId),
+                  ))
+                    NativeUi(
+                      child: ListTile(
+                        leading: const UiIcon(Icons.warning_amber_outlined),
+                        title: Text(orphan.key),
+                        subtitle: const Text('模块或入口不可用，配置已保留'),
+                      ),
                     ),
-                  ),
-            ],
+                if (area == UiLayoutPreviewArea.all)
+                  for (final warning in compositionWarnings(
+                    registry,
+                    profile.mountFor,
+                  ))
+                    Text(
+                      warning,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+              ],
+            ),
           ),
         ),
+        actions: [
+          NativeUi(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('返回编辑'),
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('返回编辑'),
-        ),
-      ],
     );
   }
 
@@ -169,21 +184,23 @@ class UiLayoutPreview extends StatelessWidget {
     final diagnostic = layoutEntryDiagnostic(registry, entry, profile.mountFor);
     final pending = diagnostic?.issue == UiMountIssue.missingContext;
     final mount = profile.mountFor(entry);
-    return ListTile(
-      dense: true,
-      leading: Icon(
-        diagnostic == null
-            ? entry.icon
-            : pending
-            ? Icons.info_outline
-            : Icons.warning_amber_outlined,
-      ),
-      title: Text(entry.label),
-      subtitle: Text(
-        diagnostic == null
-            ? '${entry.content ? '嵌入内容' : openingLabel(entry.opening)}'
-                  '${mount.context.taskId != null || mount.context.projectId != null ? ' · 已绑定上下文，运行时核验' : ''}'
-            : '${pending ? '上下文待检查' : '失效'}：${diagnostic.message}',
+    return NativeUi(
+      child: ListTile(
+        dense: true,
+        leading: UiIcon(
+          diagnostic == null
+              ? entry.icon
+              : pending
+              ? Icons.info_outline
+              : Icons.warning_amber_outlined,
+        ),
+        title: Text(entry.label),
+        subtitle: Text(
+          diagnostic == null
+              ? '${entry.content ? '嵌入内容' : openingLabel(entry.opening)}'
+                    '${mount.context.taskId != null || mount.context.projectId != null ? ' · 已绑定上下文，运行时核验' : ''}'
+              : '${pending ? '上下文待检查' : '失效'}：${diagnostic.message}',
+        ),
       ),
     );
   }

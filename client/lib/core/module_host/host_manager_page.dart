@@ -1,3 +1,6 @@
+import '../ui/ui_icon.dart';
+import '../ui/native_ui.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -91,7 +94,7 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
       events: {'press': (_) => press?.call()},
       fallback: FilledButton.icon(
         onPressed: press,
-        icon: const Icon(Icons.file_open_outlined),
+        icon: const UiIcon(Icons.file_open_outlined),
         label: const Text('导入 .xmodule'),
       ),
     );
@@ -135,6 +138,21 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
             publishers: await ref.read(hostPublisherRegistryProvider.future),
           );
     if (!mounted) return;
+    await installResolvedModules(context, ref, host, localPackages: [package]);
+  }
+
+  Future<void> restoreBundled(
+    ModuleHost host,
+    Map<String, Object?> entry,
+  ) async {
+    final asset = await rootBundle.load(entry['asset'] as String);
+    final package = await ScriptPackage.verify(
+      asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
+      preinstalledDigest: entry['sha256'] as String,
+    );
+    if (!mounted) return;
+    // Busy-state changes can recreate the catalog's FutureBuilder. The page's
+    // context remains mounted while the package is loaded and reviewed.
     await installResolvedModules(context, ref, host, localPackages: [package]);
   }
 
@@ -183,7 +201,8 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
   Widget build(BuildContext context) => ref
       .watch(moduleHostProvider)
       .when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () =>
+            const Center(child: NativeUi(child: CircularProgressIndicator())),
         error: (e, _) => Center(child: Text('$e')),
         data: (host) => StreamBuilder<void>(
           stream: host.registryChanges.stream,
@@ -202,29 +221,35 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                     runSpacing: 8,
                     children: [
                       _importButton(host),
-                      OutlinedButton.icon(
-                        onPressed: busy
-                            ? null
-                            : () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ModuleCatalogPage(host: host),
+                      NativeUi(
+                        child: OutlinedButton.icon(
+                          onPressed: busy
+                              ? null
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        ModuleCatalogPage(host: host),
+                                  ),
                                 ),
-                              ),
-                        icon: const Icon(Icons.public),
-                        label: const Text('模块商店'),
+                          icon: const UiIcon(Icons.public),
+                          label: const Text('模块商店'),
+                        ),
                       ),
                     ],
                   ),
-                  if (busy) const LinearProgressIndicator(),
-                  ListTile(
-                    leading: const Icon(Icons.palette_outlined),
-                    title: const Text('界面风格与恢复默认'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const UiPackSettingsPage(),
+                  if (busy)
+                    const NativeUi(child: LinearProgressIndicator()),
+                  NativeUi(
+                    child: ListTile(
+                      leading: const UiIcon(Icons.palette_outlined),
+                      title: const Text('界面风格与恢复默认'),
+                      trailing: const UiIcon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const UiPackSettingsPage(),
+                        ),
                       ),
                     ),
                   ),
@@ -236,11 +261,13 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                         'business': '业务模块',
                         'ui': 'UI 包',
                       }.entries)
-                        ChoiceChip(
-                          label: Text(entry.value),
-                          selected: category == entry.key,
-                          onSelected: (_) =>
-                              setState(() => category = entry.key),
+                        NativeUi(
+                          child: ChoiceChip(
+                            label: Text(entry.value),
+                            selected: category == entry.key,
+                            onSelected: (_) =>
+                                setState(() => category = entry.key),
+                          ),
                         ),
                     ],
                   ),
@@ -553,34 +580,22 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                       children: [
                         if (snapshot.hasData)
                           for (final raw in jsonDecode(snapshot.data!) as List)
-                            ListTile(
-                              title: Text('${object(raw)['id']}'),
-                              trailing: TextButton(
-                                onPressed: busy
-                                    ? null
-                                    : () => action(() async {
-                                        final entry = object(raw),
-                                            asset = await rootBundle.load(
-                                              entry['asset'] as String,
-                                            );
-                                        final package =
-                                            await ScriptPackage.verify(
-                                              asset.buffer.asUint8List(
-                                                asset.offsetInBytes,
-                                                asset.lengthInBytes,
-                                              ),
-                                              preinstalledDigest:
-                                                  entry['sha256'] as String,
-                                            );
-                                        if (!context.mounted) return;
-                                        await installResolvedModules(
-                                          context,
-                                          ref,
-                                          host,
-                                          localPackages: [package],
-                                        );
-                                      }),
-                                child: const Text('安装 / 恢复'),
+                            NativeUi(
+                              child: ListTile(
+                                title: Text('${object(raw)['id']}'),
+                                trailing: NativeUi(
+                                  child: TextButton(
+                                    onPressed: busy
+                                        ? null
+                                        : () => action(
+                                            () => restoreBundled(
+                                              host,
+                                              object(raw),
+                                            ),
+                                          ),
+                                    child: const Text('安装 / 恢复'),
+                                  ),
+                                ),
                               ),
                             ),
                       ],

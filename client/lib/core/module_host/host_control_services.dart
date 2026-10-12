@@ -224,6 +224,7 @@ void registerHostControlServices(
         if (args.containsKey('mainLimit')) {
           profile = UiLayoutProfile(
             mainLimit: args['mainLimit'] as int?,
+            morePageEnabled: profile.morePageEnabled,
             mounts: profile.mounts,
           );
         }

@@ -92,85 +92,121 @@ void main() {
   }
 
   for (final scale in [1.0, 1.6, 2.0]) {
-    testWidgets('module header matches today without flashing at ${scale}x', (
-      tester,
-    ) async {
-      await tester.binding.setSurfaceSize(const Size(420, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      tester.platformDispatcher.textScaleFactorTestValue = scale;
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      await tester.runAsync(() async {
-        await setup();
-        await saveTable(_timetable());
-        for (final id in ['app.tasks', 'app.views.today']) {
-          await host.install(
-            await ScriptPackage.verify(
-              await File('../dist/modules/$id.xmodule').readAsBytes(),
-              allowUnsignedLocal: true,
-            ),
-          );
-        }
-      });
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            databaseProvider.overrideWith((_) async => db),
-            moduleHostProvider.overrideWith((_) async => host),
-          ],
-          child: XudianApp(),
-        ),
-      );
-      await _settleNative(tester);
-      await tester.tap(find.text('今天').last);
-      await _settleNative(tester);
-      final header = find.byKey(const ValueKey('workspace-header-region'));
-      expect(
-        find.descendant(of: header, matching: find.text('今天')),
-        findsOneWidget,
-      );
-      final standardHeight = tester.getSize(header).height;
-      for (var visit = 0; visit < 2; visit++) {
-        final gate = Completer<void>();
-        host.instances['app.schedule']!.workflowTail = gate.future;
-        await tester.tap(find.text('课表'));
-        await tester.pump();
-        for (var frame = 0; frame < 5; frame++) {
-          expect(
-            find.descendant(of: header, matching: find.text('课表')),
-            findsNothing,
-          );
-          expect(
-            find.descendant(of: header, matching: find.text('今天')),
-            findsNothing,
-          );
-          expect(find.byTooltip('页面菜单'), findsOneWidget);
-          await tester.pump(const Duration(milliseconds: 20));
-        }
-        await tester.pump(const Duration(milliseconds: 200));
-        final pendingHeight = tester.getSize(header).height;
-        expect(pendingHeight, standardHeight);
-        gate.complete();
+    testWidgets(
+      'module header replaces the civil date without flashing at ${scale}x',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(420, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.runAsync(() async {
+          await setup();
+          await saveTable(_timetable());
+          for (final id in ['app.tasks', 'app.views.today']) {
+            await host.install(
+              await ScriptPackage.verify(
+                await File('../dist/modules/$id.xmodule').readAsBytes(),
+                allowUnsignedLocal: true,
+              ),
+            );
+          }
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              databaseProvider.overrideWith((_) async => db),
+              moduleHostProvider.overrideWith((_) async => host),
+            ],
+            child: XudianApp(),
+          ),
+        );
         await _settleNative(tester);
+        await tester.tap(find.text('日程').last);
+        await _settleNative(tester);
+        // The outgoing page keeps its header during the slide transition.
+        final header = find
+            .byKey(const ValueKey('workspace-header-region'))
+            .last;
+        const dateTitle = '9月7日 周一';
         expect(
-          find.descendant(of: header, matching: find.text('第 1 周')),
+          find.descendant(of: header, matching: find.text(dateTitle)),
           findsOneWidget,
         );
-        expect(tester.getSize(header).height, pendingHeight);
-        await tester.tap(find.text('今天').last);
-        await _settleNative(tester);
+        final title = find.descendant(
+          of: header,
+          matching: find.text(dateTitle),
+        );
+        expect(tester.widget<Text>(title).style!.fontSize, 24);
+        expect(tester.widget<Text>(title).maxLines, 3);
+        final datePicker = find.descendant(
+          of: header,
+          matching: find.byKey(const ValueKey('workspace-date-picker')),
+        );
+        expect(datePicker, findsOneWidget);
+        expect(tester.widget<TextButton>(datePicker).onPressed, isNotNull);
         expect(
-          find.descendant(of: header, matching: find.text('今天')),
+          find.descendant(of: header, matching: find.byTooltip('前一天')),
           findsOneWidget,
         );
-      }
-      expect(tester.getSize(header).height, standardHeight);
-      expect(
-        find.descendant(of: header, matching: find.text('今天')),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    });
+        expect(
+          find.descendant(of: header, matching: find.byTooltip('后一天')),
+          findsOneWidget,
+        );
+        final menu = find.descendant(
+          of: header,
+          matching: find.byTooltip('页面菜单'),
+        );
+        expect(tester.getSize(menu).width, greaterThanOrEqualTo(48));
+        expect(tester.getRect(menu).right, closeTo(400, .01));
+        final menuSize = tester.getSize(menu);
+        for (var visit = 0; visit < 2; visit++) {
+          final gate = Completer<void>();
+          host.instances['app.schedule']!.workflowTail = gate.future;
+          await tester.tap(find.text('课表'));
+          await tester.pump();
+          for (var frame = 0; frame < 5; frame++) {
+            expect(
+              find.descendant(of: header, matching: find.text('课表')),
+              findsNothing,
+            );
+            expect(
+              find.descendant(of: header, matching: find.text(dateTitle)),
+              findsNothing,
+            );
+            expect(menu, findsOneWidget);
+            expect(tester.getSize(menu), menuSize);
+            expect(
+              tester.getRect(menu).right - tester.getRect(header).left,
+              closeTo(400, .01),
+            );
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+          await tester.pump(const Duration(milliseconds: 200));
+          final pendingHeight = tester.getSize(header).height;
+          gate.complete();
+          await _settleNative(tester);
+          expect(
+            find.descendant(of: header, matching: find.text('第 1 周')),
+            findsOneWidget,
+          );
+          expect(tester.getSize(header).height, pendingHeight);
+          await tester.tap(find.text('日程').last);
+          await _settleNative(tester);
+          expect(
+            find.descendant(of: header, matching: find.text(dateTitle)),
+            findsOneWidget,
+          );
+        }
+        // Civil-date headers can wrap at large text scales; only the schedule's
+        // pending and ready headers promise the same height.
+        expect(
+          find.descendant(of: header, matching: find.text(dateTitle)),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
   }
 
   testWidgets(
@@ -355,7 +391,7 @@ void main() {
         ),
       );
       expect(object(saved)['name'], '更新后的学期');
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await _settleNative(tester);
 
       for (final destination in <String, String>{
@@ -368,7 +404,28 @@ void main() {
         await tester.ensureVisible(find.text(destination.key));
         await tester.tap(find.text(destination.key));
         await _settleNative(tester);
-        expect(find.text(destination.value), findsOneWidget);
+        if (destination.key == '课程管理' || destination.key == '调课记录') {
+          // Add actions use accessible icon buttons, without visible labels.
+          final action = find.byTooltip(destination.value);
+          expect(action, findsOneWidget);
+          await tester.ensureVisible(action);
+          await tester.tap(action);
+          await _settleNative(tester);
+          final dialog = find.byType(AlertDialog);
+          expect(dialog, findsOneWidget);
+          expect(
+            (tester.widget<AlertDialog>(dialog).title! as Text).data,
+            destination.value,
+          );
+          await tester.tap(
+            find.descendant(of: dialog, matching: find.text('取消')),
+          );
+          await _settleNative(tester);
+          expect(dialog, findsNothing);
+          expect(action, findsOneWidget);
+        } else {
+          expect(find.text(destination.value), findsOneWidget);
+        }
         if (destination.key == '显示设置') {
           expect(find.byType(TimeGrid), findsOneWidget);
           final gridSize = tester.getSize(find.byType(TimeGrid));
@@ -394,6 +451,11 @@ void main() {
           await tester.drag(find.byType(Slider), const Offset(80, 0));
           await _settleNative(tester);
           expect(find.text('保存显示设置'), findsOneWidget);
+          await Scrollable.ensureVisible(
+            tester.element(find.text('保存显示设置')),
+            alignment: .5,
+          );
+          await _settleNative(tester);
           await tester.tap(find.text('保存显示设置'));
           await _settleNative(tester);
           await tester.tap(find.text('确认'));
@@ -405,12 +467,12 @@ void main() {
           expect(find.byType(TimeGrid), findsOneWidget);
         }
         expect(tester.takeException(), isNull);
-        await tester.pageBack();
+        await tester.binding.handlePopRoute();
         await _settleNative(tester);
       }
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await _settleNative(tester);
-      await tester.pageBack();
+      await tester.binding.handlePopRoute();
       await _settleNative(tester);
       expect(find.byType(TimeGrid), findsOneWidget);
       expect(

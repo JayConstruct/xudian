@@ -1,7 +1,7 @@
 import {data,services,ui,http,secrets,grants,packages,clock,ids} from '@xudian/sdk';
 const ref=id=>({moduleId:'app.ai',serviceId:id,majorVersion:1});
 let cancelled=false,requestId=null,currentGrant=null;
-const button=(text,event,extra={})=>({type:'button',text,event,...extra});
+const button=(text,event,extra={})=>({type:'button',text,event,variant:'text',...extra});
 async function persistUndo(undo) { const plan=await services.prepare(undo.ref,undo.input);if(await ui.review(plan.planId)) return services.commit(plan.planId); }
 async function persist(id,input) { const p=await services.prepare(ref(id),input); if(await ui.review(p.planId)) return services.commit(p.planId); }
 export async function saveConnection({connection}) {
@@ -124,10 +124,10 @@ export async function render({state={},event,formValues={}}) {
     sent=true;
     if(state.advanced) { state.moduleSource=JSON.stringify(proposal(reply),null,2); const p=await packages.prepare(proposal(reply)); await packages.review(p.id); }
   }
-  const children=[{type:'row',children:[button('模型连接',{type:'configure'}),button(state.advanced?'切换普通聊天':'高级模块开发',{type:'advanced'}),button('清空历史',{type:'clear'}),button('取消当前操作',{type:'cancel'},{interrupt:'cancel'})]}];
+  const children=[{type:'sectionHeader',title:'对话设置',subtitle:connection?.model||'配置模型后开始聊天'},{type:'row',children:[button('模型连接',{type:'configure'}),button(state.advanced?'切换普通聊天':'高级模块开发',{type:'advanced'}),button('清空历史',{type:'clear'}),button('取消当前操作',{type:'cancel'},{interrupt:'cancel'})]}];
   if(state.lastUndo) children.push(button('撤销上次操作（校验当前状态）',{type:'undo'}));
-  for(const message of messages) children.push({type:'card',children:[{type:'text',text:message.role==='user'?'你':'AI'},{type:'richText',text:message.content}]});
-  const footer={type:'column',children:[{type:'input',key:'message',text:state.advanced?'描述要生成或更新的模块':'输入消息',multiline:true,minLines:1,maxLines:5,event:{type:'send'}},button('发送',{type:'send'})]};
-  if(state.advanced) children.push({type:'sourceEditor',key:'moduleSource',text:'模块 definition 与源码 JSON',value:state.moduleSource||'',multiline:true},button('审核并安装源码',{type:'installSource'}));
+  for(const message of messages) children.push({type:'column',children:[{type:'sectionHeader',title:message.role==='user'?'你':'AI'},{type:'richText',text:message.content}]});
+  const footer={type:'column',children:[{type:'input',key:'message',text:state.advanced?'描述要生成或更新的模块':'输入消息',multiline:true,minLines:1,maxLines:5,event:{type:'send'}},button('发送',{type:'send'},{variant:'filled'})]};
+  if(state.advanced) children.push({type:'sectionHeader',title:'模块源码'}, {type:'sourceEditor',key:'moduleSource',text:'模块 definition 与源码 JSON',value:state.moduleSource||'',multiline:true},button('审核并安装源码',{type:'installSource'}));
   return {state,clearForms:sent?['message']:[],replaceForms:state.advanced?{moduleSource:state.moduleSource||''}:{},tree:{type:'column',children,footer}};
 }

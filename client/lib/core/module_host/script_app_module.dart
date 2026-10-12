@@ -1,3 +1,5 @@
+import '../../app/app_icons.dart';
+
 import 'package:flutter/material.dart';
 
 import '../modules/app_module.dart';
@@ -28,31 +30,66 @@ class ScriptAppModule implements AppModule {
     for (final raw in package.definition['pages'] as List? ?? [])
       ..._page(object(raw)),
     for (final raw in package.definition['contributions'] as List? ?? [])
-      WidgetRegistration(
-        UiSlot.values.byName(object(raw)['slot'] as String),
-        object(raw)['id'] as String,
-        (context) =>
-            object(raw)['kind'] == 'content' &&
-                object(raw)['slot'] != 'globalOverlay'
-            ? ScriptPage(
-                host: host,
-                moduleId: package.id,
-                handler: object(raw)['handler'] as String,
-                pageContext: {'contributionId': object(raw)['id']},
-                embedded: true,
-              )
-            : ScriptLauncher(
-                host: host,
-                moduleId: package.id,
-                handler: object(raw)['handler'] as String,
-                label: object(raw)['label'] as String,
-                id: object(raw)['id'] as String,
-                floating: object(raw)['slot'] == 'globalOverlay',
-              ),
-      ),
+      _contribution(object(raw)),
   ];
+
+  UiRegistration _contribution(Map<String, Object?> contribution) {
+    final slot = UiSlot.values.byName(contribution['slot'] as String);
+    final id = contribution['id'] as String;
+    final handler = contribution['handler'] as String;
+    final label = contribution['label'] as String? ?? package.title;
+    if (slot == UiSlot.workspaceAssistant) {
+      return WorkspaceAssistantRegistration(
+        id: id,
+        label: label,
+        supports: (moduleIds) => host.directoryServices().any((raw) {
+          final service = object(raw);
+          return moduleIds.contains(service['moduleId']) &&
+              service['tool'] is Map;
+        }),
+        onOpen: (context, pageContext) => openScriptLauncher(
+          context,
+          host: host,
+          moduleId: package.id,
+          handler: handler,
+          label: label,
+          pageContext: pageContext,
+        ),
+      );
+    }
+    return WidgetRegistration(
+      slot,
+      id,
+      (context) =>
+          contribution['kind'] == 'content' && slot != UiSlot.globalOverlay
+          ? ScriptPage(
+              host: host,
+              moduleId: package.id,
+              handler: handler,
+              pageContext: {'contributionId': id},
+              embedded: true,
+            )
+          : ScriptLauncher(
+              host: host,
+              moduleId: package.id,
+              handler: handler,
+              label: label,
+              id: id,
+              floating: slot == UiSlot.globalOverlay,
+            ),
+    );
+  }
+
   List<UiRegistration> _page(Map<String, Object?> page) {
     final id = string(page['id'], 'page id');
+    final headerMode = page['headerMode'] ?? 'standard';
+    if (!{'standard', 'contributed', 'date'}.contains(headerMode)) {
+      throw const FormatException('Invalid page headerMode');
+    }
+    if (page['initializesRuntimeContext'] != null &&
+        page['initializesRuntimeContext'] is! bool) {
+      throw const FormatException('Invalid page initializesRuntimeContext');
+    }
     final entries = [
       if (page['entry'] != null) object(page['entry']),
       for (final raw in page['entries'] as List? ?? []) object(raw),
@@ -64,29 +101,20 @@ class ScriptAppModule implements AppModule {
         title: page['title'] as String? ?? package.title,
         container: page['kind'] == 'container',
         retainPosition: page['retainPosition'] == true,
-        headerMode: page['headerMode'] as String? ?? 'standard',
+        headerMode: headerMode as String,
+        initializesRuntimeContext: page['initializesRuntimeContext'] == true,
         requiredContext: (page['requiredContext'] as List? ?? [])
             .cast<String>(),
         slots: [
           for (final raw in page['slots'] as List? ?? [])
-            PageSlotDefinition(
-              id: object(raw)['id'] as String,
-              label: object(raw)['label'] as String,
-              kind: PageSlotKind.values.byName(
-                object(raw)['kind'] as String? ?? 'entries',
-              ),
-              isPublic: object(raw)['public'] == true,
-              editable: object(raw)['editable'] != false,
-              capacity: object(raw)['capacity'] as int?,
-              requiredContext: (object(raw)['requiredContext'] as List? ?? [])
-                  .cast<String>(),
-            ),
+            _pageSlot(object(raw)),
         ],
-        builder: (_, context) => ScriptPage(
-          key: ValueKey('$id:${context.identity}'),
+        builder: (buildContext, context) => ScriptPage(
+          key: ValueKey('$id:${context.navigationIdentity}'),
           host: host,
           moduleId: package.id,
           handler: page['handler'] as String,
+          embedded: UiPageContentScope.inlineOf(buildContext),
           pageContext: {
             if (package.definition['derivedFrom'] != null)
               'legacyPageId':
@@ -129,12 +157,25 @@ class ScriptAppModule implements AppModule {
     ];
   }
 
-  IconData _icon(Object? name) => switch (name) {
-    'calendar' => Icons.calendar_month_outlined,
-    'ai' => Icons.auto_awesome_outlined,
-    'today' => Icons.today_outlined,
-    'inbox' => Icons.inbox_outlined,
-    'projects' => Icons.folder_outlined,
-    _ => Icons.extension_outlined,
-  };
+  PageSlotDefinition _pageSlot(Map<String, Object?> slot) {
+    final kind = PageSlotKind.values.byName(
+      slot['kind'] as String? ?? 'entries',
+    );
+    final inline = slot.containsKey('inline') ? slot['inline'] : false;
+    if (inline is! bool || inline && kind != PageSlotKind.sections) {
+      throw const FormatException('inline requires a boolean sections slot');
+    }
+    return PageSlotDefinition(
+      id: slot['id'] as String,
+      label: slot['label'] as String,
+      kind: kind,
+      isPublic: slot['public'] == true,
+      editable: slot['editable'] != false,
+      inline: inline,
+      capacity: slot['capacity'] as int?,
+      requiredContext: (slot['requiredContext'] as List? ?? []).cast<String>(),
+    );
+  }
+
+  IconData _icon(Object? name) => appIconData(name) ?? Icons.grid_view_outlined;
 }

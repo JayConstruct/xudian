@@ -1,3 +1,8 @@
+import '../ui/ui_icon.dart';
+import '../ui/page_runtime_context.dart';
+import '../ui/page_composition_readiness.dart';
+import '../../app/app_icons.dart';
+
 import 'dart:async';
 
 import '../contracts/json_values.dart';
@@ -5,6 +10,11 @@ import '../ui/workspace_header.dart';
 import '../ui/ui_component.dart';
 import '../ui/ui_pack.dart';
 import '../ui/temporal_input.dart';
+import '../ui/script_transition.dart';
+import '../ui/script_keyed_list.dart';
+import '../ui/draggable_floating_panel.dart';
+import '../../app/app_ui_feedback.dart';
+import '../../app/app_motion.dart';
 import '../ui/responsive_content_grid.dart';
 import '../ui/input_validation.dart';
 
@@ -50,14 +60,21 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   Timer? progressTimer;
   int epoch = 0;
   String? error;
+  Map<String, Object?> localRuntimeContext = const {};
+  Map<String, Object?> get pageContext => {
+    ...widget.pageContext,
+    ...?PageRuntimeContextScope.read(context)?.currentValues(),
+    ...localRuntimeContext,
+  };
   String get sessionKey =>
-      '${widget.moduleId}:${widget.handler}:${canonicalJson(widget.pageContext)}';
+      '${widget.moduleId}:${widget.handler}:${canonicalJson(withoutRuntimePageContext(widget.pageContext))}';
   bool busy = false, dirty = false;
   bool showProgress = false;
   bool routeActive = true;
   Set<String>? readModules;
-  String businessRegistry = '';
+  String businessRegistry = '', examplesRegistry = '';
   Object? pendingEvent, currentEvent, queryResult;
+  PageCompositionReadinessScope? compositionReadiness;
   WorkspaceHeaderController? headerController;
   BuildContext? nodeContext;
   BuildContext get uiContext => nodeContext ?? context;
@@ -81,11 +98,17 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       refreshTimer = Timer(const Duration(milliseconds: 40), () => _render());
     });
     businessRegistry = _businessRegistry();
+    examplesRegistry = _examplesRegistry();
     registrySubscription = widget.host.registryChanges.stream.listen((_) {
       final next = _businessRegistry();
-      if (next == businessRegistry) return;
+      final nextExamples = _examplesRegistry();
+      final refresh =
+          next != businessRegistry ||
+          (readModules?.contains(uiExamplesReadDependency) == true &&
+              nextExamples != examplesRegistry);
       businessRegistry = next;
-      unawaited(_render());
+      examplesRegistry = nextExamples;
+      if (refresh) unawaited(_render());
     });
     // Civil dates can change in a configured timezone while the page is open.
     refreshTimer = Timer(const Duration(minutes: 1), () => _render());
@@ -98,12 +121,21 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       )
       .join('|');
 
+  String _examplesRegistry() => widget.host.instances.values
+      .where((i) => i.package.isUiPack)
+      .map(
+        (i) =>
+            '${i.actor.moduleId}:${i.actor.generation}:${i.package.packageDigest}',
+      )
+      .join('|');
+
   @override
   void didUpdateWidget(ScriptPage old) {
     super.didUpdateWidget(old);
     if (old.moduleId != widget.moduleId ||
         old.handler != widget.handler ||
-        canonicalJson(old.pageContext) != canonicalJson(widget.pageContext)) {
+        canonicalJson(withoutRuntimePageContext(old.pageContext)) !=
+            canonicalJson(withoutRuntimePageContext(widget.pageContext))) {
       epoch++;
       busy = false;
       showProgress = false;
@@ -131,11 +163,15 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       controlConfigs.clear();
       state = {};
       formValues = {};
+      localRuntimeContext = const {};
       readModules = null;
       subscription?.cancel();
       registrySubscription?.cancel();
       refreshTimer?.cancel();
       _subscribe();
+      unawaited(_render());
+    } else if (canonicalJson(old.pageContext) !=
+        canonicalJson(widget.pageContext)) {
       unawaited(_render());
     }
   }
@@ -168,17 +204,24 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   Future<void> _render([Object? event]) async {
     if (!mounted) return;
+    final readiness = PageCompositionReadinessScope.read(context);
+    compositionReadiness = readiness;
+    readiness?.begin(this);
     if (busy) {
       dirty = true;
       if (event != null) pendingEvent = event;
       return;
     }
     final current = ++epoch;
+    final requestContext = pageContext;
+    final runtimeScope = PageRuntimeContextScope.read(context);
+    final runtimeRevision = runtimeScope?.currentRevision();
     final instance = widget.host.instances[widget.moduleId];
     final headerScope = WorkspaceHeaderScope.read(context);
     final headerLease = headerScope?.lease;
     final ownsHeader =
         !widget.embedded &&
+        headerLease?.mode == 'contributed' &&
         headerLease?.moduleId == widget.moduleId &&
         headerLease?.pageId == widget.pageContext['pageId'];
     if (ownsHeader) headerController = headerScope!.controller;
@@ -198,7 +241,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           widget.handler,
           {
             'state': state,
-            'context': widget.pageContext,
+            'context': requestContext,
             'event': event,
             'formValues': sentForms,
           },
@@ -212,6 +255,17 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           !identical(instance, widget.host.instances[widget.moduleId])) {
         return;
       }
+      // A result queried for an older date cannot publish its tree or patch
+      // after another contribution has changed this composition's date.
+      if (canonicalJson(requestContext) != canonicalJson(pageContext) ||
+          runtimeRevision !=
+              PageRuntimeContextScope.read(context)?.currentRevision()) {
+        dirty = true;
+        return;
+      }
+      final patch = result.containsKey('runtimeContextPatch')
+          ? validateRuntimeContextPatch(result['runtimeContextPatch'])
+          : const <String, Object?>{};
       setState(() {
         for (final key in result['clearForms'] as List? ?? []) {
           if (_unchangedForm(key as String, sentForms, sentRevisions)) {
@@ -235,6 +289,24 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         tree = object(result['tree']);
         error = null;
       });
+      if (patch.isNotEmpty) {
+        if (runtimeScope != null) {
+          if (patch.entries.any(
+            (entry) => requestContext[entry.key] != entry.value,
+          )) {
+            readiness?.allowContextChanges();
+          }
+          runtimeScope.update(patch);
+        } else if (patch.entries.any(
+          (entry) => pageContext[entry.key] != entry.value,
+        )) {
+          localRuntimeContext = Map.unmodifiable({
+            ...localRuntimeContext,
+            ...patch,
+          });
+          dirty = true;
+        }
+      }
       if (ownsHeader) {
         final raw = result['header'];
         headerScope!.controller.publish(
@@ -261,6 +333,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           final next = pendingEvent;
           pendingEvent = null;
           unawaited(_render(next));
+        } else {
+          readiness?.complete(this);
         }
         refreshTimer?.cancel();
         refreshTimer = Timer(const Duration(minutes: 1), () => _render());
@@ -329,6 +403,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    compositionReadiness?.complete(this);
     headerController?.clear(this);
     if (widget.host.pageSessions.length >= 100) {
       widget.host.pageSessions.remove(widget.host.pageSessions.keys.first);
@@ -373,7 +448,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     }
     Object? result = {
       'state': state,
-      'context': widget.pageContext,
+      'context': pageContext,
       'formValues': formValues,
       'queryResult': queryResult,
       'event': currentEvent,
@@ -412,21 +487,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     }
   }
 
-  IconData? _icon(Object? value) => switch (value) {
-    'calendar' => Icons.calendar_month_outlined,
-    'schedule' => Icons.schedule_outlined,
-    'school' => Icons.school_outlined,
-    'tune' => Icons.tune,
-    'importExport' => Icons.import_export,
-    'list' => Icons.list_alt_outlined,
-    'history' => Icons.history,
-    'settings' => Icons.settings_outlined,
-    'today' => Icons.today_outlined,
-    'add' => Icons.add,
-    'delete' => Icons.delete_outline,
-    'info' => Icons.info_outline,
-    _ => null,
-  };
+  IconData? _icon(Object? value) => appIconData(value);
 
   Map<String, Object?> _bindValues(Map<String, Object?> values) =>
       values.map((key, value) => MapEntry(key, _bindValue(value)));
@@ -496,10 +557,14 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     );
   }
 
-  Widget componentNode(Map<String, Object?> spec, int depth) {
+  Widget componentNode(
+    Map<String, Object?> spec,
+    int depth, {
+    bool registeredExample = false,
+  }) {
     final ref = string(spec['ref'], 'UI component reference');
     final key = '${spec['key'] ?? ref}';
-    if (!uiContracts.containsKey(ref)) {
+    if (!registeredExample && !uiContracts.containsKey(ref)) {
       final current = widget.host.instances[widget.moduleId];
       if (current == null ||
           !current.package.dependencies.any(
@@ -518,7 +583,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final callbacks = <String, void Function(Object?)>{
       for (final entry in events.entries)
         entry.key: (value) {
-          if (!busy && props['disabled'] != true) {
+          if ((!busy || ref == 'ui.dayOverview@1' && entry.key == 'change') &&
+              props['disabled'] != true) {
             _render(
               value == null && entry.key != 'change'
                   ? entry.value
@@ -527,9 +593,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           }
         },
     };
-    if (ref == 'ui.button@1') {
-      props['disabled'] = busy || props['disabled'] == true;
-    }
+    // Page execution is serialized by the callbacks above. Keep buttons in
+    // their declared visual state while an unrelated action is being handled.
     Widget native;
     final controlType = switch (ref) {
       'ui.input@1' => 'input',
@@ -577,9 +642,107 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     );
   }
 
+  Widget componentExample(Map<String, Object?> spec, int depth) {
+    if (spec.keys.any(
+      (key) => !{'type', 'key', 'providerId', 'ref', 'events'}.contains(key),
+    )) {
+      throw const FormatException('Registered UI samples cannot be overridden');
+    }
+    final providerId = string(spec['providerId'], 'UI example provider');
+    final ref = string(spec['ref'], 'UI example reference');
+    final pack = widget.host.instances[providerId]?.package.uiPack;
+    final example = pack?.components[ref]?.example;
+    if (pack == null || example == null) {
+      return const Text('此界面示例的提供模块当前不可用');
+    }
+    final events = object(spec['events'] ?? {});
+    if (events.keys.any(
+      (port) => !(example['events'] as List).contains(port),
+    )) {
+      throw const FormatException(
+        'UI example only forwards declared sample ports',
+      );
+    }
+    final key = '${spec['key'] ?? '$providerId:$ref'}';
+    return UiPackScope(
+      key: ValueKey(key),
+      previewPacks: {providerId: pack},
+      previewSelection: UiSelection(globalPackId: providerId),
+      child: Builder(
+        builder: (localContext) {
+          final previous = nodeContext;
+          nodeContext = localContext;
+          try {
+            return componentNode(
+              {
+                'ref': ref,
+                'key': key,
+                'props': example['props'],
+                'slots': example['slots'],
+                'events': events,
+              },
+              depth + 1,
+              registeredExample: true,
+            );
+          } finally {
+            nodeContext = previous;
+          }
+        },
+      ),
+    );
+  }
+
   Widget node(Map<String, Object?> spec, [int depth = 0, bool replace = true]) {
     if (depth > 32) return const Text('组件嵌套超过限制');
     if (spec['type'] == 'component') return componentNode(spec, depth);
+    if (spec['type'] == 'componentExample') {
+      return componentExample(spec, depth);
+    }
+    final dailyRef = switch (spec['type']) {
+      'dayOverview' => 'ui.dayOverview@1',
+      'sectionHeader' => 'ui.sectionHeader@1',
+      'agendaItem' => 'ui.agendaItem@1',
+      'taskItem' => 'ui.taskItem@1',
+      _ => null,
+    };
+    if (dailyRef != null) {
+      final event = bind(spec['event']);
+      final action = spec['action'] is Map ? object(spec['action']) : null;
+      return componentNode({
+        'ref': dailyRef,
+        'key':
+            spec['key'] ?? '$dailyRef:${spec['title'] ?? spec['date'] ?? ''}',
+        'props': {
+          for (final entry in spec.entries)
+            if (!const {
+              'type',
+              'key',
+              'event',
+              'openEvent',
+              'children',
+              'action',
+            }.contains(entry.key))
+              entry.key: entry.value,
+          if (action != null) 'actionLabel': action['label'],
+          if (action != null) 'actionIcon': action['icon'],
+        },
+        'slots': {
+          if (spec['children'] != null)
+            'details': {'type': 'column', 'children': spec['children']},
+        },
+        'events': {
+          if (action?['event'] != null)
+            'press': action!['event']
+          else if (event != null &&
+              !{'taskItem', 'dayOverview'}.contains(spec['type']))
+            'press': event,
+          if ({'taskItem', 'dayOverview'}.contains(spec['type']) &&
+              event != null)
+            'change': event,
+          if (spec['openEvent'] != null) 'open': spec['openEvent'],
+        },
+      }, depth);
+    }
     if (replace) {
       final ref = switch (spec['type']) {
         'button' => 'ui.button@1',
@@ -617,6 +780,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                 'subtitle',
                 'value',
                 'style',
+                'variant',
                 'min',
                 'max',
               ])
@@ -624,7 +788,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             }),
             'label': bind(spec['title']) ?? bind(spec['text']),
             'disabled':
-                (busy && spec['interrupt'] is! String) ||
+                (busy &&
+                    spec['type'] != 'button' &&
+                    spec['interrupt'] is! String) ||
                 bind(spec['disabled']) == true,
           },
           slots: {'control': native, 'content': native},
@@ -643,21 +809,134 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         );
       }
     }
+    if (spec['type'] == 'keyedList') {
+      final items = objects(spec['children']);
+      final keys = items.map((item) => item['key']).toList();
+      final scope = bind(spec['scope']);
+      final feedbackKey = bind(spec['feedbackKey']);
+      final removeKeys = bind(spec['removeKeys']) ?? const [];
+      final highlightKeys = bind(spec['highlightKeys']) ?? const [];
+      final duration = bind(spec['duration']) ?? 220;
+      final spacing = bind(spec['spacing']) ?? 12;
+      if (scope is! String ||
+          keys.any((key) => key is! String || key.isEmpty) ||
+          keys.toSet().length != keys.length ||
+          feedbackKey != null &&
+              feedbackKey is! String &&
+              feedbackKey is! num ||
+          feedbackKey is num && !feedbackKey.isFinite ||
+          removeKeys is! List ||
+          removeKeys.any((key) => key is! String) ||
+          highlightKeys is! List ||
+          highlightKeys.any((key) => key is! String) ||
+          duration is! num ||
+          !duration.isFinite ||
+          duration != duration.roundToDouble() ||
+          duration < 100 ||
+          duration > 2000 ||
+          spacing is! num ||
+          !spacing.isFinite ||
+          spacing < 0 ||
+          spacing > 48) {
+        throw const FormatException('Invalid keyedList node');
+      }
+      final scrolling = depth == 0 && !widget.embedded;
+      return ScriptKeyedList(
+        key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
+        scope: scope,
+        feedbackKey: feedbackKey,
+        removeKeys: removeKeys.cast<String>().toSet(),
+        highlightKeys: highlightKeys.cast<String>().toSet(),
+        duration: Duration(milliseconds: duration.toInt()),
+        spacing: spacing.toDouble(),
+        scrollController: scrolling
+            ? scrollControllers.putIfAbsent('page', ScrollController.new)
+            : null,
+        padding: scrolling
+            ? EdgeInsets.fromLTRB(
+                spec['edgeToEdge'] == true ? 0 : 20,
+                spec['edgeToEdge'] == true ? 0 : 16,
+                spec['edgeToEdge'] == true ? 0 : 20,
+                16 + WorkspaceContentInsets.bottomOf(uiContext),
+              )
+            : EdgeInsets.zero,
+        items: [
+          for (final item in items)
+            ScriptListItem(
+              id: item['key'] as String,
+              builder: (context) {
+                final previous = nodeContext;
+                nodeContext = context;
+                try {
+                  return node(item, depth + 1);
+                } catch (error) {
+                  return Text('模块界面无效：$error');
+                } finally {
+                  nodeContext = previous;
+                }
+              },
+            ),
+        ],
+      );
+    }
     final children = objects(spec['children'])
         .map((n) => node(n, depth + 1))
         .toList();
     final text = '${bind(spec['text']) ?? ''}';
     final event = bind(spec['event']);
     switch (spec['type']) {
+      case 'transition':
+        final effect = bind(spec['effect']) ?? 'fade';
+        final visible = spec['visible'] == null ? true : bind(spec['visible']);
+        final duration =
+            bind(spec['duration']) ?? AppMotion.scriptTransition.inMilliseconds;
+        final collapse = spec['collapse'] == null
+            ? false
+            : bind(spec['collapse']);
+        final replayKey = bind(spec['replayKey']);
+        if (!const ['fade', 'scale', 'slide'].contains(effect) ||
+            visible is! bool ||
+            collapse is! bool ||
+            duration is! num ||
+            !duration.isFinite ||
+            duration != duration.roundToDouble() ||
+            duration < 100 ||
+            duration > 2000 ||
+            replayKey != null && replayKey is! String && replayKey is! num ||
+            replayKey is num && !replayKey.isFinite ||
+            spec['child'] is! Map) {
+          throw const FormatException('Invalid transition node');
+        }
+        return ScriptTransition(
+          key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
+          effect: effect as String,
+          visible: visible,
+          collapse: collapse,
+          replayKey: replayKey,
+          duration: Duration(milliseconds: duration.toInt()),
+          child: node(object(spec['child']), depth + 1),
+        );
       case 'column':
+        final keyCounts = <Key, int>{};
+        for (final child in children) {
+          final key = child.key;
+          if (key != null) keyCounts[key] = (keyCounts[key] ?? 0) + 1;
+        }
         return Column(
+          key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var i = 0; i < children.length; i++)
               if (spec['fillHeight'] == true && i == children.length - 1)
-                Expanded(child: children[i])
+                Expanded(
+                  key: keyCounts[children[i].key] == 1 ? children[i].key : null,
+                  child: children[i],
+                )
               else
                 Padding(
+                  // Keys must own the sibling element, not only its inner
+                  // control, when rows are inserted before a focused input.
+                  key: keyCounts[children[i].key] == 1 ? children[i].key : null,
                   padding: EdgeInsets.only(
                     bottom: (spec['spacing'] as num? ?? 12).toDouble().clamp(
                       0,
@@ -686,10 +965,18 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           ),
         );
       case 'disclosure':
+        final rounded = RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        );
         return ExpansionTile(
           key: PageStorageKey(spec['key'] ?? text),
           title: Text(text),
-          tilePadding: EdgeInsets.zero,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          shape: rounded,
+          collapsedShape: rounded,
+          clipBehavior: Clip.antiAlias,
+          backgroundColor: Theme.of(uiContext).colorScheme.surfaceContainerLow,
           children: children,
         );
       case 'card':
@@ -716,7 +1003,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               : null,
         );
       case 'richText':
-        return SelectableText(text);
+        return SelectableText(
+          key: PageStorageKey(('richText', spec['key'] ?? text)),
+          text,
+        );
       case 'listTile':
         final icon = _icon(spec['icon']);
         final subtitle = bind(spec['subtitle']);
@@ -724,7 +1014,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         final enabled = !busy && bind(spec['disabled']) != true;
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          leading: icon == null ? null : Icon(icon),
+          leading: icon == null ? null : UiIcon(icon),
           title: Text('${bind(spec['title']) ?? text}'),
           subtitle: subtitle == null ? null : Text('$subtitle'),
           trailing: trailing == false
@@ -733,7 +1023,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               ? Text(trailing)
               : event == null
               ? null
-              : const Icon(Icons.chevron_right),
+              : const UiIcon(Icons.chevron_right),
           enabled: enabled,
           onTap: event == null || !enabled ? null : () => _render(event),
         );
@@ -742,6 +1032,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           title: const Text('查看文件内容'),
           children: [
             SelectableText(
+              key: PageStorageKey(('sourceText', spec['key'] ?? text)),
               text,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
             ),
@@ -753,14 +1044,32 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                 widget.moduleId,
                 spec['interrupt'] as String,
               )
-            : busy || bind(spec['disabled']) == true
+            : bind(spec['disabled']) == true
             ? null
-            : () => _render(event);
+            : () {
+                if (!busy) _render(event);
+              };
         return switch (spec['variant']) {
-          'text' => TextButton(onPressed: press, child: Text(text)),
-          'outlined' => OutlinedButton(onPressed: press, child: Text(text)),
-          'filled' => FilledButton(onPressed: press, child: Text(text)),
-          _ => FilledButton.tonal(onPressed: press, child: Text(text)),
+          'text' => TextButton(
+            style: appUiButtonStyle,
+            onPressed: press,
+            child: Text(text),
+          ),
+          'outlined' => OutlinedButton(
+            style: appUiButtonStyle,
+            onPressed: press,
+            child: Text(text),
+          ),
+          'filled' => FilledButton(
+            style: appUiButtonStyle,
+            onPressed: press,
+            child: Text(text),
+          ),
+          _ => FilledButton.tonal(
+            style: appUiButtonStyle,
+            onPressed: press,
+            child: Text(text),
+          ),
         };
       case 'toolbar':
         Widget action(Map<String, Object?> value) => IconButton(
@@ -768,7 +1077,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           onPressed: busy || value['disabled'] == true
               ? null
               : () => _render(value['event']),
-          icon: Icon(switch (value['icon']) {
+          icon: UiIcon(switch (value['icon']) {
             'swap' => Icons.swap_horiz,
             'chevron_left' => Icons.chevron_left,
             'chevron_right' => Icons.chevron_right,
@@ -823,7 +1132,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                                 style: Theme.of(uiContext).textTheme.labelSmall,
                               ),
                             if (event != null)
-                              const Icon(Icons.arrow_drop_down, size: 20),
+                              const UiIcon(Icons.arrow_drop_down, size: 20),
                           ],
                         ),
                       ),
@@ -899,6 +1208,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               children: [
                 for (final item in objects(spec['items'] ?? spec['options']))
                   FilterChip(
+                    showCheckmark: false,
+                    shape: const StadiumBorder(),
                     label: Text('${item['label']}'),
                     selected: selected.contains(item['value']),
                     onSelected: busy || bind(spec['disabled']) == true
@@ -920,21 +1231,21 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       case 'slider':
         final min = (spec['min'] as num? ?? 0).toDouble(),
             max = (spec['max'] as num? ?? 1).toDouble();
-        return Slider(
+        return AppSlider(
           value: (bind(spec['value']) as num? ?? min).toDouble().clamp(
             min,
             max,
           ),
           min: min,
           max: max,
-          divisions: spec['divisions'] as int?,
+          divisions: (spec['divisions'] as num?)?.toInt(),
           semanticFormatterCallback: (value) => '$text $value',
           onChanged: busy || bind(spec['disabled']) == true
               ? null
               : (value) => _changeControl(spec, value, event),
         );
       case 'progress':
-        return LinearProgressIndicator(
+        return AppProgressIndicator(
           value: spec['value'] == null
               ? null
               : (bind(spec['value']) as num).toDouble().clamp(0, 1),
@@ -948,6 +1259,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           for (final entry in objects(spec['items']).asMap().entries)
             if (spec['selectedIndex'] != null)
               ChoiceChip(
+                showCheckmark: false,
+                shape: const StadiumBorder(),
                 label: Text('${entry.value['label']}'),
                 selected: bind(spec['selectedIndex']) == entry.key,
                 onSelected: busy || bind(spec['disabled']) == true
@@ -1026,7 +1339,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                       : null
                 : '${bind(spec['errorText'])}',
             prefixIcon: spec['inputMode'] == 'search'
-                ? const Icon(Icons.search)
+                ? const UiIcon(Icons.search)
                 : null,
             suffixIcon: spec['clearable'] == true && controller.text.isNotEmpty
                 ? IconButton(
@@ -1042,7 +1355,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                               debounce: true,
                             );
                           },
-                    icon: const Icon(Icons.close_rounded),
+                    icon: const UiIcon(Icons.close_rounded),
                   )
                 : null,
           ),
@@ -1164,11 +1477,16 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             Positioned.fill(
               child:
                   spec['fillHeight'] == true ||
+                      spec['type'] == 'keyedList' ||
                       spec['type'] == 'component' &&
                           (spec['ref'] as String? ?? '').startsWith('ui.page.')
                   ? Padding(
                       padding: EdgeInsets.only(
-                        bottom: spec['underlapChrome'] == true ? 0 : bottom,
+                        bottom:
+                            spec['underlapChrome'] == true ||
+                                spec['type'] == 'keyedList'
+                            ? 0
+                            : bottom,
                       ),
                       child: safeNode(spec),
                     )
@@ -1181,9 +1499,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                         ScrollController.new,
                       ),
                       padding: EdgeInsets.fromLTRB(
+                        spec['edgeToEdge'] == true ? 0 : 20,
                         spec['edgeToEdge'] == true ? 0 : 16,
-                        spec['edgeToEdge'] == true ? 0 : 16,
-                        spec['edgeToEdge'] == true ? 0 : 16,
+                        spec['edgeToEdge'] == true ? 0 : 20,
                         16 + bottom,
                       ),
                       itemCount: rootChildren.length,
@@ -1208,56 +1526,24 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                         ScrollController.new,
                       ),
                       padding: EdgeInsets.fromLTRB(
+                        spec['edgeToEdge'] == true ? 0 : 20,
                         spec['edgeToEdge'] == true ? 0 : 16,
-                        spec['edgeToEdge'] == true ? 0 : 16,
-                        spec['edgeToEdge'] == true ? 0 : 16,
+                        spec['edgeToEdge'] == true ? 0 : 20,
                         16 + bottom,
                       ),
                       child: safeNode(spec),
                     ),
             ),
             if (panel != null)
-              Positioned(
-                top: top,
-                right: 12,
-                width: (constraints.maxWidth - 24).clamp(0, 420),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: (constraints.maxHeight - top - bottom - 12)
-                        .clamp(0, constraints.maxHeight * .65),
-                  ),
-                  child: FloatingSurface(
-                    key: const ValueKey('script-floating-panel'),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${panel['title'] ?? ''}',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: '${panel['closeLabel'] ?? '关闭面板'}',
-                              onPressed: busy
-                                  ? null
-                                  : () => _render(panel['closeEvent']),
-                              icon: const Icon(Icons.close),
-                            ),
-                          ],
-                        ),
-                        Flexible(
-                          child: SingleChildScrollView(
-                            child: safeNode(object(panel['child'])),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              DraggableFloatingPanel(
+                key: ValueKey(('script-floating-panel', panel['key'])),
+                viewport: constraints.biggest,
+                bottomInset: bottom,
+                initialTop: top,
+                title: '${panel['title'] ?? ''}',
+                closeLabel: '${panel['closeLabel'] ?? '关闭面板'}',
+                onClose: busy ? null : () => _render(panel['closeEvent']),
+                child: safeNode(object(panel['child'])),
               ),
           ],
         );
@@ -1271,7 +1557,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     child: Builder(
       builder: (context) {
         nodeContext = context;
-        final loading = busy && showProgress && routeActive;
+        // Inline compositions provide one shared progress indicator.
+        final loading =
+            busy && showProgress && routeActive && compositionReadiness == null;
         return Column(
           mainAxisSize: widget.embedded ? MainAxisSize.min : MainAxisSize.max,
           children: [
@@ -1291,7 +1579,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               ),
             if (widget.embedded)
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 child: tree == null
                     ? loading
                           ? const CircularProgressIndicator()

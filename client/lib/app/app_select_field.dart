@@ -53,7 +53,7 @@ class AppSelectField<T> extends StatelessWidget {
             ),
             backgroundColor: WidgetStatePropertyAll(scheme.surface),
             surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-            elevation: const WidgetStatePropertyAll(8),
+            elevation: const WidgetStatePropertyAll(4),
             padding: const WidgetStatePropertyAll(EdgeInsets.all(8)),
             maximumSize: WidgetStatePropertyAll(
               Size(
@@ -73,9 +73,6 @@ class AppSelectField<T> extends StatelessWidget {
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
-                trailingIcon: option.value == value
-                    ? const Icon(Icons.check_rounded, size: 20)
-                    : const SizedBox(width: 20),
                 style: ButtonStyle(
                   shape: WidgetStatePropertyAll(
                     AppDesign.smoothShape(radius: AppDesign.controlRadius),
@@ -87,14 +84,14 @@ class AppSelectField<T> extends StatelessWidget {
                   textStyle: WidgetStatePropertyAll(theme.textTheme.bodyLarge),
                   backgroundColor: WidgetStatePropertyAll(
                     option.value == value
-                        ? scheme.secondaryContainer.withValues(alpha: .65)
+                        ? scheme.primaryContainer
                         : Colors.transparent,
                   ),
                   foregroundColor: WidgetStateProperty.resolveWith(
                     (states) => states.contains(WidgetState.disabled)
                         ? scheme.onSurface.withValues(alpha: .38)
                         : option.value == value
-                        ? scheme.onSecondaryContainer
+                        ? scheme.onPrimaryContainer
                         : scheme.onSurface,
                   ),
                   overlayColor: WidgetStatePropertyAll(

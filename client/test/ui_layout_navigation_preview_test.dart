@@ -129,6 +129,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('today')));
     await tester.pumpAndSettle();
     expect(find.text('编辑 · 今天'), findsOneWidget);
+    await closeInspector(tester);
+    await tester.tap(find.byKey(const ValueKey('today')));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑 · 今天'), findsOneWidget);
     await tester.tap(find.text('调整位置'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('顶部菜单'));
@@ -139,7 +143,7 @@ void main() {
           .widget<MobileBottomDock>(find.byType(MobileBottomDock))
           .destinations
           .map((e) => e.id),
-      ['schedule'],
+      ['app.shell.more', 'schedule'],
     );
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -203,9 +207,10 @@ void main() {
     await tester.tap(find.text('底部导航'));
     await tester.pumpAndSettle();
     final dock = tester.widget<MobileBottomDock>(find.byType(MobileBottomDock));
-    expect(dock.destinations.map((e) => e.id), ['today']);
-    expect(dock.hasMore, isTrue);
-    await tester.tap(find.byKey(const ValueKey('more')));
+    expect(dock.destinations.map((e) => e.id), ['app.shell.more', 'today']);
+    expect(dock.hasMore, isFalse);
+    expect(dock.onAssistant, isNotNull);
+    await tester.tap(find.byKey(const ValueKey('app.shell.more')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('layout-more-modules')), findsOneWidget);
     expect(find.byKey(const ValueKey('layout-more-schedule')), findsOneWidget);
@@ -220,6 +225,54 @@ void main() {
     );
     expect(pageBuilds, 0);
   });
+
+  testWidgets(
+    'More switch edits the draft and disabling retains overflow access',
+    (tester) async {
+      await initialize();
+      await container
+          .read(uiLayoutProvider.notifier)
+          .save(UiLayout(narrow: UiLayoutProfile(mainLimit: 1)));
+      await show(tester);
+      await tester.tap(find.text('底部导航'));
+      await tester.pumpAndSettle();
+      final toggle = find.byKey(const ValueKey('layout-more-page-enabled'));
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      final dock = tester.widget<MobileBottomDock>(
+        find.byType(MobileBottomDock),
+      );
+      expect(dock.destinations.map((e) => e.id), ['today']);
+      expect(find.textContaining('右上角的“全部入口”访问'), findsOneWidget);
+      expect(
+        container.read(uiLayoutProvider).asData!.value.narrow.morePageEnabled,
+        isTrue,
+      );
+      expect(
+        container.read(uiLayoutEditorSessionsProvider).hasDirtyEditors,
+        isTrue,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('layout-preview-all-entries-open')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('layout-more-modules')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('layout-more-schedule')),
+        findsOneWidget,
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('查看变更（1）'), findsOneWidget);
+      await tester.tap(find.text('底部导航'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      expect(pageBuilds, 0);
+    },
+  );
 
   testWidgets(
     'fixed settings stays visible and hidden entries can be restored',
@@ -393,7 +446,7 @@ void main() {
       await tester.tap(menu);
       expect(selected, 'import');
       final more = find.byKey(
-        ValueKey(desktop ? 'layout-preview-more' : 'more'),
+        ValueKey(desktop ? 'layout-preview-more' : 'app.shell.more'),
       );
       await tester.ensureVisible(more);
       await tester.tap(more);

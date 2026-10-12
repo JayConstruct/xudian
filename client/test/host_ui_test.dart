@@ -145,6 +145,8 @@ void main() {
     (tester) async {
       await setup(tester, tasks: true);
       expect(find.text('暂无今天待办或逾期任务'), findsOneWidget);
+      await tester.tap(find.byTooltip('添加任务'));
+      await settleNative(tester);
       await tester.enterText(find.byType(TextField), '买牛奶');
       await tester.ensureVisible(find.text('添加'));
       await tester.tap(find.text('添加'));

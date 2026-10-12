@@ -36,8 +36,8 @@ export function appendPeriods(existing) {
   }
   return rows;
 }
-export const listTile=(title,subtitle,icon,event,trailing)=>({type:'listTile',title,...(subtitle?{subtitle}:{}),...(icon?{icon}:{}),...(event?{event}:{}),...(trailing!==undefined?{trailing}: {})});
-export const group=(title,children)=>({type:'card',children:[{type:'text',text:title,style:'title'},...children]});
+export const listTile=(title,subtitle,icon,event,trailing)=>({type:'listTile',title,...(subtitle?{subtitle}:{}),...(event?{event}:{}),...(trailing!==undefined?{trailing}: {})});
+export const group=(title,children)=>({type:'column',children:[{type:'sectionHeader',title},...children]});
 export async function importSummary(plan,draft) {
   const summary={courses:draft?.courses?.length||0,meetings:draft?.meetings?.length||0,changes:draft?.occurrenceChanges?.length||0,added:0,updated:0,deleted:0,conflicts:plan?.result?.conflicts||[],warnings:plan?.result?.warnings||draft?.warnings||[]};
   for(const write of plan?.writes||[]) {

@@ -1,3 +1,6 @@
+import '../../core/ui/ui_icon.dart';
+import '../../core/ui/native_ui.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,13 +20,15 @@ class SettingsToolsPage extends ConsumerWidget {
         SettingsGroup(
           title: '界面辅助',
           children: [
-            SwitchListTile(
-              secondary: const Icon(Icons.label_outline),
-              title: const Text('界面标注模式'),
-              subtitle: const Text('标记关键界面区域，查看或复制标识用于反馈'),
-              value: ref.watch(uiAnnotationProvider),
-              onChanged: (value) =>
-                  ref.read(uiAnnotationProvider.notifier).setEnabled(value),
+            NativeUi(
+              child: SwitchListTile(
+                secondary: const UiIcon(Icons.label_outline),
+                title: const Text('界面标注模式'),
+                subtitle: const Text('标记关键界面区域，查看或复制标识用于反馈'),
+                value: ref.watch(uiAnnotationProvider),
+                onChanged: (value) =>
+                    ref.read(uiAnnotationProvider.notifier).setEnabled(value),
+              ),
             ),
           ],
         ),

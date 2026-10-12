@@ -1,3 +1,6 @@
+import '../ui/ui_icon.dart';
+import '../ui/native_ui.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,9 +9,11 @@ import '../../features/settings/app_preferences.dart';
 import '../../features/settings/appearance_settings_page.dart';
 import '../../features/settings/settings_tools_page.dart';
 import '../../features/settings/settings_widgets.dart';
+import '../../features/settings/app_update_page.dart';
 import '../../features/settings/ui_layout.dart';
 import '../../features/settings/ui_layout_page.dart';
 import '../modules/module_registry.dart';
+import '../app_updates/github_app_updates.dart';
 import '../ui/app_repository_links.dart';
 import '../ui/ui_annotation.dart';
 import '../ui/ui_component.dart';
@@ -262,18 +267,40 @@ class AboutSettingsPage extends ConsumerWidget {
     title: '关于序点',
     child: SettingsList(
       children: [
-        const SettingsGroup(
+        SettingsGroup(
           title: '应用',
           children: [
-            ListTile(
-              leading: Icon(Icons.grid_view_rounded),
-              title: Text('序点'),
-              subtitle: Text('专注当下，逐项完成'),
+            NativeUi(
+              child: ListTile(
+                leading: const UiIcon(Icons.grid_view_rounded),
+                title: const Text('序点'),
+                subtitle: Text(
+                  ref
+                      .watch(installedAppVersionProvider)
+                      .when(
+                        data: (value) => value.label,
+                        loading: () => '正在读取版本…',
+                        error: (_, _) => '专注当下，逐项完成',
+                      ),
+                ),
+              ),
             ),
-            ListTile(
-              leading: Icon(Icons.storage_outlined),
-              title: Text('本机数据'),
-              subtitle: Text('数据与设置保存在本机；在线模块功能需要网络连接'),
+            SettingsEntry(
+              title: '检查更新',
+              subtitle: '从 GitHub 检查应用新版本',
+              icon: Icons.system_update_rounded,
+              protected: true,
+              onTap: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(builder: (_) => const AppUpdatePage()),
+              ),
+            ),
+            const NativeUi(
+              child: ListTile(
+                leading: UiIcon(Icons.storage_outlined),
+                title: Text('本机数据'),
+                subtitle: Text('数据与设置保存在本机；在线模块功能需要网络连接'),
+              ),
             ),
           ],
         ),

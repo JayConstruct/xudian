@@ -1,3 +1,6 @@
+import 'ui_icon.dart';
+import 'native_ui.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -101,7 +104,8 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
       child: DetailPage(
         title: '界面风格',
         child: stored.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () =>
+              const Center(child: NativeUi(child: CircularProgressIndicator())),
           error: (failure, _) => Center(child: Text('无法读取界面风格：$failure')),
           data: (selection) {
             if (draft == null) baseline = draft = selection;
@@ -178,9 +182,11 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
-                  TextButton(
-                    onPressed: saving ? null : _reload,
-                    child: const Text('重新读取已保存配置'),
+                  NativeUi(
+                    child: TextButton(
+                      onPressed: saving ? null : _reload,
+                      child: const Text('重新读取已保存配置'),
+                    ),
                   ),
                 ],
                 ContentSurface(
@@ -189,29 +195,35 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
                     spacing: 12,
                     runSpacing: 12,
                     children: [
-                      FilledButton(
-                        onPressed: saving || !dirty ? null : () => _save(),
-                        child: Text(saving ? '保存中…' : '保存风格'),
+                      NativeUi(
+                        child: FilledButton(
+                          onPressed: saving || !dirty ? null : () => _save(),
+                          child: Text(saving ? '保存中…' : '保存风格'),
+                        ),
                       ),
-                      OutlinedButton(
-                        onPressed: saving
-                            ? null
-                            : () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => UiPackPreviewPage(
-                                    packs: packs,
-                                    selection: draft!,
-                                    moduleIds: ids,
+                      NativeUi(
+                        child: OutlinedButton(
+                          onPressed: saving
+                              ? null
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => UiPackPreviewPage(
+                                      packs: packs,
+                                      selection: draft!,
+                                      moduleIds: ids,
+                                    ),
                                   ),
                                 ),
-                              ),
-                        child: const Text('预览草稿'),
+                          child: const Text('预览草稿'),
+                        ),
                       ),
-                      TextButton.icon(
-                        onPressed: saving ? null : () => _save(restore: true),
-                        icon: const Icon(Icons.restore),
-                        label: const Text('恢复默认界面'),
+                      NativeUi(
+                        child: TextButton.icon(
+                          onPressed: saving ? null : () => _save(restore: true),
+                          icon: const UiIcon(Icons.restore),
+                          label: const Text('恢复默认界面'),
+                        ),
                       ),
                     ],
                   ),
@@ -313,143 +325,151 @@ class _UiPackPreviewPageState extends State<UiPackPreviewPage> {
   @override
   Widget build(BuildContext context) => UiPackScope(
     defaultOnly: true,
-    child: Scaffold(
-      appBar: AppBar(title: const Text('界面预览 · 模拟数据')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              FilterChip(
-                label: const Text('宽屏'),
-                selected: wide,
-                onSelected: (value) => setState(() => wide = value),
-              ),
-              FilterChip(
-                label: const Text('深色'),
-                selected: dark,
-                onSelected: (value) => setState(() => dark = value),
-              ),
-              SizedBox(
-                width: 180,
-                child: AppSelectField<String>(
-                  key: const ValueKey('ui-preview-template'),
-                  label: '页面类型',
-                  value: template,
-                  options: [
-                    for (final entry in const {
-                      'list': '列表页',
-                      'form': '表单页',
-                      'settings': '设置页',
-                      'detail': '详情页',
-                      'timeGrid': '时间网格页',
-                    }.entries)
-                      AppSelectOption(value: entry.key, label: entry.value),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => template = value);
-                  },
+    child: NativeUi(
+      child: Scaffold(
+        appBar: AppBar(title: const Text('界面预览 · 模拟数据')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                NativeUi(
+                  child: FilterChip(
+                    label: const Text('宽屏'),
+                    selected: wide,
+                    onSelected: (value) => setState(() => wide = value),
+                  ),
                 ),
-              ),
-              if (widget.moduleIds.isNotEmpty)
+                NativeUi(
+                  child: FilterChip(
+                    label: const Text('深色'),
+                    selected: dark,
+                    onSelected: (value) => setState(() => dark = value),
+                  ),
+                ),
                 SizedBox(
-                  width: 220,
+                  width: 180,
                   child: AppSelectField<String>(
-                    label: '预览模块',
-                    value: moduleId ?? '',
+                    key: const ValueKey('ui-preview-template'),
+                    label: '页面类型',
+                    value: template,
                     options: [
-                      const AppSelectOption(value: '', label: '全局界面'),
-                      for (final id in widget.moduleIds)
-                        AppSelectOption(value: id, label: id),
+                      for (final entry in const {
+                        'list': '列表页',
+                        'form': '表单页',
+                        'settings': '设置页',
+                        'detail': '详情页',
+                        'timeGrid': '时间网格页',
+                      }.entries)
+                        AppSelectOption(value: entry.key, label: entry.value),
                     ],
                     onChanged: (value) {
-                      if (value != null) {
-                        setState(() => moduleId = value.isEmpty ? null : value);
-                      }
+                      if (value != null) setState(() => template = value);
                     },
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Text('按钮和输入仅改变本次演示；不会创建任务、课程或修改已保存风格。'),
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: wide ? 900 : 360,
-                child: Theme(
-                  data: ThemeData(
-                    brightness: dark ? Brightness.dark : Brightness.light,
-                    useMaterial3: true,
+                if (widget.moduleIds.isNotEmpty)
+                  SizedBox(
+                    width: 220,
+                    child: AppSelectField<String>(
+                      label: '预览模块',
+                      value: moduleId ?? '',
+                      options: [
+                        const AppSelectOption(value: '', label: '全局界面'),
+                        for (final id in widget.moduleIds)
+                          AppSelectOption(value: id, label: id),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(
+                            () => moduleId = value.isEmpty ? null : value,
+                          );
+                        }
+                      },
+                    ),
                   ),
-                  child: Builder(
-                    builder: (context) => MediaQuery(
-                      data: MediaQuery.of(context)
-                          .copyWith(size: Size(wide ? 900 : 360, 640)),
-                      child: UiPackScope(
-                        previewPacks: widget.packs,
-                        previewSelection: widget.selection,
-                        child: Material(
-                          child: Column(
-                            children: [
-                              UiComponent(
-                                ref: 'ui.chrome.header@1',
-                                fallback: const ListTile(
-                                  title: Text('示例工作区'),
-                                  trailing: Icon(Icons.settings),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text('按钮和输入仅改变本次演示；不会创建任务、课程或修改已保存风格。'),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: wide ? 900 : 360,
+                  child: Theme(
+                    data: ThemeData(
+                      brightness: dark ? Brightness.dark : Brightness.light,
+                      useMaterial3: true,
+                    ),
+                    child: Builder(
+                      builder: (context) => MediaQuery(
+                        data: MediaQuery.of(context)
+                            .copyWith(size: Size(wide ? 900 : 360, 640)),
+                        child: UiPackScope(
+                          previewPacks: widget.packs,
+                          previewSelection: widget.selection,
+                          child: Material(
+                            child: Column(
+                              children: [
+                                UiComponent(
+                                  ref: 'ui.chrome.header@1',
+                                  fallback: const ListTile(
+                                    title: Text('示例工作区'),
+                                    trailing: UiIcon(Icons.settings),
+                                  ),
                                 ),
-                              ),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (wide)
-                                    SizedBox(
-                                      width: 150,
-                                      child: UiComponent(
-                                        ref: 'ui.chrome.sidebar@1',
-                                        fallback: const Column(
-                                          children: [
-                                            ListTile(title: Text('今天')),
-                                            ListTile(title: Text('项目')),
-                                          ],
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (wide)
+                                      SizedBox(
+                                        width: 150,
+                                        child: UiComponent(
+                                          ref: 'ui.chrome.sidebar@1',
+                                          fallback: const Column(
+                                            children: [
+                                              ListTile(title: Text('今天')),
+                                              ListTile(title: Text('项目')),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: UiPackScope(
+                                          moduleId: moduleId,
+                                          previewPacks: widget.packs,
+                                          previewSelection: widget.selection,
+                                          child: _template(),
                                         ),
                                       ),
                                     ),
-                                  Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: UiPackScope(
-                                        moduleId: moduleId,
-                                        previewPacks: widget.packs,
-                                        previewSelection: widget.selection,
-                                        child: _template(),
+                                  ],
+                                ),
+                                if (!wide)
+                                  UiComponent(
+                                    ref: 'ui.chrome.bottomNav@1',
+                                    fallback: const Padding(
+                                      padding: EdgeInsets.all(16),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceAround,
+                                        children: [
+                                          Text('今天'),
+                                          Text('项目'),
+                                          Text('模块'),
+                                        ],
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                              if (!wide)
-                                UiComponent(
-                                  ref: 'ui.chrome.bottomNav@1',
-                                  fallback: const Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceAround,
-                                      children: [
-                                        Text('今天'),
-                                        Text('项目'),
-                                        Text('模块'),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -458,8 +478,8 @@ class _UiPackPreviewPageState extends State<UiPackPreviewPage> {
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -480,9 +500,11 @@ class _UiPackPreviewPageState extends State<UiPackPreviewPage> {
         child: const Text('保存示例'),
       ),
     );
-    final input = TextField(
-      controller: title,
-      decoration: const InputDecoration(labelText: '标题'),
+    final input = NativeUi(
+      child: TextField(
+        controller: title,
+        decoration: const InputDecoration(labelText: '标题'),
+      ),
     );
     final fields = Column(
       children: [
@@ -492,20 +514,24 @@ class _UiPackPreviewPageState extends State<UiPackPreviewPage> {
           slots: {'control': input},
           fallback: input,
         ),
-        SwitchListTile(
-          title: const Text('已完成'),
-          value: done,
-          onChanged: (value) => setState(() => done = value),
+        NativeUi(
+          child: SwitchListTile(
+            title: const Text('已完成'),
+            value: done,
+            onChanged: (value) => setState(() => done = value),
+          ),
         ),
       ],
     );
     final items = Column(
       children: [
         for (final label in ['整理本周计划', '阅读一篇文章', '检查项目进度'])
-          CheckboxListTile(
-            title: Text(label),
-            value: done,
-            onChanged: (value) => setState(() => done = value!),
+          NativeUi(
+            child: CheckboxListTile(
+              title: Text(label),
+              value: done,
+              onChanged: (value) => setState(() => done = value!),
+            ),
           ),
       ],
     );

@@ -1,23 +1,53 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-/// Opt-in workspace chrome follows deliberate vertical scrolling. Resizes,
-/// restored positions and script-driven jumps cannot hide navigation.
+/// Chrome follows physical user travel, never a released-finger simulation,
+/// restored position or layout correction. Partial travel stays where released.
 class WorkspaceChromeController extends ChangeNotifier {
   String? _identity;
-  bool _enabled = false, _userScrolling = false;
-  bool collapsed = false;
-  double _distance = 0;
+  bool _enabled = false;
+  double _headerExtent = 64, _hiddenExtent = 0;
+  double? _wheelTravel;
   bool _scheduled = false, _disposed = false;
+
+  double get headerExtent => _headerExtent;
+  double get hiddenExtent => _hiddenExtent;
+  double get progress => (_hiddenExtent / _headerExtent).clamp(0, 1);
+  bool get collapsed => progress >= 1;
 
   void configure(String identity, {required bool enabled}) {
     if (_identity != identity || _enabled != enabled) {
       _identity = identity;
       _enabled = enabled;
-      collapsed = false;
-      _userScrolling = false;
-      _distance = 0;
+      _hiddenExtent = 0;
+      _wheelTravel = null;
     }
+  }
+
+  void updateHeaderExtent(double value) {
+    if (_disposed ||
+        !value.isFinite ||
+        value <= 0 ||
+        (value - _headerExtent).abs() < .1) {
+      return;
+    }
+    final wasCollapsed = collapsed;
+    _headerExtent = value;
+    _hiddenExtent = wasCollapsed ? value : _hiddenExtent.clamp(0, value);
+    _notifyLater();
+  }
+
+  /// A pointer signal explicitly authorizes one wheel update. User-scroll
+  /// direction alone cannot distinguish a wheel from inertial scrolling.
+  void handlePointerSignal(PointerSignalEvent event) {
+    if (!_enabled ||
+        event is! PointerScrollEvent ||
+        event.scrollDelta.dy == 0) {
+      return;
+    }
+    _wheelTravel = event.scrollDelta.dy;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _wheelTravel = null);
   }
 
   bool handleScroll(ScrollNotification notification) {
@@ -26,51 +56,50 @@ class WorkspaceChromeController extends ChangeNotifier {
         notification.metrics.axis != Axis.vertical) {
       return false;
     }
-    if (notification is UserScrollNotification) {
-      _userScrolling = notification.direction != ScrollDirection.idle;
-      if (!_userScrolling) _distance = 0;
-    } else if (notification is ScrollStartNotification) {
-      _userScrolling = notification.dragDetails != null;
-      _distance = 0;
-    } else if (notification is ScrollEndNotification) {
-      _userScrolling = false;
-      _distance = 0;
-    } else if (notification is OverscrollNotification) {
-      if ((_userScrolling || notification.dragDetails != null) &&
-          notification.overscroll < 0 &&
-          notification.metrics.pixels <=
-              notification.metrics.minScrollExtent + 1) {
-        reveal();
+    double? delta;
+    double previous = notification.metrics.pixels;
+    if (notification is ScrollUpdateNotification) {
+      previous -= notification.scrollDelta ?? 0;
+      final drag = notification.dragDetails;
+      if (drag != null) {
+        delta = -(drag.primaryDelta ?? drag.delta.dy);
+        if (notification.metrics.axisDirection == AxisDirection.up) {
+          delta = -delta;
+        }
+      } else if (_wheelTravel != null &&
+          (notification.scrollDelta ?? 0).sign == _wheelTravel!.sign) {
+        delta = notification.scrollDelta;
+        _wheelTravel = null;
       }
-    } else if (notification is ScrollUpdateNotification &&
-        (_userScrolling || notification.dragDetails != null)) {
-      final delta = notification.scrollDelta ?? 0;
-      if (delta == 0) return false;
-      if (delta < 0 &&
-          notification.metrics.pixels <=
-              notification.metrics.minScrollExtent + 1) {
-        reveal();
-        return false;
+    } else if (notification is OverscrollNotification &&
+        notification.dragDetails != null) {
+      final drag = notification.dragDetails!;
+      delta = -(drag.primaryDelta ?? drag.delta.dy);
+      if (notification.metrics.axisDirection == AxisDirection.up) {
+        delta = -delta;
       }
-      if (_distance.sign != delta.sign) _distance = 0;
-      _distance += delta;
-      if (!collapsed &&
-          _distance >= 48 &&
-          notification.metrics.pixels > notification.metrics.minScrollExtent) {
-        collapsed = true;
-        _distance = 0;
-        _notifyLater();
-      } else if (collapsed && _distance <= -16) {
-        reveal();
-      }
+    }
+    if (delta == null || delta == 0) return false;
+    final min = notification.metrics.minScrollExtent;
+    if (delta > 0 && previous < min) {
+      // An upward finger first closes the top pull-down gap. Only its remaining
+      // travel can move the toolbar, even when one update crosses the edge.
+      if (notification.metrics.pixels <= min) return false;
+      // Bouncing physics can resist travel even while closing the gap. The
+      // in-bounds remainder is the distance actually left after that resistance.
+      delta = (notification.metrics.pixels - min).clamp(0, delta);
+    }
+    final next = (_hiddenExtent + delta).clamp(0, _headerExtent).toDouble();
+    if (next != _hiddenExtent) {
+      _hiddenExtent = next;
+      _notifyLater();
     }
     return false;
   }
 
   void reveal() {
-    _distance = 0;
-    if (!collapsed) return;
-    collapsed = false;
+    if (_hiddenExtent == 0) return;
+    _hiddenExtent = 0;
     _notifyLater();
   }
 
@@ -88,5 +117,61 @@ class WorkspaceChromeController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     super.dispose();
+  }
+}
+
+/// The original full-height header remains mounted. Bottom alignment moves it
+/// upwards behind the clip by exactly the hidden physical distance.
+class WorkspaceChromeHeader extends StatelessWidget {
+  const WorkspaceChromeHeader({
+    super.key,
+    required this.controller,
+    required this.child,
+  });
+  final WorkspaceChromeController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: controller,
+    child: _HeaderExtentReporter(
+      onHeight: controller.updateHeaderExtent,
+      child: child,
+    ),
+    builder: (context, child) => ClipRect(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        heightFactor: 1 - controller.progress,
+        child: Offstage(offstage: controller.collapsed, child: child),
+      ),
+    ),
+  );
+}
+
+class _HeaderExtentReporter extends SingleChildRenderObjectWidget {
+  const _HeaderExtentReporter({required this.onHeight, required super.child});
+  final ValueChanged<double> onHeight;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _HeaderExtentRenderBox(onHeight);
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _HeaderExtentRenderBox renderObject,
+  ) => renderObject.onHeight = onHeight;
+}
+
+class _HeaderExtentRenderBox extends RenderProxyBox {
+  _HeaderExtentRenderBox(this.onHeight);
+  ValueChanged<double> onHeight;
+  double? previous;
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (previous != size.height) {
+      previous = size.height;
+      final height = size.height;
+      WidgetsBinding.instance.addPostFrameCallback((_) => onHeight(height));
+    }
   }
 }

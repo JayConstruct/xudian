@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/design_system.dart';
 import 'module_package.dart';
 
 /// Half-open row intervals; every overlapping block remains selectable.
@@ -25,6 +26,49 @@ class TimeGrid extends StatefulWidget {
 class _TimeGridState extends State<TimeGrid> {
   final horizontal = ScrollController(), header = ScrollController();
   Object? _handledScrollRequest;
+  Object? _extentGeometry;
+  double _chromeMaxExtent = 0;
+
+  double _trailingPadding(
+    BuildContext context,
+    BoxConstraints constraints,
+    double gridHeight,
+    double headerHeight,
+  ) {
+    final inset = widget.bottomInset.clamp(0.0, 400.0);
+    if (!constraints.hasBoundedHeight) return inset;
+    // The app's header and dock animate inside a stable window. Growing the
+    // viewport must not shrink the scroll range beneath an ongoing drag: that
+    // boundary correction moves rows opposite to the user's reading direction.
+    // Put only the freed space after the final row. Window, keyboard, font and
+    // timetable geometry changes establish a fresh range instead.
+    final geometry = (
+      MediaQuery.sizeOf(context),
+      MediaQuery.viewInsetsOf(context),
+      MediaQuery.textScalerOf(context).scale(14),
+      constraints.maxWidth,
+      gridHeight,
+      headerHeight,
+    );
+    if (_extentGeometry != geometry) {
+      _extentGeometry = geometry;
+      _chromeMaxExtent = 0;
+    }
+    final viewport = (constraints.maxHeight - headerHeight).clamp(
+      0.0,
+      double.infinity,
+    );
+    final naturalExtent = (gridHeight + inset - viewport).clamp(
+      0.0,
+      double.infinity,
+    );
+    if (naturalExtent > _chromeMaxExtent) _chromeMaxExtent = naturalExtent;
+    return (_chromeMaxExtent + viewport - gridHeight).clamp(
+      inset,
+      double.infinity,
+    );
+  }
+
   List<Map<String, Object?>> get columns => widget.columns;
   List<Map<String, Object?>> get rows => widget.rows;
   List<Map<String, Object?>> get blocks => widget.blocks;
@@ -107,8 +151,8 @@ class _TimeGridState extends State<TimeGrid> {
     final scheme = Theme.of(context).colorScheme;
     final compact = widget.options['fillWidth'] == true;
     final background = compact ? scheme.surface : Colors.transparent;
-    final line = scheme.outlineVariant.withValues(alpha: compact ? .35 : 1);
-    final highlight = scheme.primary.withValues(alpha: .045);
+    final line = scheme.outlineVariant.withValues(alpha: compact ? .45 : .7);
+    final highlight = scheme.primary.withValues(alpha: .06);
     Widget caption(
       Map<String, Object?> value, {
       bool row = false,
@@ -122,7 +166,16 @@ class _TimeGridState extends State<TimeGrid> {
               ? Text(
                   '${value['label'] ?? ''}',
                   textAlign: TextAlign.center,
-                  style: row ? Theme.of(context).textTheme.labelSmall : null,
+                  style:
+                      (row
+                              ? Theme.of(context).textTheme.labelSmall
+                              : Theme.of(context).textTheme.labelLarge)
+                          ?.copyWith(
+                            color: value['highlight'] == true
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
                 )
               : Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -141,7 +194,10 @@ class _TimeGridState extends State<TimeGrid> {
                                 ? 14
                                 : 18,
                             height: 1.1,
-                            fontWeight: row ? FontWeight.w600 : FontWeight.w500,
+                            color: value['highlight'] == true
+                                ? scheme.primary
+                                : scheme.onSurface,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         if (value['subtitle'] != null) ...[
@@ -206,6 +262,12 @@ class _TimeGridState extends State<TimeGrid> {
             ? available
             : columnWidth * columns.length;
         final gridHeight = rowHeight * rows.length;
+        final trailingPadding = _trailingPadding(
+          context,
+          constraints,
+          gridHeight,
+          headerHeight,
+        );
         final heading = SizedBox(
           height: headerHeight,
           child: Row(
@@ -239,10 +301,8 @@ class _TimeGridState extends State<TimeGrid> {
         );
         final body = SingleChildScrollView(
           key: const PageStorageKey('time-grid-vertical'),
-          physics: widget.bottomInset > 0
-              ? const _EndAnchoredScrollPhysics()
-              : null,
-          padding: EdgeInsets.only(bottom: widget.bottomInset.clamp(0, 400)),
+          physics: const _EndAnchoredScrollPhysics(),
+          padding: EdgeInsets.only(bottom: trailingPadding),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -279,6 +339,9 @@ class _TimeGridState extends State<TimeGrid> {
                             height: gridHeight,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
+                                color: columns[c]['highlight'] == true
+                                    ? highlight
+                                    : null,
                                 border: Border(left: BorderSide(color: line)),
                               ),
                             ),
@@ -303,6 +366,21 @@ class _TimeGridState extends State<TimeGrid> {
                                   width = columnWidth / position[1];
                               final color =
                                   _color(b['color']) ?? scheme.primary;
+                              final courseSurface = Color.alphaBlend(
+                                color.withValues(alpha: .12),
+                                scheme.surface,
+                              );
+                              final courseForeground = _readableCourseColor(
+                                color,
+                                courseSurface,
+                                scheme.onSurface,
+                              );
+                              final courseShape = AppDesign.smoothShape(
+                                radius: AppDesign.compactRadius,
+                                side: BorderSide(
+                                  color: courseForeground.withValues(alpha: .2),
+                                ),
+                              );
                               final label =
                                   '${columns[column]['label'] ?? columns[column]['title']}，第${(b['start'] as int) + 1}到${b['end']}节，${b['title']}，${b['subtitle'] ?? ''}';
                               return Positioned(
@@ -322,10 +400,11 @@ class _TimeGridState extends State<TimeGrid> {
                                   child: Tooltip(
                                     message: label,
                                     child: Material(
-                                      color: color.withValues(alpha: .16),
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: courseSurface,
+                                      shape: courseShape,
                                       clipBehavior: Clip.antiAlias,
                                       child: InkWell(
+                                        customBorder: courseShape,
                                         onTap: () => widget.onEvent(b['event']),
                                         child: Padding(
                                           padding: const EdgeInsets.all(6),
@@ -352,9 +431,10 @@ class _TimeGridState extends State<TimeGrid> {
                                                       TextOverflow.ellipsis,
                                                   style: TextStyle(
                                                     fontSize: compact
-                                                        ? 12
+                                                        ? 12.5
                                                         : null,
-                                                    color: color,
+                                                    height: 1.3,
+                                                    color: courseForeground,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
@@ -367,8 +447,10 @@ class _TimeGridState extends State<TimeGrid> {
                                                       TextOverflow.ellipsis,
                                                   style: TextStyle(
                                                     fontSize: compact
-                                                        ? 10
+                                                        ? 11
                                                         : null,
+                                                    height: 1.35,
+                                                    color: scheme.onSurface,
                                                   ),
                                                 ),
                                               ),
@@ -422,6 +504,21 @@ class _TimeGridState extends State<TimeGrid> {
       return Color(int.parse('FF${value.substring(1)}', radix: 16));
     }
     return null;
+  }
+
+  // Module palettes identify courses, but a light swatch must not make the
+  // course title unreadable. Retain its hue while moving toward theme ink.
+  Color _readableCourseColor(Color color, Color background, Color ink) {
+    final backgroundLuminance = background.computeLuminance();
+    for (var step = 0; step <= 10; step++) {
+      final candidate = Color.lerp(color.withValues(alpha: 1), ink, step / 10)!;
+      final luminance = candidate.computeLuminance();
+      final contrast = luminance > backgroundLuminance
+          ? (luminance + .05) / (backgroundLuminance + .05)
+          : (backgroundLuminance + .05) / (luminance + .05);
+      if (contrast >= 4.5) return candidate;
+    }
+    return ink;
   }
 }
 

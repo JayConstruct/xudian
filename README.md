@@ -4,11 +4,13 @@
 
 源码仓库：[JayConstruct/xudian](https://github.com/JayConstruct/xudian)。
 
+App 支持从“设置 → 关于序点 → 检查更新”查询 GitHub 正式发布，查看更新说明并打开下载页。更新规则和正式签名发布流程见 [App 更新](docs/APP_UPDATES.md)。
+
 首次安装 Android App 并从模块商店安装功能，见 [安装指南](docs/INSTALLATION.md)。[Android Actions](https://github.com/JayConstruct/xudian/actions/workflows/android.yml) 自动检查源码并构建 ARMv7、ARM64 和 x86_64 APK。
 
 ## 当前能力
 
-- 本地任务与今天视图；支持任务创建、完成、标题、优先级与日期编辑。收件箱和项目视图已移除，已有任务/项目数据保留。
+- 本地任务与日程视图；可切换过去和未来日期，顶栏显示所选日期，同步查看任务、课程，并为所选日期添加任务。支持任务完成、标题、优先级与日期编辑。收件箱和项目视图已移除，已有任务/项目数据保留。
 - 模块安装、启停、依赖检查、版本更新、回退与保留数据卸载。
 - 分类设置、入口编排、公共 UI 契约、界面风格与恢复。
 - AI 设备直连用户配置的模型接口，支持服务工具、变更审核、本地历史及有限条件撤销。

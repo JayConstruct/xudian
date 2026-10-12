@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import '../module_host/json_schema.dart';
 
 const defaultUiPackId = 'app.ui.default';
+const uiExamplesReadDependency = '@ui.examples';
 
 Map<String, Object?> _map(Object? value, String label) {
   if (value is! Map || value.keys.any((key) => key is! String)) {
@@ -16,15 +19,17 @@ class UiContract {
     this.propsSchema = uiCommonPropsSchema,
     this.requiredSlots = const [],
     this.events = const [],
+    this.optionalEvents = const [],
   });
   final String ref;
   final Map<String, Object?> propsSchema;
-  final List<String> requiredSlots, events;
+  final List<String> requiredSlots, events, optionalEvents;
   Map<String, Object?> toJson() => {
     'ref': ref,
     'propsSchema': propsSchema,
     'requiredSlots': requiredSlots,
     'events': events,
+    if (optionalEvents.isNotEmpty) 'optionalEvents': optionalEvents,
   };
 }
 
@@ -41,6 +46,10 @@ const Map<String, Object?> uiCommonPropsSchema = {
       'type': ['string', 'null'],
     },
     'disabled': {'type': 'boolean'},
+    'variant': {
+      'type': 'string',
+      'enum': ['text', 'outlined', 'filled', 'tonal'],
+    },
     'key': {'type': 'string'},
     'selectedIndex': {'type': 'integer'},
     'empty': {'type': 'boolean'},
@@ -66,6 +75,46 @@ final Map<String, UiContract> uiContracts = Map.unmodifiable({
   ])
     'ui.$name@1': UiContract('ui.$name@1'),
   'ui.button@1': const UiContract('ui.button@1', events: ['press']),
+  // Native controls retain their host-owned widget in a mandatory slot.
+  for (final name in [
+    'nativeTile',
+    'nativeControl',
+    'nativeDialog',
+    'iconButton',
+    'nativeFeedback',
+  ])
+    'ui.$name@1': UiContract('ui.$name@1', requiredSlots: const ['control']),
+  'ui.nativeSection@1': const UiContract(
+    'ui.nativeSection@1',
+    requiredSlots: ['content'],
+  ),
+  'ui.notification@1': const UiContract(
+    'ui.notification@1',
+    requiredSlots: ['content'],
+  ),
+  'ui.page.native@1': const UiContract(
+    'ui.page.native@1',
+    requiredSlots: ['body'],
+  ),
+  'ui.chrome.pageHeader@1': const UiContract(
+    'ui.chrome.pageHeader@1',
+    requiredSlots: ['control'],
+  ),
+
+  'ui.dayOverview@1': const UiContract(
+    'ui.dayOverview@1',
+    events: ['change'],
+    optionalEvents: ['change'],
+  ),
+  'ui.sectionHeader@1': const UiContract(
+    'ui.sectionHeader@1',
+    events: ['press'],
+  ),
+  'ui.agendaItem@1': const UiContract('ui.agendaItem@1', events: ['press']),
+  'ui.taskItem@1': const UiContract(
+    'ui.taskItem@1',
+    events: ['change', 'open'],
+  ),
   'ui.card@1': const UiContract('ui.card@1', requiredSlots: ['content']),
   'ui.list@1': const UiContract('ui.list@1', requiredSlots: ['items']),
   for (final name in [
@@ -377,10 +426,168 @@ bool _validRef(Object? ref) =>
     ref is String &&
     RegExp(r'^[a-z][a-zA-Z0-9_.-]*@[1-9][0-9]*$').hasMatch(ref);
 
+/// Registered samples contain data and host-owned controls, never script handlers.
+Map<String, Object?> _parseExample(Object? raw, UiContract contract) {
+  final source = _map(raw, 'UI example');
+  if (source.keys.any(
+        (key) => !{
+          'category',
+          'name',
+          'description',
+          'props',
+          'slots',
+          'events',
+        }.contains(key),
+      ) ||
+      !{
+        'actions',
+        'inputs',
+        'selection',
+        'dates',
+        'feedback',
+        'overlays',
+        'layout',
+      }.contains(source['category'])) {
+    throw const FormatException('Invalid UI example category or field');
+  }
+  final name = source['name'];
+  final description = source['description'] ?? '';
+  if (name is! String ||
+      name.trim().isEmpty ||
+      name.length > 80 ||
+      description is! String ||
+      description.length > 500 ||
+      utf8.encode(jsonEncode(source)).length > 8192) {
+    throw const FormatException('Invalid or oversized UI example');
+  }
+  final props = _map(source['props'] ?? {}, 'UI example props');
+  validateSchema(props, contract.propsSchema);
+  var values = 0;
+  void data(Object? value, int depth) {
+    if (++values > 256 || depth > 8) {
+      throw const FormatException('UI example props exceed limits');
+    }
+    if (value is Map) {
+      if (value.keys.any(
+        {'bind', 'event', 'events', 'onChangeEvent', 'interrupt'}.contains,
+      )) {
+        throw const FormatException(
+          'UI example props cannot bind script state or contain handlers',
+        );
+      }
+      for (final child in value.values) {
+        data(child, depth + 1);
+      }
+    } else if (value is List) {
+      for (final child in value) {
+        data(child, depth + 1);
+      }
+    } else if (value is num && !value.isFinite) {
+      throw const FormatException('UI example props must be finite JSON');
+    }
+  }
+
+  if (props.keys.any(
+    (key) => {
+      'type',
+      'event',
+      'onChangeEvent',
+      'footer',
+      'fillHeight',
+      'children',
+      'child',
+    }.contains(key),
+  )) {
+    throw const FormatException(
+      'UI example props cannot define script structure or handlers',
+    );
+  }
+  data(props, 0);
+  final slots = _map(source['slots'] ?? {}, 'UI example slots');
+  var count = 0;
+  void sample(Object? raw, int depth) {
+    if (++count > 128 || depth > 8) {
+      throw const FormatException('UI example slots exceed limits');
+    }
+    if (raw is List) {
+      for (final child in raw) {
+        sample(child, depth + 1);
+      }
+      return;
+    }
+    final node = _map(raw, 'UI example slot node');
+    final allowed = switch (node['type']) {
+      'column' || 'row' || 'card' => {'type', 'key', 'children', 'text'},
+      'text' => {'type', 'key', 'text'},
+      'divider' || 'spinner' => {'type', 'key'},
+      'progress' => {'type', 'key', 'value'},
+      'input' => {'type', 'key', 'text', 'label', 'value', 'placeholder'},
+      'checkbox' || 'switch' => {'type', 'key', 'text', 'label', 'value'},
+      'slider' => {'type', 'key', 'value', 'min', 'max', 'divisions'},
+      _ => throw const FormatException('Unsupported UI example slot node'),
+    };
+    if (node.keys.any((key) => !allowed.contains(key))) {
+      throw const FormatException(
+        'UI example slots cannot contain handlers or bindings',
+      );
+    }
+    for (final entry in node.entries) {
+      if (entry.key == 'children') {
+        if (entry.value is! List) {
+          throw const FormatException('UI example children must be a list');
+        }
+        sample(entry.value, depth + 1);
+      } else if (entry.value is Map ||
+          entry.value is List ||
+          (entry.value is num && !(entry.value as num).isFinite)) {
+        throw const FormatException(
+          'UI example slot values must be finite scalars',
+        );
+      }
+    }
+  }
+
+  for (final slot in slots.values) {
+    sample(slot, 0);
+  }
+  for (final required in contract.requiredSlots) {
+    final nativeControl =
+        required == 'control' && uiContracts.containsKey(contract.ref);
+    if (!nativeControl && !slots.containsKey(required)) {
+      throw FormatException('UI example requires sample slot $required');
+    }
+  }
+  final events = source['events'] ?? <String>[];
+  if (events is! List ||
+      events.any(
+        (event) => event is! String || !contract.events.contains(event),
+      ) ||
+      events.toSet().length != events.length) {
+    throw const FormatException('UI example events must name contract ports');
+  }
+  // Freeze recursively so metadata cannot be changed after package verification.
+  Object? freeze(Object? value) => value is Map
+      ? Map<String, Object?>.unmodifiable(
+          value.map((key, child) => MapEntry(key as String, freeze(child))),
+        )
+      : value is List
+      ? List<Object?>.unmodifiable(value.map(freeze))
+      : value;
+  return freeze({
+    'category': source['category'],
+    'name': name,
+    'description': description,
+    'props': props,
+    'slots': slots,
+    'events': events,
+  }) as Map<String, Object?>;
+}
+
 class UiRecipe {
-  UiRecipe(this.contract, this.tree);
+  UiRecipe(this.contract, this.tree, {this.example});
   final UiContract contract;
   final UiRecipeNode tree;
+  final Map<String, Object?>? example;
 }
 
 class UiPackDefinition {
@@ -454,8 +661,13 @@ class UiPackDefinition {
         }
         final definition = _map(entry.value, 'UI component');
         if (definition.keys.any(
-          (k) =>
-              !{'tree', 'propsSchema', 'requiredSlots', 'events'}.contains(k),
+          (k) => !{
+            'tree',
+            'propsSchema',
+            'requiredSlots',
+            'events',
+            'example',
+          }.contains(k),
         )) {
           throw const FormatException('Unknown UI component definition field');
         }
@@ -465,7 +677,8 @@ class UiPackDefinition {
             'UI exports must use their package namespace',
           );
         }
-        if (system != null && definition.keys.any((k) => k != 'tree')) {
+        if (system != null &&
+            definition.keys.any((k) => k != 'tree' && k != 'example')) {
           throw const FormatException(
             'System UI contracts cannot be redefined',
           );
@@ -496,12 +709,20 @@ class UiPackDefinition {
             );
           }
         }
-        for (final event in contract.events) {
+        for (final event in contract.events.where(
+          (event) => !contract.optionalEvents.contains(event),
+        )) {
           if (!tree.guarantees(event, event: true)) {
             throw FormatException('${entry.key} must retain event $event');
           }
         }
-        final recipe = UiRecipe(contract, tree);
+        final recipe = UiRecipe(
+          contract,
+          tree,
+          example: definition.containsKey('example')
+              ? _parseExample(definition['example'], contract)
+              : null,
+        );
         components[entry.key] = recipe;
         contracts[entry.key] = contract;
       }
@@ -640,15 +861,39 @@ void _validateNativePlacement(UiRecipeNode tree, UiContract contract) {
     }
     final bounded =
         contract.ref == 'ui.page.list@1' ||
+        contract.ref == 'ui.page.native@1' ||
         contract.ref == 'ui.page.timeGrid@1' ||
         contract.ref == 'ui.chrome.sidebar@1';
+    if (bounded &&
+        node.type == 'primitive' &&
+        node.values['name'] == 'card' &&
+        node.children.length > 1 &&
+        result.keys.any(
+          (key) =>
+              key == 'base' ||
+              {
+                'slot:items',
+                'slot:body',
+                'slot:grid',
+                'slot:navigation',
+              }.contains(key),
+        )) {
+      throw const FormatException(
+        'A viewport card needs one bounded column child',
+      );
+    }
     if (bounded &&
         node.type == 'primitive' &&
         {'scroll', 'list', 'wrap', 'row'}.contains(node.values['name']) &&
         result.keys.any(
           (k) =>
               k == 'base' ||
-              {'slot:items', 'slot:grid', 'slot:navigation'}.contains(k),
+              {
+                'slot:items',
+                'slot:body',
+                'slot:grid',
+                'slot:navigation',
+              }.contains(k),
         )) {
       throw const FormatException(
         'Scrollable native slots need a bounded vertical layout',

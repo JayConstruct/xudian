@@ -2,6 +2,80 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/ui/workspace_header.dart';
 
 void main() {
+  test(
+    'date titles format civil dates and show years outside the current year',
+    () {
+      final today = DateTime(2026, 10, 10);
+      expect(formatWorkspaceDate('2026-10-10', today: today), '10月10日 周六');
+      expect(formatWorkspaceDate('2027-01-01', today: today), '2027年1月1日 周五');
+      for (final value in [
+        null,
+        '2026-02-30',
+        '0000-01-01',
+        '2026-10-10T00:00:00',
+      ]) {
+        expect(formatWorkspaceDate(value, today: today), isNull);
+      }
+    },
+  );
+
+  testWidgets(
+    'date leases reject script headers, stale publishers and mode changes; identical dates do not notify twice',
+    (tester) async {
+      final controller = WorkspaceHeaderController();
+      addTearDown(controller.dispose);
+      final owner = Object();
+      var active = true;
+      final lease = controller.activate(
+        identity: 'page:1',
+        moduleId: 'test.date',
+        pageId: 'test.date.home',
+        enabled: true,
+        mode: 'date',
+        isActive: () => active,
+      )!;
+      controller.publish(lease, Object(), {
+        'title': 'forged script header',
+        'autoHideChrome': true,
+      }, (_) async {});
+      expect(controller.content, isNull);
+      controller.publishDate(lease, owner, '2027-01-01');
+      expect(controller.content!.spec, {
+        'title': '2027年1月1日 周五',
+        'selectedDate': '2027-01-01',
+      });
+      expect(controller.content!.spec['autoHideChrome'], isNull);
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+      await tester.pump();
+      final before = notifications;
+      controller.publishDate(lease, owner, '2027-01-01');
+      await tester.pump();
+      expect(notifications, before);
+      active = false;
+      controller.publishDate(lease, owner, '2027-01-02');
+      expect(controller.content!.spec['title'], '2027年1月1日 周五');
+      final contributed = controller.activate(
+        identity: 'page:1',
+        moduleId: 'test.date',
+        pageId: 'test.date.home',
+        enabled: true,
+        mode: 'contributed',
+        isActive: () => true,
+      )!;
+      expect(contributed, isNot(same(lease)));
+      expect(controller.content, isNull);
+      controller.publishDate(lease, owner, '2027-01-03');
+      controller.publishDate(contributed, owner, '2027-01-03');
+      expect(controller.content, isNull);
+      controller.publish(contributed, owner, {
+        'title': 'Normal script title',
+      }, (_) async {});
+      expect(controller.content!.spec['title'], 'Normal script title');
+      await tester.pump();
+    },
+  );
+
   testWidgets(
     'header leases reject late pages, old instances and stale menu actions',
     (tester) async {

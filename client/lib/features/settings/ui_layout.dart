@@ -8,25 +8,40 @@ import '../../data/app_database.dart';
 import '../../data/providers.dart';
 
 class UiLayoutProfile {
-  UiLayoutProfile({this.mainLimit, Map<String, UiMount> mounts = const {}})
-    : mounts = Map.unmodifiable(mounts);
+  UiLayoutProfile({
+    this.mainLimit,
+    this.morePageEnabled = true,
+    Map<String, UiMount> mounts = const {},
+  }) : mounts = Map.unmodifiable(mounts);
 
   final int? mainLimit;
+  final bool morePageEnabled;
   final Map<String, UiMount> mounts;
 
   UiMount mountFor(UiEntryRegistration entry) =>
       mounts[entry.id] ?? entry.defaultMount;
 
-  UiLayoutProfile withMount(String id, UiMount mount) =>
-      UiLayoutProfile(mainLimit: mainLimit, mounts: {...mounts, id: mount});
+  UiLayoutProfile withMount(String id, UiMount mount) => UiLayoutProfile(
+    mainLimit: mainLimit,
+    morePageEnabled: morePageEnabled,
+    mounts: {...mounts, id: mount},
+  );
 
   UiLayoutProfile withoutMount(String id) => UiLayoutProfile(
     mainLimit: mainLimit,
+    morePageEnabled: morePageEnabled,
     mounts: Map<String, UiMount>.of(mounts)..remove(id),
+  );
+
+  UiLayoutProfile withMorePageEnabled(bool value) => UiLayoutProfile(
+    mainLimit: mainLimit,
+    morePageEnabled: value,
+    mounts: mounts,
   );
 
   Map<String, Object?> toJson() => {
     'mainLimit': mainLimit,
+    'morePageEnabled': morePageEnabled,
     'mounts': mounts.map((id, mount) => MapEntry(id, mount.toJson())),
   };
 
@@ -35,9 +50,14 @@ class UiLayoutProfile {
     if (limit != null && (limit is! int || limit < 1)) {
       throw const FormatException('Invalid navigation limit');
     }
+    final moreEnabled = json['morePageEnabled'];
+    if (moreEnabled != null && moreEnabled is! bool) {
+      throw const FormatException('Invalid More page setting');
+    }
     final raw = json['mounts'] as Map;
     return UiLayoutProfile(
       mainLimit: limit as int?,
+      morePageEnabled: moreEnabled as bool? ?? true,
       mounts: raw.map(
         (id, mount) => MapEntry(
           id as String,

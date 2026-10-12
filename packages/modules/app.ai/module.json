@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.ai",
     "name": "AI 助手",
-    "version": "1.0.1",
-    "hostApi": "^1.0.0",
+    "version": "1.2.1",
+    "hostApi": "^1.18.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -88,7 +88,7 @@
       "entry": {
         "id": "app.ai.entry",
         "opening": "adaptivePanel",
-        "placement": "header"
+        "placement": "hidden"
       }
     }
   ],
@@ -98,7 +98,7 @@
   "contributions": [
     {
       "id": "app.ai.launcher",
-      "slot": "globalOverlay",
+      "slot": "workspaceAssistant",
       "handler": "render",
       "label": "AI 助手"
     }

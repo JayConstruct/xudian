@@ -4,13 +4,13 @@
     "id": "example.ui.compact",
     "kind": "uiPack",
     "name": "紧凑界面示例",
-    "version": "1.0.1",
-    "hostApi": "^1.6.0",
+    "version": "1.1.0",
+    "hostApi": "^1.12.0",
     "dataVersion": 1,
     "permissions": [],
     "dependencies": [],
     "defaultInstall": false,
-    "description": "提供紧凑布局的可选界面包。",
+    "description": "提供可独立调用的紧凑按钮与可选界面样式。",
     "author": "JayConstruct"
   },
   "collections": [],
@@ -69,6 +69,18 @@
             "variant": "outlined"
           },
           "event": "press"
+        },
+        "example": {
+          "category": "actions",
+          "name": "紧凑描边按钮",
+          "description": "界面包对标准按钮的紧凑描边实现，不切换全局样式即可预览。",
+          "props": {
+            "label": "紧凑描边按钮"
+          },
+          "slots": {},
+          "events": [
+            "press"
+          ]
         }
       },
       "ui.card@1": {
@@ -81,6 +93,198 @@
           "children": [
             {
               "type": "base"
+            }
+          ]
+        }
+      },
+      "example.ui.compact.primaryButton@1": {
+        "propsSchema": {
+          "type": "object",
+          "required": [
+            "label"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "disabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "events": [
+          "press"
+        ],
+        "example": {
+          "category": "actions",
+          "name": "主要操作按钮",
+          "description": "填充按钮突出主要操作；业务模块声明依赖后可独立调用。",
+          "props": {
+            "label": "主要操作按钮",
+            "disabled": false
+          },
+          "slots": {},
+          "events": [
+            "press"
+          ]
+        },
+        "tree": {
+          "type": "primitive",
+          "name": "padding",
+          "props": {
+            "padding": 4
+          },
+          "children": [
+            {
+              "type": "primitive",
+              "name": "button",
+              "props": {
+                "label": {
+                  "bind": [
+                    "props",
+                    "label"
+                  ]
+                },
+                "disabled": {
+                  "bind": [
+                    "props",
+                    "disabled"
+                  ]
+                },
+                "variant": "filled"
+              },
+              "event": "press"
+            }
+          ]
+        }
+      },
+      "example.ui.compact.outlineButton@1": {
+        "propsSchema": {
+          "type": "object",
+          "required": [
+            "label"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "disabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "events": [
+          "press"
+        ],
+        "example": {
+          "category": "actions",
+          "name": "描边操作按钮",
+          "description": "描边按钮适合次要操作；与填充按钮使用同一按压事件契约。",
+          "props": {
+            "label": "描边操作按钮",
+            "disabled": false
+          },
+          "slots": {},
+          "events": [
+            "press"
+          ]
+        },
+        "tree": {
+          "type": "primitive",
+          "name": "padding",
+          "props": {
+            "padding": 4
+          },
+          "children": [
+            {
+              "type": "primitive",
+              "name": "button",
+              "props": {
+                "label": {
+                  "bind": [
+                    "props",
+                    "label"
+                  ]
+                },
+                "disabled": {
+                  "bind": [
+                    "props",
+                    "disabled"
+                  ]
+                },
+                "variant": "outlined"
+              },
+              "event": "press"
+            }
+          ]
+        }
+      },
+      "example.ui.compact.textButton@1": {
+        "propsSchema": {
+          "type": "object",
+          "required": [
+            "label"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "disabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "events": [
+          "press"
+        ],
+        "example": {
+          "category": "actions",
+          "name": "轻量文字按钮",
+          "description": "文字按钮用于低强调操作；无需启用整个界面包。",
+          "props": {
+            "label": "轻量文字按钮",
+            "disabled": false
+          },
+          "slots": {},
+          "events": [
+            "press"
+          ]
+        },
+        "tree": {
+          "type": "primitive",
+          "name": "padding",
+          "props": {
+            "padding": 4
+          },
+          "children": [
+            {
+              "type": "primitive",
+              "name": "button",
+              "props": {
+                "label": {
+                  "bind": [
+                    "props",
+                    "label"
+                  ]
+                },
+                "disabled": {
+                  "bind": [
+                    "props",
+                    "disabled"
+                  ]
+                },
+                "variant": "text"
+              },
+              "event": "press"
             }
           ]
         }

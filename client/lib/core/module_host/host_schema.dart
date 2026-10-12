@@ -7,6 +7,11 @@ Future<void> createHostSchema(AppDatabase db) async {
   }
 }
 
+const hostUiPreferencesSchema =
+    '''CREATE TABLE IF NOT EXISTS host_ui_preferences (
+  module_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+  PRIMARY KEY(module_id, key))''';
+
 const hostSchema = [
   '''CREATE TABLE IF NOT EXISTS host_collections (
     module_id TEXT NOT NULL, space TEXT NOT NULL, name TEXT NOT NULL,
@@ -45,4 +50,5 @@ const hostSchema = [
   '''CREATE TABLE IF NOT EXISTS host_snapshots (id TEXT PRIMARY KEY,module_id TEXT NOT NULL,space TEXT NOT NULL,version TEXT NOT NULL,data_version INTEGER NOT NULL,created_at TEXT NOT NULL)''',
   '''CREATE TABLE IF NOT EXISTS host_automation (id TEXT PRIMARY KEY,module_id TEXT NOT NULL,rule_id TEXT NOT NULL,event TEXT NOT NULL,status TEXT NOT NULL,message TEXT,source_execution_id TEXT,depth INTEGER NOT NULL,created_at TEXT NOT NULL)''',
   '''CREATE TABLE IF NOT EXISTS host_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)''',
+  hostUiPreferencesSchema,
 ];

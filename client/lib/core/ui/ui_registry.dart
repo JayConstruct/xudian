@@ -29,6 +29,12 @@ class UiRegistry {
         )) {
       throw StateError('Duplicate UI widget: ${registration.id}');
     }
+    if (registration is WorkspaceAssistantRegistration &&
+        list.whereType<WorkspaceAssistantRegistration>().any(
+          (item) => item.id == registration.id,
+        )) {
+      throw StateError('Duplicate workspace assistant: ${registration.id}');
+    }
     if (registration is NavigationRegistration) {
       final duplicate = list.whereType<NavigationRegistration>().any(
         (item) => item.destination.id == registration.destination.id,

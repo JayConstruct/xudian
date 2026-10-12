@@ -11,11 +11,15 @@ class FrostedToolbarSurface extends StatelessWidget {
     super.key,
     required this.child,
     this.radius = AppDesign.dockRadius,
+    this.pill = false,
+    this.clipContent = true,
     this.surfaceKey,
   });
 
   final Widget child;
   final double radius;
+  final bool pill;
+  final bool clipContent;
   final Key? surfaceKey;
 
   @override
@@ -24,10 +28,38 @@ class FrostedToolbarSurface extends StatelessWidget {
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
     final highContrast = MediaQuery.highContrastOf(context);
-    final shape = AppDesign.smoothShape(radius: radius);
+    final shape = pill
+        ? const StadiumBorder()
+        : AppDesign.smoothShape(radius: radius);
     final surface = Color.alphaBlend(
-      scheme.primary.withValues(alpha: dark ? .035 : .015),
+      scheme.primary.withValues(alpha: dark ? .025 : .008),
       scheme.surface,
+    );
+    final glass = BackdropFilter(
+      enabled: !highContrast,
+      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          shape: shape.copyWith(
+            side: BorderSide(
+              color: highContrast
+                  ? scheme.onSurface.withValues(alpha: .35)
+                  : scheme.outlineVariant.withValues(alpha: .35),
+            ),
+          ),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              surface.withValues(alpha: highContrast ? 1 : .88),
+              surface.withValues(alpha: highContrast ? 1 : .80),
+            ],
+          ),
+        ),
+        child: clipContent
+            ? Material(type: MaterialType.transparency, child: child)
+            : null,
+      ),
     );
     return RepaintBoundary(
       child: DecoratedBox(
@@ -36,41 +68,44 @@ class FrostedToolbarSurface extends StatelessWidget {
           shape: shape,
           shadows: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? .24 : .07),
+              color: Colors.black.withValues(alpha: dark ? .22 : .045),
               blurRadius: 24,
-              offset: const Offset(0, 6),
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: dark ? .08 : .025),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
             ),
           ],
         ),
-        child: ClipRSuperellipse(
-          borderRadius: shape.borderRadius,
-          child: BackdropFilter(
-            enabled: !highContrast,
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: DecoratedBox(
-              decoration: ShapeDecoration(
-                shape: shape.copyWith(
-                  side: BorderSide(
-                    color: highContrast
-                        ? scheme.onSurface.withValues(alpha: .35)
-                        : scheme.outlineVariant.withValues(
-                            alpha: dark ? .5 : .6,
-                          ),
+        child: !clipContent
+            ? Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: ClipPath(
+                      clipper: ShapeBorderClipper(shape: shape),
+                      child: glass,
+                    ),
                   ),
-                ),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    surface.withValues(alpha: highContrast ? 1 : .9),
-                    surface.withValues(alpha: highContrast ? 1 : .84),
-                  ],
-                ),
+                  RepaintBoundary(
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: child,
+                    ),
+                  ),
+                ],
+              )
+            : pill
+            ? ClipPath(
+                clipper: const ShapeBorderClipper(shape: StadiumBorder()),
+                child: glass,
+              )
+            : ClipRSuperellipse(
+                borderRadius: BorderRadius.circular(radius),
+                child: glass,
               ),
-              child: Material(type: MaterialType.transparency, child: child),
-            ),
-          ),
-        ),
       ),
     );
   }

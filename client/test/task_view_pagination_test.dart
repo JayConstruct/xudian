@@ -11,6 +11,26 @@ import 'package:task_app/data/app_database.dart';
 List<Map<String, Object?>> records(Object? value) =>
     (value as List).map((v) => object(v)).toList();
 
+Future<ScriptPackage> sourcePackage(String id) async {
+  final directory = Directory('../packages/modules/$id');
+  final files = <String, String>{};
+  await for (final file in directory.list(recursive: true)) {
+    if (file is File && file.path.endsWith('.js')) {
+      files[file.path.substring(directory.path.length + 1)] = await file
+          .readAsString();
+    }
+  }
+  return ScriptPackage.verify(
+    await ScriptPackage.build(
+      object(
+        jsonDecode(await File('${directory.path}/module.json').readAsString()),
+      ),
+      files,
+    ),
+    allowUnsignedLocal: true,
+  );
+}
+
 void main() {
   test(
     'packaged task views paginate filtered records and preserve today rules',
@@ -28,12 +48,7 @@ void main() {
       });
       await host.initialize();
       for (final id in ['app.tasks', 'app.views.today']) {
-        await host.install(
-          await ScriptPackage.verify(
-            await File('../dist/modules/$id.xmodule').readAsBytes(),
-            allowUnsignedLocal: true,
-          ),
-        );
+        await host.install(await sourcePackage(id));
       }
       final actor = host.instances['app.tasks']!.actor;
       await db.transaction(() async {
@@ -76,9 +91,9 @@ void main() {
         await host.invokePage('app.views.today', 'render', {'state': {}}),
       );
       List<Map<String, Object?>> items() =>
-          records(object(object(page['tree'])['slots'])['items']);
+          records(object(page['tree'])['children']);
       final firstIds = items()
-          .where((v) => v['type'] == 'card')
+          .where((v) => v['type'] == 'taskItem')
           .map((v) => v['key'])
           .toList();
       expect(firstIds, hasLength(50));
@@ -90,7 +105,7 @@ void main() {
         }),
       );
       final ids = items()
-          .where((v) => v['type'] == 'card')
+          .where((v) => v['type'] == 'taskItem')
           .map((v) => v['key'])
           .toList();
       expect(ids, hasLength(61));

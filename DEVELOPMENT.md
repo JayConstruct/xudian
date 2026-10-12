@@ -28,6 +28,8 @@ cd ..
 
 ## 日常更新
 
+WSL 开始开发时运行 `scripts/start-emulator.sh`，启动 Windows 模拟器并等待 Android 就绪；已运行时直接复用。SDK 路径、AVD 与等待时间的参数见 [模拟器流程](docs/EMULATOR_UPDATE.md)。
+
 | 改动 | 命令 |
 | --- | --- |
 | Flutter 页面，保持热重载 | `scripts/update-emulator.sh --dev` |

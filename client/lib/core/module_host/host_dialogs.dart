@@ -1,3 +1,5 @@
+import '../ui/native_ui.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -17,26 +19,32 @@ Future<bool> reviewDialog(
       context: context,
       builder: (context) => UiPackScope(
         defaultOnly: true,
-        child: AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: 700,
-            child: SingleChildScrollView(
-              child: SelectableText(
-                const JsonEncoder.withIndent('  ').convert(details),
+        child: NativeUi(
+          child: AlertDialog(
+            title: Text(title),
+            content: SizedBox(
+              width: 700,
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  const JsonEncoder.withIndent('  ').convert(details),
+                ),
               ),
             ),
+            actions: [
+              NativeUi(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('取消'),
+                ),
+              ),
+              NativeUi(
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('确认'),
+                ),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('确认'),
-            ),
-          ],
         ),
       ),
     ) ??
@@ -200,18 +208,20 @@ class _HostFormDialogState extends State<HostFormDialog> {
               for (final option in (field['options'] as List? ?? []).map(
                 object,
               ))
-                FilterChip(
-                  label: Text('${option['label']}'),
-                  selected: multiples[key]!.contains(option['value']),
-                  onSelected: (selected) => setState(() {
-                    final value = option['value'] as String;
-                    if (selected) {
-                      multiples[key]!.add(value);
-                    } else {
-                      multiples[key]!.remove(value);
-                    }
-                    errors.remove(key);
-                  }),
+                NativeUi(
+                  child: FilterChip(
+                    label: Text('${option['label']}'),
+                    selected: multiples[key]!.contains(option['value']),
+                    onSelected: (selected) => setState(() {
+                      final value = option['value'] as String;
+                      if (selected) {
+                        multiples[key]!.add(value);
+                      } else {
+                        multiples[key]!.remove(value);
+                      }
+                      errors.remove(key);
+                    }),
+                  ),
                 ),
             ],
           ),
@@ -264,29 +274,31 @@ class _HostFormDialogState extends State<HostFormDialog> {
                         child: Semantics(
                           label: '$label ${option['label']}',
                           selected: selections[key] == option['value'],
-                          child: FilledButton.tonal(
-                            style: FilledButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              shape: AppDesign.smoothShape(radius: 14),
-                              backgroundColor:
-                                  selections[key] == option['value']
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context)
-                                        .colorScheme
-                                        .surfaceContainerHighest,
-                              foregroundColor:
-                                  selections[key] == option['value']
-                                  ? Theme.of(context).colorScheme.onPrimary
-                                  : Theme.of(context).colorScheme.onSurface,
+                          child: NativeUi(
+                            child: FilledButton.tonal(
+                              style: FilledButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                shape: AppDesign.smoothShape(radius: 14),
+                                backgroundColor:
+                                    selections[key] == option['value']
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                                foregroundColor:
+                                    selections[key] == option['value']
+                                    ? Theme.of(context).colorScheme.onPrimary
+                                    : Theme.of(context).colorScheme.onSurface,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  selections[key] = option['value'] as String;
+                                  errors.remove(key);
+                                });
+                                if (instantSelection) submit();
+                              },
+                              child: Text('${option['label']}'),
                             ),
-                            onPressed: () {
-                              setState(() {
-                                selections[key] = option['value'] as String;
-                                errors.remove(key);
-                              });
-                              if (instantSelection) submit();
-                            },
-                            child: Text('${option['label']}'),
                           ),
                         ),
                       ),
@@ -366,12 +378,16 @@ class _HostFormDialogState extends State<HostFormDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+        NativeUi(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
         ),
         if (!instantSelection)
-          FilledButton(onPressed: submit, child: const Text('继续')),
+          NativeUi(
+            child: FilledButton(onPressed: submit, child: const Text('继续')),
+          ),
       ],
     );
     final form = UiComponent(

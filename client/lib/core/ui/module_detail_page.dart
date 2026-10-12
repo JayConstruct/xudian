@@ -84,7 +84,8 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
       identity: '${widget.pageId}:$revision',
       moduleId: page?.moduleId ?? '',
       pageId: widget.pageId,
-      enabled: page?.headerMode == 'contributed',
+      enabled: {'contributed', 'date'}.contains(page?.headerMode),
+      mode: page?.headerMode ?? 'standard',
       isActive: () =>
           mounted && identical(widget.registry.ui.page(widget.pageId), page),
     );
@@ -106,6 +107,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                 (lease?.isActive() == true
                     ? ''
                     : widget.title ?? page?.title ?? '页面不可用'),
+            titleMaxLines: page?.headerMode == 'date' ? 3 : 1,
             leading: hasInternalBack ? BackButton(onPressed: _back) : null,
             child:
                 widget.child ??
