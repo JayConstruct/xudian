@@ -20,6 +20,193 @@ final _destinations = List.generate(
 );
 
 void main() {
+  for (final direction in TextDirection.values) {
+    testWidgets(
+      'assistant entry and exit share a slow continuous layout in ${direction.name}',
+      (tester) async {
+        final selected = ValueNotifier(0);
+        addTearDown(selected.dispose);
+        final semantics = tester.ensureSemantics();
+        var assistantCalls = 0;
+        final capsule = find.byKey(const ValueKey('mobile-navigation-capsule'));
+        final assistant = find.byKey(
+          const ValueKey('mobile-navigation-assistant'),
+        );
+        await _pumpDock(
+          tester,
+          selected,
+          direction: direction,
+          width: 288,
+          hasMore: false,
+        );
+        final expanded = tester.getRect(capsule);
+        await _pumpDock(
+          tester,
+          selected,
+          direction: direction,
+          width: 288,
+          hasMore: false,
+          onAssistant: () => assistantCalls++,
+          settle: false,
+        );
+        expect(tester.getRect(capsule), expanded);
+        await tester.pump(const Duration(milliseconds: 100));
+        final early = tester.getRect(capsule);
+        expect(early.width, lessThan(expanded.width));
+        expect(early.width, greaterThan(expanded.width - 6));
+        expect(find.semantics.byLabel('AI'), findsNothing);
+        await tester.pump(const Duration(milliseconds: 150));
+        final midpoint = tester.getRect(capsule);
+        final actionMidpoint = tester.getRect(assistant);
+        expect(midpoint.width, closeTo(expanded.width - 35, 2));
+        expect(actionMidpoint.width, closeTo(31, 2));
+        // Width reservation includes the same animated gap on either side.
+        expect(
+          expanded.width - midpoint.width,
+          closeTo(actionMidpoint.width * 70 / 62, .1),
+        );
+        await tester.pump(const Duration(milliseconds: 150));
+        final enteringTarget = tester.getRect(assistant);
+        expect(
+          enteringTarget.width,
+          greaterThanOrEqualTo(kMinInteractiveDimension),
+        );
+        await tester.tap(find.text('AI'));
+        await tester.pumpAndSettle();
+        expect(assistantCalls, 1);
+        final compact = tester.getRect(capsule);
+        expect(compact.width, closeTo(expanded.width - 70, .1));
+        await _pumpDock(
+          tester,
+          selected,
+          direction: direction,
+          width: 288,
+          hasMore: false,
+          settle: false,
+        );
+        expect(tester.getRect(capsule), compact);
+        expect(find.text('AI'), findsOneWidget);
+        expect(find.semantics.byLabel('AI'), findsNothing);
+        await tester.tap(find.text('AI'), warnIfMissed: false);
+        expect(assistantCalls, 1);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(tester.getRect(capsule).width, closeTo(midpoint.width, .1));
+        expect(
+          tester.getRect(assistant).width,
+          closeTo(actionMidpoint.width, .1),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.getRect(capsule), expanded);
+        expect(find.text('AI'), findsNothing);
+        expect(selected.value, 0);
+        expect(tester.takeException(), isNull);
+        semantics.dispose();
+      },
+    );
+  }
+
+  testWidgets('assistant visibility reverses from its current progress', (
+    tester,
+  ) async {
+    final selected = ValueNotifier(0);
+    addTearDown(selected.dispose);
+    final capsule = find.byKey(const ValueKey('mobile-navigation-capsule'));
+    final assistant = find.byKey(const ValueKey('mobile-navigation-assistant'));
+    await _pumpDock(tester, selected, width: 288, hasMore: false);
+    await _pumpDock(
+      tester,
+      selected,
+      width: 288,
+      hasMore: false,
+      onAssistant: () {},
+      settle: false,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    final entering = tester.getRect(capsule);
+    final enteringAction = tester.getRect(assistant);
+    await _pumpDock(
+      tester,
+      selected,
+      width: 288,
+      hasMore: false,
+      settle: false,
+    );
+    expect(tester.getRect(capsule), entering);
+    expect(tester.getRect(assistant), enteringAction);
+    await tester.pump(const Duration(milliseconds: 80));
+    final leaving = tester.getRect(capsule);
+    expect(leaving.width, greaterThan(entering.width));
+    await _pumpDock(
+      tester,
+      selected,
+      width: 288,
+      hasMore: false,
+      onAssistant: () {},
+      settle: false,
+    );
+    expect(tester.getRect(capsule), leaving);
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.getRect(capsule).width, lessThan(leaving.width));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(assistant).width, 62);
+    expect(tester.getRect(capsule).width, 218);
+    await tester.tap(find.text('页面 2'));
+    await tester.pumpAndSettle();
+    expect(selected.value, 2);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'reduced motion finishes assistant presence immediately, including mid-flight',
+    (tester) async {
+      final selected = ValueNotifier(0);
+      addTearDown(selected.dispose);
+      await _pumpDock(tester, selected, width: 288, hasMore: false);
+      await _pumpDock(
+        tester,
+        selected,
+        width: 288,
+        hasMore: false,
+        onAssistant: () {},
+        settle: false,
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      await _pumpDock(
+        tester,
+        selected,
+        width: 288,
+        hasMore: false,
+        onAssistant: () {},
+        disableAnimations: true,
+        settle: false,
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('mobile-navigation-assistant')))
+            .width,
+        62,
+      );
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      await _pumpDock(
+        tester,
+        selected,
+        width: 288,
+        hasMore: false,
+        disableAnimations: true,
+        settle: false,
+      );
+      expect(find.text('AI'), findsNothing);
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('mobile-navigation-capsule')))
+            .width,
+        288,
+      );
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final useBase in [false, true]) {
     testWidgets(
       'AI remains available through ${useBase ? 'base' : 'navigation slot'} chrome recipe',
@@ -691,6 +878,8 @@ Future<void> _pumpDock(
   bool showNavigation = true,
   bool? hasMore,
   VoidCallback? onAssistant,
+  double width = 360,
+  bool settle = true,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -706,7 +895,7 @@ Future<void> _pumpDock(
             body: Align(
               alignment: Alignment.bottomCenter,
               child: SizedBox(
-                width: 360,
+                width: width,
                 child: ValueListenableBuilder<int>(
                   valueListenable: selected,
                   builder: (context, selectedIndex, child) => MobileBottomDock(
@@ -727,7 +916,11 @@ Future<void> _pumpDock(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
 }
 
 void _expectSelected(WidgetTester tester, int index, {String? label}) {

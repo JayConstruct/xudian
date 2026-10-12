@@ -5,9 +5,7 @@ import 'dart:io';
 import 'package:uuid/uuid.dart';
 import 'package:pub_semver/pub_semver.dart';
 
-import '../modules/module_registry.dart';
-import '../security/capability_registry.dart';
-import 'script_app_module.dart';
+import 'module_ui_declarations.dart';
 import 'ui_preferences.dart';
 import 'host_schema.dart';
 
@@ -23,7 +21,7 @@ import '../contracts/json_values.dart';
 import '../ui/ui_pack.dart';
 import 'collection_store.dart';
 import 'json_schema.dart';
-import 'legacy_migration.dart';
+import 'legacy_data_migration.dart';
 import 'module_package.dart';
 
 class ServiceRef {
@@ -67,6 +65,7 @@ class ScriptInstance {
   Future<void> workflowTail = Future.value();
   SnapshotSession? session;
   Set<String>? pageReads;
+  bool pagePreparation = false;
   final subscriptions = <String, StreamSubscription>{};
   Future<void> tail = Future.value();
   Future<Object?> run(
@@ -148,6 +147,10 @@ class ModuleHost {
   ModuleHost({required this.store, required this.directory, this.interaction});
   final CollectionStore store;
   final Directory directory;
+  // Native polling outlives installation transactions. Keep its timers in the
+  // host's owner zone while initialization bridges use the live batch zone.
+  final Zone _workerZone = Zone.current;
+  Zone? _installBatchZone;
   HostInteraction? interaction;
   void Function(ScriptPackage candidate)? validateCandidate;
   bool preview = false;
@@ -336,9 +339,65 @@ class ModuleHost {
             entry.key: entry.value.package.uiPack!,
       }, package.dependencies);
     }
-    for (final raw in package.requiredServices) {
-      final ref = ServiceRef.parse(raw);
-      if (ref.moduleId != package.id) _service(ref);
+    _validateRequiredServices(package, {
+      for (final entry in instances.entries) entry.key: entry.value.package,
+      package.id: package,
+    });
+  }
+
+  bool _satisfiesService(
+    Map<String, Object?> requirement,
+    Iterable<Map<String, Object?>> services,
+  ) {
+    final ref = ServiceRef.parse(requirement);
+    return services.any(
+      (service) =>
+          service['id'] == ref.serviceId &&
+          (ref.moduleId == 'app.host'
+              ? ref.major == 1
+              : service['major'] == ref.major) &&
+          (requirement['kind'] == null ||
+              requirement['kind'] == service['kind']),
+    );
+  }
+
+  void _validateRequiredServices(
+    ScriptPackage package,
+    Map<String, ScriptPackage> selected,
+  ) {
+    for (final requirement in package.requiredServices) {
+      final ref = ServiceRef.parse(requirement);
+      final services = ref.moduleId == 'app.host'
+          ? nativeServices.values.map((service) => service.definition)
+          : (selected[ref.moduleId]?.definition['services'] as List? ?? []).map(
+              object,
+            );
+      if (!_satisfiesService(requirement, services)) {
+        throw StateError(
+          'Unsatisfied service: ${package.id} requires ${ref.key}',
+        );
+      }
+    }
+  }
+
+  void _validateDependents(ScriptPackage package) {
+    for (final id in dependents(package.id)) {
+      final dependent = instances[id]!.package;
+      if (!dependent.acceptsDependency(package.id, package.version)) {
+        throw StateError('Update would break module dependency: $id');
+      }
+      for (final requirement in dependent.requiredServices) {
+        final ref = ServiceRef.parse(requirement);
+        if (ref.moduleId == package.id &&
+            !_satisfiesService(
+              requirement,
+              (package.definition['services'] as List? ?? []).map(object),
+            )) {
+          throw StateError(
+            'Update would break service dependency: $id/${ref.key}',
+          );
+        }
+      }
     }
   }
 
@@ -348,6 +407,11 @@ class ModuleHost {
     int generation, {
     bool publish = true,
   }) async {
+    validateModuleUiDeclarations([
+      for (final instance in instances.values)
+        if (instance.package.id != package.id) instance.package,
+      package,
+    ]);
     final actor = ModuleActor(
       package.id,
       package.version,
@@ -365,14 +429,19 @@ class ModuleHost {
     try {
       computation = JavaScriptWorker(
         package.scripts,
+        ownerZone: _workerZone,
         memoryLimit: 32 * 1024 * 1024,
-        host: (method, args) => _bridge(instance, method, object(args ?? {})),
+        host: (method, args) => (_installBatchZone ?? _workerZone).run(
+          () => _bridge(instance, method, object(args ?? {})),
+        ),
       );
       workflow = JavaScriptWorker(
         package.scripts,
+        ownerZone: _workerZone,
         memoryLimit: 32 * 1024 * 1024,
-        host: (method, args) =>
-            _bridge(instance, method, object(args ?? {}), workflow: true),
+        host: (method, args) => (_installBatchZone ?? _workerZone).run(
+          () => _bridge(instance, method, object(args ?? {}), workflow: true),
+        ),
       );
       instance.worker = computation;
       instance.workflow = workflow;
@@ -546,25 +615,7 @@ class ModuleHost {
         }
         visit(dependency);
       }
-      for (final raw in package.requiredServices) {
-        final ref = ServiceRef.parse(raw);
-        final services = ref.moduleId == 'app.host'
-            ? nativeServices.values.map((s) => s.definition)
-            : (selected[ref.moduleId]?.definition['services'] as List? ?? [])
-                  .map(object);
-        if (!services.any(
-          (s) =>
-              s['id'] == ref.serviceId &&
-              (ref.moduleId == 'app.host'
-                  ? ref.major == 1
-                  : s['major'] == ref.major) &&
-              (raw['kind'] == null || raw['kind'] == s['kind']),
-        )) {
-          throw StateError(
-            'Unsatisfied service: ${package.id} requires ${ref.key}',
-          );
-        }
-      }
+      _validateRequiredServices(package, selected);
       visiting.remove(package.id);
       visited.add(package.id);
     }
@@ -603,66 +654,71 @@ class ModuleHost {
         _stop(id);
       }
       await store.db.transaction(() async {
-        // Restart the complete final graph in dependency order. Reused modules
-        // must be available before candidates that depend on them, while reused
-        // dependents must wait for a candidate provider's new version.
-        final candidates = {
-          for (final package in plan.packages) package.id: package,
-        };
-        final pending = {...priorPackages, ...candidates};
-        while (pending.isNotEmpty) {
-          final available = pending.values
-              .where(
-                (package) => package.dependencies.every(instances.containsKey),
-              )
-              .toList();
-          if (available.isEmpty) {
-            throw StateError('Cannot activate final dependency graph');
-          }
-          for (final package in available) {
-            if (!candidates.containsKey(package.id)) {
-              await _enable(package.id);
-              pending.remove(package.id);
-              continue;
+        final previousZone = _installBatchZone;
+        _installBatchZone = Zone.current;
+        try {
+          // Restart the complete final graph in dependency order. Reused modules
+          // must be available before candidates that depend on them, while reused
+          // dependents must wait for a candidate provider's new version.
+          final candidates = {
+            for (final package in plan.packages) package.id: package,
+          };
+          final pending = {...priorPackages, ...candidates};
+          while (pending.isNotEmpty) {
+            final available = pending.values
+                .where(
+                  (package) =>
+                      package.dependencies.every(instances.containsKey),
+                )
+                .toList();
+            if (available.isEmpty) {
+              throw StateError('Cannot activate final dependency graph');
             }
-            final row = rowsById[package.id];
-            if (row != null &&
-                row['installed'] == 1 &&
-                row['version'] == package.version) {
-              final existing = await _storedPackage(
-                package.id,
-                package.version,
-              );
-              if (existing.packageDigest != package.packageDigest) {
-                throw StateError('Module version and source are immutable');
+            for (final package in available) {
+              if (!candidates.containsKey(package.id)) {
+                await _enable(package.id);
+                pending.remove(package.id);
+                continue;
               }
-              await _enable(package.id);
-            } else {
-              await _install(package);
+              final row = rowsById[package.id];
+              if (row != null &&
+                  row['installed'] == 1 &&
+                  row['version'] == package.version) {
+                final existing = await _storedPackage(
+                  package.id,
+                  package.version,
+                );
+                if (existing.packageDigest != package.packageDigest) {
+                  throw StateError('Module version and source are immutable');
+                }
+                await _enable(package.id);
+              } else {
+                await _install(package);
+              }
+              final repository = plan.repositories[package.id];
+              if (repository != null) {
+                await store.db.customStatement(
+                  'INSERT INTO host_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                  ['module-repository:${package.id}', repository],
+                );
+              }
+              pending.remove(package.id);
             }
-            final repository = plan.repositories[package.id];
-            if (repository != null) {
-              await store.db.customStatement(
-                'INSERT INTO host_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-                ['module-repository:${package.id}', repository],
-              );
-            }
-            pending.remove(package.id);
           }
+          _validateBatchGraph({
+            for (final instance in instances.values)
+              instance.package.id: instance.package,
+          });
+          for (final instance in instances.values) {
+            _validateDependencies(instance.package);
+            validateCandidate?.call(instance.package);
+          }
+          validateModuleUiDeclarations(
+            instances.values.map((instance) => instance.package),
+          );
+        } finally {
+          _installBatchZone = previousZone;
         }
-        _validateBatchGraph({
-          for (final instance in instances.values)
-            instance.package.id: instance.package,
-        });
-        for (final instance in instances.values) {
-          _validateDependencies(instance.package);
-          validateCandidate?.call(instance.package);
-        }
-        final registry = ModuleRegistry([
-          for (final instance in instances.values)
-            ScriptAppModule(this, instance.package),
-        ], capabilities: CapabilityRegistry(['ui.registry', 'ui.composition']));
-        registry.dispose();
       });
     } catch (error) {
       final callback = onDeactivate;
@@ -812,27 +868,7 @@ class ModuleHost {
           }
         }
       }
-      for (final id in dependents(package.id)) {
-        if (!instances[id]!.package.acceptsDependency(
-          package.id,
-          package.version,
-        )) {
-          throw StateError('Update would break module dependency: $id');
-        }
-        for (final raw in instances[id]!.package.requiredServices) {
-          final ref = ServiceRef.parse(raw);
-          if (ref.moduleId == package.id &&
-              !(package.definition['services'] as List? ?? []).any(
-                (v) =>
-                    object(v)['id'] == ref.serviceId &&
-                    object(v)['major'] == ref.major,
-              )) {
-            throw StateError(
-              'Update would break service dependency: $id/${ref.key}',
-            );
-          }
-        }
-      }
+      _validateDependents(package);
       pauseDependents(package.id);
       _stop(package.id);
     }
@@ -1168,6 +1204,7 @@ class ModuleHost {
       )).single;
       final package = await _storedPackage(id, snapshot['version'] as String);
       _validateDependencies(package);
+      _validateDependents(package);
       validateCandidate?.call(package);
       final space = const Uuid().v4(),
           generation = (current['generation'] as int) + 1;
@@ -1470,14 +1507,25 @@ class ModuleHost {
     String handler,
     Object? input, {
     void Function(Set<String>)? onReads,
+    bool readOnly = false,
+    bool Function()? shouldRun,
   }) {
+    if (readOnly && input is Map && input['event'] != null) {
+      throw StateError('Page preparation cannot dispatch events');
+    }
     final instance = instances[moduleId];
     if (instance == null) throw StateError('Module unavailable');
     final result = Completer<Object?>();
     instance.workflowTail = instance.workflowTail.then((_) async {
-      final reads = onReads == null ? null : <String>{};
-      instance.pageReads = reads;
       try {
+        if (shouldRun?.call() == false ||
+            !identical(instance, instances[moduleId])) {
+          result.complete(null);
+          return;
+        }
+        final reads = onReads == null ? null : <String>{};
+        instance.pageReads = reads;
+        instance.pagePreparation = readOnly;
         final value = await instance.workflow.invoke(
           handler,
           input,
@@ -1489,6 +1537,7 @@ class ModuleHost {
         result.completeError(error, stack);
       } finally {
         instance.pageReads = null;
+        instance.pagePreparation = false;
       }
     });
     return result.future;
@@ -1521,6 +1570,29 @@ class ModuleHost {
   }) async {
     final actor = instance.actor;
     store.requireActive(actor);
+    final session = workflow ? null : instance.session;
+    final pagePreparation = workflow
+        ? instance.pagePreparation
+        : session?.pagePreparation == true;
+    // Speculative page preparation must never submit commands, open UI,
+    // subscribe, or access the network even if the module has those grants.
+    if (pagePreparation &&
+        !const {
+          'data.get',
+          'data.query',
+          'services.query',
+          'services.directory',
+          'extensions.query',
+          'extensions.queryMany',
+          'clock.now',
+          'clock.today',
+          'clock.local',
+          'ui.preferences.get',
+          'ui.catalog',
+          'ui.examples',
+        }.contains(method)) {
+      throw StateError('Page preparation forbids side effects: $method');
+    }
     if (_batchInstalling &&
         ![
           'data.get',
@@ -1536,7 +1608,6 @@ class ModuleHost {
         'Installation validation cannot use external capabilities: $method',
       );
     }
-    final session = workflow ? null : instance.session;
     final pageReads = workflow ? instance.pageReads : null;
     if (_migrationInstances.contains(actor.moduleId) &&
         !['data.get', 'data.query', 'ids.new', 'clock.now'].contains(method)) {
@@ -1605,7 +1676,10 @@ class ModuleHost {
               for (final e in entities) e['id'] as String: {},
             },
             definitions = <Object?>[];
-        final snapshot = session ?? SnapshotSession(actor, const Uuid().v4());
+        final snapshot =
+            session ??
+            (SnapshotSession(actor, const Uuid().v4())
+              ..pagePreparation = pagePreparation);
         for (final provider in instances.values) {
           for (final raw
               in provider.package.definition['services'] as List? ?? []) {
@@ -1675,9 +1749,10 @@ class ModuleHost {
         final ref = ServiceRef.parse(args['ref']);
         final querySnapshot =
             session ??
-            (pageReads == null
+            (pageReads == null && !pagePreparation
                 ? null
-                : SnapshotSession(actor, const Uuid().v4()));
+                : (SnapshotSession(actor, const Uuid().v4())
+                    ..pagePreparation = pagePreparation));
         final value = await query(
           actor,
           ref,

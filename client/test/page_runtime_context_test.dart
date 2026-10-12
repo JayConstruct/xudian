@@ -17,6 +17,8 @@ import 'package:task_app/core/modules/module_manifest.dart';
 import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
 import 'package:task_app/core/ui/page_runtime_context.dart';
+import 'package:task_app/core/ui/daily_widgets.dart';
+import 'package:task_app/core/ui/page_first_frame.dart';
 import 'package:task_app/core/ui/module_detail_page.dart';
 import 'package:task_app/core/ui/ui_composition.dart';
 import 'package:task_app/core/ui/ui_page_host.dart';
@@ -27,6 +29,8 @@ import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
 class _ContainerModule implements AppModule {
+  _ContainerModule({this.initializerHost});
+  final ModuleHost? initializerHost;
   @override
   ModuleManifest get manifest => const ModuleManifest(
     id: 'test.container',
@@ -43,7 +47,14 @@ class _ContainerModule implements AppModule {
       title: 'Shared',
       headerMode: 'date',
       container: true,
-      builder: (_, _) => const SizedBox.shrink(),
+      initializesRuntimeContext: initializerHost != null,
+      builder: (_, _) => initializerHost == null
+          ? const SizedBox.shrink()
+          : ScriptPage(
+              host: initializerHost!,
+              moduleId: 'test.navigation',
+              handler: 'render',
+            ),
       slots: const [
         PageSlotDefinition(
           id: 'daily',
@@ -231,6 +242,17 @@ export function render({context={},state={},event}) {
     }
   }
 
+  Future<void> waitForAction(WidgetTester tester, Finder action) async {
+    for (var i = 0; i < 80; i++) {
+      if (action.hitTestable().evaluate().isNotEmpty) return;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(action.hitTestable(), findsOneWidget);
+  }
+
   Future<void> show(
     WidgetTester tester, {
     PageContext pageContext = const PageContext(),
@@ -277,6 +299,61 @@ export function render({context={},state={},event}) {
     );
     await settle(tester);
   }
+
+  testWidgets(
+    'workspace first frame waits for date initialization and every actual section',
+    (tester) async {
+      final firstRender = Completer<void>();
+      final records = Completer<void>();
+      addTearDown(() {
+        if (!firstRender.isCompleted) firstRender.complete();
+        if (!records.isCompleted) records.complete();
+      });
+      host.instances['test.navigation']!.workflowTail = firstRender.future;
+      host.instances['test.tasks']!.workflowTail = records.future;
+      final stagedRegistry = ModuleRegistry([
+        _ContainerModule(initializerHost: host),
+        for (final instance in host.instances.values)
+          ScriptAppModule(host, instance.package),
+      ], capabilities: CapabilityRegistry(['ui.registry', 'ui.composition']));
+      addTearDown(stagedRegistry.dispose);
+      var ready = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
+          ],
+          child: MaterialApp(
+            home: PageFirstFrameScope(
+              onReady: () => ready++,
+              child: Scaffold(
+                body: UiPageHost(
+                  registry: stagedRegistry,
+                  pageId: 'test.container.home',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+      expect(ready, 0);
+      firstRender.complete();
+      await settle(tester);
+      expect(
+        ready,
+        0,
+        reason: 'The initializer cannot reveal an empty composition',
+      );
+      records.complete();
+      await settle(tester);
+      expect(ready, 1);
+      expect(find.text('tasks date 2026-10-01'), findsOneWidget);
+      expect(find.text('future 2026-10-01'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'one composition shares dates including nested contributions without replacing draft or state; other roots stay isolated',
@@ -367,6 +444,7 @@ export function render({context={},state={},event}) {
       await tester.tap(find.byTooltip('后一天'));
       await settle(tester);
       expect(find.text('tasks date 2026-10-02'), findsOneWidget);
+      await waitForAction(tester, find.text('Increment'));
       await tester.tap(find.text('Increment'));
       await settle(tester);
       await tester.tap(find.text('Expand quick draft'));
@@ -458,7 +536,8 @@ export function render({context={},state={},event}) {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'retained while querying',
       );
-      await tester.tap(find.text('回到今天'));
+      expect(find.text('回到今天'), findsNothing);
+      await header.content!.dispatch({'type': 'date.today'});
       await settle(tester);
       expect(find.text('tasks date 2026-10-01'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -480,12 +559,79 @@ export function render({context={},state={},event}) {
       );
       await tester.tap(date('2026-10-02'));
       await tester.pump();
-      await tester.tap(date('2026-10-03'));
+      expect(header.content!.spec['selectedDate'], '2026-10-02');
+      expect(find.text('future 2026-10-02'), findsOneWidget);
+      // The date strip is still moving; this test targets the renderer's
+      // intent queue rather than the moving cell's hit position.
+      tester.widget<DayOverview>(find.byType(DayOverview)).onChanged!(
+        '2026-10-03',
+      );
       await tester.pump();
+      expect(header.content!.spec['selectedDate'], '2026-10-03');
+      expect(find.text('future 2026-10-03'), findsOneWidget);
       gate.complete();
       await settle(tester);
       expect(find.text('tasks date 2026-10-03'), findsOneWidget);
       expect(find.text('future 2026-10-03'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'rapid date reversal rejects an older overview even when the final date equals its starting context',
+    (tester) async {
+      await show(tester);
+      await tester.tap(find.text('Expand quick draft'));
+      await settle(tester);
+      await tester.enterText(find.byType(TextField), 'ABA date draft');
+      final draft = tester
+          .widget<TextField>(find.byType(TextField))
+          .controller!;
+      final states = find
+          .byType(ScriptPage)
+          .evaluate()
+          .map((element) => (element as StatefulElement).state)
+          .toList();
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      host.instances['test.navigation']!.workflowTail = gate.future;
+      Finder date(String value) => find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == value,
+      );
+      await tester.tap(date('2026-10-02'));
+      await tester.pump();
+      expect(header.content!.spec['selectedDate'], '2026-10-02');
+      expect(find.text('future 2026-10-02'), findsOneWidget);
+      expect(date('2026-10-01').hitTestable(), findsNothing);
+      await tester.tap(find.byTooltip('前一天'));
+      await tester.pump();
+      expect(header.content!.spec['selectedDate'], '2026-10-01');
+      expect(find.text('future 2026-10-01'), findsOneWidget);
+      gate.complete();
+      for (var frame = 0; frame < 20; frame++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 15)),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(header.content!.spec['selectedDate'], '2026-10-01');
+        expect(find.text('future 2026-10-02'), findsNothing);
+        expect(find.text('tasks date 2026-10-02'), findsNothing);
+      }
+      expect(find.text('tasks date 2026-10-01'), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller,
+        same(draft),
+      );
+      expect(draft.text, 'ABA date draft');
+      final revisited = find
+          .byType(ScriptPage)
+          .evaluate()
+          .map((element) => (element as StatefulElement).state)
+          .toList();
+      expect(revisited, orderedEquals(states));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

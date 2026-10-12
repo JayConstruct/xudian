@@ -12,9 +12,11 @@
 | `lib/core/module_host/module_package.dart` | 包身份、文件、摘要及来源校验 |
 | `lib/core/module_host/script_page.dart` | 脚本页面与公共控件渲染 |
 | `lib/core/module_host/host_settings_page.dart` | 生产设置分类与二级页 |
-| `lib/core/module_host/collection_store.dart` | 通用集合、记录与查询 |
+| `lib/core/module_host/collection_store.dart` | 通用集合、记录、查询与事务；原生资源通过适配器接入 |
+| `lib/core/module_host/host_settings_resource.dart` | 原生设置读取、基线验证与事务内偏好同步 |
+| `lib/app/host_platform_bridge.dart` | 网络、凭据、文件、浏览器和能力撤销生命周期 |
 | `lib/core/module_catalog/` | 商店、作者目录、版本及依赖解析 |
-| `lib/core/ui/` | 页面组合、界面包、顶栏和宿主导航 |
+| `lib/core/ui/` | 公共视觉基础、页面组合、界面包、顶栏和宿主导航 |
 | `lib/data/app_database.dart` | Drift 数据库、迁移与旧表档案 |
 | `assets/modules/catalog.json`、`retired.json` | 随 APK 发布的模块清单、默认状态及退出分发的视图 |
 | `../packages/modules/` | 生产业务代码；课表与拾光单独安装 |

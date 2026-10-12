@@ -119,10 +119,8 @@ class ScriptAppModule implements AppModule {
             if (package.definition['derivedFrom'] != null)
               'legacyPageId':
                   page['legacyPageId'] ?? id.substring(package.id.length + 1),
-            ...context.values,
+            ...context.toJson(),
             'pageId': id,
-            if (context.taskId != null) 'taskId': context.taskId,
-            if (context.projectId != null) 'projectId': context.projectId,
           },
         ),
       ),
@@ -147,11 +145,7 @@ class ScriptAppModule implements AppModule {
             pageId: entry['targetPageId'] as String?,
             slotId: entry['slotId'] as String?,
             order: entry['order'] as int? ?? 0,
-            context: PageContext(
-              taskId: entry['taskId'] as String?,
-              projectId: entry['projectId'] as String?,
-              values: object(entry['values'] ?? {}),
-            ),
+            context: PageContext.fromLayoutJson(entry),
           ),
         ),
     ];

@@ -1,18 +1,14 @@
 import '../core/ui/native_ui.dart';
 import '../core/ui/ui_icon.dart';
+import '../core/ui/workspace_typography.dart';
+import '../core/contracts/json_values.dart';
 
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:file_selector/file_selector.dart';
 
 import '../core/module_host/module_host.dart';
 import '../core/module_host/module_package.dart';
 import '../core/module_host/host_providers.dart';
 import '../core/module_host/script_app_module.dart';
-import '../core/module_host/host_network.dart';
-import '../core/module_host/host_browser.dart';
 import '../core/module_host/host_dialogs.dart';
 import '../core/module_host/host_manager_page.dart';
 import '../core/module_host/host_settings_page.dart';
@@ -40,6 +36,7 @@ import '../core/ui/workspace_chrome.dart';
 import '../features/settings/ui_layout.dart';
 import '../features/settings/ui_layout_page.dart';
 import '../features/settings/app_preferences.dart';
+import 'host_platform_bridge.dart';
 import 'design_system.dart';
 import 'app_toast.dart';
 import 'mobile_bottom_dock.dart';
@@ -75,8 +72,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   String? restoreError;
   Map<String, String> restoreFailures = {};
   ModuleHost? host;
-  HostNetwork? network;
-  final browser = HostBrowser();
+  HostPlatformBridge? platformBridge;
   StreamSubscription<void>? hostSubscription;
   StreamSubscription<Set<String>>? dataSubscription;
   String? selectedDestinationId;
@@ -102,13 +98,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     try {
       host = await ref.read(moduleHostProvider.future);
       if (!mounted) return;
-      network ??= HostNetwork(host!.store);
+      platformBridge ??= HostPlatformBridge(host!.store);
+      platformBridge!.attach(host!);
       host!.interaction = _hostInteraction;
-      host!.onDeactivate = (actor) {
-        network!.revoke(actor);
-        unawaited(browser.revoke(actor));
-      };
-      host!.onDeleteData = network!.deleteModuleCredentials;
       registerHostControlServices(
         host!,
         widget.registry,
@@ -146,7 +138,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       for (final instance in host!.instances.values)
         ScriptAppModule(host!, instance.package),
     ]);
-    network?.revokeInactive();
+    platformBridge?.revokeInactive();
   }
 
   Future<Object?> _hostInteraction(
@@ -187,71 +179,28 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         );
       case 'secrets.configure':
-        final endpoint = network!.validateEndpoint(args['endpoint']);
-        final values = await showDialog<Map<String, Object?>>(
-          context: context,
-          builder: (_) => UiPackScope(
-            defaultOnly: true,
-            child: HostFormDialog(
-              title: '安全凭据 · ${caller.moduleId}',
-              fields: [
-                {
-                  'key': 'key',
-                  'label': '${args['label'] ?? '密钥'}（绑定 $endpoint）',
-                  'type': 'secret',
-                },
-              ],
+        return platformBridge!.configureSecret(caller, args['endpoint'], (
+          endpoint,
+        ) async {
+          final values = await showDialog<Map<String, Object?>>(
+            context: context,
+            builder: (_) => UiPackScope(
+              defaultOnly: true,
+              child: HostFormDialog(
+                title: '安全凭据 · ${caller.moduleId}',
+                fields: [
+                  {
+                    'key': 'key',
+                    'label': '${args['label'] ?? '密钥'}（绑定 $endpoint）',
+                    'type': 'secret',
+                  },
+                ],
+              ),
             ),
-          ),
-        );
-        host!.store.requireActive(caller);
-        if (values == null) return null;
-        return network!.configure(
-          caller,
-          endpoint.toString(),
-          values['key'] as String,
-        );
-      case 'secrets.delete':
-        await network!.delete(caller, args['handle'] as String);
-        return null;
-      case 'http.request':
-        return network!.request(caller, args);
-      case 'http.cancel':
-        network!.cancel(caller, args['id'] as String);
-        return null;
-      case 'files.readText':
-        final file = await openFile(
-          acceptedTypeGroups: [
-            const XTypeGroup(label: 'JSON 文件', extensions: ['json']),
-          ],
-        );
-        if (file == null) return null;
-        final bytes = await file.readAsBytes();
-        if (bytes.length > 2 * 1024 * 1024) throw StateError('文件超过2 MiB');
-        return utf8.decode(bytes);
-      case 'browser.capture':
-        return browser.capture(caller, args);
-      case 'files.saveText':
-        if (utf8.encode(args['text'] as String).length > 2 * 1024 * 1024) {
-          throw StateError('文件超过2 MiB');
-        }
-        if (Platform.isAndroid) {
-          return await const MethodChannel('xudian.host/files')
-                  .invokeMethod<bool>('saveText', {
-                    'name': args['name'],
-                    'text': args['text'],
-                  }) ??
-              false;
-        }
-        final location = await getSaveLocation(
-          suggestedName: args['name'] as String,
-        );
-        if (location == null) return false;
-        await XFile.fromData(
-          Uint8List.fromList(utf8.encode(args['text'] as String)),
-          mimeType: 'application/json',
-        ).saveTo(location.path);
-        return true;
+          );
+          if (values == null) return null;
+          return values['key'] as String;
+        });
       case 'ui.navigate':
       case 'ui.panel':
         final pageId = args['page'] as String;
@@ -381,7 +330,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         }
         return true;
       default:
-        throw StateError('Unsupported host capability: $method');
+        return platformBridge!.invoke(caller, method, args);
     }
   }
 
@@ -457,8 +406,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     hostSubscription?.cancel();
     dataSubscription?.cancel();
     if (host?.interaction == _hostInteraction) host?.interaction = null;
-    network?.close();
-    unawaited(browser.close());
+    platformBridge?.close();
     super.dispose();
   }
 
@@ -667,12 +615,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   }) {
     final textTheme = Theme.of(context).textTheme;
     final dateTitle = workspaceHeader.lease?.mode == 'date';
-    final titleStyle = textTheme.headlineSmall!.copyWith(
-      fontSize: dateTitle ? 24 : 28,
-      height: 1.15,
-      fontWeight: FontWeight.w700,
-      letterSpacing: -.6,
-    );
+    final titleStyle = WorkspaceTypography.titleStyle(textTheme);
     var controlHeight = kMinInteractiveDimension;
     for (final (style, padding) in [
       (titleStyle, 16.0),
@@ -725,7 +668,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final titleContent = spec?['titleEvent'] == null
         ? Text(
             title,
-            maxLines: dateTitle ? 3 : 1,
+            maxLines: WorkspaceTypography.titleMaxLines,
             overflow: TextOverflow.ellipsis,
             style: titleStyle,
           )
@@ -738,7 +681,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   Flexible(
                     child: Text(
                       title,
-                      maxLines: 1,
+                      maxLines: WorkspaceTypography.titleMaxLines,
                       overflow: TextOverflow.ellipsis,
                       style: titleStyle,
                     ),
@@ -748,16 +691,28 @@ class _AppShellState extends ConsumerState<AppShell> {
               ),
             ),
           );
-    // Standard and contributed titles keep a uniform single-line height.
-    // Date titles can wrap so large text retains the full civil date.
-    Widget titleAtHeight(double height) => SizedBox(
-      height: height,
-      child: Align(
-        alignment: leading['label'] is String
-            ? Alignment.center
-            : Alignment.centerLeft,
-        child: titleContent,
-      ),
+    Widget titleAtHeight(double minimumHeight) => LayoutBuilder(
+      builder: (context, constraints) {
+        final available =
+            constraints.maxWidth - (spec?['titleEvent'] == null ? 0 : 52);
+        final painter = TextPainter(
+          text: TextSpan(text: title, style: titleStyle),
+          maxLines: WorkspaceTypography.titleMaxLines,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout(maxWidth: available.clamp(1, double.infinity).toDouble());
+        final measured = painter.height + 16;
+        painter.dispose();
+        return SizedBox(
+          height: measured > minimumHeight ? measured : minimumHeight,
+          child: Align(
+            alignment: leading['label'] is String
+                ? Alignment.center
+                : Alignment.centerLeft,
+            child: titleContent,
+          ),
+        );
+      },
     );
     final titleWidget = dateTitle
         ? WorkspaceDateTitle(
@@ -766,6 +721,15 @@ class _AppShellState extends ConsumerState<AppShell> {
             style: titleStyle,
             onEvent: spec?['dateNavigation'] == true && contribution != null
                 ? (type) => unawaited(contribution.dispatch({'type': type}))
+                : null,
+            onEventWithOrigin:
+                spec?['dateNavigation'] == true && contribution != null
+                ? (type, bounds) => unawaited(
+                    contribution.dispatch({
+                      'type': type,
+                      'originBounds': bounds,
+                    }),
+                  )
                 : null,
           )
         : titleAtHeight(controlHeight);
@@ -777,69 +741,94 @@ class _AppShellState extends ConsumerState<AppShell> {
       ],
     );
     final menuPreferences = ref.watch(appPreferencesProvider).asData?.value;
-    final menu = UiAnnotation(
-      id: 'app.shell.menu',
-      name: '页面菜单',
-      purpose: '打开页面操作、模块入口及设置',
-      child: WorkspacePopupMenu(
-        key: const ValueKey('workspace-menu'),
-        haptics: menuPreferences?.haptics ?? true,
-        reduceMotion: menuPreferences?.reduceMotion ?? false,
-        onSelected: (index) {
-          if (index == -1) {
-            _openSettings();
-          } else if (index == -2) {
-            _showAllEntries(extraEntries);
-          } else if (index < actions.length) {
-            contribution?.dispatch(actions[index]['event']);
-          } else {
-            _openEntry(entries[index - actions.length]);
-          }
-        },
-        items: [
-          for (var i = 0; i < actions.length; i++)
+    final returnToToday =
+        dateTitle &&
+        spec?['dateNavigation'] == true &&
+        spec?['todayDate'] is String &&
+        spec?['selectedDate'] != spec?['todayDate'];
+    final menu = Builder(
+      builder: (menuContext) => UiAnnotation(
+        id: 'app.shell.menu',
+        name: '页面菜单',
+        purpose: '打开页面操作、模块入口及设置',
+        child: WorkspacePopupMenu(
+          key: const ValueKey('workspace-menu'),
+          haptics: menuPreferences?.haptics ?? true,
+          reduceMotion: menuPreferences?.reduceMotion ?? false,
+          onSelected: (index) {
+            if (index == -1) {
+              _openSettings();
+            } else if (index == -2) {
+              _showAllEntries(extraEntries);
+            } else if (index == -3) {
+              final box = menuContext.findRenderObject();
+              unawaited(
+                contribution!.dispatch({
+                  'type': 'date.today',
+                  if (box is RenderBox && box.hasSize)
+                    'originBounds': box.localToGlobal(Offset.zero) & box.size,
+                }),
+              );
+            } else if (index < actions.length) {
+              contribution?.dispatch(actions[index]['event']);
+            } else {
+              _openEntry(entries[index - actions.length]);
+            }
+          },
+          items: [
+            if (returnToToday)
+              PopupMenuItem(
+                value: -3,
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: menuLabel('回到今天', Icons.today_outlined),
+              ),
+            if (returnToToday && (actions.isNotEmpty || entries.isNotEmpty))
+              const PopupMenuDivider(height: 8),
+            for (var i = 0; i < actions.length; i++)
+              PopupMenuItem(
+                value: i,
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Text('${actions[i]['label'] ?? ''}'),
+              ),
+            if (actions.isNotEmpty && entries.isNotEmpty)
+              const PopupMenuDivider(height: 8),
+            for (var i = 0; i < entries.length; i++)
+              PopupMenuItem(
+                value: actions.length + i,
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: UiAnnotation(
+                  id: entries[i].id,
+                  name: entries[i].label,
+                  moduleId: entries[i].moduleId,
+                  slot: 'header',
+                  purpose: '打开功能入口',
+                  child: menuLabel(entries[i].label, entries[i].icon),
+                ),
+              ),
+            if (returnToToday || actions.isNotEmpty || entries.isNotEmpty)
+              const PopupMenuDivider(height: 8),
+            if (!_profile.morePageEnabled)
+              PopupMenuItem(
+                value: -2,
+                height: 44,
+                child: menuLabel('全部入口', Icons.grid_view_outlined),
+              ),
             PopupMenuItem(
-              value: i,
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Text('${actions[i]['label'] ?? ''}'),
-            ),
-          if (actions.isNotEmpty && entries.isNotEmpty)
-            const PopupMenuDivider(height: 8),
-          for (var i = 0; i < entries.length; i++)
-            PopupMenuItem(
-              value: actions.length + i,
+              value: -1,
               height: 44,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: UiAnnotation(
-                id: entries[i].id,
-                name: entries[i].label,
-                moduleId: entries[i].moduleId,
-                slot: 'header',
-                purpose: '打开功能入口',
-                child: menuLabel(entries[i].label, entries[i].icon),
+                id: 'app.shell.settings',
+                name: '设置',
+                purpose: '受保护的设置与恢复入口',
+                child: menuLabel('设置', Icons.settings_outlined),
               ),
             ),
-          if (actions.isNotEmpty || entries.isNotEmpty)
-            const PopupMenuDivider(height: 8),
-          if (!_profile.morePageEnabled)
-            PopupMenuItem(
-              value: -2,
-              height: 44,
-              child: menuLabel('全部入口', Icons.grid_view_outlined),
-            ),
-          PopupMenuItem(
-            value: -1,
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: UiAnnotation(
-              id: 'app.shell.settings',
-              name: '设置',
-              purpose: '受保护的设置与恢复入口',
-              child: menuLabel('设置', Icons.settings_outlined),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
     final fallback = Padding(
@@ -1219,6 +1208,33 @@ class _AppShellState extends ConsumerState<AppShell> {
         : dockInset;
     final contentInset =
         dockInset + (collapsedInset - dockInset) * chromeProgress;
+    final workspaceRevision = canonicalJson({
+      'modules': [
+        for (final module in widget.registry.modules)
+          [module.manifest.id, module.manifest.version],
+      ],
+      'instances': {
+        for (final entry
+            in host?.instances.entries ??
+                const <MapEntry<String, ScriptInstance>>[])
+          entry.key: [
+            entry.value.actor.generation,
+            entry.value.package.packageDigest,
+          ],
+      },
+      'layout': profile.toJson(),
+      'desktop': desktop,
+    });
+    final retentionKeys = <String, Object?>{
+      for (final entry in workspace)
+        entry.id: canonicalJson([
+          workspaceRevision,
+          entry.pageId,
+          (workspaceContexts[entry.id] ?? profile.mountFor(entry).context)
+              .navigationIdentity,
+        ]),
+      if (profile.morePageEnabled) _moreEntry.id: workspaceRevision,
+    };
     return Scaffold(
       backgroundColor: AppDesign.canvas(context),
       body: SafeArea(
@@ -1235,6 +1251,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                     destinationId: activeEntry.id,
                     order: activeOrder,
                     backgroundColor: AppDesign.canvas(context),
+                    maxRetainedPages: 4,
+                    retentionKeys: retentionKeys,
+                    deferUntilReady: true,
                     child: Column(
                       children: [
                         WorkspaceChromeHeader(

@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-13",
+  "buildNumber": 100,
+  "installedVersionCode": 4100,
+  "apkSha256": "7ab1d49ecb116a348617824af712f7fc3182e3a506bbe9504dc7e74a42fa200a",
+  "installedApkSha256": "7ab1d49ecb116a348617824af712f7fc3182e3a506bbe9504dc7e74a42fa200a",
+  "sourceFingerprint": "1c0ae7e6289b2ac3d128d5843a039ae647d3fb4121588a57df78a92304103958",
+  "dataPreserved": true,
+  "targetedFlutterTestsPassed": 53,
+  "staticAnalysis": "passed",
+  "behavior": [
+    "Five-day band remains in the old snapshot until all contributions are ready, then is revealed with the rest of the page",
+    "The band does not run a separate centering or selection-colour animation within a wave workspace",
+    "Band hit testing and semantics are blocked throughout preparation and reveal, preventing visible old dates from hitting different new dates",
+    "Header title remains immediate partial rolling, and header arrows and menu can keep changing target during the wave",
+    "After completion, the existing band State resumes clicks and manual horizontal dragging; standalone overview animations stay unchanged"
+  ],
+  "manualChecks": [
+    "Release emulator recording confirms old five-day dates persist until the circular front passes them",
+    "Header partial flip remains independent of content reveal",
+    "Quick reversal through header controls completes and returns to starting selected date"
+  ],
+  "regressionEvidence": [
+    "Delayed-query pixel comparison verifies the old entire five-day band stays painted until the slowest contribution is ready",
+    "Active reveal blocks band semantics and pointers, while header reversal continues",
+    "Warm cache, draft retention, data invalidation and contribution removal continue to pass"
+  ],
+  "limits": [
+    "Only affected tests rerun; no new FPS or latency measurement",
+    "Waiting plus reveal intentionally blocks band input; the header provides continuous navigation"
+  ],
+  "artifactsDirectory": "dist/verification/five-day-wave-20261013"
+}

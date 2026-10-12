@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-12",
+  "platform": "Android x86_64 emulator",
+  "buildNumber": 98,
+  "installedVersionCode": 4098,
+  "apkSha256": "6bf676c457fedf9b18fa72bb6c64a23b8823a34c43a810e9400213ad6b897165",
+  "installedApkSha256": "6bf676c457fedf9b18fa72bb6c64a23b8823a34c43a810e9400213ad6b897165",
+  "sourceFingerprint": "cc6f90b50f372573291cdc9be12fe3bf6f224b0f1aed9a1e1214aaf9a2f09f38",
+  "dataPreserved": true,
+  "targetedFlutterTestsPassed": 33,
+  "staticAnalysis": "passed",
+  "architectureFilesChecked": 118,
+  "repositoryTrackedFilesChecked": 554,
+  "changes": [
+    "Radial front widened from 8dp to a 32–56dp radial gradient halo with a 2dp contour",
+    "Theme-colour halo peaks at 14% alpha; contour peaks at 18% and fades near completion",
+    "Click reveal slowed from 380ms to 480ms and easeOutQuad; swipe remains 380ms easeOutCubic",
+    "Gradient drawing excludes live navigation regions and does not add a blur or saveLayer"
+  ],
+  "manualChecks": [
+    "Emulator recording confirms visible broad wave and continuous reversal between October 20 and October 21",
+    "Last selected day returns to October 20 after recording; business data retained"
+  ],
+  "limits": [
+    "Targeted checks rerun for this visual adjustment; earlier 948 non-network full tests belong to the prior build",
+    "ADB recording confirms appearance, not FPS or latency",
+    "Actual cold query may still require asynchronous preparation"
+  ],
+  "artifactsDirectory": "dist/verification/large-date-wave-20261012"
+}

@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-12",
+  "buildNumber": 99,
+  "installedVersionCode": 4099,
+  "apkSha256": "e485ec5a1adbd54f4e1c0bea1b84eea072e20b1ee7da80f6da28bae89ac10199",
+  "installedApkSha256": "e485ec5a1adbd54f4e1c0bea1b84eea072e20b1ee7da80f6da28bae89ac10199",
+  "sourceFingerprint": "b9b3a7fda3b5e0629b49d565c7e64910c402ba3611bbb17915f8323b6006fa11",
+  "dataPreserved": true,
+  "targetedFlutterTestsPassed": 30,
+  "staticAnalysis": "passed",
+  "behavior": [
+    "Return to today appears as the first header menu action when a different date is selected",
+    "The agenda body no longer reserves a return-action row",
+    "The target day comes from the overview declared today, shared with the leased header",
+    "The return action uses the menu button bounds as the reveal origin",
+    "Standalone overview controls outside a leased menu keep their existing return action"
+  ],
+  "manualChecks": [
+    "Today menu contains no redundant return action",
+    "Next-day menu displays Return to today as its first item",
+    "Selecting the item restores today; existing task and course data retained"
+  ],
+  "artifactsDirectory": "dist/verification/today-menu-20261012",
+  "limits": [
+    "Only affected regression files rerun; no new FPS or latency measurement"
+  ]
+}

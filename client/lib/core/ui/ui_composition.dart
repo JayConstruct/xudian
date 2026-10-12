@@ -11,47 +11,90 @@ enum UiOpening { workspace, detail, adaptivePanel }
 
 enum PageSlotKind { entries, tabs, sections }
 
+/// Generic page parameters. Entity references belong in `values['entities']`
+/// and are validated explicitly; a legacy ID alone does not identify an owner.
 class PageContext {
-  const PageContext({this.taskId, this.projectId, this.values = const {}});
+  /// Legacy named IDs remain accepted for const source compatibility. When
+  /// present they override the same keys in [values]. All public operations
+  /// consume the normalized [values] map, regardless of how it was supplied.
+  const PageContext({
+    String? taskId,
+    String? projectId,
+    Map<String, Object?> values = const {},
+  }) : _legacyTaskId = taskId,
+       _legacyProjectId = projectId,
+       // Keep the public `values` parameter name for const call-site compatibility.
+       // ignore: prefer_initializing_formals
+       _values = values;
 
-  final Map<String, Object?> values;
+  final Map<String, Object?> _values;
+  final String? _legacyTaskId;
+  final String? _legacyProjectId;
 
-  final String? taskId;
-  final String? projectId;
+  Map<String, Object?> get values => Map.unmodifiable({
+    ..._values,
+    if (_legacyTaskId != null) 'taskId': _legacyTaskId,
+    if (_legacyProjectId != null) 'projectId': _legacyProjectId,
+  });
 
-  String? value(String name) => switch (name) {
-    'taskId' => taskId,
-    'projectId' => projectId,
-    _ => values[name] is String ? values[name] as String : null,
-  };
+  /// Compatibility aliases for parameters used by older page contracts.
+  String? get taskId => value('taskId');
+  String? get projectId => value('projectId');
 
-  bool satisfies(Iterable<String> required) => required.every(
-    (name) => name == 'taskId' || name == 'projectId'
-        ? value(name)?.isNotEmpty == true
-        : values[name] != null && values[name] != '',
-  );
+  String? value(String name) {
+    final raw = values[name];
+    return raw is String ? raw : null;
+  }
 
-  String get identity =>
-      '${taskId ?? ''}:${projectId ?? ''}:${canonicalJson(values)}';
+  bool satisfies(Iterable<String> required) {
+    final parameters = values;
+    return required.every(
+      (name) => parameters[name] != null && parameters[name] != '',
+    );
+  }
+
+  String get identity => canonicalJson(values);
 
   String get navigationIdentity =>
-      '${taskId ?? ''}:${projectId ?? ''}:${canonicalJson(withoutRuntimePageContext(values))}';
+      canonicalJson(withoutRuntimePageContext(values));
 
-  PageContext merge(PageContext other) => PageContext(
-    taskId: other.taskId ?? taskId,
-    projectId: other.projectId ?? projectId,
-    values: {...values, ...other.values},
+  PageContext merge(PageContext other) =>
+      PageContext(values: {...values, ...other.values});
+
+  /// Flat script parameters; the same keys are used for every module.
+  Map<String, Object?> toJson() => values;
+
+  /// Preserve the persisted layout format used by older app versions. The
+  /// compatibility keys are emitted at the top level, other parameters under
+  /// `values`, so existing layouts can continue to round-trip unchanged.
+  Map<String, Object?> toLayoutJson() {
+    final parameters = {...values};
+    final legacyTaskId = parameters['taskId'];
+    final legacyProjectId = parameters['projectId'];
+    if (legacyTaskId is String) parameters.remove('taskId');
+    if (legacyProjectId is String) parameters.remove('projectId');
+    return {
+      if (legacyTaskId is String) 'taskId': legacyTaskId,
+      if (legacyProjectId is String) 'projectId': legacyProjectId,
+      if (parameters.isNotEmpty) 'values': parameters,
+    };
+  }
+
+  /// Adapt persisted layouts and older entry declarations at their boundary.
+  /// Explicit top-level IDs take precedence over duplicate `values` keys.
+  factory PageContext.fromLayoutJson(Map<String, Object?> json) => PageContext(
+    taskId: json['taskId'] as String?,
+    projectId: json['projectId'] as String?,
+    values: (json['values'] as Map?)?.cast<String, Object?>() ?? const {},
   );
 
   @override
   bool operator ==(Object other) =>
       other is PageContext &&
-      other.taskId == taskId &&
-      other.projectId == projectId &&
       canonicalJson(other.values) == canonicalJson(values);
 
   @override
-  int get hashCode => Object.hash(taskId, projectId, canonicalJson(values));
+  int get hashCode => canonicalJson(values).hashCode;
 }
 
 class UiMount {
@@ -86,9 +129,7 @@ class UiMount {
     if (pageId != null) 'pageId': pageId,
     if (slotId != null) 'slotId': slotId,
     'order': order,
-    if (context.taskId != null) 'taskId': context.taskId,
-    if (context.projectId != null) 'projectId': context.projectId,
-    if (context.values.isNotEmpty) 'values': context.values,
+    ...context.toLayoutJson(),
   };
 
   factory UiMount.fromJson(Map<String, Object?> json) {
@@ -104,11 +145,7 @@ class UiMount {
       pageId: json['pageId'] as String?,
       slotId: json['slotId'] as String?,
       order: order,
-      context: PageContext(
-        taskId: json['taskId'] as String?,
-        projectId: json['projectId'] as String?,
-        values: (json['values'] as Map?)?.cast<String, Object?>() ?? const {},
-      ),
+      context: PageContext.fromLayoutJson(json),
     );
   }
 }

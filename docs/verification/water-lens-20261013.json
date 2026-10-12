@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-13",
+  "platform": "Android x86_64 emulator",
+  "buildNumber": 101,
+  "installedVersionCode": 4101,
+  "apkSha256": "a8836f6217aab84c69f20f0a6bbad7b8c620c6c7b478494bcb5832b3707c3610",
+  "installedApkSha256": "a8836f6217aab84c69f20f0a6bbad7b8c620c6c7b478494bcb5832b3707c3610",
+  "sourceFingerprint": "1a9867f47134ae6141f3eadd4d319f6a70d6fd42c9eb8822fd58238760161829",
+  "dataPreserved": true,
+  "targetedFlutterTestsPassed": 36,
+  "staticAnalysis": "passed",
+  "architectureFilesChecked": 119,
+  "repositoryTrackedFilesChecked": 554,
+  "behavior": [
+    "Radial wavefront has a narrow optical lens with about 1.04x local radial magnification; source position stays fixed at the front and both band edges",
+    "Displacement stays below 1 logical pixel for the declared wave width; geometry away from the band is unchanged",
+    "Old and ready target images are sampled independently on either side to preserve date identity",
+    "Bright and dark shoulders accompany the existing fading theme-colour halo",
+    "The target texture is captured once in the same ready-frame callback before the original animation begins; no extra wait is inserted",
+    "The real child is painted once into its retained boundary, rather than painting a composited child into multiple lens clips",
+    "One active old/new image pair is limited to 8 million pixels combined; replaced images are released after the pending frame",
+    "Preparation, completion, controller replacement and disposal release or replace target textures; failed capture uses the normal reveal",
+    "Header feedback, full five-day band reveal, shared-date cache, drafts, swipes and reduced-motion/high-contrast behavior remain intact"
+  ],
+  "regressionEvidence": [
+    "Pixel tests show striped texture refraction only in the annulus, stationary navigation, correct 1x/2x image mapping and no old/new date colour mixing",
+    "A rendered-boundary test confirms the complete target layer is captured even where the old image still hides it, then cleared on cancellation",
+    "Real integrated tests cover delayed contributions, quick reversal, cache hits/invalidation, drafts and contribution removal"
+  ],
+  "manualChecks": [
+    "Release emulator recording confirms rounded light/dark wavefront while date-band and records are revealed",
+    "Rapid header reversal and manual horizontal swipe complete normally",
+    "The emulator ends on its original selected date and retained data"
+  ],
+  "limits": [
+    "Only affected regression files rerun, not a new full-suite result",
+    "The optical effect is deliberately subtle; no literal separate falling droplet is added",
+    "The image-pair bound is not a measured peak-memory figure; replaced images can remain alive through a pending paint",
+    "Recording checks appearance and coherence, not measured FPS, GPU cost or latency",
+    "Real ARM and Windows performance not measured"
+  ],
+  "artifactsDirectory": "dist/verification/water-lens-20261013"
+}

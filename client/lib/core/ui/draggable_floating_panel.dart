@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../app/design_system.dart';
+import 'ui_surfaces.dart';
 
 /// A small page-local panel; only its header drags, so content remains usable.
 class DraggableFloatingPanel extends StatefulWidget {

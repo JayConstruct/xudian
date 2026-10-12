@@ -8,6 +8,7 @@ import '../../data/app_database.dart';
 import '../contracts/json_values.dart';
 import 'json_schema.dart';
 import 'module_package.dart';
+import 'native_resource.dart';
 
 class ModuleActor {
   ModuleActor(
@@ -43,6 +44,7 @@ class SnapshotSession {
   int automationDepth = 0;
   List<String> automationTrace = [];
   final activeServices = <String>{};
+  bool pagePreparation = false;
 }
 
 class ChangePlan {
@@ -65,10 +67,19 @@ class CollectionStore {
   CollectionStore(this.db);
   final AppDatabase db;
   final changes = StreamController<Set<String>>.broadcast();
+  int _dataRevision = 0;
+
+  /// Advances synchronously after a successful write, before asynchronous
+  /// change notifications are delivered. Read caches can avoid that gap.
+  int get dataRevision => _dataRevision;
   final events = StreamController<Map<String, Object?>>.broadcast();
   final _plans = <String, ChangePlan>{};
   final _actors = <String, ModuleActor>{};
   final _sqlPageCompatibility = <String, bool>{};
+  final _nativeResources = <String, NativeResource>{};
+
+  void registerNativeResource(NativeResource resource) =>
+      _nativeResources[resource.id] = resource;
   Map<String, ModuleActor> get actors => Map.unmodifiable(_actors);
   void activate(ModuleActor actor) => _actors[actor.moduleId] = actor;
   void deactivate(String id) => _actors.remove(id);
@@ -616,12 +627,11 @@ class CollectionStore {
         }
       }
       for (final e in object(p.content['nativeReads'] ?? {}).entries) {
-        final rows = await sql('SELECT value FROM app_settings WHERE key=?', [
-          e.key,
-        ]);
-        if ((rows.isEmpty ? null : rows.single['value']) != e.value) {
-          throw StateError('Host setting conflict; prepare again');
+        final resource = _nativeResources[e.key];
+        if (resource == null) {
+          throw StateError('Native resource unavailable: ${e.key}');
         }
+        await resource.validateReads(db, object(e.value));
       }
       for (final e in object(p.content['records']).entries) {
         final key = jsonDecode(e.key) as List;
@@ -655,14 +665,8 @@ class CollectionStore {
         final w = object(raw);
         final key = [w['moduleId'], w['space'], w['collection'], w['id']];
         final value = w['value'];
-        if (w['moduleId'] == 'app.host' && w['collection'] == 'settings') {
-          if (value == null) {
-            throw StateError('Host settings cannot be deleted');
-          }
-          await db.customStatement(
-            'INSERT INTO app_settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-            [w['id'], canonicalJson(object(value)['values'])],
-          );
+        for (final resource in _nativeResources.values) {
+          if (resource.ownsWrite(w)) await resource.applyWrite(db, w);
         }
         await db.customStatement(
           '''INSERT INTO host_records(module_id,space,collection,id,value,revision,deleted)
@@ -783,6 +787,7 @@ class CollectionStore {
       changed = true;
       return p.result;
     });
+    if (changed && p.writes.isNotEmpty) _dataRevision++;
     if (changed && audit) {
       changes.add({for (final w in p.writes) object(w)['moduleId'] as String});
       await drainOutbox();

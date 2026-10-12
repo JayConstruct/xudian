@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/app_icons.dart';
+import 'ui_icons.dart';
 import 'ui_component.dart';
 
 /// App-owned icons participate in the same public UI selection as controls.

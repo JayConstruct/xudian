@@ -114,6 +114,67 @@ ModuleRegistry _registry({
 
 void main() {
   testWidgets(
+    'context validation retries the watched key with a runtime date',
+    (tester) async {
+      final database = AppDatabase(NativeDatabase.memory());
+      final registry = ModuleRegistry([
+        _Module('test.retry', [
+          UiPageRegistration(
+            id: 'test.retry.page',
+            moduleId: 'test.retry',
+            title: 'Retry',
+            builder: (_, context) =>
+                Text('recovered date ${context.values['selectedDate']}'),
+          ),
+        ]),
+      ], capabilities: CapabilityRegistry(['ui.registry', 'ui.composition']));
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        registry.dispose();
+        await database.close();
+      });
+      final validatedContexts = <PageContext>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((ref) async => database),
+            pageContextValidityProvider.overrideWith((ref, context) async* {
+              validatedContexts.add(context);
+              if (validatedContexts.length == 1) {
+                throw StateError('Transient context read failure');
+              }
+              yield true;
+            }),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: UiPageHost(
+                registry: registry,
+                pageId: 'test.retry.page',
+                pageContext: const PageContext(
+                  values: {'filter': 'active', 'selectedDate': '2026-10-12'},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('读取页面上下文失败，可稍后重试'), findsOneWidget);
+      expect(find.text('recovered date 2026-10-12'), findsNothing);
+      await tester.tap(find.text('重试'));
+      await tester.pumpAndSettle();
+      expect(find.text('读取页面上下文失败，可稍后重试'), findsNothing);
+      expect(find.text('recovered date 2026-10-12'), findsOneWidget);
+      expect(validatedContexts, [
+        const PageContext(values: {'filter': 'active'}),
+        const PageContext(values: {'filter': 'active'}),
+      ]);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'mobile failure positioning and context editing retain unsaved bindings',
     (tester) async {
       tester.view.physicalSize = const Size(320, 640);

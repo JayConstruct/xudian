@@ -4,8 +4,8 @@ import 'native_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/app_select_field.dart';
-import '../../app/design_system.dart';
+import 'ui_select_field.dart';
+import 'ui_surfaces.dart';
 import '../../features/settings/settings_widgets.dart';
 import '../contracts/json_values.dart';
 import '../module_host/host_providers.dart';

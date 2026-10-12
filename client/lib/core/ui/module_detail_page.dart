@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../app/design_system.dart';
+import 'ui_surfaces.dart';
 import '../modules/module_registry.dart';
 import 'ui_composition.dart';
 import 'ui_component.dart';

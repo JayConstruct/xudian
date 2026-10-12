@@ -127,6 +127,32 @@ void main() {
     },
   );
   test(
+    'native setting mirror rolls back with a failed collection write',
+    () async {
+      final before = object(await query('settings.get'));
+      final pending = await prepare('settings.patch', {
+        'changes': {'theme': 'dark'},
+      });
+      final settingsBefore = await store.sql('SELECT * FROM app_settings');
+      final recordsBefore = await store.sql('SELECT * FROM host_records');
+      await db.customStatement('''
+      CREATE TRIGGER reject_host_setting BEFORE INSERT ON host_records
+      WHEN NEW.module_id='app.host'
+      BEGIN SELECT RAISE(ABORT, 'rejected host record'); END
+    ''');
+      await expectLater(commit(pending), throwsA(isA<Exception>()));
+      expect(await store.sql('SELECT * FROM app_settings'), settingsBefore);
+      expect(await query('settings.get'), before);
+      expect(await store.sql('SELECT * FROM host_operations'), isEmpty);
+      expect(await store.sql('SELECT * FROM host_commits'), isEmpty);
+      expect(await store.sql('SELECT * FROM host_records'), recordsBefore);
+      await db.customStatement('DROP TRIGGER reject_host_setting');
+      await commit(pending);
+      expect(object(await query('settings.get'))['theme'], 'dark');
+    },
+  );
+
+  test(
     'layout draft and registry changes invalidate already prepared proposals',
     () async {
       final pending = await prepare('layout.patch', {

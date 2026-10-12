@@ -403,6 +403,36 @@ class FreshInstallVerification:
             self.swipe(nodes)
         raise RuntimeError('模块管理未核对到预期版本已启用：' + str(remaining))
 
+    def verify_module_pages(self, *, after_restart):
+        """Exercise installed workers before a restart can conceal install bugs."""
+        e = self.emulator
+        suffix = 'after-restart' if after_restart else 'immediately-after-install'
+        e.home()
+        self.tap_scrolling('课表')
+        e.wait_for('创建课表或导入 JSON 备份后开始使用', timeout=30, contains=True)
+        self.check_errors(e.nodes())
+        self.record(f'schedule-{suffix}')
+        self.step('scheduleOpenedAfterRestart' if after_restart
+                  else 'scheduleOpenedImmediatelyAfterInstall')
+        e.home()
+        e.open_settings()
+        nodes = e.nodes()
+        if not any('拾光教务导入' in label for label in self.labels(nodes)):
+            self.tap_scrolling('模块与连接', contains=True)
+        self.tap_scrolling('拾光教务导入', contains=True)
+        e.wait_for('按学校导入', timeout=30, contains=True)
+        self.check_errors(e.nodes())
+        self.record(f'importer-{suffix}')
+        self.step('importerSettingsOpenedAfterRestart' if after_restart
+                  else 'importerSettingsOpenedImmediatelyAfterInstall')
+        e.home()
+        self.tap_scrolling('日程')
+        e.wait_for('暂无今天待办或逾期任务', timeout=30, contains=True)
+        self.check_errors(e.nodes())
+        self.record(f'agenda-{suffix}')
+        self.step('agendaOpenedAfterRestart' if after_restart
+                  else 'agendaOpenedImmediatelyAfterInstall')
+
     def run(self):
         args, e = self.args, self.emulator
         if not args.apk.is_file():
@@ -450,22 +480,10 @@ class FreshInstallVerification:
         self.verify_review()
         e.home()
         self.verify_enabled('05-modules-enabled')
+        self.verify_module_pages(after_restart=False)
         self.launch(restart=True)
         self.verify_enabled('06-modules-enabled-after-restart')
-        e.home()
-        self.tap_scrolling('课表')
-        e.wait_for('创建课表或导入 JSON 备份后开始使用', timeout=30, contains=True)
-        self.record('07-schedule-opened')
-        self.step('scheduleOpenedAfterRestart')
-        e.home()
-        e.open_settings()
-        nodes = e.nodes()
-        if not any('拾光教务导入' in label for label in self.labels(nodes)):
-            self.tap_scrolling('模块与连接', contains=True)
-        self.tap_scrolling('拾光教务导入', contains=True)
-        e.wait_for('按学校导入', timeout=30, contains=True)
-        self.record('08-importer-settings-opened')
-        self.step('importerSettingsOpenedAfterRestart')
+        self.verify_module_pages(after_restart=True)
         if hashlib.sha256(args.apk.read_bytes()).hexdigest() != self.report['apkSha256']:
             raise RuntimeError('验收期间本地 APK 文件发生变化')
         digest = self.installed_apk_digest()

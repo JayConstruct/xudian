@@ -12,6 +12,7 @@ import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/script_page.dart';
 import 'package:task_app/core/ui/ui_component.dart';
 import 'package:task_app/core/ui/ui_pack.dart';
+import 'package:task_app/core/ui/workspace_header.dart';
 import 'package:task_app/core/ui/ui_pack_providers.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
@@ -51,14 +52,14 @@ void main() {
       {
         'main.js': r'''
 import {data,ui} from '@xudian/sdk';
-export async function render({state={},event}) {
+export async function render({state={},event,context={}}) {
   await data.query('records',{});
   state={...state,count:(state.count||0)+1};
-  const items=[{type:'text',text:'render '+state.count},
+  const items=[{type:'text',text:'render '+state.count},{type:'text',text:'date '+(context.selectedDate||'none')},
     {type:'input',key:'draft',text:'草稿'},
     {type:'button',text:'执行',event:{type:'execute'}},
     ...Array.from({length:1000},(_,i)=>({type:'text',key:'row-'+i,text:'记录 '+i}))];
-  return {state,tree:ui.component('ui.page.list@1',{key:'records',slots:{items}})};
+  return {state,header:{title:'Cached header'},tree:ui.component('ui.page.list@1',{key:'records',slots:{items}})};
 }
 ''',
       },
@@ -83,7 +84,26 @@ export async function render({state={},event}) {
     }
   }
 
-  Future<ProviderContainer> show(WidgetTester tester) async {
+  Future<ProviderContainer> show(
+    WidgetTester tester, {
+    bool active = true,
+    bool waitForRender = true,
+    Map<String, Object?> pageContext = const {},
+    WorkspaceHeaderController? headers,
+  }) async {
+    Widget page = ScriptPage(
+      host: host,
+      moduleId: 'test.page',
+      handler: 'render',
+      pageContext: pageContext,
+    );
+    if (headers != null) {
+      page = WorkspaceHeaderScope(
+        controller: headers,
+        lease: headers.lease,
+        child: page,
+      );
+    }
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -93,61 +113,186 @@ export async function render({state={},event}) {
         child: MaterialApp(
           home: UiPackScope(
             child: Scaffold(
-              body: ScriptPage(
-                host: host,
-                moduleId: 'test.page',
-                handler: 'render',
-              ),
+              body: TickerMode(enabled: active, child: page),
             ),
           ),
         ),
       ),
     );
-    await settle(tester);
+    if (waitForRender) await settle(tester);
     return ProviderScope.containerOf(tester.element(find.byType(ScriptPage)));
   }
 
-  testWidgets('fast page renders never show loading feedback', (tester) async {
-    final instance = host.instances['test.page']!;
-    final gate = Completer<void>();
-    instance.workflowTail = gate.future;
-    await show(tester);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    gate.complete();
-    for (var i = 0; i < 15; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 15)),
-      );
-      await tester.pump(const Duration(milliseconds: 10));
+  testWidgets(
+    'first script frame keeps fast loading quiet and only shows feedback after 500ms',
+    (tester) async {
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      host.instances['test.page']!.workflowTail = gate.future;
+      await show(tester, waitForRender: false);
+      expect(find.text('正在加载页面…'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.pump(const Duration(milliseconds: 501));
+      expect(find.text('正在加载页面…'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(find.byType(LinearProgressIndicator), findsNothing);
-      if (find.text('render 1').evaluate().isNotEmpty) break;
-    }
-    expect(find.text('render 1'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+      gate.complete();
+      await settle(tester);
+      expect(find.text('render 1'), findsOneWidget);
+      expect(find.text('正在加载页面…'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
-  testWidgets('slow loading appears after the delay and clears on completion', (
-    tester,
-  ) async {
-    final instance = host.instances['test.page']!;
-    final gate = Completer<void>();
-    instance.workflowTail = gate.future;
-    await show(tester);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    await tester.pump(const Duration(milliseconds: 201));
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    gate.complete();
-    await settle(tester);
-    expect(find.text('render 1'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  testWidgets(
+    'normal refresh keeps real content and delays progress feedback',
+    (tester) async {
+      await show(tester);
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      host.instances['test.page']!.workflowTail = gate.future;
+      await tester.tap(find.widgetWithText(FilledButton, '执行'));
+      await tester.pump();
+      expect(find.text('render 1'), findsOneWidget);
+      expect(find.text('正在加载页面…'), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      await tester.pump(const Duration(milliseconds: 501));
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      gate.complete();
+      await settle(tester);
+      expect(find.text('render 2'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'retained inactive pages defer changes and resume without losing content or drafts',
+    (tester) async {
+      await show(tester);
+      await tester.enterText(find.byType(TextField), '保留草稿');
+      final retained = tester.state(find.byType(ScriptPage));
+      await show(tester, active: false);
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      host.instances['test.page']!.workflowTail = gate.future;
+      host.store.changes.add({'test.page'});
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.text('render 1'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      await show(tester, waitForRender: false);
+      expect(tester.state(find.byType(ScriptPage)), same(retained));
+      expect(find.text('render 1'), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '保留草稿',
+      );
+      expect(find.text('正在加载页面…'), findsNothing);
+      gate.complete();
+      await settle(tester);
+      expect(find.text('render 2'), findsOneWidget);
+      expect(find.text('render 3'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'a retained script restores its header under the new active lease without rerendering',
+    (tester) async {
+      final headers = WorkspaceHeaderController();
+      addTearDown(headers.dispose);
+      var active = true;
+      void activate(String identity, {String moduleId = 'test.page'}) =>
+          headers.activate(
+            identity: identity,
+            moduleId: moduleId,
+            pageId: 'test.page.main',
+            enabled: true,
+            isActive: () => active,
+          );
+      activate('first');
+      const pageContext = {'pageId': 'test.page.main'};
+      await show(tester, pageContext: pageContext, headers: headers);
+      expect(headers.content?.spec['title'], 'Cached header');
+      final retained = tester.state(find.byType(ScriptPage));
+      active = false;
+      activate('other', moduleId: 'other.page');
+      await show(
+        tester,
+        active: false,
+        pageContext: pageContext,
+        headers: headers,
+      );
+      expect(headers.content, isNull);
+      active = true;
+      activate('return');
+      await show(
+        tester,
+        waitForRender: false,
+        pageContext: pageContext,
+        headers: headers,
+      );
+      expect(tester.state(find.byType(ScriptPage)), same(retained));
+      expect(headers.content?.spec['title'], 'Cached header');
+      expect(find.text('render 1'), findsOneWidget);
+      await settle(tester);
+      expect(find.text('render 2'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'a changed date never paints the previous date while its render is pending',
+    (tester) async {
+      await show(tester, pageContext: {'selectedDate': '2026-10-01'});
+      expect(find.text('date 2026-10-01'), findsOneWidget);
+      final previousElement = tester.element(find.text('date 2026-10-01'));
+      final draft = tester.widget<TextField>(find.byType(TextField));
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      // Exercise a genuinely cold date: a prepared neighbor can otherwise
+      // answer without entering the blocked foreground workflow.
+      final dynamic renderer = tester.state(find.byType(ScriptPage));
+      renderer.dateCache.clear();
+      host.instances['test.page']!.workflowTail = gate.future;
+      await show(
+        tester,
+        waitForRender: false,
+        pageContext: {'selectedDate': '2026-10-02'},
+      );
+      expect(find.text('date 2026-10-01'), findsNothing);
+      expect(
+        tester.element(find.text('date 2026-10-01', skipOffstage: false)),
+        same(previousElement),
+        reason: 'Pending records stay mounted without being painted',
+      );
+      expect(find.text('date 2026-10-01').hitTestable(), findsNothing);
+      expect(find.text('正在加载页面…'), findsNothing);
+      gate.complete();
+      await settle(tester);
+      expect(find.text('date 2026-10-02'), findsOneWidget);
+      expect(
+        tester.element(find.text('date 2026-10-02')),
+        same(previousElement),
+      );
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller,
+        same(draft.controller),
+      );
+      expect(find.text('date 2026-10-01'), findsNothing);
+      expect(find.text('正在加载页面…'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   Future<void> installUi(WidgetTester tester) async {
     await tester.runAsync(() async {

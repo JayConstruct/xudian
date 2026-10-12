@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-12",
+  "platform": "Android x86_64 emulator",
+  "buildNumber": 97,
+  "installedVersionCode": 4097,
+  "apkSha256": "48f5743f21bbc261585f0bf47e97ffe0767975180b69f70fbdf61baa0f70c8b7",
+  "installedApkSha256": "48f5743f21bbc261585f0bf47e97ffe0767975180b69f70fbdf61baa0f70c8b7",
+  "sourceFingerprint": "1c8f3eb984d1ce1fecf13245f4bcc3a81834f9ba39489737645a27b4510c171a",
+  "dataPreserved": true,
+  "flutterNonNetworkTestsPassed": 948,
+  "pythonScriptTestsPassed": 76,
+  "pythonCatalogTestsPassed": 36,
+  "selectedEmulatorUpdateTestsPassed": 47,
+  "staticAnalysis": "passed",
+  "architectureFilesChecked": 118,
+  "repositoryTrackedFilesChecked": 554,
+  "behavior": [
+    "Last complete viewport is retained as an inert snapshot until all date contributions have completed a new paint",
+    "Clicks reveal the new date radially from the trigger position for 380ms; horizontal drags use a directional reveal",
+    "Date navigation is always live and drawn at its current hit-test positions; old snapshot navigation is cleared",
+    "Business interactions and semantics remain blocked until the complete reveal finishes",
+    "Rapid changes keep the current composite and only the latest date result and queued intent may publish",
+    "Adjacent dates are prepared sequentially during idle time through a read-only bridge; nested queries carry the same restriction",
+    "Per-renderer cache retains at most five exact input/instance results, for at most 30 seconds and never beyond the next minute",
+    "Writes synchronously invalidate cache via data revision; module changes and lifecycle resume also clear preparations",
+    "Preparation cannot issue commands, UI, subscriptions, network calls or IDs, and cannot publish state or clear drafts",
+    "Navigation, form controllers and runtime instances remain single mounted instances",
+    "Reduced motion and high contrast wait for complete content and replace immediately"
+  ],
+  "manualChecks": [
+    "Release emulator recording confirms click ripple, quick reverse and horizontal date swipe with live navigation",
+    "Date-picker jump from 2026-10-12 to 2027-10-12 changes three courses to zero, with old cards cleared as the wave passes",
+    "Returned the emulator agenda to today after verification"
+  ],
+  "regressionEvidence": [
+    "Slowest contribution gate retains old pixels until all new contributions are ready",
+    "Prepared neighboring date renders behind blocked workflows, preserving drafts and issuing no speculative UI interactions",
+    "Committed task invalidates old prepared data before asynchronous change delivery",
+    "Disabling a contribution during preparation cannot strand the reveal or replay its cached courses",
+    "Live-navigation movement, removed transparent cards, repeated preparation, readiness loss and controller reuse have pixel and lifecycle tests"
+  ],
+  "limits": [
+    "Existing host_network_test excluded after earlier independent localhost delays; its root cause remains unresolved and networking is unchanged",
+    "Already executing speculative queries share the existing workflow queue; only queued obsolete preparation can be skipped",
+    "An uncached date still performs asynchronous reads while the old picture remains visible",
+    "Recording and adb screenshots verify appearance, not frame latency or FPS",
+    "Android ARM and Windows runtime/performance not measured"
+  ],
+  "artifactsDirectory": "dist/verification/date-wave-20261012"
+}

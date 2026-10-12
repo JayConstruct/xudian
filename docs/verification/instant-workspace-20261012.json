@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-12",
+  "platform": "Android x86_64 emulator",
+  "buildNumber": 94,
+  "installedVersionCode": 4094,
+  "apkSha256": "33ff2525c118d22da43798aa9f6f6425b9aebe6aa064f499bc886a09925d43f9",
+  "installedApkSha256": "33ff2525c118d22da43798aa9f6f6425b9aebe6aa064f499bc886a09925d43f9",
+  "sourceFingerprint": "669e4850f56f0be68a3d2c1dc61f1d2e395625749ef5ea93f789ff355d4e4baa",
+  "dataPreserved": true,
+  "flutterNonNetworkTestsPassed": 896,
+  "pythonTestsPassed": 76,
+  "manualChecks": [
+    "Agenda and schedule headers use shared typography",
+    "Return to agenda shows rendered content during slide",
+    "AI availability changes use synchronized layout motion",
+    "Production navigation test confirms immediate retained State, draft controller, time-grid State, header lease isolation and reversible AI layout across three return cycles"
+  ],
+  "limits": [
+    "host_network_test excluded after independent localhost socket delays; root cause not established",
+    "Screenshots include adb transport time; they do not establish frame latency or FPS",
+    "Cold first visit prepares real content before sliding; it does not guarantee zero asynchronous work",
+    "Android ARM and Windows performance not measured"
+  ],
+  "artifactsDirectory": "dist/verification/instant-workspace-20261012",
+  "additionalProductionNavigationTestPassed": 1
+}

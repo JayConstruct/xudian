@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../module_host/json_schema.dart';
-import '../../app/app_ui_feedback.dart';
-import '../../app/app_icons.dart';
+import 'ui_feedback.dart';
+import 'ui_icons.dart';
 import 'ui_pack.dart';
 import 'daily_widgets.dart';
 import 'ui_pack_providers.dart';

@@ -187,6 +187,8 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
     with TickerProviderStateMixin {
   late final lens = DockSpring(this, math.max(0, selected).toDouble());
   late final lift = DockSpring(this, 0);
+  late final actionPresence = DockActionPresence(this, visible: hasAction);
+  late bool actionIsAssistant = widget.onAssistant != null;
   late final motion = Listenable.merge([lens, lift]);
   int? pointer;
   int? preview;
@@ -196,6 +198,7 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
   VelocityTracker? tracker;
 
   bool get animated => widget.duration != Duration.zero;
+  bool get hasAction => widget.onAssistant != null || widget.hasMore;
   int get selected =>
       !widget.moreSelected &&
           widget.selectedIndex >= 0 &&
@@ -206,6 +209,8 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
   @override
   void didUpdateWidget(_FloatingDockNavigation oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (hasAction) actionIsAssistant = widget.onAssistant != null;
+    actionPresence.show(hasAction, animate: animated);
     if (oldWidget.destinations.map((e) => e.id).join('\n') !=
         widget.destinations.map((e) => e.id).join('\n')) {
       pointer = null;
@@ -215,6 +220,10 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
       lift.moveTo(0, DockPhysics.settling, animate: animated);
     }
     if (!animated) {
+      pointer = null;
+      preview = null;
+      dragging = false;
+      tracker = null;
       lift.jumpTo(0);
       lens.jumpTo(lens.target);
     }
@@ -317,14 +326,20 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
     tracker = null;
     lens.dispose();
     lift.dispose();
+    actionPresence.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: actionPresence,
+    builder: (context, _) => _navigation(context),
+  );
+
+  Widget _navigation(BuildContext context) {
     final count = widget.destinations.length;
-    final hasAction = widget.onAssistant != null || widget.hasMore;
-    if (count == 0 && !hasAction) return const SizedBox.shrink();
+    final presence = actionPresence.value;
+    if (count == 0 && presence == 0) return const SizedBox.shrink();
     final height = MobileBottomDock.navigationHeight(context);
     return SizedBox(
       key: const ValueKey('mobile-navigation'),
@@ -333,8 +348,7 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
         builder: (context, constraints) {
           final available = math.max(
             0.0,
-            constraints.maxWidth -
-                (hasAction ? height + (count > 0 ? 8 : 0) : 0),
+            constraints.maxWidth - presence * (height + (count > 0 ? 8 : 0)),
           );
           final width = math.min(count * 72.0 + 8, available);
           return Row(
@@ -488,61 +502,98 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
                     ),
                   ),
                 ),
-              if (count > 0 && hasAction) const SizedBox(width: 8),
-              if (hasAction)
-                SizedBox(
-                  key: ValueKey(
-                    widget.onAssistant == null
-                        ? 'mobile-navigation-more'
-                        : 'mobile-navigation-assistant',
-                  ),
-                  width: height,
-                  child: DockElasticSurface(
-                    enabled: animated,
-                    child: FrostedToolbarSurface(
-                      pill: true,
-                      child: AnimatedContainer(
-                        duration: widget.duration,
-                        decoration: ShapeDecoration(
-                          shape: const CircleBorder(),
-                          color:
-                              widget.onAssistant == null && widget.moreSelected
-                              ? Theme.of(context).colorScheme.primary
-                                    .withValues(alpha: .12)
-                              : Colors.transparent,
-                        ),
-                        child: widget.annotate(
-                          widget.onAssistant == null
-                              ? 'app.shell.more'
-                              : 'app.shell.assistant',
-                          widget.onAssistant == null ? '更多' : 'AI',
-                          _DockDestination(
-                            key: ValueKey(
-                              widget.onAssistant == null ? 'more' : 'assistant',
+              if (count > 0 && presence > 0) SizedBox(width: 8 * presence),
+              if (presence > 0) _action(context, height, presence, count),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _action(
+    BuildContext context,
+    double height,
+    double presence,
+    int count,
+  ) {
+    // A retiring action loses pointer, keyboard and accessibility activation
+    // immediately. During entry, enable it only once its hit target is 48 dp.
+    final interactive =
+        hasAction && height * presence >= kMinInteractiveDimension;
+    return SizedBox(
+      key: ValueKey(
+        actionIsAssistant
+            ? 'mobile-navigation-assistant'
+            : 'mobile-navigation-more',
+      ),
+      width: height * presence,
+      child: ExcludeFocus(
+        excluding: !interactive,
+        child: ExcludeSemantics(
+          excluding: !interactive,
+          child: IgnorePointer(
+            ignoring: !interactive,
+            child: OverflowBox(
+              minWidth: height,
+              maxWidth: height,
+              child: Opacity(
+                opacity: presence,
+                child: Transform.scale(
+                  scale: presence,
+                  transformHitTests: false,
+                  child: SizedBox(
+                    width: height,
+                    child: DockElasticSurface(
+                      enabled: animated && interactive,
+                      child: FrostedToolbarSurface(
+                        pill: true,
+                        child: AnimatedContainer(
+                          duration: widget.duration,
+                          decoration: ShapeDecoration(
+                            shape: const CircleBorder(),
+                            color: !actionIsAssistant && widget.moreSelected
+                                ? Theme.of(context).colorScheme.primary
+                                      .withValues(alpha: .12)
+                                : Colors.transparent,
+                          ),
+                          child: widget.annotate(
+                            actionIsAssistant
+                                ? 'app.shell.assistant'
+                                : 'app.shell.more',
+                            actionIsAssistant ? 'AI' : '更多',
+                            _DockDestination(
+                              key: ValueKey(
+                                actionIsAssistant ? 'assistant' : 'more',
+                              ),
+                              label: actionIsAssistant ? 'AI' : '更多',
+                              icon: actionIsAssistant
+                                  ? Icons.auto_awesome_rounded
+                                  : Icons.more_horiz_rounded,
+                              selected:
+                                  !actionIsAssistant && widget.moreSelected,
+                              highlighted:
+                                  !actionIsAssistant && widget.moreSelected,
+                              duration: widget.duration,
+                              onTap: () {
+                                if (!interactive) return;
+                                if (actionIsAssistant) {
+                                  widget.onAssistant?.call();
+                                } else if (widget.hasMore) {
+                                  widget.onSelected(count);
+                                }
+                              },
                             ),
-                            label: widget.onAssistant == null ? '更多' : 'AI',
-                            icon: widget.onAssistant == null
-                                ? Icons.more_horiz_rounded
-                                : Icons.auto_awesome_rounded,
-                            selected:
-                                widget.onAssistant == null &&
-                                widget.moreSelected,
-                            highlighted:
-                                widget.onAssistant == null &&
-                                widget.moreSelected,
-                            duration: widget.duration,
-                            onTap:
-                                widget.onAssistant ??
-                                () => widget.onSelected(count),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-            ],
-          );
-        },
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

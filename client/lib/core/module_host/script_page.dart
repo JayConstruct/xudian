@@ -1,12 +1,17 @@
 import '../ui/ui_icon.dart';
 import '../ui/page_runtime_context.dart';
 import '../ui/page_composition_readiness.dart';
+import '../ui/page_first_frame.dart';
+import '../ui/page_loading_placeholder.dart';
+import '../ui/date_reveal.dart';
+import 'date_page_cache.dart';
 import '../../app/app_icons.dart';
 
 import 'dart:async';
 
 import '../contracts/json_values.dart';
 import '../ui/workspace_header.dart';
+import '../ui/workspace_typography.dart';
 import '../ui/ui_component.dart';
 import '../ui/ui_pack.dart';
 import '../ui/temporal_input.dart';
@@ -45,6 +50,9 @@ class ScriptPage extends StatefulWidget {
 class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   Map<String, Object?> state = {}, formValues = {};
   Map<String, Object?>? tree;
+  String? treeContextIdentity;
+  Object? renderedInstance;
+  Map<String, Object?>? renderedHeader;
   final controllers = <String, TextEditingController>{};
   final focusNodes = <String, FocusNode>{};
   final scrollControllers = <String, ScrollController>{};
@@ -58,7 +66,13 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   StreamSubscription<void>? registrySubscription;
   Timer? refreshTimer;
   Timer? progressTimer;
+  Timer? datePrefetchTimer;
+  final dateCache = DatePageCache();
+  int cacheDataRevision = -1;
+  int datePrefetchRevision = 0;
+  bool dateContentBlocked = false;
   int epoch = 0;
+  int dateIntentRevision = 0;
   String? error;
   Map<String, Object?> localRuntimeContext = const {};
   Map<String, Object?> get pageContext => {
@@ -71,12 +85,20 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   bool busy = false, dirty = false;
   bool showProgress = false;
   bool routeActive = true;
+  bool workspaceActive = true;
   Set<String>? readModules;
   String businessRegistry = '', examplesRegistry = '';
   Object? pendingEvent, currentEvent, queryResult;
+  String? pendingEventContext;
+  int? pendingEventRuntimeRevision;
+  int? pendingEventDateIntent;
   PageCompositionReadinessScope? compositionReadiness;
+  PageFirstFrameReadiness? firstFrameReadiness;
   WorkspaceHeaderController? headerController;
   BuildContext? nodeContext;
+  bool retainDateNavigation = false;
+  bool get staleTree =>
+      tree != null && treeContextIdentity != canonicalJson(pageContext);
   BuildContext get uiContext => nodeContext ?? context;
   @override
   void initState() {
@@ -93,6 +115,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   void _subscribe() {
     subscription = widget.host.store.changes.stream.listen((modules) {
+      dateCache.invalidateModules(modules);
       if (readModules != null && !modules.any(readModules!.contains)) return;
       refreshTimer?.cancel();
       refreshTimer = Timer(const Duration(milliseconds: 40), () => _render());
@@ -108,7 +131,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               nextExamples != examplesRegistry);
       businessRegistry = next;
       examplesRegistry = nextExamples;
-      if (refresh) unawaited(_render());
+      if (refresh) {
+        dateCache.clear();
+        unawaited(_render());
+      }
     });
     // Civil dates can change in a configured timezone while the page is open.
     refreshTimer = Timer(const Duration(minutes: 1), () => _render());
@@ -137,6 +163,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         canonicalJson(withoutRuntimePageContext(old.pageContext)) !=
             canonicalJson(withoutRuntimePageContext(widget.pageContext))) {
       epoch++;
+      dateCache.clear();
+      datePrefetchRevision++;
+      datePrefetchTimer?.cancel();
       busy = false;
       showProgress = false;
       progressTimer?.cancel();
@@ -163,6 +192,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       controlConfigs.clear();
       state = {};
       formValues = {};
+      tree = null;
+      treeContextIdentity = null;
+      renderedInstance = null;
+      renderedHeader = null;
+      error = null;
       localRuntimeContext = const {};
       readModules = null;
       subscription?.cancel();
@@ -179,12 +213,36 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final active = ModalRoute.isCurrentOf(context) != false;
+    workspaceActive = TickerMode.valuesOf(context).enabled;
+    final active = ModalRoute.isCurrentOf(context) != false && workspaceActive;
     if (active == routeActive) return;
     routeActive = active;
+    if (!workspaceActive) headerController?.clear(this);
     progressTimer?.cancel();
     showProgress = false;
     if (busy && active) _delayProgress(epoch);
+    if (active) _restoreHeader();
+    if (active && dirty && !busy) {
+      dirty = false;
+      final next = _takePendingEvent();
+      unawaited(_render(next));
+    }
+  }
+
+  void _restoreHeader() {
+    final scope = WorkspaceHeaderScope.read(context);
+    final lease = scope?.lease;
+    if (tree == null ||
+        widget.embedded ||
+        lease?.mode != 'contributed' ||
+        lease?.moduleId != widget.moduleId ||
+        lease?.pageId != widget.pageContext['pageId'] ||
+        !identical(renderedInstance, widget.host.instances[widget.moduleId]) ||
+        treeContextIdentity != canonicalJson(pageContext)) {
+      return;
+    }
+    headerController = scope!.controller;
+    scope.controller.publish(lease!, this, renderedHeader, _render);
   }
 
   void _delayProgress(int current) {
@@ -199,20 +257,108 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState value) {
-    if (value == AppLifecycleState.resumed) unawaited(_render());
+    if (value == AppLifecycleState.resumed) {
+      dateCache.clear();
+      unawaited(_render());
+    }
+  }
+
+  void _checkDateCacheRevision() {
+    final revision = widget.host.store.dataRevision;
+    if (cacheDataRevision != revision) {
+      dateCache.clear();
+      cacheDataRevision = revision;
+    }
+  }
+
+  void _prepareAdjacentDates({
+    Duration delay = const Duration(milliseconds: 100),
+  }) {
+    datePrefetchTimer?.cancel();
+    final current = ++datePrefetchRevision;
+    if (DateRevealScope.read(context) == null) return;
+    final date = parseInputDate(pageContext['selectedDate']);
+    if (date == null || !workspaceActive || !routeActive) return;
+    final instance = widget.host.instances[widget.moduleId];
+    if (instance == null) return;
+    final dataRevision = widget.host.store.dataRevision;
+    final selectedDate = pageContext['selectedDate'];
+    bool canStart() =>
+        mounted &&
+        !busy &&
+        workspaceActive &&
+        routeActive &&
+        current == datePrefetchRevision &&
+        dataRevision == widget.host.store.dataRevision &&
+        identical(instance, widget.host.instances[widget.moduleId]) &&
+        selectedDate == pageContext['selectedDate'];
+    datePrefetchTimer = Timer(delay, () async {
+      if (!canStart()) return;
+      // Input defaults are registered during the paint after a query. Capture
+      // state and forms only once that paint has completed, not in its finally.
+      final inputState = freezeJson(state);
+      final inputForms = freezeJson(formValues);
+      final contextValues = Map<String, Object?>.of(pageContext);
+      final signature = canonicalJson([inputState, inputForms, contextValues]);
+      bool isCurrent() =>
+          canStart() &&
+          signature == canonicalJson([state, formValues, pageContext]);
+      for (final offset in const [1, -1]) {
+        if (!isCurrent()) break;
+        final next = DateTime.utc(date.year, date.month, date.day + offset);
+        if (next.year < 1 || next.year > 9999) continue;
+        final input = <String, Object?>{
+          'state': inputState,
+          'context': {...contextValues, 'selectedDate': formatInputDate(next)},
+          'event': null,
+          'formValues': inputForms,
+        };
+        _checkDateCacheRevision();
+        await dateCache.prepare(
+          instance: instance,
+          input: input,
+          shouldRun: isCurrent,
+          load: (stillCurrent) async {
+            Set<String> reads = const {};
+            final result = await widget.host.invokePage(
+              widget.moduleId,
+              widget.handler,
+              input,
+              readOnly: true,
+              shouldRun: stillCurrent,
+              onReads: (value) => reads = value,
+            );
+            return result is Map
+                ? PreparedDatePage(result: object(result), reads: reads)
+                : null;
+          },
+        );
+        // Yield between speculative reads so a foreground event can enter the
+        // serialized workflow before the other adjacent date is prepared.
+        await Future<void>.delayed(Duration.zero);
+      }
+    });
   }
 
   Future<void> _render([Object? event]) async {
     if (!mounted) return;
+    if (!workspaceActive) {
+      dirty = true;
+      if (event != null) _queueEvent(event);
+      return;
+    }
+    firstFrameReadiness = PageFirstFrameReadinessScope.read(context);
+    firstFrameReadiness?.begin(this);
     final readiness = PageCompositionReadinessScope.read(context);
     compositionReadiness = readiness;
     readiness?.begin(this);
     if (busy) {
       dirty = true;
-      if (event != null) pendingEvent = event;
+      if (event != null) _queueEvent(event);
       return;
     }
     final current = ++epoch;
+    final requestedDateIntent = dateIntentRevision;
     final requestContext = pageContext;
     final runtimeScope = PageRuntimeContextScope.read(context);
     final runtimeRevision = runtimeScope?.currentRevision();
@@ -235,20 +381,28 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final sentForms = Map<String, Object?>.of(formValues);
     final sentRevisions = Map<String, int>.of(formRevisions);
     try {
+      final input = <String, Object?>{
+        'state': state,
+        'context': requestContext,
+        'event': event,
+        'formValues': sentForms,
+      };
+      _checkDateCacheRevision();
+      final requestedDataRevision = widget.host.store.dataRevision;
+      final prepared = instance == null
+          ? null
+          : dateCache.lookup(instance, input);
+      if (prepared != null) readModules = prepared.reads;
       final result = object(
-        await widget.host.invokePage(
-          widget.moduleId,
-          widget.handler,
-          {
-            'state': state,
-            'context': requestContext,
-            'event': event,
-            'formValues': sentForms,
-          },
-          onReads: (reads) {
-            if (mounted && current == epoch) readModules = reads;
-          },
-        ),
+        prepared?.result ??
+            await widget.host.invokePage(
+              widget.moduleId,
+              widget.handler,
+              input,
+              onReads: (reads) {
+                if (mounted && current == epoch) readModules = reads;
+              },
+            ),
       );
       if (!mounted ||
           current != epoch ||
@@ -258,6 +412,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       // A result queried for an older date cannot publish its tree or patch
       // after another contribution has changed this composition's date.
       if (canonicalJson(requestContext) != canonicalJson(pageContext) ||
+          requestedDateIntent != dateIntentRevision ||
+          event == null &&
+              requestedDataRevision != widget.host.store.dataRevision ||
           runtimeRevision !=
               PageRuntimeContextScope.read(context)?.currentRevision()) {
         dirty = true;
@@ -287,8 +444,16 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         }
         state = object(result['state'] ?? state);
         tree = object(result['tree']);
+        treeContextIdentity = canonicalJson({...requestContext, ...patch});
+        renderedInstance = instance;
+        renderedHeader = result['header'] is Map
+            ? object(result['header'])
+            : null;
         error = null;
       });
+      if (_hasDateNavigation(tree)) readiness?.allowContextChanges();
+      final todayDate = _declaredTodayDate(tree);
+      if (todayDate != null) runtimeScope?.reportTodayDate?.call(todayDate);
       if (patch.isNotEmpty) {
         if (runtimeScope != null) {
           if (patch.entries.any(
@@ -307,7 +472,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           dirty = true;
         }
       }
-      if (ownsHeader) {
+      if (ownsHeader && routeActive) {
         final raw = result['header'];
         headerScope!.controller.publish(
           headerLease!,
@@ -330,16 +495,40 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         });
         if (dirty) {
           dirty = false;
-          final next = pendingEvent;
-          pendingEvent = null;
+          final next = _takePendingEvent();
           unawaited(_render(next));
         } else {
           readiness?.complete(this);
+          firstFrameReadiness?.complete(this);
+          _prepareAdjacentDates();
         }
         refreshTimer?.cancel();
         refreshTimer = Timer(const Duration(minutes: 1), () => _render());
       }
     }
+  }
+
+  void _queueEvent(Object event) {
+    pendingEvent = event;
+    pendingEventContext = canonicalJson(pageContext);
+    pendingEventRuntimeRevision = PageRuntimeContextScope.read(context)
+        ?.currentRevision();
+    pendingEventDateIntent = dateIntentRevision;
+  }
+
+  Object? _takePendingEvent() {
+    final next =
+        pendingEventContext == canonicalJson(pageContext) &&
+            pendingEventRuntimeRevision ==
+                PageRuntimeContextScope.read(context)?.currentRevision() &&
+            pendingEventDateIntent == dateIntentRevision
+        ? pendingEvent
+        : null;
+    pendingEvent = null;
+    pendingEventContext = null;
+    pendingEventRuntimeRevision = null;
+    pendingEventDateIntent = null;
+    return next;
   }
 
   bool _unchangedForm(
@@ -361,7 +550,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       formRevisions[key] = (formRevisions[key] ?? 0) + 1;
     });
     inputTimers.remove(key)?.cancel();
-    if (event == null) return;
+    if (event == null) {
+      _prepareAdjacentDates(delay: const Duration(milliseconds: 300));
+      return;
+    }
     final payload = {...object(event), 'value': value};
     if (debounce) {
       inputTimers[key] = Timer(const Duration(milliseconds: 150), () {
@@ -404,6 +596,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     compositionReadiness?.complete(this);
+    firstFrameReadiness?.complete(this);
     headerController?.clear(this);
     if (widget.host.pageSessions.length >= 100) {
       widget.host.pageSessions.remove(widget.host.pageSessions.keys.first);
@@ -420,6 +613,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       };
     }
     epoch++;
+    datePrefetchRevision++;
+    datePrefetchTimer?.cancel();
+    dateCache.dispose();
     progressTimer?.cancel();
     subscription?.cancel();
     registrySubscription?.cancel();
@@ -577,6 +773,16 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       }
     }
     final props = _bindValues(object(spec['props'] ?? {}));
+    if (ref == 'ui.dayOverview@1' &&
+        PageRuntimeContextScope.read(context)?.dateTodayInMenu == true) {
+      props['returnToToday'] = false;
+    }
+    if (ref == 'ui.dayOverview@1' && pageContext['selectedDate'] is String) {
+      // This control follows presentation intent immediately, while its counts
+      // and other records continue to wait for the script's current query.
+      props['selectedDate'] = pageContext['selectedDate'];
+      if (staleTree) props['summary'] = null;
+    }
     final slots = object(spec['slots'] ?? {})
         .map((name, raw) => MapEntry(name, _slot(raw, name, key, depth)));
     final events = _bindValues(object(spec['events'] ?? {}));
@@ -585,6 +791,24 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         entry.key: (value) {
           if ((!busy || ref == 'ui.dayOverview@1' && entry.key == 'change') &&
               props['disabled'] != true) {
+            if (ref == 'ui.dayOverview@1' && entry.key == 'change') {
+              Map<String, Object?>? patch;
+              try {
+                patch = validateRuntimeContextPatch({'selectedDate': value});
+              } on FormatException {
+                // Invalid module/UI-pack input stays within the script's render
+                // error boundary, rather than throwing from a widget callback.
+              }
+              if (patch != null) {
+                dateIntentRevision++;
+                // A date choice is presentation intent. Publish it before the
+                // script query returns so older responses cannot briefly rewind
+                // the header, including a rapid A -> B -> A reversal.
+                PageCompositionReadinessScope.read(context)
+                    ?.allowContextChanges();
+                PageRuntimeContextScope.read(context)?.update(patch);
+              }
+            }
             _render(
               value == null && entry.key != 'change'
                   ? entry.value
@@ -692,7 +916,53 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     );
   }
 
+  bool _hasDateNavigation(Object? spec) {
+    if (spec is Map) {
+      if (spec['type'] == 'dayOverview' || spec['ref'] == 'ui.dayOverview@1') {
+        return true;
+      }
+      return spec.values.any(_hasDateNavigation);
+    }
+    return spec is List && spec.any(_hasDateNavigation);
+  }
+
+  String? _declaredTodayDate(Object? spec) {
+    if (spec is Map) {
+      if (spec['type'] == 'dayOverview' || spec['ref'] == 'ui.dayOverview@1') {
+        final raw = spec['type'] == 'dayOverview'
+            ? spec['todayDate']
+            : (spec['props'] as Map?)?['todayDate'];
+        if (raw is String) return raw;
+      }
+      for (final value in spec.values) {
+        final date = _declaredTodayDate(value);
+        if (date != null) return date;
+      }
+    } else if (spec is List) {
+      for (final value in spec) {
+        final date = _declaredTodayDate(value);
+        if (date != null) return date;
+      }
+    }
+    return null;
+  }
+
   Widget node(Map<String, Object?> spec, [int depth = 0, bool replace = true]) {
+    final child = _node(spec, depth, replace);
+    // Keep the navigation's Elements and animation alive across a date query.
+    // Other branches remain mounted, but cannot display or expose old records.
+    if (!retainDateNavigation || _hasDateNavigation(spec)) return child;
+    return Offstage(
+      key: spec['key'] == null ? null : ValueKey(spec['key']),
+      offstage: staleTree,
+      child: IgnorePointer(
+        ignoring: dateContentBlocked,
+        child: ExcludeSemantics(excluding: dateContentBlocked, child: child),
+      ),
+    );
+  }
+
+  Widget _node(Map<String, Object?> spec, int depth, bool replace) {
     if (depth > 32) return const Text('组件嵌套超过限制');
     if (spec['type'] == 'component') return componentNode(spec, depth);
     if (spec['type'] == 'componentExample') {
@@ -1122,9 +1392,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                             Text(
                               '${bind(spec['title']) ?? text}',
                               textAlign: TextAlign.center,
-                              style: Theme.of(uiContext)
-                                  .textTheme
-                                  .headlineSmall,
+                              maxLines: WorkspaceTypography.titleMaxLines,
+                              overflow: TextOverflow.ellipsis,
+                              style: WorkspaceTypography.titleStyle(
+                                Theme.of(uiContext).textTheme,
+                              ),
                             ),
                             if (spec['subtitle'] != null)
                               Text(
@@ -1557,15 +1829,28 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     child: Builder(
       builder: (context) {
         nodeContext = context;
+        dateContentBlocked =
+            DateRevealScope.of(context)?.isTransitioning == true;
+        retainDateNavigation = _hasDateNavigation(tree);
         // Inline compositions provide one shared progress indicator.
         final loading =
             busy && showProgress && routeActive && compositionReadiness == null;
-        return Column(
+        final contextController =
+            compositionReadiness?.controller.contextControllers.contains(
+              compositionReadiness!.memberId,
+            ) ==
+            true;
+        final currentTree =
+            tree != null &&
+            (treeContextIdentity == canonicalJson(pageContext) ||
+                contextController ||
+                retainDateNavigation);
+        final content = Column(
           mainAxisSize: widget.embedded ? MainAxisSize.min : MainAxisSize.max,
           children: [
             // A modal is waiting for user input; only the active page shows
             // render progress. Keep busy for serialization and disabled inputs.
-            if (loading && tree != null)
+            if (loading && currentTree)
               const LinearProgressIndicator(minHeight: 2),
             if (error != null)
               MaterialBanner(
@@ -1583,34 +1868,62 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   horizontal: 20,
                   vertical: 12,
                 ),
-                child: tree == null
-                    ? loading
-                          ? const CircularProgressIndicator()
-                          : const SizedBox.shrink()
-                    : safeNode(tree!),
+                child: Stack(
+                  alignment: Alignment.topCenter,
+                  children: [
+                    Offstage(
+                      offstage: !currentTree,
+                      child: tree == null
+                          ? const SizedBox.shrink()
+                          : safeNode(tree!),
+                    ),
+                    if (!currentTree && loading) const PageLoadingPlaceholder(),
+                  ],
+                ),
               )
             else
               Expanded(
-                child: tree == null
-                    ? loading
-                          ? const Center(child: CircularProgressIndicator())
-                          : const SizedBox.shrink()
-                    : pageContent(),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Offstage(
+                      offstage: !currentTree,
+                      child: tree == null
+                          ? const SizedBox.shrink()
+                          : pageContent(),
+                    ),
+                    if (!currentTree && loading)
+                      const Align(
+                        alignment: Alignment.topCenter,
+                        child: PageLoadingPlaceholder(),
+                      ),
+                  ],
+                ),
               ),
             if (tree?['footer'] is Map)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  8,
-                  16,
-                  12 + WorkspaceContentInsets.bottomOf(context),
-                ),
-                child: FloatingSurface(
-                  padding: const EdgeInsets.all(12),
-                  child: safeNode(object(tree!['footer'])),
+              Offstage(
+                offstage: !currentTree,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    8,
+                    16,
+                    12 + WorkspaceContentInsets.bottomOf(context),
+                  ),
+                  child: FloatingSurface(
+                    padding: const EdgeInsets.all(12),
+                    child: safeNode(object(tree!['footer'])),
+                  ),
                 ),
               ),
           ],
+        );
+        return IgnorePointer(
+          ignoring: dateContentBlocked && !retainDateNavigation,
+          child: ExcludeSemantics(
+            excluding: dateContentBlocked && !retainDateNavigation,
+            child: content,
+          ),
         );
       },
     ),

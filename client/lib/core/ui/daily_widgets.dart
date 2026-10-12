@@ -1,10 +1,12 @@
 import 'ui_icon.dart';
 import 'temporal_input.dart';
+import 'daily_date_strip.dart';
+import 'date_reveal.dart';
 
 import 'package:flutter/material.dart';
 
-import '../../app/design_system.dart';
-import '../../app/app_motion.dart';
+import 'ui_design.dart';
+import 'ui_motion.dart';
 
 DateTime? _dailyDate(Object? value) {
   final date = parseInputDate(value);
@@ -28,6 +30,7 @@ Widget? dailyUiComponent(
       todayDate: props['todayDate'] as String?,
       dateHeading: props['dateHeading'] != false,
       dateControls: props['dateControls'] != false,
+      returnToToday: props['returnToToday'] != false,
       onChanged: disabled || events['change'] == null
           ? null
           : (date) => events['change']!(date),
@@ -83,12 +86,14 @@ class DayOverview extends StatelessWidget {
     this.onChanged,
     this.dateHeading = true,
     this.dateControls = true,
+    this.returnToToday = true,
     this.days = const [],
   });
   final String date;
   final String? summary, selectedDate, todayDate;
   final ValueChanged<String>? onChanged;
   final bool dateHeading, dateControls;
+  final bool returnToToday;
   final List<Map<String, Object?>> days;
 
   Widget day(BuildContext context, Map<String, Object?> entry) {
@@ -117,7 +122,9 @@ class DayOverview extends StatelessWidget {
           child: TweenAnimationBuilder<double>(
             duration: AppMotion.duration(
               context,
-              AppMotion.dateChange,
+              DateRevealScope.of(context) == null
+                  ? AppMotion.dateChange
+                  : Duration.zero,
               respectHighContrast: true,
             ),
             curve: AppMotion.enter,
@@ -205,6 +212,7 @@ class DayOverview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final reveal = DateRevealScope.of(context);
     final value = _dailyDate(selectedDate ?? date);
     const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     final label = value == null
@@ -222,73 +230,78 @@ class DayOverview extends StatelessWidget {
             ),
           ),
         if (dateControls && onChanged != null && value != null) ...[
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    alignment: Alignment.centerLeft,
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(48, 48),
-                  ),
-                  onPressed: () async {
-                    final selected = await showDatePicker(
-                      context: context,
-                      locale: const Locale('zh', 'CN'),
-                      helpText: '选择日期',
-                      initialDate: value,
-                      firstDate: DateTime(1),
-                      lastDate: DateTime(9999, 12, 31),
-                    );
-                    if (context.mounted && selected != null) {
-                      onChanged!(formatInputDate(selected));
-                    }
-                  },
-                  child: Text(
-                    dateHeading ? '${value.year}年$label' : '选择日期',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w400,
+          DateRevealNavigation(
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      alignment: Alignment.centerLeft,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: () async {
+                      final selected = await showDatePicker(
+                        context: context,
+                        locale: const Locale('zh', 'CN'),
+                        helpText: '选择日期',
+                        initialDate: value,
+                        firstDate: DateTime(1),
+                        lastDate: DateTime(9999, 12, 31),
+                      );
+                      if (context.mounted && selected != null) {
+                        onChanged!(formatInputDate(selected));
+                      }
+                    },
+                    child: Text(
+                      dateHeading ? '${value.year}年$label' : '选择日期',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              IconButton(
-                tooltip: '前一天',
-                style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: value.isAfter(DateTime(1))
-                    ? () => onChanged!(
-                        formatInputDate(
-                          DateTime(value.year, value.month, value.day - 1),
-                        ),
-                      )
-                    : null,
-                icon: const UiIcon(Icons.chevron_left_rounded),
-              ),
-              IconButton(
-                tooltip: '后一天',
-                style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: value.isBefore(DateTime(9999, 12, 31))
-                    ? () => onChanged!(
-                        formatInputDate(
-                          DateTime(value.year, value.month, value.day + 1),
-                        ),
-                      )
-                    : null,
-                icon: const UiIcon(Icons.chevron_right_rounded),
-              ),
-            ],
+                IconButton(
+                  tooltip: '前一天',
+                  style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                  onPressed: value.isAfter(DateTime(1))
+                      ? () => onChanged!(
+                          formatInputDate(
+                            DateTime(value.year, value.month, value.day - 1),
+                          ),
+                        )
+                      : null,
+                  icon: const UiIcon(Icons.chevron_left_rounded),
+                ),
+                IconButton(
+                  tooltip: '后一天',
+                  style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                  onPressed: value.isBefore(DateTime(9999, 12, 31))
+                      ? () => onChanged!(
+                          formatInputDate(
+                            DateTime(value.year, value.month, value.day + 1),
+                          ),
+                        )
+                      : null,
+                  icon: const UiIcon(Icons.chevron_right_rounded),
+                ),
+              ],
+            ),
           ),
         ],
-        if (onChanged != null &&
+        if (returnToToday &&
+            onChanged != null &&
             value != null &&
             _dailyDate(todayDate) != null &&
             (selectedDate ?? date) != todayDate)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => onChanged!(todayDate!),
-              child: const Text('回到今天'),
+          DateRevealNavigation(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => onChanged!(todayDate!),
+                child: const Text('回到今天'),
+              ),
             ),
           ),
         if (summary != null && summary!.isNotEmpty) ...[
@@ -314,45 +327,65 @@ class DayOverview extends StatelessWidget {
         ],
         if (days.isNotEmpty) ...[
           const SizedBox(height: 22),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final shown = days.take(7).toList();
-              final occurrences = <Object?, int>{};
-              for (final entry in shown) {
-                final date = entry['date'];
-                occurrences[date] = (occurrences[date] ?? 0) + 1;
-              }
-              Key? dateKey(Map<String, Object?> entry) =>
-                  occurrences[entry['date']] == 1
-                  ? ValueKey('daily-date:${entry['date']}')
-                  : null;
-              final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
-              final cellWidth = 52 * textScale.clamp(1.0, double.infinity);
-              if (constraints.maxWidth < shown.length * cellWidth) {
-                return _ScrollableDateStrip(
-                  selectedDate: selectedDate ?? date,
-                  selectedIndex: shown.indexWhere(
-                    (day) => day['date'] == (selectedDate ?? date),
-                  ),
-                  cellWidth: cellWidth,
-                  viewportWidth: constraints.maxWidth,
-                  children: [
-                    for (final entry in shown)
-                      SizedBox(
-                        key: dateKey(entry),
-                        width: cellWidth,
-                        child: day(context, entry),
+          IgnorePointer(
+            ignoring: reveal?.isTransitioning == true,
+            child: ExcludeSemantics(
+              excluding: reveal?.isTransitioning == true,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final shown = days.take(7).toList();
+                  final occurrences = <Object?, int>{};
+                  for (final entry in shown) {
+                    final date = entry['date'];
+                    occurrences[date] = (occurrences[date] ?? 0) + 1;
+                  }
+                  Key? dateKey(Map<String, Object?> entry) =>
+                      occurrences[entry['date']] == 1
+                      ? ValueKey('daily-date:${entry['date']}')
+                      : null;
+                  final textScale =
+                      MediaQuery.textScalerOf(context).scale(14) / 14;
+                  final cellWidth = 52 * textScale.clamp(1.0, double.infinity);
+                  if (constraints.maxWidth < shown.length * cellWidth) {
+                    return _ScrollableDateStrip(
+                      selectedDate: selectedDate ?? date,
+                      selectedIndex: shown.indexWhere(
+                        (day) => day['date'] == (selectedDate ?? date),
                       ),
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  for (final entry in shown)
-                    Expanded(key: dateKey(entry), child: day(context, entry)),
-                ],
-              );
-            },
+                      cellWidth: cellWidth,
+                      viewportWidth: constraints.maxWidth,
+                      children: [
+                        for (final entry in shown)
+                          SizedBox(
+                            key: dateKey(entry),
+                            width: cellWidth,
+                            child: day(context, entry),
+                          ),
+                      ],
+                    );
+                  }
+                  if (DailyDateStrip.supports(shown, selectedDate ?? date)) {
+                    return DailyDateStrip(
+                      days: shown,
+                      selectedDate: selectedDate ?? date,
+                      width: constraints.maxWidth,
+                      animate: reveal == null,
+                      onChanged: onChanged,
+                      cellBuilder: (entry) => day(context, entry),
+                    );
+                  }
+                  return Row(
+                    children: [
+                      for (final entry in shown)
+                        Expanded(
+                          key: dateKey(entry),
+                          child: day(context, entry),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
         ],
         const SizedBox(height: 12),

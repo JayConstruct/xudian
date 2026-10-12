@@ -28,12 +28,7 @@ Future<void> openScriptLauncher(
           host: host,
           moduleId: moduleId,
           handler: handler,
-          pageContext: {
-            ...pageContext.values,
-            if (pageContext.taskId != null) 'taskId': pageContext.taskId,
-            if (pageContext.projectId != null)
-              'projectId': pageContext.projectId,
-          },
+          pageContext: pageContext.toJson(),
         ),
       ),
     ),

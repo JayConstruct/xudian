@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/app_motion.dart';
+import 'ui_motion.dart';
 
 /// Replays a small host-rendered entrance without replacing the child's state.
 class ScriptTransition extends StatefulWidget {

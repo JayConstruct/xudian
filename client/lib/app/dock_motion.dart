@@ -5,6 +5,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 
+/// One reversible timeline drives both dock width and page-action visibility.
+/// Applying the curve to the shared position avoids resetting an interrupted
+/// transition when support changes again.
+class DockActionPresence extends ChangeNotifier {
+  DockActionPresence(TickerProvider vsync, {required bool visible})
+    : _controller = AnimationController(
+        vsync: vsync,
+        duration: const Duration(milliseconds: 500),
+        value: visible ? 1 : 0,
+      ) {
+    _controller.addListener(notifyListeners);
+  }
+
+  final AnimationController _controller;
+
+  double get value => Curves.easeInOutCubic.transform(_controller.value);
+
+  void show(bool visible, {required bool animate}) {
+    if (!animate) {
+      _controller.value = visible ? 1 : 0;
+    } else if (visible) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
 /// Motion primitives for the native dock. Retargeting an active spring keeps
 /// its ticker running, so frequent pointer moves cannot stall the first frame.
 class DockSpring extends ChangeNotifier {

@@ -26,6 +26,25 @@ Future<void> settleNative(WidgetTester tester) async {
   }
 }
 
+Future<void> waitForNativeWidget(
+  WidgetTester tester,
+  Finder target, {
+  bool hitTestable = false,
+}) async {
+  final ready = hitTestable ? target.hitTestable() : target;
+  final elapsed = Stopwatch()..start();
+  while (ready.evaluate().isEmpty &&
+      elapsed.elapsed < const Duration(seconds: 10)) {
+    // Catalog resolution, cache flushes and package verification use real I/O.
+    // Wait for the observable phase instead of assuming a fixed disk speed.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 15)),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+  }
+  expect(ready, findsOneWidget);
+}
+
 Future<ScriptPackage> package(
   String id, {
   String? dependency,
@@ -245,6 +264,8 @@ void main() {
         late ModuleHost host;
         late Directory dir;
         late ModuleCatalogClient client;
+        final navigatorKey = GlobalKey<NavigatorState>();
+        Future<void>? installation;
         final gate = Completer<List<int>>();
         var downloads = 0;
         await tester.runAsync(() async {
@@ -330,6 +351,13 @@ void main() {
                 : {},
             transport:
                 (url, {cancellation, onProgress, required maximumBytes}) async {
+                  if (url.path.endsWith('/catalog.json')) {
+                    // Resolution can outlast the dialog animation and the old
+                    // 360 ms fixture wait, even before package downloads begin.
+                    await Future<void>.delayed(
+                      const Duration(milliseconds: 450),
+                    );
+                  }
                   if (url.host == 'github.com') {
                     downloads++;
                     if (cancel) {
@@ -349,6 +377,11 @@ void main() {
           );
         });
         addTearDown(() async {
+          navigatorKey.currentState?.popUntil((route) => route.isFirst);
+          await tester.pumpWidget(const SizedBox.shrink());
+          // Resolver cache writes may still be running if an assertion fails.
+          // Unmount first so resolution exits, then drain before deleting cache.
+          await tester.runAsync(() async => await installation);
           client.dispose();
           await host.close();
           await store.close();
@@ -363,18 +396,21 @@ void main() {
               moduleCatalogClientProvider.overrideWith((_) async => client),
             ],
             child: MaterialApp(
+              navigatorKey: navigatorKey,
               home: Scaffold(
                 body: Consumer(
                   builder: (context, ref, _) => FilledButton(
-                    onPressed: () => installResolvedModules(
-                      context,
-                      ref,
-                      host,
-                      requests: {
-                        official ? 'app.import.shiguang' : 'private.schedule':
-                            'any',
-                      },
-                    ),
+                    onPressed: () {
+                      installation = installResolvedModules(
+                        context,
+                        ref,
+                        host,
+                        requests: {
+                          official ? 'app.import.shiguang' : 'private.schedule':
+                              'any',
+                        },
+                      );
+                    },
                     child: const Text('安装课表'),
                   ),
                 ),
@@ -383,26 +419,31 @@ void main() {
           ),
         );
         await tester.runAsync(() => tester.tap(find.text('安装课表')));
-        await settleNative(tester);
-        expect(find.text('下载并验证模块'), findsOneWidget);
+        await waitForNativeWidget(tester, find.text('下载并验证模块'));
         if (cancel) {
           await tester.tap(find.text('取消下载'));
-          await settleNative(tester);
+          await tester.runAsync(() async => await installation);
+          await tester.pumpAndSettle();
           expect(find.text('确认模块安装计划'), findsNothing);
         } else {
-          expect(find.text('重试'), findsOneWidget);
+          await waitForNativeWidget(tester, find.text('重试'), hitTestable: true);
           await tester.runAsync(() => tester.tap(find.text('重试')));
-          await settleNative(tester);
-          expect(find.text('确认模块安装计划'), findsOneWidget);
-          expect(find.text('确认安装'), findsOneWidget);
+          await waitForNativeWidget(tester, find.text('确认模块安装计划'));
+          await waitForNativeWidget(
+            tester,
+            find.text('确认安装'),
+            hitTestable: true,
+          );
           await tester.runAsync(() => tester.tap(find.text('确认安装')));
-          await settleNative(tester);
-          expect(find.text('模块安装完成'), findsOneWidget);
+          await waitForNativeWidget(tester, find.text('模块安装完成'));
           if (official) {
-            expect(find.text('打开模块'), findsOneWidget);
+            await waitForNativeWidget(
+              tester,
+              find.text('打开模块'),
+              hitTestable: true,
+            );
             await tester.runAsync(() => tester.tap(find.text('打开模块')));
-            await settleNative(tester);
-            expect(find.text('按学校导入'), findsOneWidget);
+            await waitForNativeWidget(tester, find.text('按学校导入'));
           }
         }
         await tester.runAsync(() async {

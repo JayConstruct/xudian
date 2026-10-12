@@ -4,6 +4,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xquickjs/src/worker_poll_scheduler.dart';
 
 void main() {
+  testWidgets('explicit owner zone survives a temporary construction zone', (
+    tester,
+  ) async {
+    final owner = Zone.current;
+    const transactionKey = #temporaryTransaction;
+    final temporary = owner.fork(zoneValues: {transactionKey: true});
+    final seen = <bool>[];
+    final scheduler = temporary.run(
+      () => WorkerPollScheduler(
+        ownerZone: owner,
+        drain: () {
+          seen.add(Zone.current[transactionKey] == true);
+          return false;
+        },
+        hasPending: () => false,
+      )..wake(),
+    );
+    addTearDown(scheduler.close);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(seen, [false]);
+    temporary.run(scheduler.wake);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(seen, [false, false]);
+    scheduler.close();
+  });
   testWidgets('posts from another zone retain the worker timer zone', (
     tester,
   ) async {
@@ -36,11 +61,11 @@ void main() {
     foreign.run(scheduler.wake);
     expect(ownerTimers, before + 1);
     expect(foreignTimers, 0);
-    await tester.pump(const Duration(milliseconds: 8));
+    await tester.pump(const Duration(milliseconds: 1));
     expect(ownerTimers, before + 2);
     scheduler.close();
   });
-  testWidgets('idle polling is bounded and a new post wakes within 8ms', (
+  testWidgets('idle polling remains bounded and a new post wakes within 1ms', (
     tester,
   ) async {
     var polls = 0;
@@ -53,18 +78,22 @@ void main() {
     )..wake();
     addTearDown(scheduler.close);
     await tester.pump(const Duration(seconds: 1));
-    expect(polls, 17, reason: 'Periodic 8ms polling would run 125 times');
+    expect(
+      polls,
+      lessThanOrEqualTo(24),
+      reason: 'Idle workers must not poll at the active 1ms rate',
+    );
+    final idlePolls = polls;
     scheduler.wake();
-    await tester.pump(const Duration(milliseconds: 7));
-    expect(polls, 17);
+    expect(polls, idlePolls);
     await tester.pump(const Duration(milliseconds: 1));
-    expect(polls, 18);
+    expect(polls, idlePolls + 1);
     scheduler.close();
     await tester.pump(const Duration(seconds: 1));
-    expect(polls, 18);
+    expect(polls, idlePolls + 1);
   });
 
-  testWidgets('pending work caps backoff at 32ms and replies restore 8ms', (
+  testWidgets('pending work backs off and replies restore 1ms responsiveness', (
     tester,
   ) async {
     var polls = 0;
@@ -78,11 +107,12 @@ void main() {
     )..wake();
     addTearDown(scheduler.close);
     await tester.pump(const Duration(seconds: 1));
-    expect(polls, 32);
+    expect(polls, inInclusiveRange(31, 36));
+    final quietPolls = polls;
     received = true;
     scheduler.wake();
-    await tester.pump(const Duration(milliseconds: 16));
-    expect(polls, 34);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(polls, quietPolls + 2);
     scheduler.close();
   });
 
@@ -104,13 +134,35 @@ void main() {
       scheduler.wake();
       await tester.pump(const Duration(milliseconds: 1));
     }
-    expect(polls, 2);
+    expect(polls, 16);
     scheduler.close();
     await tester.pump(const Duration(seconds: 1));
     expect(
       polls,
-      2,
+      16,
       reason: 'Only one timer should exist after reentrant wake',
     );
+  });
+
+  testWidgets('a short chain of immediate host replies fits in one frame', (
+    tester,
+  ) async {
+    var remaining = 12;
+    final scheduler = WorkerPollScheduler(
+      drain: () {
+        if (remaining == 0) return false;
+        remaining--;
+        return true;
+      },
+      hasPending: () => remaining > 0,
+    )..wake();
+    addTearDown(scheduler.close);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(
+      remaining,
+      0,
+      reason: 'Fast bridge replies must not each add an 8ms frame delay',
+    );
+    scheduler.close();
   });
 }

@@ -3,7 +3,7 @@ import 'ui_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../../app/design_system.dart';
+import 'ui_design.dart';
 
 enum TemporalInputKind { date, time, dateTime, dateRange }
 

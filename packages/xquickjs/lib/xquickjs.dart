@@ -41,6 +41,7 @@ class JavaScriptWorker {
     Map<String, String> files, {
     required this.host,
     int memoryLimit = 64 * 1024 * 1024,
+    Zone? ownerZone,
   }) {
     _handle = _create(memoryLimit);
     if (_handle == nullptr) throw StateError('Cannot create JavaScript worker');
@@ -65,6 +66,7 @@ class JavaScriptWorker {
     _polling = WorkerPollScheduler(
       drain: _drain,
       hasPending: () => _pending.values.any((request) => !request.isCompleted),
+      ownerZone: ownerZone,
     );
     _post(bootstrap);
   }

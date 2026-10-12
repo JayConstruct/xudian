@@ -30,6 +30,7 @@ Future<void> _settleNative(WidgetTester tester) async {
     );
     await tester.pump(const Duration(milliseconds: 20));
   }
+  await tester.pumpAndSettle();
 }
 
 void main() {

@@ -2,8 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'page_first_frame.dart';
+import 'page_loading_placeholder.dart';
+import 'date_navigation_intent.dart';
+import 'date_reveal.dart';
+
 /// Inline pages stay mounted while their initial asynchronous content arrives.
-/// The composition appears together, and retains its content during refreshes.
+/// The composition appears together, and retains mounted state during refreshes.
 class PageCompositionReadiness extends ChangeNotifier {
   final pending = <String, Set<Object>>{};
   final ready = <String>{};
@@ -105,20 +110,41 @@ class PageCompositionReadyGroup extends StatefulWidget {
 
 class _PageCompositionReadyGroupState extends State<PageCompositionReadyGroup> {
   final readiness = PageCompositionReadiness();
+  bool replacingContext = false;
+  PageFirstFrameReadiness? firstFrameReadiness;
+  DateNavigationIntentScope? dateReadinessScope;
   Timer? progressTimer;
   bool showProgress = false;
 
   void readinessChanged() {
-    progressTimer?.cancel();
+    final date = DateNavigationIntentScope.read(context);
+    dateReadinessScope = date;
+    if (date != null) {
+      final version = date.revision;
+      final ready = !readiness.waiting;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) date.reportReadiness(this, version, ready);
+      });
+    }
     if (!readiness.waiting) {
+      replacingContext = false;
+      progressTimer?.cancel();
+      progressTimer = null;
       if (showProgress) setState(() => showProgress = false);
-    } else if (readiness.hasDisplayed) {
-      if (!showProgress) setState(() => showProgress = true);
-    } else {
+      firstFrameReadiness?.complete(this);
+    } else if (progressTimer == null && !showProgress) {
       progressTimer = Timer(const Duration(milliseconds: 500), () {
         if (mounted && readiness.waiting) setState(() => showProgress = true);
       });
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    firstFrameReadiness = PageFirstFrameReadinessScope.read(context);
+    if (!readiness.hasDisplayed) firstFrameReadiness?.begin(this);
+    readinessChanged();
   }
 
   void configure() {
@@ -148,6 +174,7 @@ class _PageCompositionReadyGroupState extends State<PageCompositionReadyGroup> {
     super.didUpdateWidget(oldWidget);
     if (widget.identity != oldWidget.identity ||
         widget.memberIds.join('|') != oldWidget.memberIds.join('|')) {
+      replacingContext = true;
       configure();
       readinessChanged();
     }
@@ -156,6 +183,8 @@ class _PageCompositionReadyGroupState extends State<PageCompositionReadyGroup> {
   @override
   void dispose() {
     progressTimer?.cancel();
+    dateReadinessScope?.forgetReadiness(this);
+    firstFrameReadiness?.complete(this);
     readiness.removeListener(readinessChanged);
     readiness.dispose();
     super.dispose();
@@ -164,49 +193,84 @@ class _PageCompositionReadyGroupState extends State<PageCompositionReadyGroup> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: readiness,
-    builder: (context, _) => Stack(
-      children: [
-        Opacity(
-          opacity: readiness.hasDisplayed || !readiness.waiting ? 1 : 0,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < widget.memberIds.length; i++)
-                IgnorePointer(
-                  key: ValueKey(widget.memberIds[i]),
-                  ignoring:
-                      readiness.waiting &&
-                      (!readiness.hasDisplayed ||
-                          !readiness.contextControllers.contains(
-                            widget.memberIds[i],
-                          )),
-                  child: ExcludeSemantics(
-                    excluding:
-                        readiness.waiting &&
-                        (!readiness.hasDisplayed ||
+    builder: (context, _) => ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: !readiness.hasDisplayed && readiness.waiting ? 72 : 0,
+      ),
+      child: Stack(
+        children: [
+          Opacity(
+            opacity: readiness.hasDisplayed || !readiness.waiting ? 1 : 0,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < widget.memberIds.length; i++)
+                  IgnorePointer(
+                    key: ValueKey(widget.memberIds[i]),
+                    ignoring:
+                        DateRevealScope.of(context)?.isTransitioning == true &&
                             !readiness.contextControllers.contains(
                               widget.memberIds[i],
-                            )),
-                    child: PageCompositionReadinessScope(
-                      controller: readiness,
-                      memberId: widget.memberIds[i],
-                      generation: readiness.generation,
-                      child: widget.children[i],
+                            ) ||
+                        readiness.waiting &&
+                            (!readiness.hasDisplayed ||
+                                !readiness.contextControllers.contains(
+                                  widget.memberIds[i],
+                                )),
+                    child: ExcludeSemantics(
+                      excluding:
+                          DateRevealScope.of(context)?.isTransitioning ==
+                                  true &&
+                              !readiness.contextControllers.contains(
+                                widget.memberIds[i],
+                              ) ||
+                          readiness.waiting &&
+                              (!readiness.hasDisplayed ||
+                                  !readiness.contextControllers.contains(
+                                    widget.memberIds[i],
+                                  )),
+                      child: Opacity(
+                        // Date controls remain usable, while records from the
+                        // previous context stay mounted but cannot be painted
+                        // under the newly selected date.
+                        opacity:
+                            readiness.waiting &&
+                                readiness.hasDisplayed &&
+                                replacingContext &&
+                                !readiness.contextControllers.contains(
+                                  widget.memberIds[i],
+                                )
+                            ? 0
+                            : 1,
+                        child: PageCompositionReadinessScope(
+                          controller: readiness,
+                          memberId: widget.memberIds[i],
+                          generation: readiness.generation,
+                          child: widget.children[i],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-        if (showProgress && readiness.waiting)
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: LinearProgressIndicator(minHeight: 2),
-          ),
-      ],
+          if (showProgress && !readiness.hasDisplayed && readiness.waiting)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: PageLoadingPlaceholder(),
+            ),
+          if (showProgress && readiness.hasDisplayed && readiness.waiting)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+        ],
+      ),
     ),
   );
 }

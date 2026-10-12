@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'package:task_app/core/modules/builtin_module_registration.dart';
 import 'package:task_app/core/modules/module_manifest.dart';
 import 'package:task_app/core/ui/ui_composition.dart';
 import 'package:task_app/core/ui/ui_registration.dart';
+import 'package:task_app/core/ui/page_first_frame.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
@@ -24,6 +26,10 @@ void main() {
     int index, {
     bool reduced = false,
     TextDirection direction = TextDirection.ltr,
+    int retainedPages = 1,
+    Map<String, Object?>? retentionKeys,
+    Widget? child,
+    bool deferUntilReady = false,
   }) => tester.pumpWidget(
     MaterialApp(
       home: MediaQuery(
@@ -34,7 +40,10 @@ void main() {
             body: WorkspacePageTransition(
               destinationId: 'page-$index',
               order: index,
-              child: Center(child: Text('Page $index')),
+              maxRetainedPages: retainedPages,
+              retentionKeys: retentionKeys,
+              deferUntilReady: deferUntilReady,
+              child: child ?? Center(child: Text('Page $index')),
             ),
           ),
         ),
@@ -135,6 +144,92 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('returning to a retained page preserves its real form state', (
+    tester,
+  ) async {
+    final mounts = <int, int>{};
+    Future<void> visit(int index) => show(
+      tester,
+      index,
+      retainedPages: 3,
+      child: _RetainedProbe(index: index, mounts: mounts),
+    );
+    await visit(0);
+    await tester.enterText(find.byType(TextField), 'unfinished draft');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await visit(1);
+    await tester.pumpAndSettle();
+    expect(find.text('unfinished draft'), findsNothing);
+    expect(find.text('unfinished draft', skipOffstage: false), findsOneWidget);
+    final hiddenField = find.byKey(
+      const ValueKey('retained-field-0'),
+      skipOffstage: false,
+    );
+    expect(TickerMode.valuesOf(tester.element(hiddenField)).enabled, isFalse);
+    expect(Focus.of(tester.element(hiddenField)).canRequestFocus, isFalse);
+    await visit(0);
+    expect(find.text('unfinished draft'), findsOneWidget);
+    expect(mounts, {0: 1, 1: 1});
+    await tester.pumpAndSettle();
+    expect(TickerMode.valuesOf(tester.element(hiddenField)).enabled, isTrue);
+  });
+
+  testWidgets(
+    'retention is bounded and evicts the least recently visited page',
+    (tester) async {
+      final mounts = <int, int>{};
+      Future<void> visit(int index) async {
+        await show(
+          tester,
+          index,
+          retainedPages: 2,
+          child: _RetainedProbe(index: index, mounts: mounts),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await visit(0);
+      await visit(1);
+      await visit(0);
+      await visit(2);
+      expect(
+        find.byType(_RetainedProbe, skipOffstage: false),
+        findsNWidgets(2),
+      );
+      expect(mounts, {0: 1, 1: 1, 2: 1});
+      await visit(1);
+      expect(mounts[1], 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('module and layout identities invalidate retained widget state', (
+    tester,
+  ) async {
+    final mounts = <int, int>{};
+    Future<void> visit(int index, Map<String, Object?> keys) async {
+      await show(
+        tester,
+        index,
+        retainedPages: 3,
+        retentionKeys: keys,
+        child: _RetainedProbe(index: index, mounts: mounts),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await visit(0, {'page-0': 'generation-1', 'page-1': 'generation-1'});
+    await visit(1, {'page-0': 'generation-1', 'page-1': 'generation-1'});
+    await visit(1, {'page-0': 'generation-2', 'page-1': 'generation-1'});
+    expect(find.byType(_RetainedProbe, skipOffstage: false), findsOneWidget);
+    await visit(0, {'page-0': 'generation-2', 'page-1': 'generation-1'});
+    expect(mounts[0], 2);
+    await visit(0, {'page-0': 'generation-2'});
+    expect(find.byType(_RetainedProbe, skipOffstage: false), findsOneWidget);
+    await visit(0, {'page-0': 'generation-3'});
+    expect(mounts[0], 3);
+  });
+
   testWidgets(
     'different header heights do not shift the incoming body vertically',
     (tester) async {
@@ -163,6 +258,64 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('first visit prepares content before sliding without a spinner', (
+    tester,
+  ) async {
+    final ready = Completer<void>();
+    await show(tester, 0, retainedPages: 3, deferUntilReady: true);
+    await tester.pumpAndSettle();
+    await show(
+      tester,
+      1,
+      retainedPages: 3,
+      deferUntilReady: true,
+      child: _FirstFrameProbe(ready: ready.future),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(find.text('Page 0'), findsOneWidget);
+    expect(find.text('Prepared content'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(tester.getCenter(find.text('Page 0')).dx, 400);
+    ready.complete();
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('Prepared content'), findsOneWidget);
+    await show(tester, 0, retainedPages: 3, deferUntilReady: true);
+    await tester.pumpAndSettle();
+    await show(
+      tester,
+      1,
+      retainedPages: 3,
+      deferUntilReady: true,
+      child: _FirstFrameProbe(ready: ready.future),
+    );
+    expect(find.text('Prepared content'), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('late readiness cannot switch back after a rapid return', (
+    tester,
+  ) async {
+    final ready = Completer<void>();
+    await show(tester, 0, retainedPages: 3, deferUntilReady: true);
+    await tester.pumpAndSettle();
+    await show(
+      tester,
+      1,
+      retainedPages: 3,
+      deferUntilReady: true,
+      child: _FirstFrameProbe(ready: ready.future),
+    );
+    await tester.pump(const Duration(milliseconds: 40));
+    await show(tester, 0, retainedPages: 3, deferUntilReady: true);
+    ready.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Page 0'), findsOneWidget);
+    expect(find.text('Prepared content'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   group('real workspace', () {
     late AppDatabase db;
@@ -228,6 +381,9 @@ void main() {
             .dx;
         await tester.tap(nav('第二页'));
         await tester.pump();
+        // First-frame readiness starts this initial visit after paint. Let the
+        // ticker establish its baseline before measuring the slide itself.
+        await tester.pump();
         await tester.pump(const Duration(milliseconds: 90));
         Finder region(String name, String label) => find.descendant(
           of: find.byKey(ValueKey(name)),
@@ -281,6 +437,65 @@ void main() {
       },
     );
   });
+}
+
+class _FirstFrameProbe extends StatefulWidget {
+  const _FirstFrameProbe({required this.ready});
+  final Future<void> ready;
+
+  @override
+  State<_FirstFrameProbe> createState() => _FirstFrameProbeState();
+}
+
+class _FirstFrameProbeState extends State<_FirstFrameProbe> {
+  bool ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.ready.then((_) {
+      if (mounted) setState(() => ready = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => PageFirstFrameGate(
+    blocked: !ready,
+    child: const Center(child: Text('Prepared content')),
+  );
+}
+
+class _RetainedProbe extends StatefulWidget {
+  const _RetainedProbe({required this.index, required this.mounts});
+  final int index;
+  final Map<int, int> mounts;
+
+  @override
+  State<_RetainedProbe> createState() => _RetainedProbeState();
+}
+
+class _RetainedProbeState extends State<_RetainedProbe> {
+  final controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.mounts.update(widget.index, (value) => value + 1, ifAbsent: () => 1);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: TextField(
+      key: ValueKey('retained-field-${widget.index}'),
+      controller: controller,
+    ),
+  );
 }
 
 class _TransitionModule implements AppModule {

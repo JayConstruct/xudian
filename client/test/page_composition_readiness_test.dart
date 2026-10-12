@@ -34,6 +34,13 @@ void main() {
         ),
       );
       await show('date-1');
+      expect(find.text('正在加载页面…'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 501));
+      expect(find.text('正在加载页面…'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(PageCompositionReadyGroup)).height,
+        greaterThanOrEqualTo(72),
+      );
       final controller = scopes['a']!.controller;
       expect(controller.hasDisplayed, false);
       scopes['a']!.complete(owners['a']!);
@@ -44,6 +51,7 @@ void main() {
       await tester.pump();
       expect(controller.hasDisplayed, true);
       expect(controller.waiting, false);
+      expect(find.text('正在加载页面…'), findsNothing);
       await tester.tap(find.text('section-a'));
       expect(taps, 1);
       final retained = tester.state(find.byType(_AsyncMember).first);
@@ -52,6 +60,18 @@ void main() {
       await show('date-2');
       expect(controller.hasDisplayed, true);
       expect(controller.waiting, true);
+      final recordsOpacity = tester.widget<Opacity>(
+        find.descendant(
+          of: find.byKey(const ValueKey('b')),
+          matching: find.byType(Opacity),
+        ),
+      );
+      expect(
+        recordsOpacity.opacity,
+        0,
+        reason:
+            'Previous-date records must not be painted while new records load',
+      );
       expect(tester.state(find.byType(_AsyncMember).first), same(retained));
       await tester.tap(find.text('section-a'));
       await tester.tap(find.text('section-b'), warnIfMissed: false);

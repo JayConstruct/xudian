@@ -3,14 +3,20 @@ import 'dart:async';
 /// Bounded idle backoff for the message-only native bridge.
 /// Every Dart-to-JavaScript message wakes the scheduler, including host replies.
 class WorkerPollScheduler {
-  WorkerPollScheduler({required this.drain, required this.hasPending});
+  WorkerPollScheduler({
+    required this.drain,
+    required this.hasPending,
+    Zone? ownerZone,
+  }) : _zone = ownerZone ?? Zone.current;
 
   final bool Function() drain;
   final bool Function() hasPending;
   // Invocations may post from a different zone than worker construction (for
   // example Flutter's fake widget clock). Keep the native pump in its owner zone.
-  final Zone _zone = Zone.current;
-  static const minimum = Duration(milliseconds: 8);
+  final Zone _zone;
+  // An await-heavy first render may cross this bridge dozens of times. Keep
+  // the reply path responsive; empty polls still back off to the idle ceiling.
+  static const minimum = Duration(milliseconds: 1);
   static const maximumBusy = Duration(milliseconds: 32);
   static const maximumIdle = Duration(milliseconds: 64);
   Timer? _timer;

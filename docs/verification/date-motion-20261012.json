@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-12",
+  "platform": "Android x86_64 emulator",
+  "buildNumber": 96,
+  "installedVersionCode": 4096,
+  "apkSha256": "a988afc752b291c390a3ff9d29a419241ea2e06704b9ddf72e01ba693e5ff7f9",
+  "installedApkSha256": "a988afc752b291c390a3ff9d29a419241ea2e06704b9ddf72e01ba693e5ff7f9",
+  "sourceFingerprint": "154c11ff288c29842f436c962b0d716e1eec5fdbca702a540371fe902004bac2",
+  "dataPreserved": true,
+  "flutterNonNetworkTestsPassed": 914,
+  "selectedEmulatorUpdateTestsPassed": 38,
+  "staticAnalysis": "passed",
+  "architectureFilesChecked": 115,
+  "repositoryTrackedFilesChecked": 554,
+  "behavior": [
+    "Only changed Chinese date-title segments roll vertically for 280ms; unchanged month remains stationary",
+    "The five-day band slides for 320ms to center selection; overlapping dates retain Elements",
+    "Horizontal drag selects a declared date without interfering with vertical page scrolling; narrow or enlarged text falls back to horizontal browsing",
+    "Date navigation remains visible and usable during queries; old date-specific summaries, records and semantics stay hidden with State retained",
+    "Latest date intent wins across header, drag, header interactions; stale results and queued events cannot rewind selection",
+    "Reduced-motion and high-contrast changes finish animations immediately"
+  ],
+  "manualChecks": [
+    "Release emulator screenshots confirm real Chinese and numeric title glyphs",
+    "Screen recording confirms partial title motion and uninterrupted moving date band",
+    "Header next/previous and manual horizontal swipe select the matching date"
+  ],
+  "initialFindingsResolved": [
+    "Build95 recording exposed date navigation hidden with its stale tree; navigation is retained separately from date-specific records",
+    "Delayed-query integration exposed an outdated queued drag overwriting a later header date; queued events now carry context and intent revisions"
+  ],
+  "limits": [
+    "Existing host_network_test excluded after earlier independent localhost delays; root cause remains unresolved and networking is unchanged",
+    "Recording and adb screenshots verify appearance, not frame latency or FPS",
+    "Only module-declared queried dates and counts are shown; first query still performs asynchronous work",
+    "Android ARM and Windows runtime and performance not measured"
+  ],
+  "artifactsDirectory": "dist/verification/date-motion-20261012"
+}

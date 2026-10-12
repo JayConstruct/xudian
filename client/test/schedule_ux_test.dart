@@ -1045,11 +1045,13 @@ void main() {
           );
           await tester.tap(dockLabel('不支持 AI'));
           await _settle(tester);
+          await tester.pumpAndSettle();
           expect(find.text('没有服务工具的页面'), findsOneWidget);
           expect(assistant, findsNothing);
           await _expectNoHeaderAssistant(tester);
           await tester.tap(dockLabel('更多'));
           await _settle(tester);
+          await tester.pumpAndSettle();
           expect(assistant, findsNothing);
           await _expectNoHeaderAssistant(tester);
           await tester.tap(dockLabel('课表'));

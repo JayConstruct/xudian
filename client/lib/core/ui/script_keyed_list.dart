@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../app/app_motion.dart';
+import 'ui_motion.dart';
 
 class ScriptListItem {
   const ScriptListItem({required this.id, required this.builder});

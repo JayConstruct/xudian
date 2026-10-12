@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../modules/module_registry.dart';
-import '../../app/design_system.dart';
+import 'ui_surfaces.dart';
 import '../../features/settings/ui_layout.dart';
 import '../../features/settings/ui_layout_page.dart';
 import 'ui_annotation.dart';
@@ -15,6 +15,9 @@ import 'page_context_validation.dart';
 import 'module_detail_page.dart';
 import 'page_runtime_context.dart';
 import 'page_composition_readiness.dart';
+import 'page_first_frame.dart';
+import 'date_reveal.dart';
+import 'date_navigation_intent.dart';
 import 'workspace_header.dart';
 import 'temporal_input.dart';
 
@@ -62,6 +65,74 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
   bool ownsRuntimeContext = false;
   PageContext effectiveContext = const PageContext();
   WorkspaceHeaderController? dateHeader;
+  bool firstFrameBlocked = false;
+  final dateReveal = DateRevealController();
+  final dateReadiness = <Object, bool>{};
+  bool dateContentReady = true;
+  bool dateTransitionEnabled = false;
+  int dateVisualRevision = 0;
+  Offset? datePointer;
+  DateTime? datePointerTime;
+  bool dateSwipe = false;
+  String? todayDate;
+
+  void _reportTodayDate(String date) {
+    try {
+      validateRuntimeContextPatch({'selectedDate': date});
+    } on FormatException {
+      return;
+    }
+    if (mounted && todayDate != date) setState(() => todayDate = date);
+  }
+
+  void _forgetDateReadiness(Object owner) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      dateReadiness.remove(owner);
+      if (!dateContentReady && dateReadiness.values.every((value) => value)) {
+        setState(() => dateContentReady = true);
+      }
+    });
+  }
+
+  void _dateReadinessChanged(Object owner, int revision, bool ready) {
+    if (!mounted || revision != runtimeRevision) return;
+    dateReadiness[owner] = ready;
+    // Ordinary task edits already have their own feedback. Only a date intent
+    // freezes this viewport; section queries alone must not start a wave.
+    if (dateContentReady && !dateReveal.isTransitioning) return;
+    final complete = dateReadiness.values.every((value) => value);
+    if (complete != dateContentReady) {
+      setState(() => dateContentReady = complete);
+    }
+  }
+
+  void _prepareDate(String next, Rect? bounds) {
+    final previous = effectiveContext.values['selectedDate'];
+    if (!dateTransitionEnabled || previous is! String || previous == next) {
+      return;
+    }
+    final pointerRecent =
+        datePointerTime != null &&
+        DateTime.now().difference(datePointerTime!) <
+            const Duration(seconds: 1);
+    if (dateContentReady || dateReveal.isTransitioning) {
+      dateReveal.prepare(
+        originGlobal: bounds?.center ?? (pointerRecent ? datePointer : null),
+        initialRadius: bounds == null ? 24 : bounds.shortestSide / 2,
+        swipe: bounds == null && pointerRecent && dateSwipe,
+        direction: next.compareTo(previous) >= 0 ? 1 : -1,
+      );
+    }
+    dateContentReady = false;
+    dateVisualRevision++;
+    dateReadiness.updateAll((_, _) => false);
+  }
+
+  // Runtime date changes must not suspend or remount an existing page while
+  // validating the same persistent references. Retry must target this same key.
+  PageContext get validationContext =>
+      PageContext(values: withoutRuntimePageContext(effectiveContext.values));
 
   Future<void> _dateHeaderEvent(Object? raw) async {
     if (!mounted || raw is! Map) return;
@@ -91,22 +162,30 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
           next = formatInputDate(shifted);
         }
       case 'date.today':
-        next = formatInputDate(DateTime.now());
+        next = todayDate ?? formatInputDate(DateTime.now());
     }
     if (mounted &&
         next != null &&
         effectiveContext.values['selectedDate'] == selected) {
-      _updateRuntimeContext({'selectedDate': next});
+      _updateRuntimeContext(
+        {'selectedDate': next},
+        originBounds: raw['originBounds'] is Rect
+            ? raw['originBounds'] as Rect
+            : null,
+      );
     }
   }
 
-  bool _updateRuntimeContext(Map<String, Object?> raw) {
+  bool _updateRuntimeContext(Map<String, Object?> raw, {Rect? originBounds}) {
     final patch = validateRuntimeContextPatch(raw);
     if (!mounted ||
         patch.entries.every(
           (entry) => runtimeValues[entry.key] == entry.value,
         )) {
       return false;
+    }
+    if (patch['selectedDate'] case final String next) {
+      _prepareDate(next, originBounds);
     }
     setState(() {
       runtimeValues = Map.unmodifiable({...runtimeValues, ...patch});
@@ -133,6 +212,7 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
       // An explicit navigation date supersedes a prior local choice, while
       // keeping the mounted composition, its drafts and its scroll position.
       // Children that inherit runtime context must never rewrite its owner.
+      if (selectedDate is String) _prepareDate(selectedDate, null);
       runtimeValues = Map.unmodifiable(
         {...runtimeValues, 'selectedDate': selectedDate}
           ..removeWhere((key, value) => key == 'selectedDate' && value == null),
@@ -149,11 +229,20 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
   void dispose() {
     dateHeader?.clear(this);
     widget.registry.removeListener(_changed);
+    dateReveal.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final body = _buildPage(context);
+    return widget.path.isEmpty
+        ? PageFirstFrameGate(blocked: firstFrameBlocked, child: body)
+        : body;
+  }
+
+  Widget _buildPage(BuildContext context) {
+    firstFrameBlocked = false;
     final inheritedRuntime = PageRuntimeContextScope.maybeOf(context);
     final ownsRuntime = widget.path.isEmpty || inheritedRuntime == null;
     ownsRuntimeContext = ownsRuntime;
@@ -161,6 +250,7 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
         '${widget.pageId}/${widget.mountPath.join('/')}/${widget.pageContext.navigationIdentity}';
     if (ownsRuntime && runtimeOwner != owner) {
       runtimeOwner = owner;
+      todayDate = null;
       runtimeValues = const {};
       runtimeRevision++;
     }
@@ -180,6 +270,12 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
         const UiMountDiagnostic(UiMountIssue.targetUnavailable, '页面不可用，配置已保留'),
       );
     }
+    dateTransitionEnabled =
+        ownsRuntime &&
+        widget.path.isEmpty &&
+        !widget.inlineContent &&
+        page.container &&
+        page.headerMode == 'date';
     if (!effectiveContext.satisfies(page.requiredContext)) {
       return _failure(
         UiMountDiagnostic(
@@ -188,11 +284,12 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
         ),
       );
     }
-    if (effectiveContext.taskId != null ||
-        effectiveContext.projectId != null ||
-        (effectiveContext.values['entities'] as List? ?? []).isNotEmpty) {
-      final validity = ref.watch(pageContextValidityProvider(effectiveContext));
+    if (validationContext.values.isNotEmpty) {
+      final validity = ref.watch(
+        pageContextValidityProvider(validationContext),
+      );
       if (validity.isLoading) {
+        firstFrameBlocked = true;
         return const Center(
           child: NativeUi(child: CircularProgressIndicator()),
         );
@@ -209,7 +306,7 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
         return _failure(
           const UiMountDiagnostic(
             UiMountIssue.invalidContext,
-            '上下文对象不存在或任务与项目不匹配，配置已保留',
+            '上下文引用的对象不存在或不可用，配置已保留',
           ),
         );
       }
@@ -218,6 +315,7 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
     final lease = header?.lease;
     final ownsDateHeader =
         ownsRuntime &&
+        TickerMode.valuesOf(context).enabled &&
         widget.path.isEmpty &&
         !widget.inlineContent &&
         page.headerMode == 'date' &&
@@ -231,6 +329,7 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
         lease!,
         this,
         effectiveContext.values['selectedDate'],
+        todayDate: todayDate,
         dispatch: _dateHeaderEvent,
       );
     } else {
@@ -268,7 +367,8 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
         page.initializesRuntimeContext &&
         page.headerMode == 'date' &&
         effectiveContext.values['selectedDate'] == null;
-    return PageRuntimeContextScope(
+    firstFrameBlocked = initializesDate;
+    final body = PageRuntimeContextScope(
       values: values,
       revision: ownsRuntime ? runtimeRevision : inheritedRuntime.revision,
       currentValues: ownsRuntime
@@ -278,6 +378,11 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
           ? () => runtimeRevision
           : inheritedRuntime.currentRevision,
       update: ownsRuntime ? _updateRuntimeContext : inheritedRuntime.update,
+      dateTodayInMenu:
+          ownsDateHeader || inheritedRuntime?.dateTodayInMenu == true,
+      reportTodayDate: ownsRuntime
+          ? _reportTodayDate
+          : inheritedRuntime.reportTodayDate,
       child: PageStorage(
         bucket: position.bucket,
         child: UiAnnotation(
@@ -318,6 +423,36 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
                 else
                   Expanded(child: _slot(page, slot, profile)),
             ],
+          ),
+        ),
+      ),
+    );
+    if (!dateTransitionEnabled) return body;
+    return DateNavigationIntentScope(
+      revision: runtimeRevision,
+      reportReadiness: _dateReadinessChanged,
+      forgetReadiness: _forgetDateReadiness,
+      child: DateRevealScope(
+        controller: dateReveal,
+        child: Listener(
+          onPointerDown: (event) {
+            datePointer = event.position;
+            datePointerTime = DateTime.now();
+            dateSwipe = false;
+          },
+          onPointerMove: (event) {
+            final distance = event.position - (datePointer ?? event.position);
+            if (distance.dx.abs() > 8 &&
+                distance.dx.abs() > distance.dy.abs()) {
+              dateSwipe = true;
+            }
+          },
+          child: DateReveal(
+            controller: dateReveal,
+            revision: dateVisualRevision,
+            ready: dateContentReady && !initializesDate,
+            blockInteraction: false,
+            child: body,
           ),
         ),
       ),
@@ -602,7 +737,7 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
                       NativeUi(
                         child: TextButton(
                           onPressed: () => ref.invalidate(
-                            pageContextValidityProvider(effectiveContext),
+                            pageContextValidityProvider(validationContext),
                           ),
                           child: const Text('重试'),
                         ),

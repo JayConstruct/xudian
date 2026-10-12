@@ -61,6 +61,7 @@ class WorkspaceHeaderController extends ChangeNotifier {
     WorkspaceHeaderLease source,
     Object owner,
     Object? date, {
+    String? todayDate,
     Future<void> Function(Object?)? dispatch,
   }) {
     if (source.mode != 'date' ||
@@ -72,6 +73,7 @@ class WorkspaceHeaderController extends ChangeNotifier {
     if (identical(content?.owner, owner) &&
         content?.spec['title'] == title &&
         content?.spec['selectedDate'] == date &&
+        content?.spec['todayDate'] == todayDate &&
         (content?.spec['dateNavigation'] == true) == (dispatch != null)) {
       return;
     }
@@ -84,6 +86,7 @@ class WorkspaceHeaderController extends ChangeNotifier {
     _publish(source, owner, {
       'title': title,
       'selectedDate': date,
+      'todayDate': ?todayDate,
       if (dispatch != null) 'dateNavigation': true,
     }, dispatch ?? (_) async {});
   }

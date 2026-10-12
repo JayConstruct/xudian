@@ -178,6 +178,7 @@ export async function render({event,context}) {
       expect(find.text('来自 daily'), findsOneWidget);
       await tester.tap(dockLabel('更多'));
       await settle(tester);
+      await tester.pumpAndSettle();
       expect(find.byType(MoreWorkspacePage), findsOneWidget);
       expect(
         find.byKey(const ValueKey('mobile-navigation-assistant')),

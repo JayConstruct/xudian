@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import '../contracts/json_values.dart';
 import '../modules/module_registry.dart';
 import '../ui/ui_composition.dart';
@@ -9,6 +7,7 @@ import '../../features/settings/ui_layout.dart';
 import 'collection_store.dart';
 import 'module_host.dart';
 import 'module_package.dart';
+import 'host_settings_resource.dart';
 
 /// Protected host controls exposed through the same authorization and reviewed
 /// plan protocol as script services. No AI/task business controller is involved.
@@ -17,6 +16,8 @@ void registerHostControlServices(
   ModuleRegistry registry, {
   required bool Function() hasDirtyLayout,
 }) {
+  final settings = HostSettingsResource(host.store);
+  host.store.registerNativeResource(settings);
   String stamp() => canonicalJson({
     'modules': [
       for (final m in registry.modules)
@@ -61,22 +62,7 @@ void registerHostControlServices(
     String key,
     Map<String, Object?> fallback,
     SnapshotSession session,
-  ) async {
-    final rows = await host.store.sql(
-      'SELECT value FROM app_settings WHERE key=?',
-      [key],
-    );
-    final raw = rows.isEmpty ? null : rows.single['value'] as String;
-    if (session.nativeReads.containsKey(key) &&
-        session.nativeReads[key] != raw) {
-      throw StateError('Host setting changed while preparing');
-    }
-    session.nativeReads[key] = raw;
-    final staged = session
-        .writes[RecordKey('app.host', 'host-controls', 'settings', key).key];
-    if (staged != null) return object(object(staged['value'])['values']);
-    return raw == null ? fallback : object(jsonDecode(raw));
-  }
+  ) => settings.read(key, fallback, session);
 
   void write(
     String key,
@@ -85,17 +71,7 @@ void registerHostControlServices(
     SnapshotSession session,
   ) {
     if (canonicalJson(before) == canonicalJson(after)) return;
-    final record = RecordKey('app.host', 'host-controls', 'settings', key);
-    final existing = session.writes[record.key];
-    session.writes[record.key] = {
-      'moduleId': 'app.host',
-      'space': 'host-controls',
-      'collection': 'settings',
-      'id': key,
-      'before':
-          existing?['before'] ?? freezeJson({'id': key, 'values': before}),
-      'value': freezeJson({'id': key, 'values': after}),
-    };
+    settings.stage(key, before, after, session);
     session.approvals.add({
       'hostRegistry': stamp(),
       'layout': key == UiLayoutController.storageKey,

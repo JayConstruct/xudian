@@ -41,6 +41,8 @@ class PageRuntimeContextScope extends InheritedWidget {
     required this.update,
     required this.currentValues,
     required this.currentRevision,
+    this.dateTodayInMenu = false,
+    this.reportTodayDate,
     required super.child,
   });
   final Map<String, Object?> values;
@@ -48,11 +50,15 @@ class PageRuntimeContextScope extends InheritedWidget {
   final Map<String, Object?> Function() currentValues;
   final int Function() currentRevision;
   final bool Function(Map<String, Object?> patch) update;
+  final bool dateTodayInMenu;
+  final void Function(String date)? reportTodayDate;
   static PageRuntimeContextScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PageRuntimeContextScope>();
   static PageRuntimeContextScope? read(BuildContext context) =>
       context.getInheritedWidgetOfExactType<PageRuntimeContextScope>();
   @override
   bool updateShouldNotify(PageRuntimeContextScope oldWidget) =>
-      revision != oldWidget.revision || values != oldWidget.values;
+      revision != oldWidget.revision ||
+      values != oldWidget.values ||
+      dateTodayInMenu != oldWidget.dateTodayInMenu;
 }
