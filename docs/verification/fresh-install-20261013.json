@@ -1,0 +1,287 @@
+{
+  "status": "passed",
+  "startedAt": "2026-10-12T17:41:43.312827+00:00",
+  "serial": "emulator-5556",
+  "androidUser": 0,
+  "adbHost": "127.0.0.1",
+  "adbPort": "5037",
+  "apk": "dist/app-release-assets/v0.2.0-beta.2/app-x86_64-release.apk",
+  "expectedModules": [
+    {
+      "id": "app.schedule",
+      "name": "大学课表",
+      "version": "1.11.0"
+    },
+    {
+      "id": "app.import.shiguang",
+      "name": "拾光教务导入兼容",
+      "version": "1.5.0"
+    }
+  ],
+  "steps": [
+    {
+      "name": "targetUserInitiallyUninstalled",
+      "passed": true,
+      "packageList": ""
+    },
+    {
+      "name": "apkFirstInstalled",
+      "passed": true,
+      "adbOutput": "Performing Streamed Install\nSuccess",
+      "installedApkSha256": "16db4cacb23651afb0fc12756ec30e0798a5dcee90b93018e1d2a203afdc1eed"
+    },
+    {
+      "name": "initialTodayEmpty",
+      "passed": true
+    },
+    {
+      "name": "expectedStoreVersionReady",
+      "passed": true,
+      "actualVersion": "1.5.0",
+      "refreshCount": 0
+    },
+    {
+      "name": "dependencyReviewVerified",
+      "passed": true,
+      "modules": [
+        {
+          "id": "app.schedule",
+          "name": "大学课表",
+          "version": "1.11.0",
+          "sha256": "eeb9c52a26aa28d4448d7c530679a68b7a5b8ce11f0b18c876bd1868243dbc77",
+          "unsigned": true,
+          "newPermissions": [
+            "新增权限：ui、files、clock.today"
+          ],
+          "allPermissions": [
+            "全部权限：ui、files、clock.today"
+          ]
+        },
+        {
+          "id": "app.import.shiguang",
+          "name": "拾光教务导入兼容",
+          "version": "1.5.0",
+          "sha256": "c251c4fdda2e6dcf8ecdebc0fd2a1ee8f0f86cd7b481c862a00abd46120e096d",
+          "unsigned": true,
+          "newPermissions": [
+            "新增权限：ui、files、browser.capture、services.query:app.schedule/schedule.query.timetables@1、services.command:app.schedule/schedule.import.prepare@1"
+          ],
+          "allPermissions": [
+            "全部权限：ui、files、browser.capture、services.query:app.schedule/schedule.query.timetables@1、services.command:app.schedule/schedule.import.prepare@1"
+          ]
+        }
+      ],
+      "visibleReviewLines": [
+        "SHA-256：c251c4fdda2e6dcf8ecdebc0fd2a1ee8f0f86cd7b481c862a00abd46120e096d",
+        "SHA-256：eeb9c52a26aa28d4448d7c530679a68b7a5b8ce11f0b18c876bd1868243dbc77",
+        "全部权限：ui、files、browser.capture、services.query:app.schedule/schedule.query.timetables@1、services.command:app.schedule/schedule.import.prepare@1",
+        "全部权限：ui、files、clock.today",
+        "关闭",
+        "取消",
+        "大学课表 · 1.11.0",
+        "拾光教务导入兼容 · 1.5.0",
+        "按依赖顺序统一执行；失败时恢复原版本、数据和启用状态。",
+        "按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。",
+        "操作：安装并启用",
+        "新增权限：ui、files、browser.capture、services.query:app.schedule/schedule.query.timetables@1、services.command:app.schedule/schedule.import.prepare@1",
+        "新增权限：ui、files、clock.today",
+        "未签名包；摘要验证不代表发布者签名",
+        "来源：JayConstruct/xudian",
+        "确认安装",
+        "确认模块安装计划",
+        "管理学期、作息、课程、调课记录与多个课表，支持导入和备份。"
+      ]
+    },
+    {
+      "name": "modulesInstalledFromStore",
+      "passed": true
+    },
+    {
+      "name": "05-modules-enabled",
+      "passed": true,
+      "moduleRows": {
+        "app.import.shiguang": "拾光教务导入兼容\n按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。\n1.5.0 · 已启用",
+        "app.schedule": "大学课表\n管理学期、作息、课程、调课记录与多个课表，支持导入和备份。\n1.11.0 · 已启用"
+      }
+    },
+    {
+      "name": "resumeOriginalFirstInstallationVerified",
+      "passed": true,
+      "installedApkSha256": "16db4cacb23651afb0fc12756ec30e0798a5dcee90b93018e1d2a203afdc1eed",
+      "previousAttemptReport": "fresh-install-attempt-01.json"
+    },
+    {
+      "name": "resumeInstalledModulesWithoutRelaunch",
+      "passed": true
+    },
+    {
+      "name": "resume-installed-current-enabled",
+      "passed": true,
+      "moduleRows": {
+        "app.import.shiguang": "拾光教务导入兼容\n按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。\n1.5.0 · 已启用",
+        "app.schedule": "大学课表\n管理学期、作息、课程、调课记录与多个课表，支持导入和备份。\n1.11.0 · 已启用"
+      }
+    },
+    {
+      "name": "installationNoticeConsumedWithoutRestart",
+      "passed": true
+    },
+    {
+      "name": "scheduleOpenedImmediatelyAfterInstall",
+      "passed": true
+    },
+    {
+      "name": "importerSettingsOpenedImmediatelyAfterInstall",
+      "passed": true
+    },
+    {
+      "name": "agendaOpenedImmediatelyAfterInstall",
+      "passed": true
+    },
+    {
+      "name": "06-modules-enabled-after-restart",
+      "passed": true,
+      "moduleRows": {
+        "app.import.shiguang": "拾光教务导入兼容\n按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。\n1.5.0 · 已启用",
+        "app.schedule": "大学课表\n管理学期、作息、课程、调课记录与多个课表，支持导入和备份。\n1.11.0 · 已启用"
+      }
+    },
+    {
+      "name": "scheduleOpenedAfterRestart",
+      "passed": true
+    },
+    {
+      "name": "importerSettingsOpenedAfterRestart",
+      "passed": true
+    },
+    {
+      "name": "agendaOpenedAfterRestart",
+      "passed": true
+    },
+    {
+      "name": "installedApkUnchangedDuringModuleInstallation",
+      "passed": true,
+      "installedApkSha256": "16db4cacb23651afb0fc12756ec30e0798a5dcee90b93018e1d2a203afdc1eed"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "01-today-empty",
+      "xml": "01-today-empty.xml",
+      "screenshot": "01-today-empty.png"
+    },
+    {
+      "name": "01-initial-module-manager",
+      "xml": "01-initial-module-manager.xml",
+      "screenshot": "01-initial-module-manager.png"
+    },
+    {
+      "name": "02-store-importer",
+      "xml": "02-store-importer.xml",
+      "screenshot": "02-store-importer.png"
+    },
+    {
+      "name": "03-install-review-00",
+      "xml": "03-install-review-00.xml",
+      "screenshot": "03-install-review-00.png"
+    },
+    {
+      "name": "04-store-install-complete",
+      "xml": "04-store-install-complete.xml",
+      "screenshot": "04-store-install-complete.png"
+    },
+    {
+      "name": "05-modules-enabled-manager-00",
+      "xml": "05-modules-enabled-manager-00.xml",
+      "screenshot": "05-modules-enabled-manager-00.png"
+    },
+    {
+      "name": "failure-ui",
+      "xml": "failure-ui.xml",
+      "screenshot": "failure-ui.png"
+    },
+    {
+      "name": "attempt-02-resume-installed-current-enabled-manager-00",
+      "xml": "attempt-02-resume-installed-current-enabled-manager-00.xml",
+      "screenshot": "attempt-02-resume-installed-current-enabled-manager-00.png"
+    },
+    {
+      "name": "attempt-02-installation-action-before-open",
+      "xml": "attempt-02-installation-action-before-open.xml",
+      "screenshot": "attempt-02-installation-action-before-open.png"
+    },
+    {
+      "name": "attempt-02-installation-notice-consumed",
+      "xml": "attempt-02-installation-notice-consumed.xml",
+      "screenshot": "attempt-02-installation-notice-consumed.png"
+    },
+    {
+      "name": "attempt-02-schedule-immediately-after-install",
+      "xml": "attempt-02-schedule-immediately-after-install.xml",
+      "screenshot": "attempt-02-schedule-immediately-after-install.png"
+    },
+    {
+      "name": "attempt-02-importer-immediately-after-install",
+      "xml": "attempt-02-importer-immediately-after-install.xml",
+      "screenshot": "attempt-02-importer-immediately-after-install.png"
+    },
+    {
+      "name": "attempt-02-agenda-immediately-after-install",
+      "xml": "attempt-02-agenda-immediately-after-install.xml",
+      "screenshot": "attempt-02-agenda-immediately-after-install.png"
+    },
+    {
+      "name": "attempt-02-06-modules-enabled-after-restart-manager-00",
+      "xml": "attempt-02-06-modules-enabled-after-restart-manager-00.xml",
+      "screenshot": "attempt-02-06-modules-enabled-after-restart-manager-00.png"
+    },
+    {
+      "name": "attempt-02-schedule-after-restart",
+      "xml": "attempt-02-schedule-after-restart.xml",
+      "screenshot": "attempt-02-schedule-after-restart.png"
+    },
+    {
+      "name": "attempt-02-importer-after-restart",
+      "xml": "attempt-02-importer-after-restart.xml",
+      "screenshot": "attempt-02-importer-after-restart.png"
+    },
+    {
+      "name": "attempt-02-agenda-after-restart",
+      "xml": "attempt-02-agenda-after-restart.xml",
+      "screenshot": "attempt-02-agenda-after-restart.png"
+    }
+  ],
+  "attempt": 2,
+  "apkSha256": "16db4cacb23651afb0fc12756ec30e0798a5dcee90b93018e1d2a203afdc1eed",
+  "elapsedSeconds": 161.1,
+  "storeVersionWait": {
+    "expectedVersion": "1.5.0",
+    "observations": [
+      {
+        "elapsedSeconds": 2.05,
+        "label": "拾光教务导入兼容\n推荐\n按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。\n学习 · JayConstruct\n版本：1.5.0 · 可安装"
+      }
+    ],
+    "refreshes": []
+  },
+  "attemptStartedAt": "2026-10-12T17:49:29.385784+00:00",
+  "previousFailure": "RuntimeError: UI item missing: 创建课表或导入 JSON 备份后开始使用; visible: ['前一天', '10月12日 周一', '后一天', '页面菜单', '0 项待办', '日期选择，左右滑动切换日期', '0 待办, 2026-10-10\\n周六\\n10\\n0 待办', '0 待办, 2026-10-11\\n周日\\n11\\n0 待办', '今天，0 待办, 2026-10-12\\n今天\\n12\\n0 待办', '0 待办, 2026-10-13\\n周二\\n13\\n0 待办', '0 待办, 2026-10-14\\n周三\\n14\\n0 待办', '今日课程  0\\n今天没有课程', '查看课表', '待办事项  0\\n暂无今天待办或逾期任务\\n把今天想做的事记下来。', '更多', '课表', '日程', '模块安装完成', '打开模块', 'AI']",
+  "previousAttemptError": "RuntimeError: UI item missing: 创建课表或导入 JSON 备份后开始使用; visible: ['前一天', '10月12日 周一', '后一天', '页面菜单', '0 项待办', '日期选择，左右滑动切换日期', '0 待办, 2026-10-10\\n周六\\n10\\n0 待办', '0 待办, 2026-10-11\\n周日\\n11\\n0 待办', '今天，0 待办, 2026-10-12\\n今天\\n12\\n0 待办', '0 待办, 2026-10-13\\n周二\\n13\\n0 待办', '0 待办, 2026-10-14\\n周三\\n14\\n0 待办', '今日课程  0\\n今天没有课程', '查看课表', '待办事项  0\\n暂无今天待办或逾期任务\\n把今天想做的事记下来。', '更多', '课表', '日程', '模块安装完成', '打开模块', 'AI']",
+  "previousAttemptReport": "fresh-install-attempt-01.json",
+  "firstInstallationAttemptReport": "fresh-install-attempt-01.json",
+  "appRelease": {
+    "tag": "v0.2.0-beta.2",
+    "sourceCommit": "4703f0cf7b751c82e29c1fdbca80c7c6a4d0b88f",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.2",
+    "apkWasPublicReleaseAsset": true
+  },
+  "environment": {
+    "avd": "Xudian_Release_20261013",
+    "freshStandaloneDevice": true,
+    "platform": "Android 17 / API 37, x86_64",
+    "existingEmulatorAndDataUnchanged": true
+  },
+  "artifactDirectory": "dist/verification/fresh-install-20261013-online",
+  "publicFirstAttemptReport": "docs/verification/fresh-install-20261013-attempt-01.json",
+  "scope": "Public APK fresh install, default online store dependency install, immediate page access and restart; ARM device runtime and school-specific login are not tested."
+}

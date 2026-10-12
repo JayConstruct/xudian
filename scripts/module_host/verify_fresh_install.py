@@ -8,6 +8,8 @@ same APK as any other user's installation. Evidence and a JSON report are kept
 on both success and failure. Failed runs retain their app and module data.
 --resume continues only a failed first installation proved by this output
 directory's report, with the same device/user/APK and no target modules installed.
+--resume-installed continues only the already-proved module installation, without
+relaunching the app before the immediate page checks. Prior failures are archived.
 """
 
 import argparse
@@ -77,8 +79,10 @@ class FreshInstallVerification:
         self.started = time.monotonic()
         self.ui_started = False
         self.resuming = False
+        self.resuming_installed = False
         self.report_file = self.output / ('fresh-install-resume-rejected.json'
-                                          if args.resume else 'fresh-install.json')
+                                          if args.resume or args.resume_installed
+                                          else 'fresh-install.json')
         self.modules = [
             {'id': 'app.schedule', 'name': '大学课表',
              'version': args.expected_schedule_version},
@@ -118,7 +122,7 @@ class FreshInstallVerification:
         artifact['xml'] = f'{name}.xml'
         return snapshot.nodes
 
-    def prepare_resume(self):
+    def prepare_resume(self, *, installed_modules=False):
         previous_file = self.output / 'fresh-install.json'
         if not previous_file.is_file():
             raise RuntimeError('--resume 缺少同一 output 目录的原始 fresh-install.json')
@@ -138,7 +142,21 @@ class FreshInstallVerification:
                                '拒绝使用已有安装替代从 0 验收')
         if self.installed_apk_digest() != digest:
             raise RuntimeError('--resume 当前已安装 APK 与原首装证据不一致')
-        if 'modulesInstalledFromStore' in proven:
+        if previous.get('expectedModules') != self.modules:
+            raise RuntimeError('恢复验收的预期模块身份或版本与原首装报告不一致')
+        if installed_modules:
+            if ('modulesInstalledFromStore' not in proven
+                    or 'dependencyReviewVerified' not in proven
+                    or '05-modules-enabled' not in proven
+                    or '06-modules-enabled-after-restart' in proven):
+                raise RuntimeError('--resume-installed 缺少已审核安装/启用证据，或此前已经重启')
+            reviews = proven['dependencyReviewVerified'].get('modules', [])
+            if any(not any(
+                    all(review.get(key) == module[key] for key in ('id', 'name', 'version'))
+                    and re.fullmatch(r'[0-9a-f]{64}', review.get('sha256', ''))
+                    for review in reviews) for module in self.modules):
+                raise RuntimeError('--resume-installed 原审核模块或摘要证据不完整')
+        elif 'modulesInstalledFromStore' in proven:
             raise RuntimeError('--resume 原报告已证明模块安装完成；'
                                '仅允许恢复模块尚未安装的失败首装')
         attempt = previous.get('attempt', 1)
@@ -152,14 +170,46 @@ class FreshInstallVerification:
         self.report['attempt'] = attempt + 1
         self.report['attemptStartedAt'] = datetime.now(timezone.utc).isoformat()
         self.report['previousFailure'] = previous.get('error')
+        self.report['previousAttemptError'] = previous.get('error')
         self.report['previousAttemptReport'] = archive.name
+        self.report.setdefault('firstInstallationAttemptReport', archive.name)
         self.report['status'] = 'running'
         for key in ('error', 'failureCaptureError', 'failureVisibleLabels'):
             self.report.pop(key, None)
         self.resuming = True
+        self.resuming_installed = installed_modules
         self.report_file = previous_file
         self.step('resumeOriginalFirstInstallationVerified', installedApkSha256=digest,
                   previousAttemptReport=archive.name)
+
+    def consume_install_action(self, *, expect_open=False):
+        """An accessible action can keep a Snackbar above the dock indefinitely."""
+        e = self.emulator
+        nodes = e.nodes()
+        if not any('模块安装完成' in e.label(node) for node in nodes):
+            return
+        actions = [node for node in nodes
+                   if e.label(node) == '打开模块' and node.get('enabled') != 'false']
+        if len(actions) != 1:
+            raise RuntimeError('安装完成提示遮挡导航且没有唯一可用的打开模块操作')
+        self.record('installation-action-before-open')
+        e.tap_node(actions[0])
+        if expect_open:
+            # This action captures the store route's BuildContext. It can open
+            # the importer only while that original route is still mounted.
+            e.wait_for('按学校导入', timeout=30, contains=True)
+        else:
+            deadline = time.monotonic() + 20
+            while any('模块安装完成' in e.label(node) for node in e.nodes()):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('安装完成提示操作后仍遮挡底栏')
+                time.sleep(.2)
+        self.check_errors(e.nodes())
+        self.record('importer-opened-through-installation-action' if expect_open
+                    else 'installation-notice-consumed')
+        self.step('installationActionOpenedImporterWithoutRestart' if expect_open
+                  else 'installationNoticeConsumedWithoutRestart')
+        e.home()
 
     def refuse_existing_modules_on_resume(self):
         self.find_scrolling('模块商店', down=False)
@@ -407,6 +457,7 @@ class FreshInstallVerification:
         """Exercise installed workers before a restart can conceal install bugs."""
         e = self.emulator
         suffix = 'after-restart' if after_restart else 'immediately-after-install'
+        self.consume_install_action()
         e.home()
         self.tap_scrolling('课表')
         e.wait_for('创建课表或导入 JSON 备份后开始使用', timeout=30, contains=True)
@@ -440,17 +491,17 @@ class FreshInstallVerification:
         self.report['apkSha256'] = hashlib.sha256(args.apk.read_bytes()).hexdigest()
         installed = e.adb('shell', 'pm', 'list', 'packages', '--user', str(args.user), PACKAGE)
         app_installed = f'package:{PACKAGE}' in installed.splitlines()
-        if app_installed and not args.resume:
+        if app_installed and not (args.resume or args.resume_installed):
             raise RuntimeError(f'Android user {args.user} 已安装 {PACKAGE}；拒绝覆盖或清数据。'
                                '请使用未安装本 App 的独立模拟器或 Android user。')
         current = e.adb('shell', 'am', 'get-current-user').strip()
         if current != str(args.user):
             raise RuntimeError(f'当前前台 Android user 为 {current}，不是 {args.user}；'
                                '请先切换目标 user 后重试，避免验证错误用户的 UI。')
-        if args.resume:
+        if args.resume or args.resume_installed:
             if not app_installed:
                 raise RuntimeError('--resume 目标 user 的原首装 App 已不存在，拒绝重新安装替代原证据')
-            self.prepare_resume()
+            self.prepare_resume(installed_modules=args.resume_installed)
         else:
             self.step('targetUserInitiallyUninstalled', packageList=installed.strip())
             install = e.adb('install', '--user', str(args.user), '-r', str(args.apk.resolve()))
@@ -463,6 +514,12 @@ class FreshInstallVerification:
         self.ui_started = True
         e.adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
         e.adb('shell', 'wm', 'dismiss-keyguard')
+        if args.resume_installed:
+            # Continue the same live process. No launch, install or force-stop
+            # may repair workers before their immediate post-install checks.
+            self.step('resumeInstalledModulesWithoutRelaunch')
+            self.finish_module_verification()
+            return
         self.launch(restart=self.resuming)
         e.wait_for('暂无今天待办或逾期任务', timeout=30, contains=True)
         self.record('resume-today-empty' if self.resuming else '01-today-empty')
@@ -478,8 +535,15 @@ class FreshInstallVerification:
         e.tap_node(card)
         self.tap_scrolling('解析依赖并安装')
         self.verify_review()
+        self.consume_install_action(expect_open=True)
         e.home()
-        self.verify_enabled('05-modules-enabled')
+        self.finish_module_verification()
+
+    def finish_module_verification(self):
+        args = self.args
+        self.verify_enabled('resume-installed-current-enabled'
+                            if self.resuming_installed else '05-modules-enabled')
+        self.consume_install_action()
         self.verify_module_pages(after_restart=False)
         self.launch(restart=True)
         self.verify_enabled('06-modules-enabled-after-restart')
@@ -503,8 +567,11 @@ def main():
     parser.add_argument('--output', type=Path, default=ROOT / 'dist/verification/fresh-install')
     parser.add_argument('--expected-schedule-version', default='1.7.0')
     parser.add_argument('--expected-importer-version', default='1.4.0')
-    parser.add_argument('--resume', action='store_true',
+    resumes = parser.add_mutually_exclusive_group()
+    resumes.add_argument('--resume', action='store_true',
                         help='Resume a failed first install proved by this output directory, before module installation')
+    resumes.add_argument('--resume-installed', action='store_true',
+                         help='Continue proved module installation in the same live app without relaunching before page checks')
     args = parser.parse_args()
     if args.user < 0:
         parser.error('--user must be nonnegative')

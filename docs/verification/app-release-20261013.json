@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-13",
+  "tag": "v0.2.0-beta.2",
+  "sourceCommit": "4703f0cf7b751c82e29c1fdbca80c7c6a4d0b88f",
+  "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.2",
+  "prerelease": true,
+  "artifacts": [
+    {
+      "name": "app-armeabi-v7a-release.apk",
+      "size": 23130860,
+      "sha256": "b066ae1698eb5d06a04a97da29aca9fb47d49f61adf2e4eb94892a9b562c9b1e",
+      "versionCode": 1110,
+      "abi": "armeabi-v7a",
+      "signatureSha256": "47a394d02243cc9c6b98e5b39a1a0e4fb1d3311f0cef2104e3a2747c89babf13",
+      "pinnedBundlePackages": 6,
+      "url": "https://github.com/JayConstruct/xudian/releases/download/v0.2.0-beta.2/app-armeabi-v7a-release.apk"
+    },
+    {
+      "name": "app-arm64-v8a-release.apk",
+      "size": 25372862,
+      "sha256": "4c9c6e0d484528d5cb8b9f8be4ca9be0d9f7a54d9a17a6f576c9e0d9ca988dcb",
+      "versionCode": 2110,
+      "abi": "arm64-v8a",
+      "signatureSha256": "47a394d02243cc9c6b98e5b39a1a0e4fb1d3311f0cef2104e3a2747c89babf13",
+      "pinnedBundlePackages": 6,
+      "url": "https://github.com/JayConstruct/xudian/releases/download/v0.2.0-beta.2/app-arm64-v8a-release.apk"
+    },
+    {
+      "name": "app-x86_64-release.apk",
+      "size": 26912615,
+      "sha256": "16db4cacb23651afb0fc12756ec30e0798a5dcee90b93018e1d2a203afdc1eed",
+      "versionCode": 4110,
+      "abi": "x86_64",
+      "signatureSha256": "47a394d02243cc9c6b98e5b39a1a0e4fb1d3311f0cef2104e3a2747c89babf13",
+      "pinnedBundlePackages": 6,
+      "url": "https://github.com/JayConstruct/xudian/releases/download/v0.2.0-beta.2/app-x86_64-release.apk"
+    }
+  ],
+  "checks": [
+    "anonymous public download",
+    "SOURCE_COMMIT",
+    "SHA256SUMS",
+    "APK signature",
+    "application identity and version",
+    "ABI and native libraries",
+    "six APK bundled module digests"
+  ],
+  "localValidation": {
+    "flutterFullRegression": 958,
+    "pythonTooling": 84,
+    "pythonModuleRelease": 36,
+    "flutterAnalyze": "passed",
+    "productionArchitectureDartFiles": 119,
+    "batchMigrationRollbackRegression": "passed",
+    "localAdditionalNetworkRetry": "one timeout; standalone Dart probe traced WSL socket binding delays under VM profiling; production unchanged",
+    "limitations": [
+      "x86_64 Android emulator runtime verified; ARM devices and real-device frame rates not tested"
+    ]
+  },
+  "onlineWorkflowRuns": [
+    {
+      "id": 38283364938,
+      "type": "module release",
+      "status": "success"
+    },
+    {
+      "id": 38283364793,
+      "type": "main full checks and three ABI APK builds",
+      "status": "success"
+    },
+    {
+      "id": 38284181275,
+      "type": "app tag full checks, three ABI APK builds and public release",
+      "status": "success"
+    }
+  ],
+  "moduleCatalogCommit": "dfcaa504b7371b7b32a9ccdf4e2ac84f26359ec1",
+  "moduleStoreReport": "docs/verification/module-store-release-20261013.json",
+  "freshDeviceReport": "docs/verification/fresh-install-20261013.json"
+}
