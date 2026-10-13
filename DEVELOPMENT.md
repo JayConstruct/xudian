@@ -28,7 +28,7 @@ cd ..
 
 ## 日常更新
 
-WSL 开始开发时运行 `scripts/start-emulator.sh`，启动 Windows 模拟器并等待 Android 就绪；已运行时直接复用。SDK 路径、AVD 与等待时间的参数见 [模拟器流程](docs/EMULATOR_UPDATE.md)。
+WSL 开始开发时运行 `scripts/start-emulator.sh`，启动 Windows 模拟器并等待 Android 就绪；已运行时直接复用。强制冷启动用 `--cold-boot`，高刷用 `--cold-boot --refresh-rate 120`（或 `165`），可加 `--lock-refresh-rate` 锁定 Android 最高/最低刷新率并保存恢复脚本；均保留应用和数据。SDK 路径、AVD、等待时间与刷新率恢复方式见 [模拟器流程](docs/EMULATOR_UPDATE.md)。
 
 | 改动 | 命令 |
 | --- | --- |

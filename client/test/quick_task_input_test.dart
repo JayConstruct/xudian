@@ -90,6 +90,8 @@ void main() {
         '保留草稿',
       );
       expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('关闭提示'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('添加任务'));
       await tester.pumpAndSettle();
       expect(attempts, 2);

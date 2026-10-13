@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/design_system.dart';
+import '../../app/app_toast.dart';
 import '../../core/modules/module_registry.dart';
 import '../../core/modules/builtin_module_registration.dart';
 import '../../core/declarative/package/module_package.dart';
@@ -195,7 +196,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
         builtinModuleControllerProvider(widget.registry).future,
       )).setEnabled(module.id, enabled);
     } catch (error) {
-      _message('无法更改${module.title}：$error');
+      _message('无法更改${module.title}：$error', kind: 'error');
     } finally {
       if (mounted) setState(() => changingBuiltin = false);
     }
@@ -296,10 +297,10 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
       );
       if (applied && mounted) {
         _reload();
-        _message('模块包已安装');
+        _message('模块包已安装', kind: 'success');
       }
     } catch (error) {
-      _message('导入模块包失败：$error');
+      _message('导入模块包失败：$error', kind: 'error');
     }
   }
 
@@ -379,7 +380,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
       await (await _runtime()).setEnabled(module.id, enabled);
       _reload();
     } catch (error) {
-      _message('操作失败：$error');
+      _message('操作失败：$error', kind: 'error');
     }
   }
 
@@ -409,7 +410,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
     final templates = engine.templatesFor(module.id);
     if (!mounted) return;
     if (templates.isEmpty) {
-      _message('该模块没有任务模板');
+      _message('该模块没有任务模板', kind: 'info');
       return;
     }
 
@@ -463,9 +464,10 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
       _message(
         '模板已创建 ${result.createdTasks} 个任务'
         '${result.projectId == null ? '' : '，并创建项目'}',
+        kind: 'success',
       );
     } catch (error) {
-      _message('从模板创建任务失败：$error');
+      _message('从模板创建任务失败：$error', kind: 'error');
     }
   }
 
@@ -668,7 +670,7 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
       await (await _runtime()).rollback(module.id, selected);
       _reload();
     } catch (error) {
-      _message('恢复模块配置失败：$error');
+      _message('恢复模块配置失败：$error', kind: 'error');
     }
   }
 
@@ -700,12 +702,12 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
       await (await _runtime()).uninstall(module.id, deleteData: true);
       _reload();
     } catch (error) {
-      _message('删除失败：$error');
+      _message('删除失败：$error', kind: 'error');
     }
   }
 
-  void _message(String text) {
+  void _message(String text, {required String kind}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    AppToast.show(context, message: text, kind: kind);
   }
 }

@@ -11,6 +11,7 @@ import '../../core/ui/ui_registration.dart';
 import '../../core/ui/ui_composition.dart';
 import '../../core/ui/ui_slot.dart';
 import '../../app/design_system.dart';
+import '../../app/app_toast.dart';
 import '../declarative_runtime/declarative_runtime_controller.dart';
 import '../tasks/application/providers.dart';
 import 'proposal/module_proposal_coordinator.dart';
@@ -130,7 +131,7 @@ class _AiPageState extends ConsumerState<AiModuleDeveloperPanel> {
       connection = loaded;
       apiKey = loadedKey ?? '';
     } catch (_) {
-      _message('读取 AI 连接配置失败，请在设置中重试');
+      _message('读取 AI 连接配置失败，请在设置中重试', kind: 'error');
     } finally {
       if (mounted) setState(() => loadingSettings = false);
     }
@@ -174,7 +175,7 @@ class _AiPageState extends ConsumerState<AiModuleDeveloperPanel> {
     final endpoint = Uri.tryParse(connection.endpoint);
     if (endpoint == null ||
         !OpenAiCompatibleProvider.acceptsEndpoint(endpoint)) {
-      _message('请先配置 AI 连接');
+      _message('请先配置 AI 连接', kind: 'info');
       await _openConnection();
       return;
     }
@@ -210,10 +211,10 @@ class _AiPageState extends ConsumerState<AiModuleDeveloperPanel> {
       );
       if (applied && mounted) {
         requestController.clear();
-        _message('AI 生成的模块已应用');
+        _message('AI 生成的模块已应用', kind: 'success');
       }
     } catch (error) {
-      if (!cancellation.cancelled) _message('AI 提案失败：$error');
+      if (!cancellation.cancelled) _message('AI 提案失败：$error', kind: 'error');
     } finally {
       if (identical(pendingRequest, cancellation)) pendingRequest = null;
       if (mounted) setState(() => applying = false);
@@ -230,7 +231,7 @@ class _AiPageState extends ConsumerState<AiModuleDeveloperPanel> {
       }
       source = decoded.map((key, value) => MapEntry('$key', value));
     } catch (error) {
-      _message('JSON 无法解析：$error');
+      _message('JSON 无法解析：$error', kind: 'error');
       return;
     }
 
@@ -247,19 +248,19 @@ class _AiPageState extends ConsumerState<AiModuleDeveloperPanel> {
         canApply: () => available && !cancellation.cancelled,
       );
       if (applied && mounted) {
-        _message('模块已应用');
+        _message('模块已应用', kind: 'success');
       }
     } catch (error) {
-      _message('提案失败：$error');
+      _message('提案失败：$error', kind: 'error');
     } finally {
       if (identical(pendingRequest, cancellation)) pendingRequest = null;
       if (mounted) setState(() => applying = false);
     }
   }
 
-  void _message(String value) {
+  void _message(String value, {required String kind}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
+    AppToast.show(context, message: value, kind: kind);
   }
 
   @override

@@ -206,6 +206,14 @@ void main() {
         expect(calls.last['method'], 'ui.showCode');
         expect(find.textContaining('模块界面无效'), findsNothing);
         expect(tester.takeException(), isNull);
+        await show(tester, demo: 'notification', brightness: config.brightness);
+        await reveal(tester, find.text('长时提示 · 10 秒'));
+        await tester.tap(find.text('长时提示 · 10 秒'));
+        await settle(tester);
+        expect(calls.last['duration'], 10000);
+        await reveal(tester, find.text('打开面板并显示提示'));
+        expect(find.textContaining('不支持的组件'), findsNothing);
+        expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
       },
@@ -310,6 +318,65 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
+    },
+  );
+
+  test(
+    'notification examples use valid real calls and retain panel context',
+    () async {
+      final calls = <Map<String, Object?>>[];
+      host.interaction = (_, method, args) async {
+        calls.add({'method': method, ...args});
+        return null;
+      };
+      Future<void> invoke(
+        Map<String, Object?> event, {
+        Map<String, Object?> context = const {
+          'pageId': 'app.ui.examples.demo.notification',
+        },
+      }) async {
+        await host.invokePage('app.ui.examples', 'render', {
+          'event': event,
+          'context': context,
+        });
+      }
+
+      for (final kind in ['info', 'success', 'error']) {
+        await invoke({'type': 'notify', 'kind': kind});
+      }
+      expect(calls.map((call) => call['kind']), ['info', 'success', 'error']);
+      expect(calls.every((call) => call['duration'] == 3000), isTrue);
+      calls.clear();
+
+      for (final sample in ['long', 'short', 'extended']) {
+        await invoke({'type': 'notify', 'sample': sample});
+      }
+      expect(calls.map((call) => call['duration']), [8000, 1000, 10000]);
+      final longMessage = calls.first['message'] as String;
+      expect(longMessage.length, inInclusiveRange(50, 200));
+      calls.clear();
+
+      await invoke({'type': 'notifySequence'});
+      expect(calls.map((call) => call['kind']), ['info', 'success', 'error']);
+      expect(calls.map((call) => call['message']).toSet(), hasLength(3));
+      calls.clear();
+
+      await invoke({'type': 'notifyDuplicate'});
+      expect(calls, hasLength(3));
+      expect(calls[0], calls[1]);
+      expect(calls[1], calls[2]);
+      calls.clear();
+
+      await invoke({'type': 'panel', 'notification': true});
+      expect(calls.single['method'], 'ui.panel');
+      expect(calls.single['context'], {'notification': true});
+      calls.clear();
+      await invoke(
+        {'type': 'notify', 'sample': 'panel'},
+        context: {'pageId': 'app.ui.examples.local', 'notification': true},
+      );
+      expect(calls.single['method'], 'ui.notify');
+      expect(calls.single['kind'], 'success');
     },
   );
 

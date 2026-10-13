@@ -263,7 +263,7 @@ export const grants = Object.freeze({request: spec => call('grants.request', spe
 export const packages = Object.freeze({prepare: spec => call('packages.prepare', spec), review: id => call('packages.review', {id})});
 export const files = Object.freeze({readText: () => call('files.readText', {}), saveText: (name, text) => call('files.saveText', {name, text})});
 export const browser = Object.freeze({capture: options => call('browser.capture', options)});
-export const clock = Object.freeze({today: zone => call('clock.today', {zone}), local: zone => call('clock.local', {zone}), now: () => call('clock.now', {})});
+export const clock = Object.freeze({today: zone => call('clock.today', {zone}), local: zone => call('clock.local', {zone}), now: () => call('clock.now', {}), toLocal: options => call('clock.toLocal', options), toUtc: options => call('clock.toUtc', options)});
 export const ids = Object.freeze({new: () => call('ids.new', {})});
 export default Object.freeze({data, services, extensions, events, ui, http, secrets, grants, packages, files, browser, clock, ids});
 ''';

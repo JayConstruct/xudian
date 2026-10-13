@@ -6,7 +6,9 @@ abstract final class AppMotion {
   static const dateTitle = Duration(milliseconds: 280);
   static const dateStrip = Duration(milliseconds: 320);
   static const dateReveal = Duration(milliseconds: 480);
-  static const dateRevealSwipe = Duration(milliseconds: 380);
+  static const dateContentFade = Duration(milliseconds: 180);
+  static const dateContentLeave = Duration(milliseconds: 120);
+  static const dateWaveSpacing = Duration(milliseconds: 80);
   static const disclosure = Duration(milliseconds: 220);
   static const scriptTransition = Duration(milliseconds: 350);
   static const workspaceTransition = Duration(milliseconds: 360);

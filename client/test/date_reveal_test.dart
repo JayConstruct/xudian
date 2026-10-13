@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/ui/date_reveal.dart';
+import 'package:task_app/core/ui/ui_motion.dart';
 
 typedef Frame = ({
   int date,
@@ -105,16 +106,43 @@ void main() {
     }))!;
   }
 
+  List<int> backgroundPixels(WidgetTester tester) {
+    final background = Theme.of(tester.element(find.byType(DateReveal)))
+        .scaffoldBackgroundColor;
+    return [
+      (background.r * 255).round(),
+      (background.g * 255).round(),
+      (background.b * 255).round(),
+      (background.a * 255).round(),
+    ];
+  }
+
+  void expectSamePaint(List<int> near, List<int> far) {
+    for (var channel = 0; channel < near.length; channel++) {
+      // Decorative tint is bounded to 4.5% and has no content reveal edge.
+      expect((near[channel] - far[channel]).abs(), lessThanOrEqualTo(12));
+    }
+  }
+
   testWidgets(
-    'freezes complete paint until ready then reveals from button edge',
+    'old content fades out while pending and ready content fades in independently',
     (tester) async {
       await mount(tester);
-      controller.prepare(originGlobal: const Offset(0, 0), initialRadius: 20);
+      controller.prepare(originGlobal: Offset.zero, initialRadius: 20);
       update(date: 2, color: Colors.blue, ready: false);
       await tester.pump();
+      final dynamic state = tester.state(find.byType(DateReveal));
+      expect(state.snapshot, isA<ui.Image>());
+      expect(state.oldOpacity, 1);
+      expect(await pixel(tester, 100, 100), [244, 67, 54, 255]);
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(state.oldOpacity, greaterThan(0));
+      expect(state.oldOpacity, lessThan(1));
+      expect(await pixel(tester, 100, 100), isNot([244, 67, 54, 255]));
       await tester.pump(const Duration(milliseconds: 700));
       expect(controller.isPreparing, isTrue);
-      expect(await pixel(tester, 100, 100), [244, 67, 54, 255]);
+      expect(state.oldOpacity, 0);
+      expect(await pixel(tester, 100, 100), backgroundPixels(tester));
       expect(
         tester.widget<ColoredBox>(find.byType(ColoredBox).last).color,
         Colors.blue,
@@ -127,10 +155,15 @@ void main() {
       expect(controller.isPreparing, isFalse);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
-      expect(await pixel(tester, 5, 5), [33, 150, 243, 255]);
-      expect(await pixel(tester, 195, 195), [244, 67, 54, 255]);
+      expect(state.animation.value, greaterThan(0));
+      expect(state.animation.value, lessThan(1));
+      final near = await pixel(tester, 5, 5);
+      expect(near, isNot([33, 150, 243, 255]));
+      expect(near, isNot(backgroundPixels(tester)));
+      expectSamePaint(near, await pixel(tester, 195, 195));
       await tester.pumpAndSettle();
       expect(controller.isTransitioning, isFalse);
+      expect(state.snapshot, isNull);
       expect(await pixel(tester, 195, 195), [33, 150, 243, 255]);
       await tester.tapAt(const Offset(100, 100));
       expect(clicks, 1);
@@ -154,7 +187,7 @@ void main() {
   });
 
   testWidgets(
-    'selection during reveal freezes current composite without jump',
+    'selection during fade reuses one old image and waits for the latest data',
     (tester) async {
       await mount(tester);
       controller.prepare(originGlobal: Offset.zero);
@@ -162,18 +195,93 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
-      final corner = await pixel(tester, 5, 5);
-      final farCorner = await pixel(tester, 195, 195);
+      final dynamic state = tester.state(find.byType(DateReveal));
+      final original = state.snapshot;
+      final opacity = state.oldOpacity as double;
       controller.prepare(originGlobal: const Offset(200, 200));
       update(date: 3, color: Colors.green, ready: false);
       await tester.pump();
-      expect(await pixel(tester, 5, 5), corner);
-      expect(await pixel(tester, 195, 195), farCorner);
+      expect(state.snapshot, same(original));
+      expect(state.oldOpacity, opacity);
+      expect(state.animation.value, 0);
+      expect(controller.isPreparing, isTrue);
+      await tester.pump(const Duration(milliseconds: 480));
+      expect(controller.isTransitioning, isTrue);
+      expect(state.waves, isEmpty);
+      expect(state.oldOpacity, 0);
+      expect(await pixel(tester, 5, 5), backgroundPixels(tester));
+      expect(await pixel(tester, 195, 195), backgroundPixels(tester));
       update(date: 3, color: Colors.green, ready: true);
       await tester.pumpAndSettle();
       expect(controller.isTransitioning, isFalse);
+      expect(await pixel(tester, 195, 195), [76, 175, 80, 255]);
     },
   );
+
+  testWidgets(
+    'rapid ready selections restart the latest fade with bounded waves',
+    (tester) async {
+      await mount(tester);
+      controller.prepare(originGlobal: Offset.zero);
+      update(date: 2, color: Colors.blue, ready: true);
+      await tester.pump();
+      final dynamic state = tester.state(find.byType(DateReveal));
+      final original = state.snapshot;
+      for (var date = 3; date <= 8; date++) {
+        controller.prepare(originGlobal: const Offset(200, 200));
+        update(date: date, color: Colors.green, ready: true);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(state.snapshot, same(original));
+        expect(state.animation.value, 0);
+        expect(controller.isPreparing, isFalse);
+        expect(controller.isTransitioning, isTrue);
+        expect((state.waves as List).length, lessThanOrEqualTo(3));
+        expect(find.byType(DateReveal), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(DateReveal),
+            matching: find.byType(ColoredBox),
+          ),
+          findsOneWidget,
+        );
+      }
+      await tester.pump();
+      await tester.pump(
+        AppMotion.dateContentFade + const Duration(milliseconds: 1),
+      );
+      expect(controller.isTransitioning, isFalse);
+      expect(await pixel(tester, 5, 5), [76, 175, 80, 255]);
+      expect(await pixel(tester, 195, 195), [76, 175, 80, 255]);
+      expect(
+        state.waves,
+        isNotEmpty,
+        reason: 'Ready data completes its fade without waiting for background waves.',
+      );
+      await tester.pumpAndSettle();
+      expect(state.waves, isEmpty);
+    },
+  );
+
+  testWidgets('cancel discards a queued reveal and restores live interaction', (
+    tester,
+  ) async {
+    await mount(tester);
+    controller.prepare();
+    update(date: 2, color: Colors.blue, ready: true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    controller.prepare();
+    update(date: 3, color: Colors.green, ready: false);
+    await tester.pump();
+    controller.cancel();
+    await tester.pumpAndSettle();
+    expect(controller.isTransitioning, isFalse);
+    expect(controller.isPreparing, isFalse);
+    expect(await pixel(tester, 100, 100), [76, 175, 80, 255]);
+    await tester.tapAt(const Offset(100, 100));
+    expect(clicks, 1);
+  });
 
   testWidgets(
     'revision fallback captures old paint without an explicit origin',
@@ -188,7 +296,7 @@ void main() {
     },
   );
 
-  testWidgets('swipe reveals horizontally without a radial wave', (
+  testWidgets('swipe fades all content uniformly without background waves', (
     tester,
   ) async {
     await mount(tester);
@@ -197,9 +305,14 @@ void main() {
     await tester.pump();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(await pixel(tester, 5, 100), [244, 67, 54, 255]);
-    expect(await pixel(tester, 195, 100), [33, 150, 243, 255]);
+    final dynamic state = tester.state(find.byType(DateReveal));
+    expect(state.waves, isEmpty);
+    final left = await pixel(tester, 5, 100);
+    expect(left, await pixel(tester, 195, 100));
+    expect(left, isNot([244, 67, 54, 255]));
+    expect(left, isNot([33, 150, 243, 255]));
     await tester.pumpAndSettle();
+    expect(await pixel(tester, 195, 100), [33, 150, 243, 255]);
   });
 
   testWidgets(
@@ -246,7 +359,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('origin above viewport reveals from the header button', (
+  testWidgets('header wave origin does not clip or delay the content fade', (
     tester,
   ) async {
     await mount(tester);
@@ -254,10 +367,16 @@ void main() {
     update(date: 2, color: Colors.blue, ready: true);
     await tester.pump();
     await tester.pump();
-    // Sample behind the wider halo, where the new content is fully revealed.
-    await tester.pump(const Duration(milliseconds: 140));
+    await tester.pump(const Duration(milliseconds: 50));
+    expectSamePaint(await pixel(tester, 100, 5), await pixel(tester, 100, 195));
+    await tester.pump(
+      AppMotion.dateContentFade + const Duration(milliseconds: 1),
+    );
+    expect(controller.isTransitioning, isFalse);
     expect(await pixel(tester, 100, 5), [33, 150, 243, 255]);
-    expect(await pixel(tester, 100, 195), [244, 67, 54, 255]);
+    expect(await pixel(tester, 100, 195), [33, 150, 243, 255]);
+    final dynamic state = tester.state(find.byType(DateReveal));
+    expect(state.waves, isNotEmpty);
     await tester.pumpAndSettle();
   });
 
@@ -337,7 +456,7 @@ void main() {
   });
 
   testWidgets(
-    'live navigation moves visibly while old business paint stays frozen',
+    'live navigation stays untouched while business content fades and remains blocked',
     (tester) async {
       await mount(tester);
       var navigationClicks = 0;
@@ -394,7 +513,9 @@ void main() {
                                   child: ColoredBox(
                                     color: value.date == 1
                                         ? Colors.orange
-                                        : Colors.yellow,
+                                        : value.date == 2
+                                        ? Colors.yellow
+                                        : Colors.purple,
                                   ),
                                 ),
                               ),
@@ -456,88 +577,116 @@ void main() {
       ], reason: 'The visible wave must not tint the live date controls.');
       await tester.tapAt(const Offset(100, 150));
       expect(businessClicks, 0);
+      controller.prepare(originGlobal: Offset.zero);
+      update(date: 3, color: Colors.green, ready: false);
+      await tester.pump();
+      expect(await pixel(tester, 100, 80), [156, 39, 176, 255]);
+      await tester.tapAt(const Offset(100, 80));
+      expect(navigationClicks, 2);
+      await tester.pump(const Duration(milliseconds: 480));
+      expect(await pixel(tester, 100, 80), [156, 39, 176, 255]);
+      expect(await pixel(tester, 100, 150), backgroundPixels(tester));
+      await tester.tapAt(const Offset(100, 150));
+      expect(businessClicks, 0);
+      update(date: 3, color: Colors.green, ready: true);
       await tester.pumpAndSettle();
       await tester.tapAt(const Offset(100, 150));
       expect(businessClicks, 1);
       semantics.dispose();
     },
   );
-  testWidgets('readiness loss during reveal freezes its current composite', (
-    tester,
-  ) async {
-    await mount(tester);
-    controller.prepare(originGlobal: Offset.zero);
-    update(date: 2, color: Colors.blue, ready: true);
-    await tester.pump();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    final near = await pixel(tester, 5, 5);
-    final far = await pixel(tester, 195, 195);
-    expect(near, [33, 150, 243, 255]);
-    expect(far, [244, 67, 54, 255]);
-    update(date: 2, color: Colors.green, ready: false);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 700));
-    expect(controller.isPreparing, isTrue);
-    expect(await pixel(tester, 5, 5), near);
-    expect(await pixel(tester, 195, 195), far);
-    update(date: 2, color: Colors.green, ready: true);
-    await tester.pumpAndSettle();
-    expect(await pixel(tester, 100, 100), [76, 175, 80, 255]);
-  });
-  testWidgets('wave replaces removed cards with the new empty background', (
-    tester,
-  ) async {
-    await mount(tester);
-    controller.prepare(originGlobal: Offset.zero);
-    update(date: 2, color: Colors.transparent, ready: true);
-    await tester.pump();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    final background = Theme.of(tester.element(find.byType(DateReveal)))
-        .scaffoldBackgroundColor;
-    expect(await pixel(tester, 5, 5), [
-      (background.r * 255).round(),
-      (background.g * 255).round(),
-      (background.b * 255).round(),
-      (background.a * 255).round(),
-    ]);
-    expect(await pixel(tester, 195, 195), [244, 67, 54, 255]);
-    await tester.pumpAndSettle();
-    expect(await pixel(tester, 195, 195), isNot([244, 67, 54, 255]));
-  });
+  testWidgets(
+    'readiness loss stops the fade and hides unready replacement content',
+    (tester) async {
+      await mount(tester);
+      controller.prepare(originGlobal: Offset.zero);
+      update(date: 2, color: Colors.blue, ready: true);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      final dynamic state = tester.state(find.byType(DateReveal));
+      final original = state.snapshot;
+      expect(state.animation.value, greaterThan(0));
+      update(date: 2, color: Colors.green, ready: false);
+      await tester.pump();
+      expect(controller.isPreparing, isTrue);
+      expect(state.snapshot, same(original));
+      expect(state.animation.value, 0);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(await pixel(tester, 5, 5), backgroundPixels(tester));
+      expect(await pixel(tester, 195, 195), backgroundPixels(tester));
+      await tester.tapAt(const Offset(100, 100));
+      expect(clicks, 0);
+      update(date: 2, color: Colors.green, ready: true);
+      await tester.pumpAndSettle();
+      expect(await pixel(tester, 100, 100), [76, 175, 80, 255]);
+    },
+  );
 
-  testWidgets('lens samples the complete ready page behind the old paint', (
-    tester,
-  ) async {
-    await mount(tester);
-    controller.prepare(originGlobal: Offset.zero);
-    update(date: 2, color: Colors.blue, ready: false);
-    await tester.pump();
-    final dynamic state = tester.state(find.byType(DateReveal));
-    expect(
-      state.targetSnapshot,
-      isNull,
-      reason: 'Unready contributions must not become a lens texture.',
-    );
-    update(date: 2, color: Colors.blue, ready: true);
-    await tester.pump();
-    final texture = state.targetSnapshot as ui.Image;
-    final bytes = (await tester.runAsync(
-      () => texture.toByteData(format: ui.ImageByteFormat.rawRgba),
-    ))!;
-    final index =
-        ((texture.height - 1) * texture.width + texture.width - 1) * 4;
-    expect(bytes.buffer.asUint8List().sublist(index, index + 4), [
-      33,
-      150,
-      243,
-      255,
-    ], reason: 'Capture the full new layer, including its unrevealed corner.');
-    expect(await pixel(tester, 195, 195), [244, 67, 54, 255]);
-    controller.cancel();
-    await tester.pump();
-    expect(state.targetSnapshot, isNull);
-    expect(await pixel(tester, 195, 195), [33, 150, 243, 255]);
-  });
+  testWidgets(
+    'removed cards fade to the new empty background without a reveal edge',
+    (tester) async {
+      await mount(tester);
+      controller.prepare(swipe: true);
+      update(date: 2, color: Colors.transparent, ready: true);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      final near = await pixel(tester, 5, 5);
+      expect(near, await pixel(tester, 195, 195));
+      expect(near, isNot([244, 67, 54, 255]));
+      expect(near, isNot(backgroundPixels(tester)));
+      await tester.pumpAndSettle();
+      expect(await pixel(tester, 195, 195), backgroundPixels(tester));
+    },
+  );
+
+  testWidgets(
+    'ready content remains live while the only image is the original snapshot',
+    (tester) async {
+      await mount(tester);
+      controller.prepare(originGlobal: Offset.zero);
+      update(date: 2, color: Colors.blue, ready: false);
+      await tester.pump();
+      final dynamic state = tester.state(find.byType(DateReveal));
+      final original = state.snapshot as ui.Image;
+      final bytes = (await tester.runAsync(
+        () => original.toByteData(format: ui.ImageByteFormat.rawRgba),
+      ))!;
+      final index =
+          ((original.height - 1) * original.width + original.width - 1) * 4;
+      expect(bytes.buffer.asUint8List().sublist(index, index + 4), [
+        244,
+        67,
+        54,
+        255,
+      ]);
+      update(date: 2, color: Colors.blue, ready: true);
+      await tester.pump();
+      expect(state.snapshot, same(original));
+      expect(
+        find.descendant(
+          of: find.byType(DateReveal),
+          matching: find.byType(ColoredBox),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<ColoredBox>(
+              find.descendant(
+                of: find.byType(DateReveal),
+                matching: find.byType(ColoredBox),
+              ),
+            )
+            .color,
+        Colors.blue,
+      );
+      controller.cancel();
+      await tester.pump();
+      expect(state.snapshot, isNull);
+      expect(state.waves, isEmpty);
+      expect(await pixel(tester, 195, 195), [33, 150, 243, 255]);
+    },
+  );
 }

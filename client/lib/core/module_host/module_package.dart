@@ -22,6 +22,43 @@ String string(Object? value, String label) {
   return value;
 }
 
+/// Optional queries retain the exact service permission but do not require
+/// installing or keeping their provider enabled.
+Set<String> optionalServicePermissions(Map<String, Object?> manifest) {
+  final raw = manifest['optionalServices'];
+  if (raw == null) return {};
+  if (raw is! List) {
+    throw const FormatException('optionalServices must be an array');
+  }
+  final permissions = (manifest['permissions'] as List? ?? []).cast<String>();
+  final result = <String>{};
+  for (final item in raw) {
+    final ref = object(item, 'optional service');
+    final module = string(ref['moduleId'], 'optional service module');
+    final service = string(ref['serviceId'], 'optional service id');
+    final major = ref['majorVersion'];
+    if (ref.keys.any(
+          (key) =>
+              !['moduleId', 'serviceId', 'majorVersion', 'kind'].contains(key),
+        ) ||
+        !RegExp(r'^[a-z][a-z0-9]*(\.[a-z][a-z0-9_-]*)+$').hasMatch(module) ||
+        service.contains('/') ||
+        service.contains('@') ||
+        major is! int ||
+        major < 1 ||
+        ref['kind'] != 'query') {
+      throw const FormatException('Invalid optional query service');
+    }
+    final permission = 'services.query:$module/$service@$major';
+    if (!result.add(permission) || !permissions.contains(permission)) {
+      throw const FormatException(
+        'Optional queries require a unique declaration and exact permission',
+      );
+    }
+  }
+  return result;
+}
+
 Future<String> digest(List<int> bytes) async =>
     (await Sha256().hash(bytes)).bytes
         .map((b) => b.toRadixString(16).padLeft(2, '0'))
@@ -75,6 +112,7 @@ class ScriptPackage {
       throw const FormatException('Invalid data version');
     }
     final dependencyIds = <String>{};
+    optionalServicePermissions(manifest);
     for (final raw in manifest['dependencies'] as List? ?? []) {
       final id = raw is String
           ? raw
@@ -113,7 +151,11 @@ class ScriptPackage {
           object(definition['migrations'], 'migrations').isNotEmpty) {
         throw const FormatException('UI packs cannot define migrations');
       }
-      for (final key in ['serviceDependencies', 'httpOrigins']) {
+      for (final key in [
+        'serviceDependencies',
+        'optionalServices',
+        'httpOrigins',
+      ]) {
         if (manifest.containsKey(key) &&
             (manifest[key] is! List || (manifest[key] as List).isNotEmpty)) {
           throw FormatException('UI pack $key must be empty');
@@ -193,8 +235,9 @@ class ScriptPackage {
     for (final raw in manifest['serviceDependencies'] as List? ?? [])
       object(raw),
     for (final permission in permissions)
-      if (RegExp(r'^services\.(query|command):([^/]+)/(.+)@([1-9]\d*)$')
-          .hasMatch(permission))
+      if (!optionalServicePermissions(manifest).contains(permission) &&
+          RegExp(r'^services\.(query|command):([^/]+)/(.+)@([1-9]\d*)$')
+              .hasMatch(permission))
         () {
           final match = RegExp(
             r'^services\.(query|command):([^/]+)/(.+)@([1-9]\d*)$',

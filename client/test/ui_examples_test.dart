@@ -2,7 +2,9 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'support/legacy_app.dart';
+
 import 'package:task_app/core/ui/ui_registration.dart';
 import 'package:task_app/core/ui/ui_slot.dart';
 import 'package:task_app/data/app_database.dart';
@@ -158,6 +160,9 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('示例表单已验证，未写入真实任务。'), findsOneWidget);
         expect(tester.takeException(), isNull);
+        expect(find.byType(SnackBar), findsNothing);
+        await tester.tap(find.byTooltip('关闭提示'));
+        await tester.pumpAndSettle();
 
         await section('状态反馈');
         await reveal(find.widgetWithText(ChoiceChip, '错误'));

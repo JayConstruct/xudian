@@ -25,7 +25,7 @@ export const examples = [
   {id:'loading',category:'feedback',title:'加载动画',description:'启动与停止原生循环加载动画。',ref:'ui.loading@1',initial:false},
   {id:'progress',category:'feedback',title:'进度指示',description:'确定进度与不确定进度动画。',ref:'ui.progress@1',initial:.4},
   {id:'error',category:'feedback',title:'错误提示与重试',description:'真实错误组件及重试恢复操作。',ref:'ui.error@1',initial:true},
-  {id:'notification',category:'feedback',title:'消息提示',description:'短暂消息、成功与错误反馈。',ref:'ui.notify'},
+  {id:'notification',category:'feedback',title:'消息提示',description:'全局 Toast 的三种状态、长文本、替换去重、弹层与真实进出动画。',ref:'ui.notify'},
   {id:'panel',category:'overlays',title:'操作面板',description:'手机底部面板与宽屏侧边详情。',ref:'ui.panel'},
   {id:'floating',category:'overlays',title:'悬浮窗',description:'在当前页面上方显示可关闭面板。',ref:'floatingPanel'},
   {id:'animation',category:'overlays',title:'过渡动画',description:'淡入、缩放、滑动与重播。',ref:'transition',initial:'fade'},

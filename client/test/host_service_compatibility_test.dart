@@ -25,7 +25,9 @@ Future<ScriptPackage> candidate(
   String version = '1.0.0',
   List<String> permissions = const [],
   List<Object?> serviceDependencies = const [],
+  List<Object?> optionalServices = const [],
   List<Object?> services = const [],
+  String script = 'export function value(){return {};}',
 }) async => ScriptPackage.verify(
   await ScriptPackage.build(
     {
@@ -37,13 +39,14 @@ Future<ScriptPackage> candidate(
         'dataVersion': 1,
         'permissions': permissions,
         'serviceDependencies': serviceDependencies,
+        'optionalServices': optionalServices,
       },
       'entryPoint': 'main.js',
       'collections': [],
       'services': services,
       'pages': [],
     },
-    {'main.js': 'export function value(){return {};}'},
+    {'main.js': script},
   ),
   allowUnsignedLocal: true,
 );
@@ -84,6 +87,152 @@ void main() {
       contains('Unsatisfied service'),
     ),
   );
+
+  const optionalQuery = {
+    'moduleId': providerId,
+    'serviceId': serviceId,
+    'majorVersion': 1,
+    'kind': 'query',
+  };
+
+  test(
+    'optional query installs without provider and survives provider disable',
+    () async {
+      final optional = await candidate(
+        consumerId,
+        permissions: ['services.query:$providerId/$serviceId@1'],
+        optionalServices: [optionalQuery],
+      );
+      expect(optional.dependencies, isEmpty);
+      expect(optional.requiredServices, isEmpty);
+      await host.install(optional);
+      final caller = host.instances[consumerId]!.actor;
+      const ref = ServiceRef(providerId, serviceId, 1);
+      await expectLater(host.query(caller, ref, {}), throwsStateError);
+      await host.install(await provider('query'));
+      expect(await host.query(caller, ref, {}), {});
+      expect(host.dependents(providerId), isEmpty);
+      await host.disable(providerId);
+      expect(host.instances[consumerId]!.actor, same(caller));
+      await expectLater(host.query(caller, ref, {}), throwsStateError);
+      await host.enable(providerId);
+      expect(await host.query(caller, ref, {}), {});
+    },
+  );
+
+  test('optional queries cannot remove command service requirements', () async {
+    final optional = await candidate(
+      consumerId,
+      permissions: [
+        'services.query:$providerId/$serviceId@1',
+        'services.command:$providerId/$serviceId@1',
+      ],
+      optionalServices: [optionalQuery],
+    );
+    expect(optional.dependencies, [providerId]);
+    expect(optional.requiredServices.single['kind'], 'command');
+  });
+
+  test(
+    'optional declarations require query kind and exact permission',
+    () async {
+      await expectLater(
+        candidate(consumerId, optionalServices: [optionalQuery]),
+        throwsFormatException,
+      );
+      for (final declarations in [
+        [
+          {...optionalQuery, 'kind': 'command'},
+        ],
+        [
+          {...optionalQuery, 'majorVersion': 0},
+        ],
+        [optionalQuery, optionalQuery],
+      ]) {
+        await expectLater(
+          candidate(
+            consumerId,
+            optionalServices: declarations,
+            permissions: ['services.query:$providerId/$serviceId@1'],
+          ),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+
+  for (final change in ['install', 'enable', 'disable', 'restart']) {
+    test(
+      'directory baseline detects optional provider $change at commit',
+      () async {
+        if (change != 'install') {
+          await host.install(await provider('query'));
+          if (change == 'enable') await host.disable(providerId);
+        }
+        await host.install(
+          await candidate(
+            consumerId,
+            permissions: ['services.query:$providerId/$serviceId@1'],
+            optionalServices: [optionalQuery],
+            services: [service('command')],
+            script:
+                '''
+import {services} from '@xudian/sdk';
+export async function value() {
+  const directory = await services.directory();
+  return {result:{available:directory.some(s=>s.moduleId==='$providerId')},writes:[]};
+}
+export async function render() {return services.directory();}
+''',
+          ),
+        );
+        Set<String>? reads;
+        await host.invokePage(
+          consumerId,
+          'render',
+          {},
+          readOnly: true,
+          onReads: (value) => reads = value,
+        );
+        expect(reads, contains(providerId));
+        final caller = host.instances[consumerId]!.actor;
+        final plan = await host.prepare(
+          caller,
+          const ServiceRef(consumerId, serviceId, 1),
+          {},
+        );
+        host.review(plan.id, caller);
+        switch (change) {
+          case 'install':
+            await host.install(await provider('query'));
+          case 'enable':
+            await host.enable(providerId);
+          case 'disable':
+            await host.disable(providerId);
+          case 'restart':
+            await host.disable(providerId);
+            await host.enable(providerId);
+        }
+        await expectLater(
+          host.commit(caller, plan.id),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('Service directory changed'),
+            ),
+          ),
+        );
+        final fresh = await host.prepare(
+          caller,
+          const ServiceRef(consumerId, serviceId, 1),
+          {},
+        );
+        host.review(fresh.id, caller);
+        expect(await host.commit(caller, fresh.id), fresh.result);
+      },
+    );
+  }
 
   for (final requiredKind in ['query', 'command']) {
     final otherKind = requiredKind == 'query' ? 'command' : 'query';

@@ -1,6 +1,6 @@
 # JavaScript 模块 SDK v1
 
-当前宿主 API 为 `1.20.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
+当前宿主 API 为 `1.21.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
 
 新增模块使用 `formatVersion: 3`、`packageFormat: 2`，按所用能力声明最低 `hostApi`。组件/服务的 `@1` 主版本与宿主 API 版本分别管理，下方完整契约保留兼容规则。
 
@@ -215,7 +215,7 @@ await ui.preferences.set('gallery.pinned', [...new Set([...pinned, 'button'])]);
 await ui.notify({message: '已固定到首页', kind: 'success', duration: 3000});
 ```
 
-`ui.notify({message,kind?,duration?})` 显示顶部圆角悬浮 toast，返回 `null`，带状态图标、自动消失和关闭按钮，页面仍可操作并遵循减少动画设置。message 为 1–200 字符的非空文本，kind 为 `info`（默认）、`success` 或 `error`，error 使用错误色；duration 为 1000–10000 毫秒的整数，默认 3000。新提示替换当前提示，无导航或数据副作用。调用权限和执行阶段限制与 UI 偏好相同。
+`ui.notify({message,kind?,duration?})` 显示顶部圆角悬浮 Toast，返回 `null`，带状态图标、自动消失和关闭按钮，页面仍可操作并遵循减少动画设置。message 为 1–200 字符的非空文本，kind 为 `info`（默认）、`success` 或 `error`，error 使用错误色；duration 为 1000–10000 毫秒的整数，默认 3000。不同提示替换当前提示；展示中的相同 message 与 kind 不重播、不延长计时，即使新调用传入不同 duration。关闭开始后再次调用可展示新条目。返回值不等待提示消失；调用无导航或业务数据副作用，权限和执行阶段限制与 UI 偏好相同。原生与脚本共用 `ui.notification@1`，UI、动画、场景边界及真实演示见 [全局 Toast 规范](design/TOAST.md)。
 
 `transition` 节点包装一个 `child`，effect 为 `fade`（默认）、`scale` 或 `slide`。visible 默认 `true`，切换时播放进出动画；更新字符串／数字 `replayKey` 或更换节点 key 重播。duration 为 100–2000 毫秒整数，默认 350。宿主保留原内容布局和控件状态，隐藏内容不响应输入且不进入无障碍树；系统或应用“减少动画”直接呈现最终状态。
 
@@ -432,3 +432,29 @@ ui.component('ui.dayOverview@1', {
 新的 token 仅对本次差量生效：`removeKeys` 中已从当前 children 消失的旧行渐隐并收拢，仍存在的行只更新数据；`highlightKeys` 中真正新增的行短暂显示 900ms 背景高亮，不改变已有行透明度。两者都是字符串数组，默认空。普通删除、翻页、外部写入不带新 token 时立即更新；历史日期的已完成任务如果仍在查询结果中，不执行退出。退出开始即禁用点击、焦点和无障碍遍历；连续提交与同 token 刷新保留每条退出的原截止时间，离屏行也按时释放。系统或应用“减少动画”立即更新最终列表并跳过高亮，开启该设置也会结束在途退出。
 
 `duration` 控制退出时长，为 100–2000ms 的整数，默认 220ms；`spacing` 为 0–48 的有限数字，默认 12。UI 包仍可替换每个行组件，列表只负责稳定身份与通用呈现，不调用业务服务。这是视觉差量更新，服务查询、脚本执行和跨桥传输仍按既有刷新流程完成；不是 SQLite 或跨桥的局部更新协议。日程 `app.views.today 1.6.2` 使用此节点，在任务创建、完成的审核提交成功后提供反馈；快速添加仍使用独立的可折叠 `transition`。
+
+## API 1.21 的纯时区转换与可选查询
+
+声明 `hostApi: '^1.21.0'` 后可使用两项无副作用转换，在页面、只读页面准备、query 和 command prepare 中均可调用，不需要额外权限，也不读取宿主当前时间：
+
+```js
+await clock.toLocal({utc: '2026-11-01T05:30:00.000Z', zone: 'America/New_York'});
+// {date:'2026-11-01', time:'01:30', weekday:7}
+await clock.toUtc({date: '2026-11-01', time: '01:30', zone: 'America/New_York'});
+// {status:'ambiguous', instants:['2026-11-01T05:30:00.000Z','2026-11-01T06:30:00.000Z']}
+```
+
+`zone` 必填，为有效 IANA 时区名；`utc` 必须是以 `Z` 结尾、包含秒的 ISO UTC 时间戳，可含 1–6 位小数。输出日期为 `YYYY-MM-DD`、时间为 `HH:mm`，星期一为 1、星期日为 7。反向输入仅接受有效的 `YYYY-MM-DD` 日期与 `HH:mm` 时间；非法日期、时刻和时区报错。`clock.toUtc` 的 `status` 为 `unique`（一个候选）、`ambiguous`（多个候选，UTC 升序）或 `nonexistent`（空数组）。夏令时跳跃、重复与整日跳过均返回明确状态，不替调用者选候选或移动时间。
+
+`manifest.optionalServices` 可声明只读可选服务，且必须保留相同引用的精确查询权限：
+
+```json
+{
+  "permissions": ["services.query:app.schedule/schedule.query.timetables@1"],
+  "optionalServices": [{"moduleId":"app.schedule","serviceId":"schedule.query.timetables","majorVersion":1,"kind":"query"}]
+}
+```
+
+该声明仅排除由精确查询权限推导的必需依赖；显式 `dependencies`、`serviceDependencies` 与 command 权限仍是必需依赖。提供者缺失、停用或服务不兼容不阻止可选调用方安装、启用；停用提供者不会级联停用可选调用方。可先通过 `services.directory()` 判断服务是否存在；实际查询仍校验精确权限、服务种类、主版本与 Schema，缺少服务时抛错。可选声明本身不授予权限，也不允许 command。
+
+`services.directory()` 记录当前服务目录与实例代数作为 prepare 的读取基线，包含可选提供者尚未安装或启用的状态；目录变化后提交拒绝并要求重新准备。只读页面准备也记录声明的可选提供者 ID，即使提供者当前缺失，安装或启停后页面可重新查询。

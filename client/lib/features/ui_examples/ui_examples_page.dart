@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/app_toast.dart';
 import '../../app/design_system.dart';
 import '../../core/ui/ui_annotation.dart';
 
@@ -66,9 +67,7 @@ class _UiExamplesPageState extends State<UiExamplesPage> {
   }
 
   void _message(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message: message);
   }
 
   Widget _surface(String title, Widget child) => UiAnnotation(

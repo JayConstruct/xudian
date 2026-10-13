@@ -886,7 +886,7 @@ void main() {
   );
 
   testWidgets(
-    'date refresh retains the old paint until the slowest contribution is ready without exposing old records',
+    'date refresh fades old paint while waiting for every contribution without exposing unready records',
     (tester) async {
       tester.view.physicalSize = const Size(390, 1000);
       tester.view.devicePixelRatio = 1;
@@ -909,17 +909,23 @@ void main() {
         const Rect.fromLTWH(0, 0, 390, 1000),
       );
       expect(sampleRect.isEmpty, isFalse);
-      final oldPaint = await _paintedRegion(
-        tester,
-        find.byKey(screenKey),
-        sampleRect,
-      );
       final stripRect = tester.getRect(strip);
       final oldDatePaint = await _paintedRegion(
         tester,
         find.byKey(screenKey),
         stripRect,
       );
+      final background = Theme.of(tester.element(find.byType(DateReveal)))
+          .scaffoldBackgroundColor;
+      final backgroundPixel = [
+        (background.r * 255).round(),
+        (background.g * 255).round(),
+        (background.b * 255).round(),
+        (background.a * 255).round(),
+      ];
+      Uint8List backgroundRegion(Uint8List region) => Uint8List.fromList([
+        for (var i = 0; i < region.length ~/ 4; i++) ...backgroundPixel,
+      ]);
       final courseGate = Completer<void>();
       addTearDown(() {
         if (!courseGate.isCompleted) courseGate.complete();
@@ -949,25 +955,44 @@ void main() {
       expect(find.semantics.byLabel('今天的任务'), findsNothing);
       expect(find.semantics.byLabel('2026-10-13'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsNothing);
-      for (var frame = 0; frame < 6; frame++) {
-        await tester.pump(const Duration(milliseconds: 16));
-        expect(
-          _paintDifference(
-            oldPaint,
-            await _paintedRegion(tester, find.byKey(screenKey), sampleRect),
-          ),
-          lessThan(.03),
-          reason: 'The previous task paint must remain while courses load.',
-        );
-        expect(
-          _paintDifference(
-            oldDatePaint,
-            await _paintedRegion(tester, find.byKey(screenKey), stripRect),
-          ),
-          lessThan(.03),
-          reason: 'The five-day band must remain in the same old snapshot.',
-        );
-      }
+      final dynamic revealState = tester.state(find.byType(DateReveal));
+      expect(revealState.snapshot, isA<ui.Image>());
+      expect(
+        revealState.animation.value,
+        0,
+        reason: 'The ready task contribution cannot start a partial page fade.',
+      );
+      // Old content leaves in 120ms; the decorative wave finishes at 480ms.
+      // A slow contribution must keep the business area blank after both,
+      // rather than display old records or prematurely expose ready sections.
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(revealState.oldOpacity, 0);
+      expect(revealState.waves, isEmpty);
+      final waitingTaskPaint = await _paintedRegion(
+        tester,
+        find.byKey(screenKey),
+        sampleRect,
+      );
+      final waitingDatePaint = await _paintedRegion(
+        tester,
+        find.byKey(screenKey),
+        stripRect,
+      );
+      expect(
+        _paintDifference(backgroundRegion(waitingTaskPaint), waitingTaskPaint),
+        lessThan(.005),
+        reason: 'Old task text and unready replacement text must be absent from paint.',
+      );
+      expect(
+        _paintDifference(backgroundRegion(waitingDatePaint), waitingDatePaint),
+        lessThan(.005),
+        reason:
+            'The business date band fades away while the course query is held.',
+      );
+      expect(strip.hitTestable(), findsNothing);
+      expect(find.byType(AgendaItem).hitTestable(), findsNothing);
+      expect(find.byTooltip('前一天').hitTestable(), findsOneWidget);
+      expect(find.byTooltip('后一天').hitTestable(), findsOneWidget);
       courseGate.complete();
       await _settle(tester);
       expect(find.text('今天的任务'), findsNothing);

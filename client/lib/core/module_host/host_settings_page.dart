@@ -1,5 +1,6 @@
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
+import '../../app/app_toast.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,8 +38,7 @@ Future<void> _openCatalog(BuildContext context, WidgetRef ref) async {
     );
   } catch (_) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('无法打开模块商店，请重试')));
+      AppToast.show(context, message: '无法打开模块商店，请重试', kind: 'error');
     }
   }
 }

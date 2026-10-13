@@ -40,8 +40,13 @@ async function model(connection,messages,tools) {
 }
 function undoInput(spec,scope) {
   if(spec&&typeof spec==='object'&&!Array.isArray(spec)) {
-    if(spec.bind) { let value=scope;for(const key of spec.bind) value=value?.[key];return spec.boolean?!!value:value; }
-    if(spec.beforeChangedFields) return Object.fromEntries(Object.keys(scope.input.changes||{}).map(key=>[key,scope.before[key]]));
+    if(spec.when&&!undoInput(spec.when,scope))return undefined;
+    if(spec.bind) { let value=scope;for(const key of spec.bind) value=value?.[key];return spec.boolean?!!value:spec.nullIfMissing&&value==null?null:value; }
+    if(spec.beforeChangedFields) {
+      const changed=scope.input.changes||{},keys=new Set(Object.keys(changed));
+      for(const [trigger,fields] of Object.entries(spec.includeWhenChanged||{}))if(trigger in changed)for(const key of fields)keys.add(key);
+      return Object.fromEntries([...keys].map(key=>[key,scope.before[key]??null]));
+    }
     return Object.fromEntries(Object.entries(spec).map(([key,value])=>[key,undoInput(value,scope)]));
   }
   return spec;

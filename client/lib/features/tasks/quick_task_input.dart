@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_toast.dart';
+
 import '../../core/modules/module_context.dart';
 import 'application/providers.dart';
 
@@ -71,8 +73,7 @@ class _QuickTaskInputState extends ConsumerState<QuickTaskInput> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    AppToast.show(context, message: message, kind: 'error');
   }
 
   @override

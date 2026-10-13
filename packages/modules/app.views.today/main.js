@@ -27,6 +27,13 @@ async function overview(state,event,context) {
 }
 const field=(key,label,value='',type='text',options)=>({key,label,value,type:['dueDate','plannedDate'].includes(key)?'date':type,required:['name','title'].includes(key),maxLength:key==='title'?300:120,...(options?{options}: {})});
 async function execute(id,input) { const plan=await services.prepare(ref(id),input); if(await ui.review(plan.planId)) return services.commit(plan.planId); }
+async function plannedLabel(task) {
+  if(task.plannedStartAt&&task.plannedEndAt&&task.plannedTimezone) {
+    const start=await clock.toLocal({utc:task.plannedStartAt,zone:task.plannedTimezone}),end=await clock.toLocal({utc:task.plannedEndAt,zone:task.plannedTimezone});
+    return `计划 ${start.date} ${start.time}–${end.time} (${task.plannedTimezone})`;
+  }
+  return task.plannedDate&&`计划 ${task.plannedDate}`;
+}
 export async function render({state={},event,formValues={},context={}}) {
   state={...state};
   if(context.pageId==='app.views.today.home')return {state,runtimeContextPatch:{selectedDate:validDate(context.selectedDate??await clock.today())},tree:{type:'column',children:[]}};
@@ -67,7 +74,12 @@ export async function render({state={},event,formValues={},context={}}) {
   if(event?.type==='edit') {
     const t=event.task;
     const values=await ui.dialog({title:'编辑任务',fields:[field('title','标题',t.title),field('priority','优先级',String(t.priority),'select',[0,1,2,3].map(x=>({value:String(x),label:String(x)}))),field('dueDate','到期日期 YYYY-MM-DD（留空清除）',t.dueDate),field('plannedDate','计划日期 YYYY-MM-DD（留空清除）',t.plannedDate)]});
-    if(values) await execute('task.updateFields',{id:t.id,changes:{...values,priority:Number(values.priority),dueDate:values.dueDate||null,plannedDate:values.plannedDate||null},expectedUpdatedAt:t.updatedAt});
+    if(values) {
+      const changes={...values,priority:Number(values.priority),dueDate:values.dueDate||null,plannedDate:values.plannedDate||null};
+      // Saving a title or priority must not clear an unchanged precise plan.
+      if(changes.plannedDate===(t.plannedDate||null))delete changes.plannedDate;
+      await execute('task.updateFields',{id:t.id,changes,expectedUpdatedAt:t.updatedAt});
+    }
   }
   if(event?.type==='field') {
     const f=event.field,entity={moduleId:'app.tasks',collection:'tasks',id:event.task.id},current=event.task.fields?.[f.key];
@@ -99,7 +111,7 @@ export async function render({state={},event,formValues={},context={}}) {
         ...(field.commands?.set?[button('修改字段',{type:'field',task,field}),button('清除字段',{type:'clearField',task,field})]:[]),
       ]}));
       children.push({type:'taskItem',key:task.id,title:task.title,completed:task.completed,
-        subtitle:[task.dueDate&&`到期 ${task.dueDate}`,task.plannedDate&&`计划 ${task.plannedDate}`,projectNames.get(task.projectId),task.priority&&`优先级 ${task.priority}`].filter(Boolean).join(' · '),
+        subtitle:[task.dueDate&&`到期 ${task.dueDate}`,await plannedLabel(task),projectNames.get(task.projectId),task.priority&&`优先级 ${task.priority}`].filter(Boolean).join(' · '),
         event:{type:'complete',task},openEvent:{type:'edit',task},
         ...(fields.length?{children:[{type:'disclosure',key:'task-fields:'+task.id,text:'扩展字段',children:fields}]}: {}),
       });

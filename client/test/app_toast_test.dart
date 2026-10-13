@@ -152,4 +152,204 @@ void main() {
     expect(find.text('panel notice'), findsNothing);
     expect(find.text('panel action'), findsOneWidget);
   });
+
+  testWidgets('duplicate notices keep animation and original deadline', (
+    tester,
+  ) async {
+    late BuildContext source;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            source = context;
+            return const Scaffold();
+          },
+        ),
+      ),
+    );
+    AppToast.show(
+      source,
+      message: '已保存',
+      kind: 'success',
+      duration: const Duration(seconds: 1),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    final fade = find
+        .ancestor(of: find.text('已保存'), matching: find.byType(FadeTransition))
+        .first;
+    final opacity = tester.widget<FadeTransition>(fade).opacity;
+    expect(opacity.value, greaterThan(0));
+    expect(opacity.value, lessThan(1));
+    AppToast.show(
+      source,
+      message: '已保存',
+      kind: 'success',
+      duration: const Duration(seconds: 10),
+    );
+    await tester.pump();
+    expect(tester.widget<FadeTransition>(fade).opacity, same(opacity));
+    await tester.pump(const Duration(milliseconds: 910));
+    await tester.pump(AppToast.exitDuration);
+    await tester.pump();
+    expect(find.text('已保存'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a repeated message can be shown while the old one exits', (
+    tester,
+  ) async {
+    late BuildContext source;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            source = context;
+            return const Scaffold();
+          },
+        ),
+      ),
+    );
+    AppToast.show(source, message: '提示');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('关闭提示'));
+    await tester.pump(const Duration(milliseconds: 50));
+    AppToast.show(source, message: '提示');
+    await tester.pumpAndSettle();
+    expect(find.text('提示'), findsOneWidget);
+    await tester.tap(find.byTooltip('关闭提示'));
+    await tester.pumpAndSettle();
+    expect(find.text('提示'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tearing down an overlay does not leave a stale notice', (
+    tester,
+  ) async {
+    late BuildContext source;
+    Widget app() => MaterialApp(
+      home: Builder(
+        builder: (context) {
+          source = context;
+          return const Scaffold();
+        },
+      ),
+    );
+    await tester.pumpWidget(app());
+    AppToast.show(source, message: '旧窗口');
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(app());
+    AppToast.show(source, message: '新窗口');
+    await tester.pumpAndSettle();
+    expect(find.text('新窗口'), findsOneWidget);
+    expect(find.text('旧窗口'), findsNothing);
+    await tester.tap(find.byTooltip('关闭提示'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('independent root overlays own their notices', (tester) async {
+    late BuildContext left, right;
+    await tester.pumpWidget(
+      Row(
+        textDirection: TextDirection.ltr,
+        children: [
+          Expanded(
+            child: MaterialApp(
+              home: Builder(
+                builder: (context) {
+                  left = context;
+                  return const Scaffold();
+                },
+              ),
+            ),
+          ),
+          Expanded(
+            child: MaterialApp(
+              home: Builder(
+                builder: (context) {
+                  right = context;
+                  return const Scaffold();
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    AppToast.show(left, message: '左侧窗口');
+    AppToast.show(right, message: '右侧窗口');
+    await tester.pumpAndSettle();
+    expect(find.text('左侧窗口'), findsOneWidget);
+    expect(find.text('右侧窗口'), findsOneWidget);
+    await tester.tap(find.byTooltip('关闭提示').first);
+    await tester.pumpAndSettle();
+    expect(find.text('左侧窗口'), findsNothing);
+    expect(find.text('右侧窗口'), findsOneWidget);
+    await tester.tap(find.byTooltip('关闭提示'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('long large text remains scrollable above the keyboard', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final semantics = tester.ensureSemantics();
+    late BuildContext source;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(2.5),
+            padding: const EdgeInsets.only(top: 24),
+            viewInsets: const EdgeInsets.only(bottom: 280),
+          ),
+          child: child!,
+        ),
+        home: Builder(
+          builder: (context) {
+            source = context;
+            return const Scaffold();
+          },
+        ),
+      ),
+    );
+    final message = '长文本演示，正文可以滚动并保留关闭操作。' * 10;
+    AppToast.show(
+      source,
+      message: message,
+      kind: 'error',
+      duration: const Duration(seconds: 10),
+    );
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('错误'), findsOneWidget);
+    expect(find.text(message), findsOneWidget);
+    final close = tester.getRect(find.byTooltip('关闭提示'));
+    expect(close.top, greaterThanOrEqualTo(36));
+    expect(close.bottom, lessThanOrEqualTo(360));
+    final card = find
+        .ancestor(of: find.text(message), matching: find.byType(Material))
+        .first;
+    expect(tester.getRect(card).top, 36);
+    expect(tester.getRect(card).bottom, lessThanOrEqualTo(348));
+    final scrollable = find.descendant(
+      of: find.byType(SingleChildScrollView),
+      matching: find.byType(Scrollable),
+    );
+    final position = tester.state<ScrollableState>(scrollable).position;
+    expect(position.maxScrollExtent, greaterThan(0));
+    await tester.drag(scrollable, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    expect(position.pixels, greaterThan(0));
+    await tester.tap(find.byTooltip('关闭提示'));
+    await tester.pumpAndSettle();
+    expect(find.text(message), findsNothing);
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
 }

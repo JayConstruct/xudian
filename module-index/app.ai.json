@@ -165,6 +165,61 @@
       "size": 5411,
       "sha256": "89e825f578721dd71281ac5515fc770f9e3e253dd1829c0f05fbf77f233db05a",
       "signature": null
+    },
+    {
+      "version": "1.3.0",
+      "manifest": {
+        "id": "app.ai",
+        "name": "AI 助手",
+        "version": "1.3.0",
+        "hostApi": "^1.18.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "http",
+          "secrets",
+          "grants.request",
+          "grants.revoke",
+          "packages.prepare",
+          "packages.review",
+          "clock.today"
+        ],
+        "dependencies": [],
+        "defaultInstall": true,
+        "httpOrigins": [],
+        "description": "提供 AI 助手入口和宿主服务接口。",
+        "author": "JayConstruct"
+      },
+      "services": [
+        {
+          "id": "ai.connection.save",
+          "major": 1,
+          "handler": "saveConnection",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "ai.history.save",
+          "major": 1,
+          "handler": "saveHistory",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261013-planner/app.ai-1.3.0.xmodule",
+      "size": 5534,
+      "sha256": "4e947c7d48c99e70f343fb401cec3a585d6e608aec12fadc48b0d0505f39d7e7",
+      "signature": null
     }
   ]
 }

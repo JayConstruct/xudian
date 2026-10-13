@@ -35,6 +35,7 @@
 | 底栏 | `ui.chrome.bottomNav@1` | `navigation`、`input`（无快捷输入时提供空槽位） |
 | 侧栏 | `ui.chrome.sidebar@1` | `navigation` |
 | 标题 | `ui.chrome.header@1` | `title`、`actions` |
+| 短暂反馈 | `ui.notification@1` | `content`，宿主持有正文、关闭与可访问语义 |
 
 Flutter 页面通过 `UiComponent(ref, fallback, props, slots, events)` 使用组件，`UiPackScope` 传递模块与选择上下文。fallback 提供稳定默认内容；slots 是宿主持有的 Widget，输入、焦点与业务状态不交给包。
 
@@ -191,6 +192,8 @@ ui.component('ui.dayOverview@1', {
 | `ui.nativeDialog@1` | `control` | 普通原生对话框，包含原始内容与操作 |
 | `ui.nativeFeedback@1` | `control` | 原生错误及重试状态 |
 | `ui.notification@1` | `content` | 保留关闭、时长及可访问语义的宿主浮动提示 |
+
+原生 `AppToast.show` 与脚本 `ui.notify` 共用这一通知契约，解析调用处的有效界面选择。UI 包可以包装 `content` 调整外观，位置、宽度约束、动画、计时、单条替换和重复提示去重由宿主持有。默认 UI、场景边界和真实交互示例见 [全局 Toast 规范](design/TOAST.md)。
 
 这些 recipe 可用 padding、背景、card、column 等实际包装或布局原生控件。mandatory 槽位只能出现一次，不能通过隐藏、重复或丢弃控件移除操作。`ui.page.native@1` 的 `body` 需要有限高度；vertical column 自动为它分配剩余空间。card 应只有一个明确的 bounded column 子节点，不允许直接将标题与滚动 body 放进多子节点 card，也不能在 body 外再套 scroll／list／wrap／row。
 

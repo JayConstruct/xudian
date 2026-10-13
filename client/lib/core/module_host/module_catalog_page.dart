@@ -1,5 +1,6 @@
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
+import '../../app/app_toast.dart';
 
 import 'dart:convert';
 import 'dart:io';
@@ -116,8 +117,7 @@ Future<void> installResolvedModules(
       includeDependencies(item.id);
     }
     if (changes.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('所需模块已经安装并启用')));
+      AppToast.show(context, message: '所需模块已经安装并启用', kind: 'info');
       return;
     }
     final packages = await showDialog<List<ScriptPackage>>(
@@ -170,9 +170,7 @@ Future<void> installResolvedModules(
         rethrow;
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('安装状态已变化，正在重新解析依赖，请重新确认')));
+        AppToast.show(context, message: '安装状态已变化，正在重新解析依赖，请重新确认', kind: 'info');
       }
     } finally {
       host.discardInstallBatch(plan);

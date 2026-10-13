@@ -5,6 +5,16 @@ export const button=(label,event,disabled=false,variant='tonal')=>ui.component('
 export const column=children=>({type:'column',children});
 export const tile=(title,subtitle,event,icon)=>({type:'listTile',title,subtitle,...(icon?{icon}:{}),...(event?{event}:{trailing:''})});
 export const group=(title,children)=>({type:'column',children:[{type:'sectionHeader',title},...children]});
+export const notificationSamples={
+  info:{message:'这是一条演示消息',kind:'info',duration:3000},
+  success:{message:'演示操作已完成',kind:'success',duration:3000},
+  error:{message:'演示操作失败，请重试',kind:'error',duration:3000},
+  long:{message:'这是用于检查换行和大字号的长文本提示：已保存本地示例内容，返回页面后可以继续编辑。请在浅色、深色和系统大字号下查看正文、状态图标与关闭按钮是否完整显示。',kind:'info',duration:8000},
+  short:{message:'短时提示将在 1 秒后关闭',kind:'info',duration:1000},
+  extended:{message:'长时提示将在 10 秒后关闭，也可点击关闭按钮',kind:'info',duration:10000},
+  duplicate:{message:'相同消息只显示一次，不延长原来的 3 秒计时',kind:'info',duration:3000},
+  panel:{message:'操作面板保持打开，Toast 显示在弹层上方',kind:'success',duration:3000},
+};
 const change=id=>({type:'changeDemo',id});
 const iconGroups=[
   ['页面与内容',[['today','今天'],['calendar','课表与日期'],['tasks','任务'],['modules','模块'],['projects','项目'],['inbox','收件箱'],['school','学校'],['schedule','时间']]],
@@ -46,7 +56,24 @@ export function control(item,state,forms) {
   if(id==='loading')return column([...(value?[ui.component('ui.loading@1'),text('正在加载示例…','muted')]:[text('尚未开始加载','muted')]),button(value?'停止加载':'开始加载',{...change(id),value:!value})]);
   if(id==='progress')return column([ui.component('ui.progress@1',{props:{value:state.indeterminate?null:Number(value)}}),{type:'slider',key:formKey(id),min:0,max:1,divisions:10,value:Number(value),event:change(id)},{type:'switch',text:'不确定进度',value:!!state.indeterminate,event:{type:'value',key:'indeterminate'}}]);
   if(id==='error')return column([value?ui.component('ui.error@1',{props:{message:'示例加载失败，请重试'},events:{retry:{...change(id),value:false}}}):text('重试成功，已恢复示例内容'),button('再次显示错误',{...change(id),value:true},false,'outlined')]);
-  if(id==='notification')return {type:'row',children:['info','success','error'].map(kind=>button({info:'显示消息',success:'成功提示',error:'错误提示'}[kind],{type:'notify',kind}))};
+  if(id==='notification')return column([
+    text('所有按钮均调用真实全局 Toast。提示位于顶部安全区，不阻断页面操作。','muted'),
+    {type:'row',children:['info','success','error'].map(kind=>button({info:'显示消息',success:'成功提示',error:'错误提示'}[kind],{type:'notify',kind}))},
+    group('正文与时长',[
+      button('显示长文本',{type:'notify',sample:'long'},false,'outlined'),
+      {type:'row',children:[button('短时提示 · 1 秒',{type:'notify',sample:'short'},false,'outlined'),button('长时提示 · 10 秒',{type:'notify',sample:'extended'},false,'outlined')]},
+      text('切换浅色 / 深色和系统大字号后，使用长文本检查换行及关闭按钮。任意提示都可手动关闭。','muted'),
+    ]),
+    group('连续触发与弹层',[
+      {type:'row',children:[button('连续替换 · 3 条',{type:'notifySequence'},false,'outlined'),button('重复相同消息',{type:'notifyDuplicate'},false,'outlined')]},
+      text('连续触发时保留最新一条；重复相同内容与状态时不叠加，也不延长原计时。','muted'),
+      button('打开面板并显示提示',{type:'panel',notification:true},false,'outlined'),
+    ]),
+    group('真实入场与退场动画',[
+      text('入场 180ms：向下轻移并淡入；退场 140ms：向上轻移并淡出。','muted'),
+      text('默认展示真实动画。在“设置 → 外观与交互”开启“减少动画”，或开启系统减少动画后，再点击上述按钮检查即时显示与关闭。','muted'),
+    ]),
+  ]);
   if(id==='panel')return button('打开操作面板',{type:'panel'},false,'outlined');
   if(id==='floating')return column([text('悬浮窗在页面上方显示，不挤压下方内容。','muted'),button('显示悬浮窗',{type:'floating',visible:true}),tile('页面下方仍可操作','悬浮窗打开时也可点击此项',{type:'action',id})]);
   if(id==='animation')return column([
@@ -79,7 +106,10 @@ export function callCode(item,state,forms) {
   };
   if(item.id==='panel')return {call:"await ui.panel('app.ui.examples.local', {}, {adaptive: true});",handler:'// 用户关闭面板后返回当前演示页。'};
   if(item.id==='confirm')return {call:"const result = await ui.dialog({\n  title: '确认演示操作',\n  fields: [{key: 'name', label: '演示名称', value: '本地示例', required: true}]\n});",handler:"if (result) state.result = '已确认 ' + result.name;"};
-  if(item.id==='notification')return {call:"await ui.notify({message: '演示操作已完成', kind: 'success', duration: 3000});",handler:'// kind 支持 info、success、error；仅展示消息。'};
+  if(item.id==='notification')return {
+    call:"await ui.notify({message: '演示操作已完成', kind: 'success', duration: 3000});\n\n// 弹层内也使用同一个全局 Toast\nawait ui.panel('app.ui.examples.local', {notification: true}, {adaptive: true});",
+    handler:"// kind 支持 info、success、error；duration 为 1000–10000ms 整数，默认 3000ms。\n// message 为 1–200 字符。长文本自动换行，关闭按钮可提前结束提示。\n// 连续调用时保留最新一条；相同内容与状态去重，不延长计时。\nfor (const kind of ['info', 'success', 'error']) {\n  await ui.notify({message: '连续替换：' + kind, kind});\n}\n// 入场 180ms，退场 140ms；减少动画遵循应用及系统设置。",
+  };
   if(item.id==='content')return {
     call:`ui.component('ui.icon@1', {\n  key: 'demo.icon:today',\n  props: {name: 'today', size: 28, semanticLabel: '今天'}\n})\n\n// 完整内容组件树\n${JSON.stringify(control(item,state,forms),null,2)}`,
     handler:'// name 使用图标下方的实际名称，size 指定尺寸，semanticLabel 提供无障碍说明。\n// ui.icon@1 默认使用 AppSymbolIcon 矢量图标；选定的 UI 包可覆盖同一公共组件。\n// 将组件放入 render 返回的 tree.children。',

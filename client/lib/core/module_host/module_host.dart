@@ -20,9 +20,11 @@ import 'package:xquickjs/xquickjs.dart';
 import '../contracts/json_values.dart';
 import '../ui/ui_pack.dart';
 import 'collection_store.dart';
+import 'clock_conversion.dart';
 import 'json_schema.dart';
 import 'legacy_data_migration.dart';
 import 'module_package.dart';
+import 'service_directory_resource.dart';
 
 class ServiceRef {
   const ServiceRef(this.moduleId, this.serviceId, this.major);
@@ -192,6 +194,7 @@ class ModuleHost {
 
   Future<void> initialize() async {
     zones.initializeTimeZones();
+    store.registerNativeResource(ServiceDirectoryResource(_directoryBaseline));
     await directory.create(recursive: true);
     await store.db.customStatement(hostUiPreferencesSchema);
     await migrateLegacyData(store);
@@ -1491,6 +1494,22 @@ class ModuleHost {
     return result;
   }
 
+  String _directoryBaseline() {
+    final ids = instances.keys.toList()..sort();
+    return canonicalJson({
+      'services': directoryServices(),
+      'instances': [
+        for (final id in ids)
+          {
+            'id': id,
+            'version': instances[id]!.actor.version,
+            'generation': instances[id]!.actor.generation,
+            'space': instances[id]!.actor.space,
+          },
+      ],
+    });
+  }
+
   List<Object?> directoryServices() => [
     for (final native in nativeServices.values)
       {...native.definition, 'moduleId': 'app.host', 'moduleName': '宿主'},
@@ -1587,6 +1606,8 @@ class ModuleHost {
           'clock.now',
           'clock.today',
           'clock.local',
+          'clock.toLocal',
+          'clock.toUtc',
           'ui.preferences.get',
           'ui.catalog',
           'ui.examples',
@@ -1600,6 +1621,8 @@ class ModuleHost {
           'ids.new',
           'clock.now',
           'clock.today',
+          'clock.toLocal',
+          'clock.toUtc',
           'ui.catalog',
           'ui.examples',
           'services.directory',
@@ -1657,6 +1680,16 @@ class ModuleHost {
           session: session,
         );
       case 'services.directory':
+        pageReads?.addAll([
+          ...instances.keys,
+          for (final raw
+              in instance.package.manifest['optionalServices'] as List? ?? [])
+            string(object(raw)['moduleId'], 'optional service module'),
+        ]);
+        session?.nativeReads.putIfAbsent(
+          ServiceDirectoryResource.resourceId,
+          () => {'registry': _directoryBaseline()},
+        );
         return directoryServices();
       case 'extensions.query':
       case 'extensions.queryMany':
@@ -1787,6 +1820,10 @@ class ModuleHost {
         return const Uuid().v4();
       case 'clock.now':
         return clockNow().toUtc().toIso8601String();
+      case 'clock.toLocal':
+        return clockToLocal(args);
+      case 'clock.toUtc':
+        return clockToUtc(args);
       case 'clock.today':
       case 'clock.local':
         final local = args['zone'] == null

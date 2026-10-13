@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.tasks",
     "name": "任务",
-    "version": "1.3.1",
-    "hostApi": "^1.16.0",
+    "version": "1.4.0",
+    "hostApi": "^1.21.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -345,6 +345,37 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 3
+          },
+          "plannedStartAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plannedEndAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plannedTimezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "executionExpiresOn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estimatedMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
           }
         }
       },
@@ -396,6 +427,37 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 3
+            },
+            "plannedStartAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "plannedEndAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "plannedTimezone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "executionExpiresOn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "estimatedMinutes": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
             }
           }
         }
@@ -438,6 +500,37 @@
                   "string",
                   "null"
                 ]
+              },
+              "plannedStartAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plannedEndAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "plannedTimezone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "executionExpiresOn": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "estimatedMinutes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
               }
             },
             "additionalProperties": false
@@ -491,6 +584,37 @@
                     "string",
                     "null"
                   ]
+                },
+                "plannedStartAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "plannedEndAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "plannedTimezone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "executionExpiresOn": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "estimatedMinutes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
                 }
               },
               "additionalProperties": false
@@ -518,7 +642,14 @@
               ]
             },
             "changes": {
-              "beforeChangedFields": true
+              "beforeChangedFields": true,
+              "includeWhenChanged": {
+                "plannedDate": [
+                  "plannedStartAt",
+                  "plannedEndAt",
+                  "plannedTimezone"
+                ]
+              }
             }
           }
         }
@@ -547,6 +678,18 @@
           },
           "expectedUpdatedAt": {
             "type": "string"
+          },
+          "actualCompletedOn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completedTimezone": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -577,6 +720,18 @@
             },
             "expectedUpdatedAt": {
               "type": "string"
+            },
+            "actualCompletedOn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "completedTimezone": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         },
@@ -600,9 +755,97 @@
                 "completedAt"
               ],
               "boolean": true
+            },
+            "actualCompletedOn": {
+              "bind": [
+                "before",
+                "actualCompletedOn"
+              ],
+              "nullIfMissing": true,
+              "when": {
+                "bind": [
+                  "before",
+                  "completedAt"
+                ],
+                "boolean": true
+              }
+            },
+            "completedTimezone": {
+              "bind": [
+                "before",
+                "completedTimezone"
+              ],
+              "nullIfMissing": true,
+              "when": {
+                "bind": [
+                  "before",
+                  "completedAt"
+                ],
+                "boolean": true
+              }
             }
           }
         }
+      }
+    },
+    {
+      "id": "task.range",
+      "major": 1,
+      "handler": "taskRange",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "required": [
+          "startAt",
+          "endAt"
+        ],
+        "properties": {
+          "startAt": {
+            "type": "string"
+          },
+          "endAt": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "array"
+      }
+    },
+    {
+      "id": "task.restore",
+      "major": 1,
+      "handler": "taskRestore",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "required": [
+          "id",
+          "expected",
+          "value"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "expected": {
+            "type": "object"
+          },
+          "value": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": [
+          "object",
+          "null"
+        ]
       }
     }
   ]

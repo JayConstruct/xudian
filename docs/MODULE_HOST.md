@@ -16,7 +16,7 @@ QuickJS NG v0.17.0 源码固定在 `packages/xquickjs/src/vendor`，构建钩子
 
 市场 Ed25519 签名覆盖规范 JSON `{packageFormat,release,files}`，核验可信发布者、审核状态和发布者绑定。资源包另外检查构建摘要；本地未签名包必须经宿主明确展示来源后确认。活动包按原始 ZIP 摘要存入不可变目录，原始来源与版本记录保留。旧 JSON 的转换结果单独登记 `derivedFrom`，不继承或冒充原始签名。
 
-模块定义、SDK 和示例见 [MODULE_SDK.md](MODULE_SDK.md)。宿主 API 版本为 `1.20.0`，接受兼容的 pub_semver 约束，例如 `^1.0.0`、`>=1.0.0 <2.0.0`，模块版本支持预发布与构建标识；依赖可以用模块 ID 字符串或 `{moduleId,version}` 声明版本范围。服务使用 `{moduleId,serviceId,majorVersion}`，实体引用使用 `{moduleId,collection,id}`。使用工具栏、填满视口的时间网格和 `clock.local` 的模块应声明 `^1.1.0`，使旧宿主明确拒绝尚未支持的界面能力。使用单顶栏贡献、分组设置行、时间输入及自适应面板的模块应声明 `^1.2.0`。使用公共组件节点、组件目录或 UI 包的模块应声明 `^1.6.0`。
+模块定义、SDK 和示例见 [MODULE_SDK.md](MODULE_SDK.md)。宿主 API 版本为 `1.21.0`，接受兼容的 pub_semver 约束，例如 `^1.0.0`、`>=1.0.0 <2.0.0`，模块版本支持预发布与构建标识；依赖可以用模块 ID 字符串或 `{moduleId,version}` 声明版本范围。服务使用 `{moduleId,serviceId,majorVersion}`，实体引用使用 `{moduleId,collection,id}`。使用工具栏、填满视口的时间网格和 `clock.local` 的模块应声明 `^1.1.0`，使旧宿主明确拒绝尚未支持的界面能力。使用单顶栏贡献、分组设置行、时间输入及自适应面板的模块应声明 `^1.2.0`。使用公共组件节点、组件目录或 UI 包的模块应声明 `^1.6.0`。
 
 ## 运行和权限
 

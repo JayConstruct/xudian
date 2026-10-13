@@ -8,6 +8,7 @@ import '../../core/modules/module_context.dart';
 import '../../core/ui/ui_annotation.dart';
 import '../../core/ui/ui_composition.dart';
 import '../../app/design_system.dart';
+import '../../app/app_toast.dart';
 import '../tasks/application/providers.dart';
 import '../tasks/task_editor.dart';
 import 'declarative_field_editor.dart';
@@ -298,8 +299,7 @@ class _DeclarativeTaskPageState extends ConsumerState<DeclarativeTaskPage>
       });
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('更新失败：$error')));
+        AppToast.show(context, message: '更新失败：$error', kind: 'error');
       }
     } finally {
       pendingTasks.remove(id);

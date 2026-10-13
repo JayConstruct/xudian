@@ -12,6 +12,7 @@ Future<ScriptPackage> makePackage(
   List<Object?> dependencies = const [],
   List<Object?> services = const [],
   List<Object?> serviceDependencies = const [],
+  List<Object?> optionalServices = const [],
   List<String> permissions = const [],
   String hostApi = '^1.8.0',
 }) async => ScriptPackage.verify(
@@ -26,6 +27,7 @@ Future<ScriptPackage> makePackage(
         'dataVersion': 1,
         'dependencies': dependencies,
         'serviceDependencies': serviceDependencies,
+        'optionalServices': optionalServices,
         'permissions': permissions,
       },
       'entryPoint': 'main.js',
@@ -145,6 +147,26 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('optional query does not fetch a missing provider', () async {
+    await fixture.add(
+      await makePackage(
+        'test.optional',
+        permissions: ['services.query:test.missing/data.read@1'],
+        optionalServices: [
+          {
+            'moduleId': 'test.missing',
+            'serviceId': 'data.read',
+            'majorVersion': 1,
+            'kind': 'query',
+          },
+        ],
+      ),
+    );
+    final resolution = await ModuleDependencyResolver(fixture.client)
+        .resolve(requests: {'test.optional': 'any'}, installed: {});
+    expect(resolution.ordered.map((module) => module.id), ['test.optional']);
+  });
+
   test(
     'withdrawn defaults are excluded from online and cached catalogs',
     () async {
@@ -165,7 +187,7 @@ void main() {
         containsAll(['test.withdrawn', 'test.kept']),
       );
       expect(
-      () => client.excludedModuleIds.add('test.kept'),
+        () => client.excludedModuleIds.add('test.kept'),
         throwsUnsupportedError,
       );
     },

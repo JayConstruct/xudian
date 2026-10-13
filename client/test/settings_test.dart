@@ -4,7 +4,9 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'support/legacy_app.dart';
+
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/features/ai/settings/ai_secret_store.dart';
 import 'package:task_app/features/ai/settings/ai_settings_store.dart';
@@ -115,6 +117,9 @@ void main() {
       await tester.pumpAndSettle();
       expect((await DriftAiSettingsStore(db).load()).model, 'test-model');
       expect(secrets.key, 'test-secret');
+      expect(find.text('AI 连接配置已保存'), findsOneWidget);
+      await tester.tap(find.byTooltip('关闭提示'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('尚未提交的任务'), findsOneWidget);

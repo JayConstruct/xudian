@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/design_system.dart';
+import '../../app/app_toast.dart';
 
 Future<Map<String, Object?>?> showTemplateParameterDialog({
   required BuildContext context,
@@ -33,8 +34,8 @@ class _TemplateParameterDialog extends StatefulWidget {
   State<_TemplateParameterDialog> createState() =>
       _TemplateParameterDialogState();
 }
-class _TemplateParameterDialogState
-    extends State<_TemplateParameterDialog> {
+
+class _TemplateParameterDialogState extends State<_TemplateParameterDialog> {
   final controllers = <String, TextEditingController>{};
   final values = <String, Object?>{};
 
@@ -75,8 +76,7 @@ class _TemplateParameterDialogState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (final parameter in widget.parameters)
-                _field(parameter),
+              for (final parameter in widget.parameters) _field(parameter),
             ],
           ),
         ),
@@ -86,13 +86,11 @@ class _TemplateParameterDialogState
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('创建任务'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('创建任务')),
       ],
     );
   }
+
   Widget _field(Map parameter) {
     final id = parameter['id'] as String;
     final label = parameter['label'] as String;
@@ -180,8 +178,7 @@ class _TemplateParameterDialogState
           padding: const EdgeInsets.only(bottom: 12),
           child: TextField(
             controller: controllers[id],
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
               labelText: required ? '$label *' : label,
             ),
@@ -199,6 +196,7 @@ class _TemplateParameterDialogState
         );
     }
   }
+
   Future<void> _pickDateTime(String id) async {
     final now = DateTime.now();
     final current = DateTime.tryParse(values[id]?.toString() ?? '') ?? now;
@@ -272,8 +270,6 @@ class _TemplateParameterDialogState
   }
 
   void _error(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    AppToast.show(context, message: message, kind: 'error');
   }
 }

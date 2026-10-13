@@ -1,5 +1,6 @@
 import 'ui_icon.dart';
 import 'native_ui.dart';
+import 'ui_toast.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,8 +48,10 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
         baseline = draft = restore ? UiSelection() : draft;
         error = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(restore ? '已恢复默认界面，业务数据保留' : '界面风格已保存')),
+      AppToast.show(
+        context,
+        message: restore ? '已恢复默认界面，业务数据保留' : '界面风格已保存',
+        kind: 'success',
       );
     } on StateError catch (failure) {
       if (mounted) setState(() => error = '${failure.message}；草稿保留');
@@ -490,13 +493,11 @@ class _UiPackPreviewPageState extends State<UiPackPreviewPage> {
       props: const {'label': '保存示例', 'disabled': false},
       events: {
         'press': (_) =>
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('模拟保存完成'))),
+            AppToast.show(context, message: '模拟保存完成', kind: 'success'),
       },
       fallback: FilledButton(
         onPressed: () =>
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('模拟保存完成'))),
+            AppToast.show(context, message: '模拟保存完成', kind: 'success'),
         child: const Text('保存示例'),
       ),
     );

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../app/design_system.dart';
+import '../../app/app_toast.dart';
 import '../../core/app_updates/github_app_updates.dart';
 import '../../core/ui/app_repository_links.dart';
 import '../../core/ui/native_ui.dart';
@@ -58,9 +59,8 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     }
   }
 
-  void _notify(String message) => ScaffoldMessenger.of(context)
-    ..clearSnackBars()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  void _notify(String message, {required String kind}) =>
+      AppToast.show(context, message: message, kind: kind);
 
   Future<void> _open(Uri url) async {
     try {
@@ -68,15 +68,15 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     } catch (_) {
       // Keep a copy action available if this device has no browser.
     }
-    if (mounted) _notify('无法打开浏览器，请复制链接');
+    if (mounted) _notify('无法打开浏览器，请复制链接', kind: 'error');
   }
 
   Future<void> _copy(Uri url) async {
     try {
       await Clipboard.setData(ClipboardData(text: url.toString()));
-      if (mounted) _notify('下载页链接已复制');
+      if (mounted) _notify('下载页链接已复制', kind: 'success');
     } catch (_) {
-      if (mounted) _notify('复制失败，请重试');
+      if (mounted) _notify('复制失败，请重试', kind: 'error');
     }
   }
 

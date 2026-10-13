@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'ui_toast.dart';
+
 final externalUrlLauncherProvider = Provider<Future<bool> Function(Uri)>(
   (_) =>
       (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
@@ -18,10 +20,8 @@ class AppRepositoryLinks extends ConsumerWidget {
   final VoidCallback onBrowseModules;
   final bool showHeading;
 
-  void _notify(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(message)));
+  void _notify(BuildContext context, String message, {required String kind}) {
+    AppToast.show(context, message: message, kind: kind);
   }
 
   Future<void> _open(
@@ -36,7 +36,7 @@ class AppRepositoryLinks extends ConsumerWidget {
       // The address remains available to copy when no browser can handle it.
     }
     if (!opened && context.mounted) {
-      _notify(context, '无法打开链接，请复制地址');
+      _notify(context, '无法打开链接，请复制地址', kind: 'error');
     }
   }
 
@@ -44,11 +44,11 @@ class AppRepositoryLinks extends ConsumerWidget {
     try {
       await Clipboard.setData(ClipboardData(text: address));
       if (context.mounted) {
-        _notify(context, '地址已复制');
+        _notify(context, '地址已复制', kind: 'success');
       }
     } catch (_) {
       if (context.mounted) {
-        _notify(context, '复制失败，请重试');
+        _notify(context, '复制失败，请重试', kind: 'error');
       }
     }
   }

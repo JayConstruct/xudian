@@ -6,6 +6,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'ui_toast.dart';
+
 final uiAnnotationProvider = NotifierProvider<UiAnnotationController, bool>(
   UiAnnotationController.new,
 );
@@ -342,9 +344,11 @@ class _UiAnnotationState extends ConsumerState<UiAnnotation> {
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                   } catch (_) {
                     if (!dialogContext.mounted) return;
-                    ScaffoldMessenger.maybeOf(
+                    AppToast.show(
                       dialogContext,
-                    )?.showSnackBar(const SnackBar(content: Text('复制失败，请重试')));
+                      message: '复制失败，请重试',
+                      kind: 'error',
+                    );
                   }
                 },
                 child: const Text('复制标识'),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/design_system.dart';
+import '../../app/app_toast.dart';
 import '../../core/modules/module_registry.dart';
 import '../../core/ui/ui_component.dart';
 import '../../core/ui/ui_pack_settings_page.dart';
@@ -37,8 +38,7 @@ class _AppearanceSettingsPageState
       await ref.read(appPreferencesProvider.notifier).save(preferences);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('设置保存失败，请重试')));
+        AppToast.show(context, message: '设置保存失败，请重试', kind: 'error');
       }
     } finally {
       if (mounted) setState(() => saving = false);

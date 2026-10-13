@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/design_system.dart';
+import '../../app/app_toast.dart';
 import '../../core/contracts/json_values.dart';
 import '../../core/modules/module_registry.dart';
 import '../../core/ui/ui_composition.dart';
@@ -718,8 +719,10 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
           ),
           NativeUi(
             child: TextButton(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('配置保持不变，条件恢复后可重新使用')),
+              onPressed: () => AppToast.show(
+                context,
+                message: '配置保持不变，条件恢复后可重新使用',
+                kind: 'info',
               ),
               child: const Text('暂时保留'),
             ),

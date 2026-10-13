@@ -35,6 +35,26 @@ export async function queryToday({timetableId,date:selectedDate}) {
   // an unsupported five-digit year for the exclusive next-day boundary.
   return {date:today,teachingWeek:teachingWeek(t,today),items:occurrences(t,courses,meetings,changes,today,today+'\uffff')};
 }
+// Inclusive civil range. Reuse the same occurrences as the timetable views,
+// then resolve each local period boundary in its own timetable timezone.
+export async function queryBusy({startDate,endDate}) {
+  feedDate(startDate);feedDate(endDate);
+  const length=(civil(endDate)-civil(startDate))/dayMs+1;
+  if(length<1||length>30)throw new Error('忙碌查询请选择1–30天');
+  const items=[];
+  for(const timetable of await data.query('timetables')) {
+    const {t,courses,meetings,changes}=await snapshot(timetable.id);
+    for(const item of occurrences(t,courses,meetings,changes,startDate,endDate+'\uffff')) {
+      const startTime=t.periods[item.startPeriod-1].start,endTime=t.periods[item.endPeriod-1].end;
+      const start=await clock.toUtc({date:item.date,time:startTime,zone:t.timezone}),end=await clock.toUtc({date:item.date,time:endTime,zone:t.timezone});
+      if(start.status!=='unique'||end.status!=='unique'||start.instants.length!==1||end.instants.length!==1)throw new Error(`${t.name} ${item.date} 的课程时间存在夏令时歧义或不存在`);
+      if(end.instants[0]<=start.instants[0])throw new Error('课程结束时间必须晚于开始时间');
+      items.push({id:t.id+'|'+item.occurrenceId,startAt:start.instants[0],endAt:end.instants[0],timetableId:t.id,date:item.date,timezone:t.timezone,title:item.title});
+    }
+  }
+  items.sort((a,b)=>a.startAt.localeCompare(b.startAt)||a.id.localeCompare(b.id));
+  return {startDate,endDate,items};
+}
 export async function queryTodayFeed({date:selectedDate}={}) {
   const date=selectedDate===undefined?await clock.today():feedDate(selectedDate),items=[];
   for(const timetable of await data.query('timetables')) {

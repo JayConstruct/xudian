@@ -125,6 +125,37 @@
         "author": {
           "type": "string",
           "description": "Optional author display name, not a verified publisher identity."
+        },
+        "optionalServices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "moduleId",
+              "serviceId",
+              "majorVersion",
+              "kind"
+            ],
+            "properties": {
+              "moduleId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "serviceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "majorVersion": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "kind": {
+                "const": "query"
+              }
+            },
+            "additionalProperties": false
+          },
+          "uniqueItems": true
         }
       }
     },
@@ -360,6 +391,9 @@
                 "maxItems": 0
               },
               "httpOrigins": {
+                "maxItems": 0
+              },
+              "optionalServices": {
                 "maxItems": 0
               }
             }

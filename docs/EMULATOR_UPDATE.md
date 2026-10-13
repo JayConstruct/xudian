@@ -17,17 +17,32 @@ scripts/start-emulator.sh --avd YOUR_AVD \
 scripts/start-emulator.sh --dry-run
 ```
 
-需要以 120fps 的 8.33ms 帧预算测量时，可在退出当前模拟器后临时冷启动：
+强制冷启动或开启高刷（例如 120 / 165 Hz）：
 
 ```bash
+scripts/start-emulator.sh --cold-boot
+scripts/start-emulator.sh --cold-boot --refresh-rate 120
+scripts/start-emulator.sh --cold-boot --refresh-rate 165
+
+# 可选：同时锁定 Android 最高/最低刷新率，避免系统策略仍限制为 60Hz
+scripts/start-emulator.sh --cold-boot --refresh-rate 165 --lock-refresh-rate
+
+# 预览操作，不连接设备、不关闭或启动进程、不改设置
+scripts/start-emulator.sh --cold-boot --refresh-rate 120 --lock-refresh-rate --dry-run
+
+# 未运行时启动；已运行时只核对刷新率，不自动重启
 scripts/start-emulator.sh --refresh-rate 120
 ```
 
-`--refresh-rate` 接受 30～240 Hz 的整数；指定时新进程附加 `-vsync-rate HZ -no-snapshot`，不修改 AVD 配置、不加载或保存 Quick Boot 快照。此参数只改变 Android 客体的刷新节拍，保持原有分辨率和清晰度；所选刷新率不能高于显示模拟器窗口的主机屏幕当前刷新率，120Hz 要求主机至少为 120Hz。已运行设备仅核对 `ro.boot.qemu.vsync`，不匹配或无法读取时会报错，需先退出再冷启动，脚本不会自动重启。未指定参数时保留原有启动和复用行为。
+`--cold-boot` 不清除应用或用户数据：目标设备已运行时，先通过模拟器控制台核对 AVD 名称，再关闭该设备，等待 ADB 和 Windows 目标进程退出后重新启动；不会批量终止其他模拟器。不带刷新率时使用 `-no-snapshot-load`，只跳过快照加载，退出仍允许保存 Quick Boot 快照。若目标为 offline、无法核对名称、名称不符、关闭失败或退出超时，脚本报错而不是盲目杀进程；此时手动退出目标模拟器后重试。`--timeout` 分别限制退出等待和 Android 启动等待。
 
-脚本核对启动属性后，还需用 `adb -s emulator-5554 shell dumpsys display` 检查当前显示模式的分辨率、刷新率与 `supportedModes`，并测量实际呈现间隔。客体报告 120Hz 不保证 Windows 窗口显示了每一个 Flutter 帧，60Hz 测量中的同步等待也不能直接视为未满足 120fps 的计算预算。恢复 60Hz 时，退出后运行 `scripts/start-emulator.sh --refresh-rate 60`；无需降低分辨率。
+`--refresh-rate` 接受 30～240 Hz 的整数，包括 120 和 165；指定时新进程附加 `-vsync-rate HZ -no-snapshot`，不修改 AVD 配置、不加载或保存 Quick Boot 快照。此参数只改变 Android 客体的刷新节拍，保持原有分辨率和清晰度；主机显示器当前刷新率会限制窗口实际呈现，测量 120 / 165fps 时应使用至少对应刷新率的主机屏幕。未加 `--cold-boot` 时，已运行设备仅核对 `ro.boot.qemu.vsync`，不匹配或无法读取时会报错，提示强制冷启动。未指定参数时保留原有启动和复用行为。
 
-即使 `ro.boot.qemu.vsync=120`、`supportedModes` 为 120Hz，Android 的默认刷新率策略仍可能使 `mActiveRenderFrameRate` 和 `mDisplayModeSpecs` 的 render 上限保持 60Hz。此时先记录当前用户的设置原值，再临时调整最高、最低刷新率；启动脚本不会自动修改这些设置：
+脚本核对启动属性后，还需用 `adb -s emulator-5554 shell dumpsys display` 检查当前显示模式的分辨率、刷新率与 `supportedModes`，并测量实际呈现间隔。客体报告 120Hz 不保证 Windows 窗口显示了每一个 Flutter 帧，60Hz 测量中的同步等待也不能直接视为未满足 120fps 的计算预算。恢复客体 60Hz 时运行 `scripts/start-emulator.sh --cold-boot --refresh-rate 60`；无需降低分辨率。
+
+即使 `ro.boot.qemu.vsync=120`、`supportedModes` 为 120Hz，Android 的默认刷新率策略仍可能使 `mActiveRenderFrameRate` 和 `mDisplayModeSpecs` 的 render 上限保持 60Hz。`--lock-refresh-rate` 必须与 `--refresh-rate` 一起使用；脚本先读取 Android 当前用户和两项设置原值，再保存恢复脚本到 `.cache/emulator-start/refresh-端口-随机标识.sh`，随后设置并读回核对 `peak_refresh_rate` / `min_refresh_rate`。终端会打印 `bash 恢复脚本路径`；原值为 `null` 时恢复脚本删除该覆盖值，而非写入字符串 `null`。只读失败时不写设置；写入或核对失败时保留恢复脚本并报错，不宣告就绪。
+
+锁定设置跨模拟器重启持续生效，不会在脚本结束时自动恢复，且不能保证应用实际帧率。实验结束后对同一设备执行打印的恢复命令；多次锁定生成多份记录，按操作的逆序恢复可回到最初的设置。未加 `--lock-refresh-rate` 时脚本不修改 Android 刷新率策略。也可以继续手动记录和调整：
 
 ```bash
 peak_before="$(adb -s emulator-5554 shell settings --user current get system peak_refresh_rate | tr -d '\r')"

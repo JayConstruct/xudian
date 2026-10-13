@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/design_system.dart';
+import '../../../app/app_toast.dart';
 import '../../tasks/application/providers.dart';
 import '../provider/openai_compatible_provider.dart';
 
@@ -64,13 +65,11 @@ class _AiConnectionPageState extends ConsumerState<AiConnectionPage> {
         model: model.text.trim(),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('AI 连接配置已保存')));
+      AppToast.show(context, message: 'AI 连接配置已保存', kind: 'success');
       Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('保存失败，请重试')));
+        AppToast.show(context, message: '保存失败，请重试', kind: 'error');
       }
     } finally {
       if (mounted) setState(() => saving = false);

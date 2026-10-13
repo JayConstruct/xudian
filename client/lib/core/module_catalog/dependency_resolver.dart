@@ -132,6 +132,7 @@ class ModuleDependencyResolver {
 
   List<_Requirement> _requirements(ResolvedCatalogModule module) {
     final result = <_Requirement>[];
+    final optional = optionalServicePermissions(module.manifest);
     for (final raw in module.manifest['dependencies'] as List? ?? []) {
       final id = raw is String
           ? raw
@@ -192,6 +193,7 @@ class ModuleDependencyResolver {
     }
     for (final permission
         in (module.manifest['permissions'] as List? ?? []).cast<String>()) {
+      if (optional.contains(permission)) continue;
       if (!permission.startsWith('services.query:') &&
           !permission.startsWith('services.command:')) {
         continue;

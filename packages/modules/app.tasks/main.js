@@ -7,6 +7,40 @@ function validDate(value) {
   const date=new Date(value+'T00:00:00Z');
   if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value) throw new Error('日期不存在');
 }
+function utc(value,label='时间') {
+  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/.test(value))throw new Error(`${label}必须为 UTC 时间`);
+  validDate(value.slice(0,10));
+  const parsed=new Date(value);
+  if(!Number.isFinite(parsed.getTime())||parsed.toISOString().slice(0,19)!==value.slice(0,19))throw new Error(`${label}无效`);
+  return parsed.toISOString();
+}
+const precisionFields=['plannedStartAt','plannedEndAt','plannedTimezone'];
+const extraFields=[...precisionFields,'estimatedMinutes','executionExpiresOn','actualCompletedOn','completedTimezone'];
+async function normalizePlan(value,changes) {
+  if('plannedDate' in changes&&!precisionFields.some(k=>k in changes))for(const k of precisionFields)value[k]=null;
+  if(value.estimatedMinutes!=null&&(!Number.isSafeInteger(value.estimatedMinutes)||value.estimatedMinutes<1))throw new Error('预计时长必须为正整数分钟');
+  validDate(value.executionExpiresOn);
+  const precise=precisionFields.some(k=>value[k]!=null);
+  if(!precise)return value;
+  if(precisionFields.some(k=>value[k]==null)||typeof value.plannedTimezone!=='string'||!value.plannedTimezone)throw new Error('精确计划需同时提供开始、结束时间和时区');
+  value.plannedStartAt=utc(value.plannedStartAt,'开始时间');value.plannedEndAt=utc(value.plannedEndAt,'结束时间');
+  if(value.plannedEndAt<=value.plannedStartAt)throw new Error('结束时间必须晚于开始时间');
+  const start=await clock.toLocal({utc:value.plannedStartAt,zone:value.plannedTimezone}),end=await clock.toLocal({utc:value.plannedEndAt,zone:value.plannedTimezone});
+  if(start.date!==end.date)throw new Error('精确计划不能跨午夜');
+  value.plannedDate=start.date;
+  return value;
+}
+const unexpired=day=>({any:[{field:'executionExpiresOn',op:'isNull'},{field:'executionExpiresOn',op:'gte',value:day}]});
+const associated=(day,today)=>({any:[{field:'plannedDate',op:'eq',value:day},{field:'dueDate',op:day===today?'lte':'eq',value:day}]});
+function dailyFilter(day,today) {
+  const pending={all:[{field:'completedAt',op:'isNull'},unexpired(day),associated(day,today)]};
+  if(day>=today)return pending;
+  return {any:[pending,{all:[{field:'completedAt',op:'notNull'},{any:[associated(day,today),{field:'actualCompletedOn',op:'eq',value:day}]}]}]};
+}
+function dailyMember(task,day,today) {
+  const linked=task.plannedDate===day||(day===today?task.dueDate!=null&&task.dueDate<=day:task.dueDate===day);
+  return task.completedAt?day<today&&(linked||task.actualCompletedOn===day):linked&&(task.executionExpiresOn==null||task.executionExpiresOn>=day);
+}
 function priority(p) { if(!Number.isInteger(p)||p<0||p>3) throw new Error('优先级必须在0–3之间'); }
 export async function taskGet({id}) { return data.get('tasks',id); }
 const taskSort=[{field:'priority',direction:'desc'},{field:'createdAt',direction:'asc'}];
@@ -23,15 +57,14 @@ export async function taskDayCounts({dates}) {
   if(!Array.isArray(dates)||!dates.length||dates.length>7||new Set(dates).size!==dates.length)throw new Error('请选择1至7个不同日期');
   dates.forEach(date=>{if(date==null)throw new Error('日期不存在');validDate(date);});
   const today=await clock.today(),conditions=['deletedAt','archivedAt','parentTaskId'].map(field=>({field,op:'isNull'}));
-  conditions.push({any:[{field:'dueDate',op:'in',value:dates},{field:'plannedDate',op:'in',value:dates},...(dates.includes(today)?[{field:'dueDate',op:'lte',value:today}]:[])]});
-  conditions.push({any:[{field:'completedAt',op:'isNull'},...dates.filter(date=>date<today).map(date=>({any:[{field:'dueDate',op:'eq',value:date},{field:'plannedDate',op:'eq',value:date}]}))]});
+  conditions.push({any:dates.map(day=>dailyFilter(day,today))});
   const days=dates.map(date=>({date,pending:0,completed:0,overdue:0,loadedPending:0,loadedCompleted:0,hasMore:false,truncated:false}));
   // Stream sorted pages: only counters and the first 50 statuses per day remain
   // in memory, even when the collection exceeds the host's per-query limit.
   for await(const records of taskPages({filter:{all:conditions},sort:taskSort})) {
     for(const task of records)for(const day of days) {
       const date=day.date;
-      if(!(date<today||!task.completedAt)||!(task.plannedDate===date||(date===today?task.dueDate!=null&&task.dueDate<=date:task.dueDate===date)))continue;
+      if(!dailyMember(task,date,today))continue;
       const loaded=day.pending+day.completed<50;
       if(task.completedAt){day.completed++;if(loaded)day.loadedCompleted++;}
       else {day.pending++;if(loaded)day.loadedPending++;}
@@ -50,13 +83,12 @@ export async function taskList({filter,projectId,view='all',today,date,query='',
     currentDate=await clock.today();selectedDate=date??currentDate;validDate(selectedDate);
   }
   if(view!=='raw')for(const field of ['deletedAt','archivedAt','parentTaskId'])conditions.push({field,op:'isNull'});
-  if(view!=='raw'&&!(view==='daily'&&selectedDate<currentDate))conditions.push({field:'completedAt',op:'isNull'});
+  if(view!=='raw'&&!['daily','today'].includes(view))conditions.push({field:'completedAt',op:'isNull'});
   if(projectId!==undefined)conditions.push(projectId===null?{field:'projectId',op:'isNull'}:{field:'projectId',op:'eq',value:projectId});
   if(view==='inbox')conditions.push({field:'projectId',op:'isNull'});
-  if(view==='today') {today=today||await clock.today();conditions.push({any:[{field:'dueDate',op:'lte',value:today},{field:'plannedDate',op:'eq',value:today}]});}
-  // History shows current completion state for tasks associated with that date;
-  // it does not reconstruct past status or carry today's overdue backlog back.
-  if(view==='daily')conditions.push({any:[{field:'dueDate',op:selectedDate===currentDate?'lte':'eq',value:selectedDate},{field:'plannedDate',op:'eq',value:selectedDate}]});
+  if(view==='today') {today=today||await clock.today();validDate(today);conditions.push(dailyFilter(today,today));}
+  // Historical dates include associated tasks and their actual completion day.
+  if(view==='daily')conditions.push(dailyFilter(selectedDate,currentDate));
   const options={filter:{all:conditions},sort:taskSort};
   let tasks;
   if(query) {
@@ -89,30 +121,64 @@ export async function taskCreate(input) {
   }
   const now=await clock.now(),value={id:await ids.new(),title,projectId:input.projectId||null,parentTaskId:input.parentTaskId||null,notes:'',priority:p,
     dueDate:input.dueDate||null,plannedDate:input.plannedDate||null,completedAt:null,archivedAt:null,deletedAt:null,createdAt:now,updatedAt:now};
-  return {writes:[{collection:'tasks',id:value.id,value}],events:[{type:'task.created',entity:{moduleId:'app.tasks',collection:'tasks',id:value.id}}],result:{id:value.id}};
+  for(const k of extraFields)value[k]=input[k]??null;
+  value.actualCompletedOn=null;value.completedTimezone=null;
+  await normalizePlan(value,input);
+  return {writes:[{collection:'tasks',id:value.id,value}],events:[{type:'task.created',entity:{moduleId:'app.tasks',collection:'tasks',id:value.id}}],result:value};
 }
-function snapshot(t) { return Object.fromEntries(['id','title','priority','dueDate','plannedDate','projectId','parentTaskId','completedAt','archivedAt','deletedAt','updatedAt'].map(k=>[k,t[k]])); }
-function canonical(v) { if(v&&typeof v==='object'&&!Array.isArray(v)) return JSON.stringify(Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]]))); return JSON.stringify(v); }
+function snapshot(t) { return Object.fromEntries(['id','title','priority','dueDate','plannedDate','projectId','parentTaskId','completedAt','archivedAt','deletedAt','updatedAt',...extraFields].map(k=>[k,t[k]??null])); }
+function canonical(v) { const stable=x=>Array.isArray(x)?x.map(stable):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,stable(x[k])])):x;return JSON.stringify(stable(v)); }
 async function check(input) {
   const t=await data.get('tasks',input.id); if(!t||t.deletedAt) throw new Error('任务已不可用');
-  if(input.expectedUpdatedAt&&t.updatedAt!==input.expectedUpdatedAt||input.expectedValues&&canonical(input.expectedValues)!==canonical(snapshot(t))) throw new Error('任务已被其他操作修改，请重新生成方案');
+  if(input.expectedUpdatedAt&&t.updatedAt!==input.expectedUpdatedAt||input.expectedValues&&Object.entries(input.expectedValues).some(([k,v])=>canonical(v)!==canonical(t[k]??null))) throw new Error('任务已被其他操作修改，请重新生成方案');
   return t;
 }
 export async function taskUpdate(input) {
   const t=await check(input),changes={...input.changes};
-  for(const k of Object.keys(changes)) if(!['title','priority','dueDate','plannedDate'].includes(k)) throw new Error(`不支持修改字段：${k}`);
+  for(const k of Object.keys(changes)) if(!['title','priority','dueDate','plannedDate',...precisionFields,'estimatedMinutes','executionExpiresOn'].includes(k)) throw new Error(`不支持修改字段：${k}`);
   if('title' in changes) changes.title=cleanTitle(changes.title,300,'任务标题');
   if('priority' in changes) priority(changes.priority);
   if('dueDate' in changes) validDate(changes.dueDate); if('plannedDate' in changes) validDate(changes.plannedDate);
-  if(!Object.keys(changes).some(k=>canonical(t[k])!==canonical(changes[k]))) return {writes:[],events:[],result:snapshot(t)};
-  const value={...t,...changes,updatedAt:await clock.now()};
-  return {writes:[{collection:'tasks',id:t.id,value}],events:[{type:'task.updated',entity:{moduleId:'app.tasks',collection:'tasks',id:t.id},fields:Object.keys(changes)}],result:snapshot(value)};
+  const value=await normalizePlan({...t,...changes},changes);
+  const fields=Object.keys(value).filter(k=>canonical(t[k]??null)!==canonical(value[k]??null));
+  if(!fields.length)return {writes:[],events:[],result:snapshot(t)};
+  value.updatedAt=await clock.now();
+  return {writes:[{collection:'tasks',id:t.id,value}],events:[{type:'task.updated',entity:{moduleId:'app.tasks',collection:'tasks',id:t.id},fields}],result:snapshot(value)};
 }
 export async function taskComplete(input) {
-  const t=await check(input); if(typeof input.completed!=='boolean') throw new Error('completed必须为布尔值');
-  if(!!t.completedAt===input.completed) return {writes:[],events:[],result:snapshot(t)};
-  const now=await clock.now(),value={...t,completedAt:input.completed?now:null,updatedAt:now};
-  return {writes:[{collection:'tasks',id:t.id,value}],events:[{type:input.completed?'task.completed':'task.reopened',entity:{moduleId:'app.tasks',collection:'tasks',id:t.id}}],result:snapshot(value)};
+  const t=await check(input);if(typeof input.completed!=='boolean')throw new Error('completed必须为布尔值');
+  if(!input.completed&&('actualCompletedOn' in input||'completedTimezone' in input))throw new Error('重新打开任务不能指定完成日期');
+  if(!input.completed&&!t.completedAt)return {writes:[],events:[],result:snapshot(t)};
+  const value={...t};
+  if(input.completed) {
+    // A date correction keeps the original audit timestamp.
+    if(!t.completedAt||'actualCompletedOn' in input||'completedTimezone' in input) {
+      const zone=input.completedTimezone??t.completedTimezone??t.plannedTimezone??'UTC';
+      if(typeof zone!=='string'||!zone)throw new Error('完成时区无效');
+      const now=await clock.now();
+      const local=await clock.toLocal({utc:now,zone});
+      const day='actualCompletedOn' in input?input.actualCompletedOn:t.actualCompletedOn??local.date;validDate(day);
+      value.completedAt=t.completedAt||now;value.actualCompletedOn=day;value.completedTimezone='completedTimezone' in input?input.completedTimezone:zone;
+    }
+  } else {value.completedAt=null;value.actualCompletedOn=null;value.completedTimezone=null;}
+  if(canonical(value)===canonical(t))return {writes:[],events:[],result:snapshot(t)};
+  value.updatedAt=await clock.now();
+  const type=input.completed?(t.completedAt?'task.completionCorrected':'task.completed'):'task.reopened';
+  return {writes:[{collection:'tasks',id:t.id,value}],events:[{type,entity:{moduleId:'app.tasks',collection:'tasks',id:t.id}}],result:snapshot(value)};
+}
+export async function taskRange({startAt,endAt}) {
+  startAt=utc(startAt);endAt=utc(endAt);if(endAt<=startAt)throw new Error('时间范围无效');
+  const items=[];
+  const filter={all:[{field:'deletedAt',op:'isNull'},{field:'plannedStartAt',op:'lt',value:endAt},{field:'plannedEndAt',op:'gt',value:startAt}]};
+  for await(const page of taskPages({filter,sort:[{field:'plannedStartAt',direction:'asc'},{field:'id',direction:'asc'}]}))items.push(...page);
+  return items;
+}
+export async function taskRestore({id,expected,value}) {
+  if(!expected||typeof expected!=='object'||Array.isArray(expected)||expected.id!==id||value!==null&&(!value||typeof value!=='object'||Array.isArray(value)||value.id!==id))throw new Error('恢复任务数据无效');
+  const current=await data.get('tasks',id);
+  if(canonical(current)!==canonical(expected))throw new Error('任务已被其他操作修改，无法撤销');
+  if(canonical(current)===canonical(value))return {writes:[],events:[],result:value};
+  return {writes:[{collection:'tasks',id,value}],events:[{type:value===null?'task.deleted':'task.restored',entity:{moduleId:'app.tasks',collection:'tasks',id}}],result:value};
 }
 export async function render({state={},event}) {
   if(event?.type==='new') {

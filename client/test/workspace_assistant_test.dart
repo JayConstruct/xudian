@@ -97,7 +97,7 @@ void main() {
         }),
         allowUnsignedLocal: true,
       );
-      expect(ai.version, '1.2.1');
+      expect(ai.version, '1.3.0');
       expect(ai.manifest['hostApi'], '^1.18.0');
       await host.install(ai);
       final registrations = ScriptAppModule(host, ai).ui;

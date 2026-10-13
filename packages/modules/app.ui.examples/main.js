@@ -1,6 +1,6 @@
 import {ui,clock} from '@xudian/sdk';
 import {categories,examples,formKey,initialValue,demoPage,pinnedKey} from './catalog.js';
-import {button,column,control,demoValue,callCode,group,text,tile} from './examples.js';
+import {button,column,control,demoValue,callCode,group,text,tile,notificationSamples} from './examples.js';
 const defaults=()=>({completed:['done'],onlyPending:false,examples:{},modes:{},results:{}});
 const registeredPage='app.ui.examples.registered';
 const categoryFor=value=>categories.some(([id])=>id===value)?value:'layout';
@@ -86,13 +86,18 @@ export async function render({state={},event,formValues={},context={}}) {
     const result=await ui.dialog({title:'确认演示操作',fields:[{key:'name',label:'演示名称',value:'本地示例',required:true}]});
     state.results[event.id]=result?'已确认 '+result.name:'已取消演示';
   }
-  if(event?.type==='panel')await ui.panel('app.ui.examples.local',{}, {adaptive:true});
+  if(event?.type==='panel')await ui.panel('app.ui.examples.local',event.notification?{notification:true}:{}, {adaptive:true});
   if(event?.type==='composition')await ui.navigate('app.ui.examples.composition');
   if(event?.type==='localAction')state.localAction=event.action;
   if(event?.type==='floating')state.floating=event.visible;
   if(event?.type==='animationEffect'&&['fade','scale','slide'].includes(event.effect))state.examples.animation=event.effect;
   if(event?.type==='replay'){state.animationReplay=(state.animationReplay||0)+1;state.animationVisible=true;}
-  if(event?.type==='notify')await ui.notify({message:{info:'这是一条演示消息',success:'演示操作已完成',error:'演示操作失败，请重试'}[event.kind],kind:event.kind,duration:3000});
+  if(event?.type==='notify') {
+    const sample=notificationSamples[event.sample||event.kind];
+    if(sample)await ui.notify(sample);
+  }
+  if(event?.type==='notifySequence')for(const kind of ['info','success','error'])await ui.notify({message:'连续替换：'+kind,kind,duration:3000});
+  if(event?.type==='notifyDuplicate')for(let i=0;i<3;i++)await ui.notify(notificationSamples.duplicate);
   if(event?.type==='registeredAction')state.registeredResult={port:event.port,value:event.value??null};
   if(event?.type==='showCode') {
     const sections=current?codeSections(current,state,{...formValues,...replaceForms}):page==='app.ui.examples.local'?[{title:'打开操作面板',code:"await ui.panel('app.ui.examples.local', {}, {adaptive: true});"}]:null;
@@ -101,6 +106,12 @@ export async function render({state={},event,formValues={},context={}}) {
   if(page==='app.ui.examples.composition')return {state,tree:column([])};
   if(page==='app.ui.examples.local')return {state,tree:column([
     text('面板内容与局部位置演示','heading'),text('此页面保留当前运行期间的局部滚动位置。','muted'),
+    ...(context.notification?[group('弹层内的全局 Toast',[
+      text('打开面板后点击按钮，检查提示显示在弹层上方且面板保持打开。弹出键盘时也可查看顶部位置。','muted'),
+      ui.component('ui.input@1',{key:'notification.keyboard',props:{label:'输入以弹出键盘',clearable:true}}),
+      button('在面板中显示提示',{type:'notify',sample:'panel'}),
+      button('在面板中显示长文本',{type:'notify',sample:'long'},false,'outlined'),
+    ])]:[]),
     {type:'row',children:['安排明天','稍后处理'].map(action=>button(action,{type:'localAction',action},false,'outlined'))},
     ...(state.localAction?[text('已选择：'+state.localAction)]:[]),...Array.from({length:25},(_,i)=>tile('演示条目 '+(i+1),'本地内容')),
     ...(state.codeError?[text(state.codeError)]:[]),button('查看调用方式',{type:'showCode'},false,'outlined'),

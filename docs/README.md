@@ -12,6 +12,7 @@
 | [拾光导入](SHIGUANG_IMPORT.md) | 学校搜索、通用系统、采集流程、兼容范围与致谢 |
 | [设置层级](SETTINGS_HIERARCHY.md) | 分类首页、二级页与模块入口 |
 | [界面规则](UI_DESIGN_SYSTEM.md) | 共用视觉、顶栏、菜单、适配与反馈 |
+| [全局 Toast](design/TOAST.md) | 短暂反馈的 UI、动画、去重、调用与示例验收 |
 | [AI 助手](AI_ASSISTANT.md) | 当前服务工具、审核、记录与操作边界 |
 
 ## 开发与发布

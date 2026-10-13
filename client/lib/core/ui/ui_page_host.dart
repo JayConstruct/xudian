@@ -1,5 +1,6 @@
 import 'ui_icon.dart';
 import 'native_ui.dart';
+import 'ui_toast.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -718,8 +719,10 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
                     NativeUi(
                       child: TextButton(
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('配置保持不变，条件恢复后可重新使用')),
+                          AppToast.show(
+                            context,
+                            message: '配置保持不变，条件恢复后可重新使用',
+                            kind: 'info',
                           );
                         },
                         child: const Text('暂时保留'),
