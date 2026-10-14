@@ -16,12 +16,30 @@ Default stack: 512 KiB. Continuous execution deadline: 1 second. Dart requests h
 10-second computation deadline. Cancellation interrupts native execution and joins the
 worker. This runs in the Flutter process; it is not an OS sandbox.
 
-Dart polls native messages with one-shot timers: 8 ms after a post or received message,
-then exponential empty-poll backoff capped at 32 ms while an invocation is pending and
-64 ms when idle. Host replies and subscription notifications reset the delay to 8 ms;
-repeated posts retain an already imminent poll. Closing cancels the timer before native
-teardown. A long pure-JavaScript invocation can therefore wait up to roughly 32 ms for
-its result to be detected, excluding Dart event-loop delays. This trades that bounded
-latency for fewer empty polls; it is not a measured device CPU or battery benchmark.
+The native output queue signals Dart when it changes from empty to nonempty, through
+`NativeCallable.listener`. Dart drains the bounded message queue in the worker's owner
+zone. The native thread only posts an asynchronous isolate notification: no engine
+pointer crosses threads and no Dart code runs on the native engine thread. Idle workers
+create no polling timers; host replies and subscription events use the same notification
+path. Two workers still execute their own ESM initialization and retain separate globals;
+activation and transaction semantics are unchanged.
+
+Closing first marks the Dart worker closed, interrupts native execution and joins/destroys
+the native worker, then closes the listener. Joining guarantees native code cannot call
+the closed trampoline. Closing the listener port discards already queued notifications;
+no pointer is carried by the callback. Constructor failures use the same teardown order.
+The listener is created in the durable owner zone so a temporary installation transaction
+cannot leak into later requests. The host continues to dispatch initialization bridges
+through the active installation transaction when applicable.
+
+From `client/`, run `dart run tool/benchmark_script_worker.dart 30` for a local real-engine
+microbenchmark: construction/load with a top-level await, 12 serial host bridge calls,
+and timers created during one idle second. Output is JSON in microseconds with individual
+samples and nearest-rank p50/p95. It excludes application/Flutter startup and is not a device CPU,
+battery or Android cold-start benchmark. Native callback scheduling still depends on the
+Dart event loop; there is no fixed deadline for notification delivery.
+
+Callback thread/lifecycle rules: [Dart NativeCallable.listener](https://api.dart.dev/dart-ffi/NativeCallable/NativeCallable.listener.html)
+and [NativeCallable.close](https://api.dart.dev/dart-ffi/NativeCallable/close.html).
 
 See `docs/MODULE_SDK.md` and real-engine `client/test/script_worker_test.dart`.

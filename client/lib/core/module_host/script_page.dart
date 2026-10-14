@@ -1017,7 +1017,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       offstage: staleTree,
       child: IgnorePointer(
         ignoring: dateContentBlocked,
-        child: ExcludeSemantics(excluding: dateContentBlocked, child: child),
+        child: ExcludeFocus(
+          excluding: dateContentBlocked,
+          child: ExcludeSemantics(excluding: dateContentBlocked, child: child),
+        ),
       ),
     );
   }
@@ -1295,9 +1298,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           ),
         );
       case 'disclosure':
-        final rounded = RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        );
+        final rounded = AppDesign.smoothShape();
         return ExpansionTile(
           key: PageStorageKey(spec['key'] ?? text),
           title: Text(text),
@@ -1640,6 +1641,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               : spec['inputMode'] == 'url'
               ? TextInputType.url
               : null,
+          obscureText: false,
+          autofillHints: spec['inputMode'] == 'url'
+              ? const [AutofillHints.url]
+              : null,
           autocorrect: spec['inputMode'] != 'url',
           enableSuggestions: spec['inputMode'] != 'url',
           textInputAction: spec['inputMode'] == 'search'
@@ -1980,9 +1985,12 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         );
         return IgnorePointer(
           ignoring: dateContentBlocked && !retainDateNavigation,
-          child: ExcludeSemantics(
+          child: ExcludeFocus(
             excluding: dateContentBlocked && !retainDateNavigation,
-            child: content,
+            child: ExcludeSemantics(
+              excluding: dateContentBlocked && !retainDateNavigation,
+              child: content,
+            ),
           ),
         );
       },

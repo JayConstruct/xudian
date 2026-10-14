@@ -110,6 +110,14 @@ void main() {
       expect(find.byType(LinearProgressIndicator), findsNothing);
       await tester.pumpAndSettle();
       expect(find.byType(TextField).hitTestable(), findsOneWidget);
+      final search = tester.widget<TextField>(find.byType(TextField));
+      expect(search.decoration?.border, isNull);
+      expect(
+        Theme.of(tester.element(find.byType(TextField)))
+            .inputDecorationTheme
+            .border,
+        isA<ShapedInputBorder>(),
+      );
       expect(find.text('发现适合你的模块'), findsNothing);
       final status = find.byKey(const ValueKey('catalog-filter-status'));
       final category = find.byKey(const ValueKey('catalog-filter-category'));
@@ -136,7 +144,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('状态：全部'), findsOneWidget);
       expect(find.text('分类：全部分类'), findsOneWidget);
-      expect(find.byType(ModuleCatalogCard), findsNWidgets(6));
+      expect(find.text('找到 6 个模块 · 目录共 6 个'), findsOneWidget);
+      expect(find.byType(ModuleCatalogCard).evaluate().length, lessThan(6));
       await chooseCatalogFilter(tester, 'category', '学习');
       expect(find.byType(ModuleCatalogCard), findsNWidgets(4));
       await chooseCatalogFilter(tester, 'status', '未安装');
@@ -150,7 +159,8 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         isEmpty,
       );
-      expect(find.byType(ModuleCatalogCard), findsNWidgets(6));
+      expect(find.text('找到 6 个模块 · 目录共 6 个'), findsOneWidget);
+      expect(find.byType(ModuleCatalogCard).evaluate().length, lessThan(6));
       expect(tester.takeException(), isNull);
     },
   );

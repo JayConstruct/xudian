@@ -6,14 +6,16 @@ usage() {
 用法：scripts/start-emulator.sh [选项]
 
 从 WSL 启动 Windows Android 模拟器，等待 Linux ADB 确认 Android 已启动。
-默认复用已运行的模拟器；--cold-boot 会关闭目标设备再冷启动，保留应用和数据。
+默认复用已运行的模拟器；--cold-boot 询问是否关闭目标设备，确认后自动冷启动，保留应用和数据。
 
   --avd NAME       AVD 名称（默认 Medium_Phone_API_37.0）
   --emulator PATH  Windows emulator.exe 路径
                   默认 D:\x128_install\AndroidSdk\emulator\emulator.exe
   --port PORT      模拟器控制台端口（默认 5554，须为 5554～5682 的偶数）
+  --memory MB      客体 RAM 上限（默认 2048，须为 1536～8192 MB 的整数）
+                  仅新启动生效，不限制 Windows 进程总内存
   --refresh-rate HZ 客体刷新率（30～240 的整数），新启动时冷启动；复用时核对
-  --cold-boot      强制冷启动；已运行时核对 AVD 后关闭并重启，不清除数据
+  --cold-boot      冷启动；已运行时询问，输入 y 后关闭并重启，不清除数据
   --lock-refresh-rate 同时设置 Android 最高/最低刷新率，须指定 --refresh-rate
                   保存原值恢复脚本；设置持续生效，实际帧率仍需测量
   --timeout SEC    等待启动的秒数（默认 180）
@@ -29,6 +31,7 @@ fail() { echo "错误：$*" >&2; exit 1; }
 avd='Medium_Phone_API_37.0'
 emulator='D:\x128_install\AndroidSdk\emulator\emulator.exe'
 port=5554
+memory=2048
 refresh_rate=''
 cold_boot=false
 lock_refresh_rate=false
@@ -40,12 +43,13 @@ while (( $# )); do
     --dry-run) dry_run=true; shift ;;
     --cold-boot) cold_boot=true; shift ;;
     --lock-refresh-rate) lock_refresh_rate=true; shift ;;
-    --avd|--emulator|--port|--refresh-rate|--timeout)
+    --avd|--emulator|--port|--memory|--refresh-rate|--timeout)
       (( $# >= 2 )) && [[ -n "$2" && "$2" != --* ]] || fail "$1 缺少参数。"
       case "$1" in
         --avd) avd="$2" ;;
         --emulator) emulator="$2" ;;
         --port) port="$2" ;;
+        --memory) memory="$2" ;;
         --refresh-rate) refresh_rate="$2" ;;
         --timeout) boot_timeout="$2" ;;
       esac
@@ -57,6 +61,9 @@ done
 [[ "$port" =~ ^[0-9]{4}$ ]] || fail '模拟器端口必须为 5554～5682 的偶数。'
 port=$((10#$port))
 (( port >= 5554 && port <= 5682 && port % 2 == 0 )) || fail '模拟器端口必须为 5554～5682 的偶数。'
+[[ "$memory" =~ ^[0-9]{1,5}$ ]] || fail '客体 RAM 上限必须为 1536～8192 MB 的整数。'
+memory=$((10#$memory))
+(( memory >= 1536 && memory <= 8192 )) || fail '客体 RAM 上限必须为 1536～8192 MB 的整数。'
 if [[ -n "$refresh_rate" ]]; then
   [[ "$refresh_rate" =~ ^[0-9]{1,3}$ ]] || fail '客体刷新率必须为 30～240 Hz 的整数。'
   refresh_rate=$((10#$refresh_rate))
@@ -75,15 +82,16 @@ adb_port=$((10#$adb_port))
 (( adb_port >= 1 && adb_port <= 65535 )) || fail 'XUDIAN_ADB_PORT 必须为 1～65535。'
 [[ "$adb_host" == 127.0.0.1 || "$adb_host" == localhost ]] || fail '启动本机 Windows 模拟器时，XUDIAN_ADB_HOST 必须为 127.0.0.1 或 localhost。'
 serial="emulator-$port"
-launch_arguments=(-avd "$avd" -port "$port")
+launch_arguments=(-avd "$avd" -port "$port" -memory "$memory")
 if [[ -n "$refresh_rate" ]]; then
   launch_arguments+=(-vsync-rate "$refresh_rate" -no-snapshot)
 elif "$cold_boot"; then
   launch_arguments+=(-no-snapshot-load)
 fi
 echo "AVD：$avd；设备：$serial；ADB：$adb_host:$adb_port；超时：${boot_timeout}s"
+echo "客体 RAM 上限：${memory} MB（仅新启动生效；Windows 进程总内存另含图形等开销）。"
 if "$dry_run"; then
-  if "$cold_boot"; then echo "冷启动：核对并关闭已运行的 $serial，再启动；不清除应用和数据。"; fi
+  if "$cold_boot"; then echo "冷启动：若 $serial 已运行，询问是否关闭；确认后自动关闭并重新启动，不清除应用和数据。"; fi
   printf 'Windows 启动命令：%s' "$emulator"
   printf ' %s' "${launch_arguments[@]}"
   printf '\n'
@@ -104,34 +112,91 @@ exec 9>"$start_root/.cache/emulator-start/$port.lock"
 flock -n 9 || fail "另一个启动流程正在等待 $serial，请稍后重试。"
 adb_command=(adb -H "$adb_host" -P "$adb_port")
 probe() { timeout "$probe_timeout" "${adb_command[@]}" "$@" 2>/dev/null; }
+read_avd_name() {
+  local property value avd_deadline="${1:-}" probe_timeout="$probe_timeout"
+  # adb emu commands can exit successfully without returning console output.
+  for property in ro.boot.qemu.avd_name ro.kernel.qemu.avd_name; do
+    if [[ -n "$avd_deadline" ]]; then
+      probe_timeout=$((avd_deadline - SECONDS))
+      (( probe_timeout > 0 )) || return 1
+      (( probe_timeout <= 5 )) || probe_timeout=5
+    fi
+    value="$(probe -s "$serial" shell getprop "$property")" || continue
+    value="$(awk '{ sub(/\r$/, ""); sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); if (length) { print; exit } }' <<< "$value")"
+    if [[ -n "$value" ]]; then printf '%s\n' "$value"; return 0; fi
+  done
+  return 1
+}
+read_windows_avd_name() {
+  local encoded value
+  encoded="$(python3 - "$port" <<'PY'
+import base64
+import sys
+
+port = sys.argv[1]
+command = f"""# AVD_NAME_QUERY
+$ErrorActionPreference = 'Stop'
+$names = @(Get-CimInstance Win32_Process | Where-Object {{
+    $_.Name -match '^(emulator|qemu-system-.*)\\.exe$' -and
+    $_.CommandLine -match '-port\\s+{port}(?=\\s|$)'
+}} | ForEach-Object {{
+    $match = [regex]::Match($_.CommandLine, '-avd\\s+"?([A-Za-z0-9_][A-Za-z0-9_.-]*)"?(?=\\s|$)')
+    if ($match.Success) {{ $match.Groups[1].Value }} else {{ '__unknown__' }}
+}} | Sort-Object -Unique)
+if ($names.Count -eq 1 -and $names[0] -ne '__unknown__') {{ Write-Output $names[0] }}
+"""
+print(base64.b64encode(command.encode('utf-16le')).decode('ascii'))
+PY
+  )" || return 1
+  value="$(timeout 10 powershell.exe -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand "$encoded" 9>&- 2>/dev/null)" || return 1
+  value="${value//$'\r'/}"
+  [[ "$value" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || return 1
+  printf '%s\n' "$value"
+}
 probe_timeout=5
 if ! devices="$(probe devices -l)"; then
   if "$cold_boot"; then fail '无法查询 ADB 设备，不能安全执行冷启动；请检查 ADB 连接。'; fi
 fi
 state="$(awk -v serial="$serial" '$1 == serial { print $2; exit }' <<< "$devices")"
-if "$cold_boot"; then
+if "$cold_boot" && [[ -n "$state" ]]; then
   for tool in powershell.exe python3; do
     command -v "$tool" >/dev/null || fail "找不到 $tool，不能执行冷启动。"
   done
-  if [[ -n "$state" ]]; then
-    [[ "$state" == device ]] || fail "$serial 当前为 $state，无法安全核对 AVD；请先手动退出目标模拟器再冷启动。"
-    actual_avd="$(probe -s "$serial" emu avd name)" || fail "无法核对 $serial 的 AVD；不会关闭设备。"
-    actual_avd="${actual_avd//$'\r'/}"
-    actual_avd="${actual_avd%%$'\n'*}"
+  [[ "$state" == device ]] || fail "$serial 当前为 $state，无法安全核对 AVD；请先手动退出目标模拟器再冷启动。"
+  verify_target_avd() {
+    local actual_avd
+    if ! actual_avd="$(read_avd_name)"; then
+      actual_avd="$(read_windows_avd_name)" || fail "无法读取 $serial 的 AVD 名称属性或 Windows 进程参数；不会关闭设备。"
+    fi
     [[ "$actual_avd" == "$avd" ]] || fail "$serial 的 AVD 为 ${actual_avd:-未知}，期望 $avd；不会关闭设备。"
-    echo "关闭 $serial（$avd），准备冷启动…"
-    probe -s "$serial" emu kill || fail "无法关闭 $serial；请手动退出后重试。"
-    shutdown_deadline=$((SECONDS + boot_timeout))
-    while [[ -n "$state" ]]; do
-      probe_timeout=$((shutdown_deadline - SECONDS))
-      (( probe_timeout > 0 )) || fail "等待 $serial 退出超过 ${boot_timeout}s；不会启动重复进程。"
-      (( probe_timeout <= 5 )) || probe_timeout=5
-      devices="$(probe devices -l)" || fail '等待退出时 ADB 查询失败；不会启动重复进程。'
-      state="$(awk -v serial="$serial" '$1 == serial { print $2; exit }' <<< "$devices")"
-      if [[ -n "$state" ]]; then sleep 1; fi
-    done
-    probe_timeout=5
-  fi
+  }
+  verify_target_avd
+  while true; do
+    printf '%s' "$serial（$avd）已运行，是否关闭并冷启动？[y/N] " >&2
+    if ! IFS= read -r answer; then
+      echo '未收到确认，已取消冷启动。' >&2
+      exit 1
+    fi
+    case "$answer" in
+      [yY]|[yY][eE][sS]) break ;;
+      ''|[nN]|[nN][oO]) echo '已取消冷启动，保留正在运行的模拟器。'; exit 0 ;;
+      *) echo '请输入 y（关闭并冷启动）或 n（取消）。' >&2 ;;
+    esac
+  done
+  # Recheck after the user answers in case the device changed while waiting.
+  verify_target_avd
+  echo "关闭 $serial（$avd），准备冷启动…"
+  probe -s "$serial" emu kill || fail "无法关闭 $serial；请手动退出后重试。"
+  shutdown_deadline=$((SECONDS + boot_timeout))
+  while [[ -n "$state" ]]; do
+    probe_timeout=$((shutdown_deadline - SECONDS))
+    (( probe_timeout > 0 )) || fail "等待 $serial 退出超过 ${boot_timeout}s；不会启动重复进程。"
+    (( probe_timeout <= 5 )) || probe_timeout=5
+    devices="$(probe devices -l)" || fail '等待退出时 ADB 查询失败；不会启动重复进程。'
+    state="$(awk -v serial="$serial" '$1 == serial { print $2; exit }' <<< "$devices")"
+    if [[ -n "$state" ]]; then sleep 1; fi
+  done
+  probe_timeout=5
 fi
 if [[ -z "$state" ]]; then
   command -v powershell.exe >/dev/null || fail '找不到 powershell.exe，请检查 WSL 的 Windows 互操作配置。'
@@ -153,21 +218,24 @@ if (-not (Test-Path -LiteralPath $emulatorPath -PathType Leaf)) {{
 }}
 $avdPattern = '-avd\\s+"?{avd.replace('.', '[.]')}"?(?=\\s|$)'
 $portPattern = '-port\\s+{port}(?=\\s|$)'
-$findExisting = {{ Get-CimInstance Win32_Process | Where-Object {{
+$findExisting = {{ @(Get-CimInstance Win32_Process | Where-Object {{
     $_.Name -match '^(emulator|qemu-system-.*)\\.exe$' -and
-    $_.CommandLine -match $avdPattern -and $_.CommandLine -match $portPattern
-}} }}
-$existing = & $findExisting
-if ($existing -and ${cold_boot}) {{
+    ($_.CommandLine -match $avdPattern -or $_.CommandLine -match $portPattern)
+}}) }}
+$processes = @(& $findExisting)
+if ($processes.Count -gt 0 -and ${cold_boot}) {{
     $deadline = (Get-Date).AddSeconds({boot_timeout})
-    while ($existing -and (Get-Date) -lt $deadline) {{
+    while ($processes.Count -gt 0 -and (Get-Date) -lt $deadline) {{
         Start-Sleep -Milliseconds 500
-        $existing = & $findExisting
+        $processes = @(& $findExisting)
     }}
-    if ($existing) {{
-        throw 'Target emulator process is still running. Close it manually before cold boot.'
+    if ($processes.Count -gt 0) {{
+        throw '目标模拟器进程仍在运行，无法通过 ADB 安全关闭；请手动关闭后重试。'
     }}
 }}
+$existing = @($processes | Where-Object {{
+    $_.CommandLine -match $avdPattern -and $_.CommandLine -match $portPattern
+}})
 if ($existing) {{
     Write-Output 'Emulator process already running; waiting for Android.'
 }} else {{
@@ -193,9 +261,7 @@ while (( SECONDS < deadline )); do
     probe_timeout=$((deadline - SECONDS))
     (( probe_timeout > 0 )) || break
     (( probe_timeout <= 5 )) || probe_timeout=5
-    actual_avd="$(probe -s "$serial" shell getprop ro.boot.qemu.avd_name || true)"
-    actual_avd="${actual_avd//$'\r'/}"
-    actual_avd="${actual_avd%%$'\n'*}"
+    actual_avd="$(read_avd_name "$deadline" || true)"
     [[ "$actual_avd" == "$avd" ]] || fail "$serial 的 AVD 为 ${actual_avd:-未知}，期望 $avd；请核对 --avd 或 --port。"
     if [[ -n "$refresh_rate" ]]; then
       probe_timeout=$((deadline - SECONDS))

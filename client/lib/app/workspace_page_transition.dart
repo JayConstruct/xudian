@@ -15,6 +15,7 @@ class WorkspacePageTransition extends StatefulWidget {
     this.maxRetainedPages = 1,
     this.retentionKeys,
     this.deferUntilReady = false,
+    this.onDestinationReady,
   }) : assert(maxRetainedPages >= 1);
 
   final String destinationId;
@@ -33,6 +34,11 @@ class WorkspacePageTransition extends StatefulWidget {
   /// Keep the outgoing content visible while a first visit prepares its frame.
   /// Returning to an already rendered page starts the transition immediately.
   final bool deferUntilReady;
+
+  /// Fires once per frame identity after usable content is ready, visible and
+  /// its entrance transition has completed a Flutter frame.
+  /// Stale preparation callbacks and hidden retained pages do not notify.
+  final VoidCallback? onDestinationReady;
 
   @override
   State<WorkspacePageTransition> createState() =>
@@ -169,6 +175,27 @@ class _WorkspacePageTransitionState extends State<WorkspacePageTransition>
         }
       });
     }
+    _notifyAfterVisibleFrame(id, frame);
+  }
+
+  void _notifyAfterVisibleFrame(String id, _WorkspaceFrame frame) {
+    if (frame.notified || frame.notificationScheduled) return;
+    frame.notificationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      frame.notificationScheduled = false;
+      if (!mounted ||
+          !identical(frames[id], frame) ||
+          id != widget.destinationId ||
+          !frame.ready ||
+          !frame.visible ||
+          waitingForReady ||
+          !controller.isCompleted) {
+        return;
+      }
+      frame.notified = true;
+      widget.onDestinationReady?.call();
+    });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   VoidCallback _readyCallback(String id, _WorkspaceFrame frame) =>
@@ -190,6 +217,7 @@ class _WorkspacePageTransitionState extends State<WorkspacePageTransition>
     _touch(widget.destinationId);
     _trimFrames();
     controller.value = 1;
+    _notifyAfterVisibleFrame(widget.destinationId, current);
   }
 
   void _animationStatusChanged(AnimationStatus status) {
@@ -201,6 +229,10 @@ class _WorkspacePageTransitionState extends State<WorkspacePageTransition>
       }
       _trimFrames();
     });
+    _notifyAfterVisibleFrame(
+      widget.destinationId,
+      frames[widget.destinationId]!,
+    );
   }
 
   @override
@@ -265,6 +297,7 @@ class _WorkspaceFrame {
   final Object? retentionKey;
   bool visible = true;
   bool ready = false;
+  bool notified = false, notificationScheduled = false;
 
   double position(double progress) => start + (end - start) * progress;
 }

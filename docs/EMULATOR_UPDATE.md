@@ -15,9 +15,14 @@ scripts/start-emulator.sh --avd YOUR_AVD \
   --emulator 'C:\Users\YOUR_USER\AppData\Local\Android\Sdk\emulator\emulator.exe' \
   --port 5556 --timeout 240
 scripts/start-emulator.sh --dry-run
+scripts/start-emulator.sh --memory 4096
 ```
 
+新启动默认通过 `-memory 2048` 将 Android 客体 RAM 上限设为 2048 MB；`--memory MB` 可调整为 1536～8192 MB 的整数，覆盖本次启动的 AVD 内存配置。参数范围见 [Android 模拟器命令行文档](https://developer.android.com/studio/run/emulator-commandline#common)。这不是 Windows 模拟器进程总内存的硬上限，图形、快照等仍有额外开销。复用已有模拟器时不会改变其内存配置；需要应用新值时，使用 `--cold-boot --memory MB`，确认关闭后重新启动。
+
 强制冷启动或开启高刷（例如 120 / 165 Hz）：
+
+AVD 名称通过 Android 的 `ro.boot.qemu.avd_name` 属性核对；为空或查询失败时尝试旧版 `ro.kernel.qemu.avd_name`，并清理空行、首尾空白与回车，不依赖可能成功但没有名称输出的 `adb emu avd name`。关闭前若两个属性均不可读取，再检查 Windows 中明确带有目标 `-port` 参数的模拟器进程；仅接受这些进程指向唯一且一致的 `-avd` 名称。确认后再次核对。所有查询均失败或名称不匹配时停止关闭操作；启动完成后仍需通过 Android 属性核对。
 
 ```bash
 scripts/start-emulator.sh --cold-boot
@@ -34,7 +39,7 @@ scripts/start-emulator.sh --cold-boot --refresh-rate 120 --lock-refresh-rate --d
 scripts/start-emulator.sh --refresh-rate 120
 ```
 
-`--cold-boot` 不清除应用或用户数据：目标设备已运行时，先通过模拟器控制台核对 AVD 名称，再关闭该设备，等待 ADB 和 Windows 目标进程退出后重新启动；不会批量终止其他模拟器。不带刷新率时使用 `-no-snapshot-load`，只跳过快照加载，退出仍允许保存 Quick Boot 快照。若目标为 offline、无法核对名称、名称不符、关闭失败或退出超时，脚本报错而不是盲目杀进程；此时手动退出目标模拟器后重试。`--timeout` 分别限制退出等待和 Android 启动等待。
+`--cold-boot` 不清除应用或用户数据：目标设备已运行时，核对 AVD 后询问“是否关闭并冷启动？[y/N]”。输入 `y` 或 `yes`（不区分大小写），脚本再次核对目标，通过 `adb emu kill` 关闭该设备，等待 ADB 和 Windows 目标进程退出，然后自动启动。输入 `n`、`no` 或直接回车则取消，保留原模拟器；输入结束（EOF）时也不会关闭。目标未运行时直接启动，无需确认。若目标 offline、无法核对名称、名称不符、ADB 查询失败、关闭失败或退出超时，停止操作；无法通过 ADB 核对和关闭的 Windows 进程需手动关闭。脚本只关闭经核对并确认的目标设备。不带刷新率时使用 `-no-snapshot-load`，只跳过快照加载，退出仍允许保存 Quick Boot 快照。`--timeout` 分别限制退出等待和 Android 启动等待。
 
 `--refresh-rate` 接受 30～240 Hz 的整数，包括 120 和 165；指定时新进程附加 `-vsync-rate HZ -no-snapshot`，不修改 AVD 配置、不加载或保存 Quick Boot 快照。此参数只改变 Android 客体的刷新节拍，保持原有分辨率和清晰度；主机显示器当前刷新率会限制窗口实际呈现，测量 120 / 165fps 时应使用至少对应刷新率的主机屏幕。未加 `--cold-boot` 时，已运行设备仅核对 `ro.boot.qemu.vsync`，不匹配或无法读取时会报错，提示强制冷启动。未指定参数时保留原有启动和复用行为。
 
@@ -118,6 +123,8 @@ scripts/update-emulator.sh --module app.schedule
 每次实际更新先执行仓库与预装资源检查，包括复用已有 APK 的情况；它拒绝意外跟踪的本机产物、多余预装包、损坏包和无索引发布包。检查或打包脚本变化也会使回归检查缓存失效。
 
 源码、资源、Android 构建配置、依赖锁文件及 Flutter 工具版本未变化时，复用已核验的 APK。文档、测试和独立模块脚本不触发客户端 APK 重建。测试源码或检查工具变化会使检查缓存失效；debug 和 release 使用独立缓存。
+
+本地 `packages/xquickjs` 的 Dart、C 源码、vendor 头文件、构建 hook 和包依赖声明也纳入构建指纹；修改这些运行时输入会重新构建并扩大到完整 Flutter 回归，不能仅因客户端 Dart 文件未变就复用旧 APK。包说明文档及本机缓存仍不触发重建。
 
 模拟器实际 APK 的 SHA-256 和 versionCode 均一致时跳过重复安装。构建产物损坏、设备版本更高或构建输入变化时重新构建，构建号自动递增。覆盖安装使用 `adb install -r`，保留现有应用数据；安装后核对设备版本和摘要，再启动客户端。
 

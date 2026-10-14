@@ -1,0 +1,3079 @@
+{
+  "date": "2026-10-14",
+  "scope": "Deeper startup optimization: database isolate preparation, native worker notification and immutable package reuse",
+  "finalBuild": {
+    "buildNumber": 107,
+    "versionCode": 4107,
+    "versionName": "0.2.0-beta.3",
+    "mode": "release",
+    "abi": "x86_64",
+    "startupCaptureEnabled": false,
+    "apkSha256": "cd92f97c496aed6def9833b78ab212852a170c3688629983f97cfa1ff6b8547b",
+    "sourceFingerprint": "3616a7c448cc18a193aa3f4ff489a7c91ab3323507e81bcb0a20cc8dc1cde375",
+    "fullFlutterPassed": 1147,
+    "pythonPassed": 190,
+    "appDataRetained": true,
+    "modulePackagesUpdated": false
+  },
+  "diagnosticBuilds": [
+    {
+      "role": "baseline",
+      "buildNumber": 105,
+      "versionCode": 4105,
+      "mode": "release",
+      "abi": "x86_64",
+      "startupCaptureEnabled": true,
+      "apkSha256": "17bb23dfe30543efa7232fb14d0ea8fa75d1a9636ff1f87f6bf2a9c279d4d9aa",
+      "dataRetained": true,
+      "modulePackagesUpdated": false,
+      "sampleIntervalSeconds": 2,
+      "sampleRuns": 10
+    },
+    {
+      "role": "candidate",
+      "buildNumber": 106,
+      "versionCode": 4106,
+      "mode": "release",
+      "abi": "x86_64",
+      "startupCaptureEnabled": true,
+      "apkSha256": "e498367388936a1d91ecaa34b9939ac10035dcb8402bce08e1b0067b0ad6cd1d",
+      "dataRetained": true,
+      "modulePackagesUpdated": false,
+      "sampleIntervalSeconds": 2,
+      "sampleRuns": 10,
+      "firstSamplingBackgroundLoad": "Flutter full regression was running concurrently; exploratory only. Repeat after regression completes before comparison."
+    }
+  ],
+  "checks": {
+    "fullFlutterPassed": 1147,
+    "combinedTargetedPassed": 51,
+    "pythonToolsPassed": 190,
+    "staticAnalysis": "passed",
+    "repositoryBoundaries": "passed",
+    "productionArchitecture": "passed",
+    "sourceMatchesFinalAPK": true,
+    "installedApkDigestMatches": true,
+    "finalAppForeground": true
+  },
+  "sampling": [
+    {
+      "name": "baseline-ready",
+      "conditions": "build104 regular release, retained existing device state; 10 trials",
+      "localReport": "dist/verification/startup-deep-20261014/baseline-ready.json",
+      "complete": true,
+      "requestedRuns": 10,
+      "completedRuns": 10,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 10,
+          "p50Ms": 950.5,
+          "p95Ms": 1063,
+          "minMs": 902,
+          "maxMs": 1063
+        },
+        "WaitTime": {
+          "count": 10,
+          "p50Ms": 953.0,
+          "p95Ms": 1065,
+          "minMs": 912,
+          "maxMs": 1065
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 10,
+          "p50Ms": 1368.5,
+          "p95Ms": 1516,
+          "minMs": 1247,
+          "maxMs": 1516
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "baseline-diagnostic-ready",
+      "conditions": "build105 diagnostic, validation before full phase capture",
+      "localReport": "dist/verification/startup-deep-20261014/baseline-diagnostic-ready.json",
+      "complete": true,
+      "requestedRuns": 5,
+      "completedRuns": 5,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 5,
+          "p50Ms": 1315,
+          "p95Ms": 4147,
+          "minMs": 1196,
+          "maxMs": 4147
+        },
+        "WaitTime": {
+          "count": 5,
+          "p50Ms": 1316,
+          "p95Ms": 4150,
+          "minMs": 1200,
+          "maxMs": 4150
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 5,
+          "p50Ms": 1751,
+          "p95Ms": 4642,
+          "minMs": 1428,
+          "maxMs": 4642
+        }
+      },
+      "errors": []
+    },
+    {
+      "name": "baseline-phases",
+      "conditions": "build105 diagnostic baseline; 10 trials",
+      "localReport": "dist/verification/startup-deep-20261014/baseline-phases.json",
+      "complete": true,
+      "requestedRuns": 10,
+      "completedRuns": 10,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 10,
+          "p50Ms": 1344.0,
+          "p95Ms": 1833,
+          "minMs": 1204,
+          "maxMs": 1833
+        },
+        "WaitTime": {
+          "count": 10,
+          "p50Ms": 1346.0,
+          "p95Ms": 1835,
+          "minMs": 1205,
+          "maxMs": 1835
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 10,
+          "p50Ms": 1839.0,
+          "p95Ms": 1950,
+          "minMs": 1439,
+          "maxMs": 1950
+        },
+        "startupPhases": [
+          {
+            "name": "app.firstFrame",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 13427.0,
+              "p95": 31099,
+              "min": 9215,
+              "max": 31099
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "app.workspaceReady",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1486064.0,
+              "p95": 1790147,
+              "min": 1346021,
+              "max": 1790147
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "database.open",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 694172.5,
+              "p95": 882969,
+              "min": 554124,
+              "max": 882969
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.defaults.metadata",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1766.0,
+              "p95": 7555,
+              "min": 975,
+              "max": 7555
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.initialize",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 520502.0,
+              "p95": 623672,
+              "min": 485590,
+              "max": 623672
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "elapsedUs": {
+              "p50": 7045.5,
+              "p95": 11251,
+              "min": 3383,
+              "max": 11251
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "elapsedUs": {
+              "p50": 141796.0,
+              "p95": 149091,
+              "min": 137413,
+              "max": 149091
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "elapsedUs": {
+              "p50": 7064.5,
+              "p95": 9374,
+              "min": 4537,
+              "max": 9374
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "elapsedUs": {
+              "p50": 5872.5,
+              "p95": 179823,
+              "min": 5182,
+              "max": 179823
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "elapsedUs": {
+              "p50": 4298.5,
+              "p95": 5777,
+              "min": 2785,
+              "max": 5777
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 7354.5,
+              "p95": 16849,
+              "min": 5025,
+              "max": 16849
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "elapsedUs": {
+              "p50": 4104.5,
+              "p95": 8032,
+              "min": 2712,
+              "max": 8032
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "example.ui.compact",
+            "elapsedUs": {
+              "p50": 7314.0,
+              "p95": 10604,
+              "min": 5049,
+              "max": 10604
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.restore",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1219826.5,
+              "p95": 1513383,
+              "min": 1062261,
+              "max": 1513383
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.restore.packages",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1626.5,
+              "p95": 6508,
+              "min": 754,
+              "max": 6508
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 5114.0,
+              "p95": 99940,
+              "min": 2611,
+              "max": 99940
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 3999.0,
+              "p95": 23685,
+              "min": 1849,
+              "max": 23685
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 11621.5,
+              "p95": 19606,
+              "min": 6076,
+              "max": 19606
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 8818.0,
+              "p95": 26638,
+              "min": 5491,
+              "max": 26638
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 5279.0,
+              "p95": 21164,
+              "min": 3439,
+              "max": 21164
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 6399.0,
+              "p95": 12863,
+              "min": 3296,
+              "max": 12863
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 3723.0,
+              "p95": 23110,
+              "min": 2033,
+              "max": 23110
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 4252.0,
+              "p95": 10952,
+              "min": 2273,
+              "max": 10952
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 2524.5,
+              "p95": 7753,
+              "min": 1806,
+              "max": 7753
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 2901.0,
+              "p95": 4913,
+              "min": 1207,
+              "max": 4913
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 3599.5,
+              "p95": 14327,
+              "min": 2142,
+              "max": 14327
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 4006.5,
+              "p95": 23674,
+              "min": 2518,
+              "max": 23674
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 3241.0,
+              "p95": 5902,
+              "min": 1872,
+              "max": 5902
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 2796.5,
+              "p95": 5640,
+              "min": 1825,
+              "max": 5640
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "page.execute",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 15995.5,
+              "p95": 18465,
+              "min": 11618,
+              "max": 18465
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "page.firstFrame",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 426614.0,
+              "p95": 608240,
+              "min": 83178,
+              "max": 608240
+            },
+            "count": {
+              "p50": 2.0,
+              "p95": 2,
+              "min": 2,
+              "max": 2
+            }
+          },
+          {
+            "name": "page.queue",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 3651.5,
+              "p95": 4575,
+              "min": 3299,
+              "max": 4575
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "shell.restore",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1219805.0,
+              "p95": 1513908,
+              "min": 1060009,
+              "max": 1513908
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          }
+        ]
+      },
+      "errors": []
+    },
+    {
+      "name": "candidate-phases",
+      "conditions": "build106 diagnostic exploratory; Flutter full tests concurrently running",
+      "localReport": "dist/verification/startup-deep-20261014/candidate-phases.json",
+      "complete": true,
+      "requestedRuns": 10,
+      "completedRuns": 10,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 10,
+          "p50Ms": 1400.0,
+          "p95Ms": 1704,
+          "minMs": 1185,
+          "maxMs": 1704
+        },
+        "WaitTime": {
+          "count": 10,
+          "p50Ms": 1401.5,
+          "p95Ms": 1708,
+          "minMs": 1250,
+          "maxMs": 1708
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 10,
+          "p50Ms": 1913.0,
+          "p95Ms": 2060,
+          "minMs": 1510,
+          "maxMs": 2060
+        },
+        "startupPhases": [
+          {
+            "name": "app.firstFrame",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 314190.5,
+              "p95": 733154,
+              "min": 9035,
+              "max": 733154
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "app.workspaceReady",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1527344.5,
+              "p95": 1797785,
+              "min": 1407681,
+              "max": 1797785
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "database.open",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 482743.0,
+              "p95": 1057091,
+              "min": 43635,
+              "max": 1057091
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "database.ready",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 213570.5,
+              "p95": 942272,
+              "min": 36545,
+              "max": 942272
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.defaults.metadata",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1678.0,
+              "p95": 5964,
+              "min": 699,
+              "max": 5964
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.initialize",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 468873.0,
+              "p95": 538708,
+              "min": 333838,
+              "max": 538708
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "elapsedUs": {
+              "p50": 5716.0,
+              "p95": 21918,
+              "min": 3345,
+              "max": 21918
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "elapsedUs": {
+              "p50": 144758.5,
+              "p95": 173023,
+              "min": 137118,
+              "max": 173023
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "elapsedUs": {
+              "p50": 6597.5,
+              "p95": 15268,
+              "min": 5186,
+              "max": 15268
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "elapsedUs": {
+              "p50": 5626.5,
+              "p95": 13529,
+              "min": 3622,
+              "max": 13529
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "elapsedUs": {
+              "p50": 5008.0,
+              "p95": 7313,
+              "min": 3036,
+              "max": 7313
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 11504.5,
+              "p95": 20443,
+              "min": 3860,
+              "max": 20443
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "elapsedUs": {
+              "p50": 5974.0,
+              "p95": 114147,
+              "min": 2813,
+              "max": 114147
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "example.ui.compact",
+            "elapsedUs": {
+              "p50": 5430.0,
+              "p95": 14843,
+              "min": 2721,
+              "max": 14843
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.restore",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 910348.5,
+              "p95": 1496074,
+              "min": 502540,
+              "max": 1496074
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.restore.packages",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1719.5,
+              "p95": 8568,
+              "min": 703,
+              "max": 8568
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 4130.5,
+              "p95": 13527,
+              "min": 1924,
+              "max": 13527
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 1683.0,
+              "p95": 8605,
+              "min": 1154,
+              "max": 8605
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 8674.0,
+              "p95": 13977,
+              "min": 6053,
+              "max": 13977
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 6784.0,
+              "p95": 13448,
+              "min": 5929,
+              "max": 13448
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 4454.0,
+              "p95": 15949,
+              "min": 3861,
+              "max": 15949
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 4665.5,
+              "p95": 8614,
+              "min": 3594,
+              "max": 8614
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 2018.0,
+              "p95": 12995,
+              "min": 1454,
+              "max": 12995
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 2288.0,
+              "p95": 9082,
+              "min": 1089,
+              "max": 9082
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 1915.5,
+              "p95": 3386,
+              "min": 747,
+              "max": 3386
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 908.5,
+              "p95": 13412,
+              "min": 654,
+              "max": 13412
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 4129.0,
+              "p95": 5893,
+              "min": 2104,
+              "max": 5893
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 2790.0,
+              "p95": 4895,
+              "min": 2253,
+              "max": 4895
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 2392.0,
+              "p95": 5814,
+              "min": 1301,
+              "max": 5814
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 2437.0,
+              "p95": 4387,
+              "min": 1196,
+              "max": 4387
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "page.execute",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 9234.5,
+              "p95": 15699,
+              "min": 5083,
+              "max": 15699
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "page.firstFrame",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 471187.5,
+              "p95": 575231,
+              "min": 39516,
+              "max": 575231
+            },
+            "count": {
+              "p50": 2.0,
+              "p95": 2,
+              "min": 2,
+              "max": 2
+            }
+          },
+          {
+            "name": "page.queue",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 4413.0,
+              "p95": 16804,
+              "min": 2891,
+              "max": 16804
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "shell.restore",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 910502.0,
+              "p95": 1498797,
+              "min": 504600,
+              "max": 1498797
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          }
+        ]
+      },
+      "errors": []
+    },
+    {
+      "name": "candidate-phases-idle",
+      "conditions": "build106 diagnostic after Flutter full suite; Python tools briefly running during the group",
+      "localReport": "dist/verification/startup-deep-20261014/candidate-phases-idle.json",
+      "complete": true,
+      "requestedRuns": 10,
+      "completedRuns": 10,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 10,
+          "p50Ms": 1358.0,
+          "p95Ms": 1471,
+          "minMs": 1254,
+          "maxMs": 1471
+        },
+        "WaitTime": {
+          "count": 10,
+          "p50Ms": 1359.5,
+          "p95Ms": 1505,
+          "minMs": 1285,
+          "maxMs": 1505
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 10,
+          "p50Ms": 1769.5,
+          "p95Ms": 2057,
+          "minMs": 1556,
+          "maxMs": 2057
+        },
+        "startupPhases": [
+          {
+            "name": "app.firstFrame",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 22198.0,
+              "p95": 808022,
+              "min": 9580,
+              "max": 808022
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "app.workspaceReady",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1448636.5,
+              "p95": 1791214,
+              "min": 1285907,
+              "max": 1791214
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "database.open",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 721286.5,
+              "p95": 1099311,
+              "min": 35534,
+              "max": 1099311
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "database.ready",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 116171.0,
+              "p95": 698659,
+              "min": 29330,
+              "max": 698659
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.defaults.metadata",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1114.5,
+              "p95": 3380,
+              "min": 606,
+              "max": 3380
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.initialize",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 396266.0,
+              "p95": 515081,
+              "min": 322941,
+              "max": 515081
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "elapsedUs": {
+              "p50": 6253.0,
+              "p95": 100052,
+              "min": 3936,
+              "max": 100052
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "elapsedUs": {
+              "p50": 136959.5,
+              "p95": 150833,
+              "min": 128449,
+              "max": 150833
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "elapsedUs": {
+              "p50": 5822.0,
+              "p95": 7503,
+              "min": 4363,
+              "max": 7503
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "elapsedUs": {
+              "p50": 5651.5,
+              "p95": 14582,
+              "min": 3353,
+              "max": 14582
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "elapsedUs": {
+              "p50": 3759.5,
+              "p95": 6318,
+              "min": 2765,
+              "max": 6318
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 6667.5,
+              "p95": 12026,
+              "min": 4090,
+              "max": 12026
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "elapsedUs": {
+              "p50": 3909.5,
+              "p95": 9527,
+              "min": 2613,
+              "max": 9527
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 10,
+            "moduleId": "example.ui.compact",
+            "elapsedUs": {
+              "p50": 5701.5,
+              "p95": 10127,
+              "min": 2998,
+              "max": 10127
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.restore",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1113196.0,
+              "p95": 1432593,
+              "min": 483055,
+              "max": 1432593
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.restore.packages",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1479.5,
+              "p95": 127005,
+              "min": 517,
+              "max": 127005
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 6376.5,
+              "p95": 12923,
+              "min": 1865,
+              "max": 12923
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ai",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 2519.0,
+              "p95": 4886,
+              "min": 1645,
+              "max": 4886
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 8648.5,
+              "p95": 23440,
+              "min": 5840,
+              "max": 23440
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.import.shiguang",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 7774.5,
+              "p95": 15874,
+              "min": 5871,
+              "max": 15874
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 3944.0,
+              "p95": 16202,
+              "min": 3440,
+              "max": 16202
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.schedule",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 4408.5,
+              "p95": 8074,
+              "min": 3052,
+              "max": 8074
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 1755.0,
+              "p95": 7644,
+              "min": 1313,
+              "max": 7644
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.tasks",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 1285.5,
+              "p95": 2187,
+              "min": 982,
+              "max": 2187
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 1254.5,
+              "p95": 2024,
+              "min": 783,
+              "max": 2024
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.contributions",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 929.0,
+              "p95": 1931,
+              "min": 630,
+              "max": 1931
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 3036.5,
+              "p95": 13182,
+              "min": 2142,
+              "max": 13182
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 2592.0,
+              "p95": 5369,
+              "min": 1868,
+              "max": 5369
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 2319.5,
+              "p95": 9553,
+              "min": 1226,
+              "max": 9553
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 10,
+            "moduleId": "app.views.today",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 1580.0,
+              "p95": 3128,
+              "min": 1163,
+              "max": 3128
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "page.execute",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 7788.0,
+              "p95": 12514,
+              "min": 4585,
+              "max": 12514
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "page.firstFrame",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 47972.0,
+              "p95": 638555,
+              "min": 40430,
+              "max": 638555
+            },
+            "count": {
+              "p50": 2.0,
+              "p95": 2,
+              "min": 2,
+              "max": 2
+            }
+          },
+          {
+            "name": "page.queue",
+            "sampleCount": 10,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 3833.0,
+              "p95": 4009,
+              "min": 3531,
+              "max": 4009
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "shell.restore",
+            "sampleCount": 10,
+            "elapsedUs": {
+              "p50": 1113455.0,
+              "p95": 1432166,
+              "min": 483308,
+              "max": 1432166
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          }
+        ]
+      },
+      "errors": []
+    },
+    {
+      "name": "candidate-phases-repeat20",
+      "conditions": "build106 diagnostic exploratory; final APK compilation overlapped this group",
+      "localReport": "dist/verification/startup-deep-20261014/candidate-phases-repeat20.json",
+      "complete": true,
+      "requestedRuns": 20,
+      "completedRuns": 20,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 20,
+          "p50Ms": 1466.5,
+          "p95Ms": 1647,
+          "minMs": 1232,
+          "maxMs": 1692
+        },
+        "WaitTime": {
+          "count": 20,
+          "p50Ms": 1469.0,
+          "p95Ms": 1651,
+          "minMs": 1266,
+          "maxMs": 1695
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 20,
+          "p50Ms": 1955.0,
+          "p95Ms": 2347,
+          "minMs": 1487,
+          "maxMs": 2400
+        },
+        "startupPhases": [
+          {
+            "name": "app.firstFrame",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 17557.0,
+              "p95": 588772,
+              "min": 9640,
+              "max": 656676
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "app.workspaceReady",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 1606700.0,
+              "p95": 1920950,
+              "min": 1314182,
+              "max": 1953449
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "database.open",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 769103.0,
+              "p95": 1016296,
+              "min": 50370,
+              "max": 1072608
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "database.ready",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 663936.5,
+              "p95": 964325,
+              "min": 36086,
+              "max": 1064055
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.defaults.metadata",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 1284.5,
+              "p95": 2713,
+              "min": 715,
+              "max": 4649
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.initialize",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 475059.5,
+              "p95": 567102,
+              "min": 312814,
+              "max": 649471
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 20,
+            "moduleId": "app.ai",
+            "elapsedUs": {
+              "p50": 7523.0,
+              "p95": 70987,
+              "min": 3187,
+              "max": 158634
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 20,
+            "moduleId": "app.import.shiguang",
+            "elapsedUs": {
+              "p50": 145169.0,
+              "p95": 151964,
+              "min": 128727,
+              "max": 234284
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 20,
+            "moduleId": "app.schedule",
+            "elapsedUs": {
+              "p50": 6831.5,
+              "p95": 16125,
+              "min": 5097,
+              "max": 18979
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 20,
+            "moduleId": "app.tasks",
+            "elapsedUs": {
+              "p50": 4910.0,
+              "p95": 10611,
+              "min": 2945,
+              "max": 17647
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 20,
+            "moduleId": "app.ui.contributions",
+            "elapsedUs": {
+              "p50": 4646.0,
+              "p95": 28284,
+              "min": 2778,
+              "max": 32799
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 20,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 7264.5,
+              "p95": 14159,
+              "min": 4838,
+              "max": 17228
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 20,
+            "moduleId": "app.views.today",
+            "elapsedUs": {
+              "p50": 5563.0,
+              "p95": 18938,
+              "min": 3366,
+              "max": 101192
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.package.verify",
+            "sampleCount": 20,
+            "moduleId": "example.ui.compact",
+            "elapsedUs": {
+              "p50": 4713.5,
+              "p95": 8872,
+              "min": 2824,
+              "max": 12747
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.restore",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 1266762.5,
+              "p95": 1495243,
+              "min": 574970,
+              "max": 1496324
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.restore.packages",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 1560.0,
+              "p95": 11377,
+              "min": 627,
+              "max": 14588
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.ai",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 3589.5,
+              "p95": 6506,
+              "min": 1780,
+              "max": 11314
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.ai",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 1930.0,
+              "p95": 5544,
+              "min": 1228,
+              "max": 7278
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.import.shiguang",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 8785.5,
+              "p95": 12075,
+              "min": 6443,
+              "max": 20305
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.import.shiguang",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 7693.0,
+              "p95": 23047,
+              "min": 5786,
+              "max": 31298
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.schedule",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 4706.0,
+              "p95": 16444,
+              "min": 3369,
+              "max": 21860
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.schedule",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 3801.5,
+              "p95": 5615,
+              "min": 3269,
+              "max": 10836
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.tasks",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 2480.0,
+              "p95": 14134,
+              "min": 1312,
+              "max": 178032
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.tasks",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 1704.5,
+              "p95": 3850,
+              "min": 900,
+              "max": 8781
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.ui.contributions",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 1322.5,
+              "p95": 4996,
+              "min": 782,
+              "max": 11027
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.ui.contributions",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 1048.5,
+              "p95": 2873,
+              "min": 466,
+              "max": 3693
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.ui.examples",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 3526.0,
+              "p95": 20602,
+              "min": 2082,
+              "max": 101399
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.ui.examples",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 2753.5,
+              "p95": 6123,
+              "min": 1917,
+              "max": 20686
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.views.today",
+            "worker": "computation",
+            "elapsedUs": {
+              "p50": 2611.5,
+              "p95": 3945,
+              "min": 1387,
+              "max": 4115
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "host.worker.load",
+            "sampleCount": 20,
+            "moduleId": "app.views.today",
+            "worker": "workflow",
+            "elapsedUs": {
+              "p50": 1969.5,
+              "p95": 5437,
+              "min": 1174,
+              "max": 11424
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "page.execute",
+            "sampleCount": 20,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 7908.5,
+              "p95": 14485,
+              "min": 5538,
+              "max": 14609
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "page.firstFrame",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 470630.5,
+              "p95": 736744,
+              "min": 38863,
+              "max": 801067
+            },
+            "count": {
+              "p50": 2.0,
+              "p95": 2,
+              "min": 2,
+              "max": 2
+            }
+          },
+          {
+            "name": "page.queue",
+            "sampleCount": 20,
+            "moduleId": "app.ui.examples",
+            "elapsedUs": {
+              "p50": 4046.5,
+              "p95": 4970,
+              "min": 3121,
+              "max": 5193
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          },
+          {
+            "name": "shell.restore",
+            "sampleCount": 20,
+            "elapsedUs": {
+              "p50": 1266391.5,
+              "p95": 1495595,
+              "min": 575208,
+              "max": 1496701
+            },
+            "count": {
+              "p50": 1.0,
+              "p95": 1,
+              "min": 1,
+              "max": 1
+            }
+          }
+        ]
+      },
+      "errors": []
+    },
+    {
+      "name": "final-ready20",
+      "conditions": "build107 regular release; incomplete because emulator exited at trial11",
+      "localReport": "dist/verification/startup-deep-20261014/final-ready20.json",
+      "complete": false,
+      "requestedRuns": 20,
+      "completedRuns": 10,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 10,
+          "p50Ms": 1387.0,
+          "p95Ms": 1572,
+          "minMs": 1234,
+          "maxMs": 1572
+        },
+        "WaitTime": {
+          "count": 10,
+          "p50Ms": 1432.0,
+          "p95Ms": 1575,
+          "minMs": 1242,
+          "maxMs": 1575
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 10,
+          "p50Ms": 1943.0,
+          "p95Ms": 2102,
+          "minMs": 1547,
+          "maxMs": 2102
+        }
+      },
+      "errors": [
+        {
+          "trial": 11,
+          "phase": "launch",
+          "message": "ADB am start returned an error",
+          "operation": "am start",
+          "exitCode": 255,
+          "stdoutPresent": true,
+          "stderrPresent": false,
+          "timedOut": false,
+          "timeoutSeconds": 60
+        }
+      ]
+    },
+    {
+      "name": "final-ready10-restarted",
+      "conditions": "build107 regular release after emulator restart and one uncounted first launch; no concurrent build/test",
+      "localReport": "dist/verification/startup-deep-20261014/final-ready10-restarted.json",
+      "complete": true,
+      "requestedRuns": 10,
+      "completedRuns": 10,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 10,
+          "p50Ms": 721.5,
+          "p95Ms": 1036,
+          "minMs": 651,
+          "maxMs": 1036
+        },
+        "WaitTime": {
+          "count": 10,
+          "p50Ms": 724.0,
+          "p95Ms": 1049,
+          "minMs": 654,
+          "maxMs": 1049
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 10,
+          "p50Ms": 987.0,
+          "p95Ms": 1311,
+          "minMs": 912,
+          "maxMs": 1311
+        }
+      },
+      "errors": []
+    }
+  ],
+  "microbenchmarks": {
+    "workerBefore": {
+      "runs": 30,
+      "measurement": "Linux real QuickJS; excludes app/engine startup",
+      "summary": {
+        "loadMicros": {
+          "p50": 3840,
+          "p95": 4034
+        },
+        "chainMicros": {
+          "p50": 25989,
+          "p95": 26177
+        }
+      },
+      "idleWorkerTimersPerSecond": 20,
+      "samples": [
+        {
+          "loadMicros": 19515,
+          "chainMicros": 25592
+        },
+        {
+          "loadMicros": 4033,
+          "chainMicros": 29005
+        },
+        {
+          "loadMicros": 3700,
+          "chainMicros": 25989
+        },
+        {
+          "loadMicros": 3840,
+          "chainMicros": 25970
+        },
+        {
+          "loadMicros": 3813,
+          "chainMicros": 26071
+        },
+        {
+          "loadMicros": 3772,
+          "chainMicros": 26011
+        },
+        {
+          "loadMicros": 3858,
+          "chainMicros": 26072
+        },
+        {
+          "loadMicros": 3755,
+          "chainMicros": 26024
+        },
+        {
+          "loadMicros": 3726,
+          "chainMicros": 26004
+        },
+        {
+          "loadMicros": 3888,
+          "chainMicros": 26044
+        },
+        {
+          "loadMicros": 3755,
+          "chainMicros": 26040
+        },
+        {
+          "loadMicros": 3976,
+          "chainMicros": 25884
+        },
+        {
+          "loadMicros": 3845,
+          "chainMicros": 25901
+        },
+        {
+          "loadMicros": 3944,
+          "chainMicros": 25973
+        },
+        {
+          "loadMicros": 3833,
+          "chainMicros": 25912
+        },
+        {
+          "loadMicros": 3863,
+          "chainMicros": 26177
+        },
+        {
+          "loadMicros": 3615,
+          "chainMicros": 25987
+        },
+        {
+          "loadMicros": 3850,
+          "chainMicros": 25869
+        },
+        {
+          "loadMicros": 4034,
+          "chainMicros": 25854
+        },
+        {
+          "loadMicros": 3905,
+          "chainMicros": 25903
+        },
+        {
+          "loadMicros": 3919,
+          "chainMicros": 26016
+        },
+        {
+          "loadMicros": 3633,
+          "chainMicros": 25976
+        },
+        {
+          "loadMicros": 3920,
+          "chainMicros": 25986
+        },
+        {
+          "loadMicros": 3735,
+          "chainMicros": 25976
+        },
+        {
+          "loadMicros": 3893,
+          "chainMicros": 26019
+        },
+        {
+          "loadMicros": 3703,
+          "chainMicros": 26118
+        },
+        {
+          "loadMicros": 3712,
+          "chainMicros": 26088
+        },
+        {
+          "loadMicros": 3673,
+          "chainMicros": 26149
+        },
+        {
+          "loadMicros": 3712,
+          "chainMicros": 25890
+        },
+        {
+          "loadMicros": 3871,
+          "chainMicros": 26061
+        }
+      ]
+    },
+    "workerAfter": {
+      "runs": 30,
+      "measurement": "Linux real QuickJS; excludes app/engine startup",
+      "summary": {
+        "loadMicros": {
+          "p50": 754,
+          "p95": 1178
+        },
+        "chainMicros": {
+          "p50": 1846,
+          "p95": 2688
+        }
+      },
+      "idleWorkerTimersPerSecond": 0,
+      "samples": [
+        {
+          "loadMicros": 18006,
+          "chainMicros": 2106
+        },
+        {
+          "loadMicros": 926,
+          "chainMicros": 2159
+        },
+        {
+          "loadMicros": 738,
+          "chainMicros": 1744
+        },
+        {
+          "loadMicros": 688,
+          "chainMicros": 2344
+        },
+        {
+          "loadMicros": 723,
+          "chainMicros": 2014
+        },
+        {
+          "loadMicros": 888,
+          "chainMicros": 2479
+        },
+        {
+          "loadMicros": 809,
+          "chainMicros": 2161
+        },
+        {
+          "loadMicros": 1110,
+          "chainMicros": 1869
+        },
+        {
+          "loadMicros": 863,
+          "chainMicros": 2399
+        },
+        {
+          "loadMicros": 1073,
+          "chainMicros": 2241
+        },
+        {
+          "loadMicros": 717,
+          "chainMicros": 1743
+        },
+        {
+          "loadMicros": 813,
+          "chainMicros": 1846
+        },
+        {
+          "loadMicros": 947,
+          "chainMicros": 2816
+        },
+        {
+          "loadMicros": 888,
+          "chainMicros": 2082
+        },
+        {
+          "loadMicros": 738,
+          "chainMicros": 1847
+        },
+        {
+          "loadMicros": 707,
+          "chainMicros": 2688
+        },
+        {
+          "loadMicros": 937,
+          "chainMicros": 2032
+        },
+        {
+          "loadMicros": 780,
+          "chainMicros": 1758
+        },
+        {
+          "loadMicros": 628,
+          "chainMicros": 1589
+        },
+        {
+          "loadMicros": 911,
+          "chainMicros": 1782
+        },
+        {
+          "loadMicros": 650,
+          "chainMicros": 1775
+        },
+        {
+          "loadMicros": 639,
+          "chainMicros": 2043
+        },
+        {
+          "loadMicros": 743,
+          "chainMicros": 1679
+        },
+        {
+          "loadMicros": 627,
+          "chainMicros": 1695
+        },
+        {
+          "loadMicros": 646,
+          "chainMicros": 1585
+        },
+        {
+          "loadMicros": 864,
+          "chainMicros": 1532
+        },
+        {
+          "loadMicros": 754,
+          "chainMicros": 1544
+        },
+        {
+          "loadMicros": 633,
+          "chainMicros": 1606
+        },
+        {
+          "loadMicros": 673,
+          "chainMicros": 1479
+        },
+        {
+          "loadMicros": 1178,
+          "chainMicros": 1827
+        }
+      ]
+    },
+    "packageBefore": {
+      "provenance": "Exact PACKAGE_BENCHMARK JSON copied from already completed Flutter test tool output; no rerun",
+      "execSession": 20789,
+      "results": [
+        {
+          "name": "defaults.verify",
+          "iterations": 40,
+          "p50Us": 2314,
+          "p95Us": 3436,
+          "totalUs": 99230,
+          "cpuTicks": 14
+        },
+        {
+          "name": "defaults.verify+origin+scripts2",
+          "iterations": 40,
+          "p50Us": 2137,
+          "p95Us": 3169,
+          "totalUs": 91913,
+          "cpuTicks": 15
+        },
+        {
+          "name": "synthetic.verify",
+          "iterations": 40,
+          "p50Us": 13047,
+          "p95Us": 16007,
+          "totalUs": 536688,
+          "cpuTicks": 64
+        },
+        {
+          "name": "synthetic.scripts2",
+          "iterations": 120,
+          "p50Us": 4699,
+          "p95Us": 5191,
+          "totalUs": 571164,
+          "cpuTicks": 59
+        }
+      ]
+    },
+    "packageAfter": {
+      "provenance": "Exact PACKAGE_BENCHMARK JSON copied from already completed Flutter test tool output; no rerun",
+      "execSession": 37545,
+      "results": [
+        {
+          "name": "defaults.verify",
+          "iterations": 40,
+          "p50Us": 2413,
+          "p95Us": 3829,
+          "totalUs": 104760,
+          "cpuTicks": 14
+        },
+        {
+          "name": "defaults.verify+origin+scripts2",
+          "iterations": 40,
+          "p50Us": 2227,
+          "p95Us": 4212,
+          "totalUs": 101220,
+          "cpuTicks": 15
+        },
+        {
+          "name": "synthetic.verify",
+          "iterations": 40,
+          "p50Us": 13054,
+          "p95Us": 19210,
+          "totalUs": 552184,
+          "cpuTicks": 63
+        },
+        {
+          "name": "synthetic.scripts2",
+          "iterations": 120,
+          "p50Us": 7,
+          "p95Us": 16,
+          "totalUs": 1023,
+          "cpuTicks": 0
+        }
+      ]
+    }
+  },
+  "interpretation": [
+    "Native notification materially reduces local serial host bridge wait and eliminates periodic idle timers.",
+    "Script decoding is cached once per immutable package, but complete package verification showed no microbenchmark speedup.",
+    "Final 10-trial regular release group has workspace-ready p50=987ms/p95=1311ms; it followed an emulator restart.",
+    "The earlier regular baseline and final group were not interleaved in matched emulator states. No stable overall startup speedup percentage is established.",
+    "Diagnostic groups and groups overlapping tests or compilation are exploratory and are not pooled with regular release groups.",
+    "The failed 20-trial group is retained as incomplete and is not used as a completed comparison group.",
+    "ActivityCreateToWorkspaceReadyMs excludes process creation and is not Android TTFD.",
+    "ARM64 physical-device startup, Windows native notification teardown and low-end/large-dataset matrices were not measured."
+  ],
+  "appDataRetained": true,
+  "modulePackagesUpdated": false,
+  "logcatCleared": false,
+  "published": false,
+  "gitCommitted": false
+}

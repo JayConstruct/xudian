@@ -1,9 +1,149 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xquickjs/xquickjs.dart';
 
 void main() {
+  test('native output notifications create no idle polling timers', () async {
+    var timers = 0;
+    late JavaScriptWorker worker;
+    await runZoned(
+      () async {
+        worker = JavaScriptWorker({
+          'main.js': 'export function value(){return 42;}',
+        }, host: (_, _) async => null);
+        await worker.load('main.js');
+        final before = timers;
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+        expect(
+          timers - before,
+          1,
+          reason: 'Only the test wait creates a timer',
+        );
+        expect(await worker.invoke('value', {}), 42);
+      },
+      zoneSpecification: ZoneSpecification(
+        createTimer: (self, parent, zone, duration, callback) {
+          timers++;
+          return parent.createTimer(zone, duration, callback);
+        },
+      ),
+    );
+    worker.close();
+  });
+
+  test(
+    'top-level awaits execute per worker and globals remain isolated',
+    () async {
+      var initializations = 0;
+      const scripts = {
+        'main.js': """
+import {clock} from '@xudian/sdk';
+const initial = await clock.now();
+let count = 0;
+export function value(){return {initial,count:++count};}
+""",
+      };
+      final first = JavaScriptWorker(
+        scripts,
+        host: (_, _) async => ++initializations,
+      );
+      final second = JavaScriptWorker(
+        scripts,
+        host: (_, _) async => ++initializations,
+      );
+      addTearDown(first.close);
+      addTearDown(second.close);
+      await first.load('main.js');
+      await second.load('main.js');
+      expect(initializations, 2);
+      expect(await first.invoke('value', {}), {'initial': 1, 'count': 1});
+      expect(await first.invoke('value', {}), {'initial': 1, 'count': 2});
+      expect(await second.invoke('value', {}), {'initial': 2, 'count': 1});
+    },
+  );
+
+  test('queued notifications, pending calls and late host replies survive close', () async {
+    for (var iteration = 0; iteration < 100; iteration++) {
+      final reply = Completer<Object?>();
+      final requested = Completer<void>();
+      final worker = JavaScriptWorker(
+        {
+          'main.js': """
+import {clock} from '@xudian/sdk';
+export async function waiting(){return await clock.now();}
+export function burst(){for(let i=0;i<30;i++) globalThis.__send(JSON.stringify({type:'result',id:-1,value:i})); return 7;}
+""",
+        },
+        host: (_, _) async {
+          requested.complete();
+          return reply.future;
+        },
+      );
+      await worker.load('main.js');
+      final waiting = worker.invoke('waiting', {});
+      final waitingError = expectLater(waiting, throwsStateError);
+      await requested.future;
+      final burst = worker.invoke('burst', {});
+      final burstResult = burst.then(
+        (value) => expect(value, 7),
+        onError: (Object error) => expect(error, isA<StateError>()),
+      );
+      // Give the native thread a chance to queue notifications while Dart is
+      // still in this synchronous turn, then destroy it before callbacks drain.
+      sleep(const Duration(milliseconds: 1));
+      worker.close();
+      reply.complete('late');
+      worker.close();
+      await waitingError;
+      await burstResult;
+    }
+    await Future<void>.delayed(Duration.zero);
+  });
+
+  test(
+    'notifications use the owner zone after temporary construction ends',
+    () async {
+      const transactionKey = #temporaryWorkerTransaction;
+      final owner = Zone.current;
+      final temporary = owner.fork(zoneValues: {transactionKey: true});
+      final seen = <bool>[];
+      final worker = temporary.run(
+        () => JavaScriptWorker(
+          {
+            'main.js': "import {clock} from '@xudian/sdk'; await clock.now(); export async function now(){return clock.now();}",
+          },
+          ownerZone: owner,
+          host: (_, _) async {
+            seen.add(Zone.current[transactionKey] == true);
+            return 1;
+          },
+        ),
+      );
+      addTearDown(worker.close);
+      await temporary.run(() => worker.load('main.js'));
+      expect(await temporary.run(() => worker.invoke('now', {})), 1);
+      expect(seen, [false, false]);
+    },
+  );
+
+  test(
+    'closing from a synchronous host callback never joins a waiting Dart call',
+    () async {
+      late JavaScriptWorker worker;
+      worker = JavaScriptWorker(
+        {'main.js': "import {clock} from '@xudian/sdk'; await clock.now();"},
+        host: (_, _) async {
+          worker.close();
+          return 1;
+        },
+      );
+      await expectLater(worker.load('main.js'), throwsStateError);
+      expect(worker.closed, isTrue);
+    },
+  );
+
   test(
     'caught host errors expose business text and retain diagnostic details',
     () async {

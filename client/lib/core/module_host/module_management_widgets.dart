@@ -55,6 +55,9 @@ void showHostService(BuildContext context, Map<String, Object?> service) =>
       context: context,
       builder: (context) => NativeUi(
         child: AlertDialog(
+          titlePadding: AppDesign.dialogTitlePadding,
+          contentPadding: AppDesign.dialogContentPadding,
+          actionsPadding: AppDesign.dialogActionsPadding,
           title: const Text('宿主内置服务'),
           content: Text(
             '${service['serviceId']} @ ${service['majorVersion']} 由宿主提供，无需安装。',
@@ -107,7 +110,12 @@ class ModuleSummaryTile extends StatelessWidget {
         children: [
           Text(description),
           const SizedBox(height: 4),
-          Text('$version · $status'),
+          Text(
+            '$version · $status',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
       onTap: onTap,
@@ -132,11 +140,19 @@ class ModuleDetailsDialog extends StatelessWidget {
   final String? repository, status;
   final List<String>? allDependents;
 
-  Widget _field(String title, String value) => Padding(
+  Widget _field(BuildContext context, String title, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [Text(title), SelectableText(value)],
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.labelMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 4),
+        SelectableText(value, style: Theme.of(context).textTheme.bodyMedium),
+      ],
     ),
   );
 
@@ -154,20 +170,26 @@ class ModuleDetailsDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _field('作用', package.description),
-              _field('模块 ID', package.id),
-              _field('版本与状态', '${package.version} · ${status ?? '待安装'}'),
-              _field('作者', package.author),
-              _field('来源', repository ?? package.origin),
+              _field(context, '作用', package.description),
+              _field(context, '模块 ID', package.id),
               _field(
+                context,
+                '版本与状态',
+                '${package.version} · ${status ?? '待安装'}',
+              ),
+              _field(context, '作者', package.author),
+              _field(context, '来源', repository ?? package.origin),
+              _field(
+                context,
                 '签名',
                 package.release['channel'] == 'market'
                     ? '发布者签名已验证'
                     : '未签名包；SHA-256 摘要校验不代表作者签名',
               ),
-              _field('SHA-256', package.packageDigest),
-              _field('宿主兼容性', '${package.manifest['hostApi']}'),
+              _field(context, 'SHA-256', package.packageDigest),
+              _field(context, '宿主兼容性', '${package.manifest['hostApi']}'),
               _field(
+                context,
                 '权限',
                 package.permissions.isEmpty
                     ? '无'
@@ -212,10 +234,12 @@ class ModuleDetailsDialog extends StatelessWidget {
               const SizedBox(height: 12),
               if (allDependents != null)
                 _field(
+                  context,
                   '被依赖情况（所有已安装模块）',
                   allDependents!.isEmpty ? '无' : allDependents!.join('\n'),
                 ),
               _field(
+                context,
                 '受影响的已启用模块',
                 dependents.isEmpty ? '无' : dependents.join('\n'),
               ),

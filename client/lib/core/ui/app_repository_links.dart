@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'ui_toast.dart';
+import 'ui_icon.dart';
 
 final externalUrlLauncherProvider = Provider<Future<bool> Function(Uri)>(
   (_) =>
@@ -62,13 +63,13 @@ class AppRepositoryLinks extends ConsumerWidget {
     required IconData icon,
   }) => ListTile(
     contentPadding: EdgeInsets.zero,
-    leading: Icon(icon),
+    leading: UiIcon(icon),
     title: Text(title),
     subtitle: Text(address, softWrap: true),
     onTap: () => _open(context, ref, address),
     trailing: IconButton(
       tooltip: copyTooltip,
-      icon: const Icon(Icons.copy_outlined),
+      icon: const UiIcon(Icons.copy_outlined),
       onPressed: () => _copy(context, address),
     ),
   );
@@ -99,7 +100,7 @@ class AppRepositoryLinks extends ConsumerWidget {
       ),
       TextButton.icon(
         onPressed: onBrowseModules,
-        icon: const Icon(Icons.public),
+        icon: const UiIcon(Icons.public),
         label: const Text('打开模块商店'),
       ),
     ],

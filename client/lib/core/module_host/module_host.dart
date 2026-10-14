@@ -259,8 +259,17 @@ class ModuleHost {
       }
     }
     // The database points only at committed content-addressed packages.
-    final installations = await store.sql(
-      'SELECT * FROM host_installations WHERE installed=1 AND enabled=1',
+    final installations = await UiLoadTrace.run(
+      'host.restore.packages',
+      () => store.sql('''SELECT installations.*,
+        packages.module_id AS package_id,
+        packages.digest AS package_digest,
+        packages.origin AS package_origin
+        FROM host_installations AS installations
+        LEFT JOIN host_packages AS packages
+          ON packages.module_id=installations.module_id
+          AND packages.version=installations.version
+        WHERE installations.installed=1 AND installations.enabled=1'''),
     );
     final pending = {
       for (final row in installations) row['module_id'] as String: row,
@@ -276,6 +285,14 @@ class ModuleHost {
           final package = verifiedPackages[id] ??= await _storedPackage(
             id,
             row['version'] as String,
+            storedRows: row['package_id'] == null
+                ? const []
+                : [
+                    {
+                      'digest': row['package_digest'],
+                      'origin': row['package_origin'],
+                    },
+                  ],
           );
           if (package.dependencies.any(pending.containsKey)) continue;
           _validateDependencies(package);
@@ -315,18 +332,30 @@ class ModuleHost {
     );
   }
 
-  Future<ScriptPackage> _storedPackage(String id, String version) =>
-      UiLoadTrace.run(
-        'host.package.verify',
-        () => _readStoredPackage(id, version),
-        arguments: {'moduleId': id, 'version': version},
-      );
+  Future<ScriptPackage> _storedPackage(
+    String id,
+    String version, {
+    List<Map<String, Object?>>? storedRows,
+  }) => UiLoadTrace.run(
+    'host.package.verify',
+    () => _readStoredPackage(id, version, storedRows: storedRows),
+    arguments: {'moduleId': id, 'version': version},
+  );
 
-  Future<ScriptPackage> _readStoredPackage(String id, String version) async {
-    final row = (await store.sql(
-      'SELECT * FROM host_packages WHERE module_id=? AND version=?',
-      [id, version],
-    )).single;
+  Future<ScriptPackage> _readStoredPackage(
+    String id,
+    String version, {
+    List<Map<String, Object?>>? storedRows,
+  }) async {
+    // Restore can supply rows from its single joined query. An empty list keeps
+    // the same missing-provenance failure as the ordinary database lookup.
+    final row =
+        (storedRows ??
+                await store.sql(
+                  'SELECT * FROM host_packages WHERE module_id=? AND version=?',
+                  [id, version],
+                ))
+            .single;
     final bytes = await File('${directory.path}/${row['digest']}.xmodule')
         .readAsBytes();
     // Revalidate every file. Trust is derived from previously verified immutable

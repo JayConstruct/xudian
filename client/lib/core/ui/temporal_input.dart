@@ -227,6 +227,7 @@ class TemporalInput extends StatelessWidget {
     this.clearable = true,
     this.editable = true,
     this.errorText,
+    this.helperText,
     this.minDate,
     this.maxDate,
     this.isCurrent,
@@ -239,7 +240,7 @@ class TemporalInput extends StatelessWidget {
   final FocusNode? focusNode;
   final ValueChanged<Object?> onChanged;
   final bool enabled, clearable, editable, legacyDateTime;
-  final String? errorText, minDate, maxDate;
+  final String? errorText, helperText, minDate, maxDate;
   final bool Function()? isCurrent;
 
   @override
@@ -305,6 +306,8 @@ class TemporalInput extends StatelessWidget {
       labelText: label,
       enabled: enabled,
       errorText: validation,
+      helperText: helperText,
+      helperMaxLines: 3,
       suffixIcon: actions,
     );
     if (controller != null) {

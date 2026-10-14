@@ -24,6 +24,8 @@ final installedAppVersionProvider = FutureProvider<InstalledAppVersion>((
 
 enum AppUpdatePlatform { android, windows, unsupported }
 
+enum AppUpdateChannel { stable, testing }
+
 final appUpdatePlatformProvider = Provider<AppUpdatePlatform>(
   (_) => Platform.isAndroid
       ? AppUpdatePlatform.android
@@ -38,11 +40,13 @@ class AppRelease {
     required this.url,
     required this.notes,
     required this.publishedAt,
+    this.isPrerelease = false,
   });
   final Version version;
   final Uri url;
   final String notes;
   final DateTime? publishedAt;
+  final bool isPrerelease;
 }
 
 class AppUpdateResult {
@@ -80,7 +84,7 @@ final githubAppUpdatesProvider = Provider<GitHubAppUpdates>(
   (_) => GitHubAppUpdates(),
 );
 
-/// App releases share a repository with module releases. Only stable semantic
+/// App releases share a repository with module releases. Only supported app
 /// tags with uploaded installers for this platform can become app updates.
 class GitHubAppUpdates {
   GitHubAppUpdates({GitHubReleaseTransport? transport})
@@ -89,8 +93,9 @@ class GitHubAppUpdates {
 
   Future<AppUpdateResult> check(
     InstalledAppVersion installed,
-    AppUpdatePlatform platform,
-  ) async {
+    AppUpdatePlatform platform, {
+    AppUpdateChannel channel = AppUpdateChannel.stable,
+  }) async {
     if (platform == AppUpdatePlatform.unsupported) {
       throw const AppUpdateException('当前平台暂不支持应用更新，请查看 GitHub 发布页');
     }
@@ -116,7 +121,7 @@ class GitHubAppUpdates {
         if (data is! List) throw const FormatException('Invalid releases');
         final releases =
             data
-                .map((value) => _release(value, platform))
+                .map((value) => _release(value, platform, channel))
                 .whereType<AppRelease>()
                 .toList()
               ..sort((a, b) => b.version.compareTo(a.version));
@@ -142,16 +147,21 @@ class GitHubAppUpdates {
     }
   }
 
-  static AppRelease? _release(Object? value, AppUpdatePlatform platform) {
+  static AppRelease? _release(
+    Object? value,
+    AppUpdatePlatform platform,
+    AppUpdateChannel channel,
+  ) {
     if (value is! Map ||
         value['draft'] != false ||
-        value['prerelease'] != false) {
+        value['prerelease'] is! bool) {
       return null;
     }
     final tag = value['tag_name'];
     if (tag is! String ||
-        !RegExp(r'^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$')
-            .hasMatch(tag)) {
+        !RegExp(
+          r'^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(0|[1-9]\d*))?$',
+        ).hasMatch(tag)) {
       return null;
     }
     final Version version;
@@ -160,6 +170,8 @@ class GitHubAppUpdates {
     } on FormatException {
       return null;
     }
+    final isPrerelease = value['prerelease'] == true || version.isPreRelease;
+    if (channel == AppUpdateChannel.stable && isPrerelease) return null;
     final url = Uri.tryParse(
       value['html_url'] is String ? value['html_url'] as String : '',
     );
@@ -191,6 +203,7 @@ class GitHubAppUpdates {
     }
     return AppRelease(
       version: version,
+      isPrerelease: isPrerelease,
       url: url,
       notes: value['body'] is String ? value['body'] as String : '',
       publishedAt: value['published_at'] is String

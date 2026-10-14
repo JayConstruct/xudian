@@ -58,6 +58,13 @@ export async function renderStable({state={},context={}}) {
   if(context.notify) await ui.notify({message:'foreground'});
   return {state,tree:{type:'text',text:'stable '+(++stableRenders)+' date '+context.selectedDate}};
 }
+export function renderDisclosure({state={},event}) {
+  return {state,tree:{type:'disclosure',text:'详细安排',children:[
+    {type:'text',text:'折叠正文'},
+    {type:'button',text:'确认安排',event:{type:'confirm'}},
+    ...(event?.type==='confirm'?[{type:'text',text:'已确认'}]:[])
+  ]}};
+}
 export async function render({state={},event,context={}}) {
   await data.query('records',{});
   state={...state,count:(state.count||0)+1};
@@ -129,6 +136,24 @@ export async function render({state={},event,context={}}) {
     if (waitForRender) await settle(tester);
     return ProviderScope.containerOf(tester.element(find.byType(ScriptPage)));
   }
+
+  testWidgets(
+    'disclosure shares continuous shape and retains expansion and actions',
+    (tester) async {
+      await show(tester, handler: 'renderDisclosure');
+      final tile = tester.widget<ExpansionTile>(find.byType(ExpansionTile));
+      expect(tile.shape, isA<RoundedSuperellipseBorder>());
+      expect(tile.collapsedShape, tile.shape);
+      await tester.tap(find.text('详细安排'));
+      await tester.pumpAndSettle();
+      expect(find.text('折叠正文').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('确认安排'));
+      await settle(tester);
+      expect(find.text('已确认'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'a successful foreground date is replayed after an unrelated write',

@@ -34,10 +34,18 @@ import re
 import sys
 from pathlib import Path
 root = Path(os.environ['START_TEST_ROOT'])
+command = base64.b64decode(sys.argv[-1]).decode('utf-16le')
+if '# AVD_NAME_QUERY' in command:
+    with (root / 'windows-name-calls').open('a') as log:
+        log.write(command + '\\n')
+    print(os.environ.get('START_TEST_WINDOWS_AVD', ''))
+    sys.exit(0)
 (root / 'launch').write_text(sys.argv[-1])
 if os.environ['START_TEST_MODE'] == 'launch-failure':
     sys.exit(1)
-command = base64.b64decode(sys.argv[-1]).decode('utf-16le')
+if os.environ['START_TEST_MODE'] == 'windows-existing' and '$processes.Count -gt 0 -and $true' in command:
+    print('目标模拟器进程仍在运行，无法通过 ADB 安全关闭；请手动关闭后重试。', file=sys.stderr)
+    sys.exit(1)
 rate = re.search("'-vsync-rate', '([0-9]+)'", command)
 if rate:
     (root / 'boot-refresh').write_text(rate.group(1))
@@ -56,14 +64,18 @@ if 'devices' in args:
     if mode == 'devices-failure':
         sys.exit(1)
     print('List of devices attached')
-    if mode in ('ready', 'wrong-avd', 'offline', 'shutdown-timeout', 'kill-failure', 'name-failure'):
+    if mode in ('ready', 'wrong-avd', 'offline', 'shutdown-timeout', 'kill-failure', 'name-failure', 'target-changed', 'console-name-empty', 'legacy-name', 'name-leading-blank', 'name-missing', 'windows-name'):
         if not (root / 'killed').exists() or mode == 'shutdown-timeout':
             print(os.environ.get('START_TEST_SERIAL', 'emulator-5554') + '\\t' + ('offline' if mode == 'offline' else 'device'))
 elif 'emu' in args:
     if args[-2:] == ['avd', 'name']:
         if mode == 'name-failure':
             sys.exit(1)
-        print('Other_AVD' if mode == 'wrong-avd' else 'Medium_Phone_API_37.0')
+        if mode == 'console-name-empty':
+            sys.exit(0)
+        changed = mode == 'target-changed' and (root / 'name-probed').exists()
+        (root / 'name-probed').touch()
+        print('Other_AVD' if mode == 'wrong-avd' or changed else 'Medium_Phone_API_37.0')
         print('OK')
     elif args[-1] == 'kill':
         if mode == 'kill-failure':
@@ -92,8 +104,16 @@ elif 'settings' in args:
         settings[setting] = args[-1] if operation == 'put' else 'null'
         settings_file.write_text(json.dumps(settings))
 elif 'getprop' in args:
-    if args[-1] == 'ro.boot.qemu.avd_name':
-        print('Other_AVD' if mode == 'wrong-avd' else 'Medium_Phone_API_37.0')
+    if args[-1] in ('ro.boot.qemu.avd_name', 'ro.kernel.qemu.avd_name'):
+        if mode == 'name-failure':
+            sys.exit(1)
+        if mode == 'name-missing' or (mode == 'windows-name' and not (root / 'killed').exists()) or (mode == 'legacy-name' and args[-1] == 'ro.boot.qemu.avd_name'):
+            print('\\r')
+            sys.exit(0)
+        changed = mode == 'target-changed' and (root / 'name-probed').exists()
+        (root / 'name-probed').touch()
+        name = 'Other_AVD' if mode == 'wrong-avd' or changed else 'Medium_Phone_API_37.0'
+        print('\\r\\n  ' + name + '  \\r' if mode == 'name-leading-blank' else name + '\\r')
     elif args[-1] == 'ro.boot.qemu.vsync':
         rate_file = root / 'boot-refresh'
         rate = rate_file.read_text() if rate_file.exists() else os.environ.get('START_TEST_REFRESH_RATE', '60')
@@ -111,10 +131,10 @@ elif 'getprop' in args:
         path.write_text('#!/usr/bin/python3\nimport os\n' + source)
         path.chmod(0o755)
 
-    def run_script(self, *args, mode='new'):
+    def run_script(self, *args, mode='new', answer=''):
         return subprocess.run(['bash', str(self.root / 'scripts' / SCRIPT.name), *args],
                               env=dict(self.env, START_TEST_MODE=mode),
-                              capture_output=True, text=True, timeout=10)
+                              input=answer, capture_output=True, text=True, timeout=10)
 
     def test_launch_waits_and_quotes_windows_path_literally(self):
         path = "D:\\Android SDK\\中文'$(literal)\\emulator.exe"
@@ -130,6 +150,41 @@ elif 'getprop' in args:
         self.assertNotIn('-vsync-rate', command)
         self.assertNotIn('-no-snapshot', command)
         self.assertNotIn('ro.boot.qemu.vsync', calls)
+        self.assertIn("'-memory', '2048'", command)
+
+    def test_custom_memory_is_passed_to_launcher(self):
+        result = self.run_script('--memory', '4096', '--cold-boot')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        command = base64.b64decode((self.root / 'launch').read_text()).decode('utf-16le')
+        self.assertIn("'-memory', '4096'", command)
+        self.assertIn('客体 RAM 上限：4096 MB', result.stdout)
+
+    def test_memory_boundaries_and_dry_run_contact_no_devices(self):
+        for value, expected in [('1536', '1536'), ('8192', '8192'), ('02048', '2048')]:
+            with self.subTest(value=value):
+                result = self.run_script('--memory', value, '--dry-run')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f'-memory {expected}', result.stdout)
+                self.assertFalse((self.root / 'launch').exists())
+                self.assertFalse((self.root / 'adb-calls').exists())
+
+    def test_invalid_memory_fails_before_external_commands(self):
+        for value in ('1535', '8193', '0', '-1', '2048.0', 'abc', '9999999999', '2048;command'):
+            with self.subTest(value=value):
+                result = self.run_script('--memory', value)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('1536～8192', result.stderr)
+                self.assertFalse((self.root / 'launch').exists())
+                self.assertFalse((self.root / 'adb-calls').exists())
+        result = self.run_script('--memory')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('缺少参数', result.stderr)
+
+    def test_memory_on_reused_device_explains_it_only_applies_to_new_launch(self):
+        result = self.run_script('--memory', '4096', mode='ready')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('仅新启动生效', result.stdout)
+        self.assertFalse((self.root / 'launch').exists())
 
     def test_refresh_rate_is_passed_to_new_cold_boot(self):
         self.env['START_TEST_REFRESH_RATE'] = '120'
@@ -185,41 +240,71 @@ elif 'getprop' in args:
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('缺少参数', result.stderr)
 
-    def test_cold_boot_restarts_only_matching_device(self):
-        result = self.run_script('--cold-boot', mode='ready')
+    def test_cold_boot_closes_and_restarts_after_confirmation(self):
+        result = self.run_script('--cold-boot', mode='ready', answer='y\n')
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('是否关闭并冷启动？[y/N]', result.stderr)
         calls = (self.root / 'adb-calls').read_text().splitlines()
-        name_call = '-H 127.0.0.1 -P 5037 -s emulator-5554 emu avd name'
-        kill_call = '-H 127.0.0.1 -P 5037 -s emulator-5554 emu kill'
-        self.assertLess(calls.index(name_call), calls.index(kill_call))
-        self.assertEqual(calls.count(kill_call), 1)
-        command = base64.b64decode((self.root / 'launch').read_text()).decode('utf-16le')
-        self.assertIn("'-no-snapshot-load'", command)
-        self.assertIn('if ($existing -and $true)', command)
-        self.assertIn('Target emulator process is still running', command)
-        self.assertNotIn('-wipe-data', command)
-        self.assertNotIn('Stop-Process', command)
+        kill = '-H 127.0.0.1 -P 5037 -s emulator-5554 emu kill'
+        name = '-H 127.0.0.1 -P 5037 -s emulator-5554 shell getprop ro.boot.qemu.avd_name'
+        self.assertEqual(calls.count(kill), 1)
+        self.assertEqual(calls[:3], ['-H 127.0.0.1 -P 5037 devices -l', name, name])
+        self.assertIn('devices -l', calls[calls.index(kill) + 1])
+        self.assertTrue((self.root / 'launch').exists())
+        self.assertIn('模拟器已就绪', result.stdout)
 
-    def test_cold_boot_changes_running_device_to_165_hz(self):
-        result = self.run_script('--cold-boot', '--refresh-rate', '165', mode='ready')
+    def test_cold_boot_applies_memory_and_refresh_rate_after_confirmation(self):
+        result = self.run_script('--cold-boot', '--refresh-rate', '165', '--memory', '4096',
+                                 mode='ready', answer='YES\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         command = base64.b64decode((self.root / 'launch').read_text()).decode('utf-16le')
+        self.assertIn("'-memory', '4096'", command)
         self.assertIn("'-vsync-rate', '165', '-no-snapshot'", command)
         self.assertIn('客体刷新率已核对：165 Hz', result.stdout)
 
+    def test_cold_boot_decline_default_and_eof_keep_running_device(self):
+        for answer in ('n\n', 'NO\n', '\n', ''):
+            with self.subTest(answer=answer):
+                result = self.run_script('--cold-boot', mode='ready', answer=answer)
+                self.assertEqual(result.returncode, 1 if answer == '' else 0)
+                self.assertIn('取消冷启动', result.stdout + result.stderr)
+                calls = (self.root / 'adb-calls').read_text()
+                self.assertNotIn('emu kill', calls)
+                self.assertNotIn('getprop sys.boot_completed', calls)
+                self.assertFalse((self.root / 'launch').exists())
+                self.assertNotIn('模拟器已就绪', result.stdout)
+
+    def test_invalid_confirmation_is_reprompted_without_closing(self):
+        result = self.run_script('--cold-boot', mode='ready', answer='invalid\nn\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('请输入 y', result.stderr)
+        self.assertNotIn('emu kill', (self.root / 'adb-calls').read_text())
+        self.assertFalse((self.root / 'launch').exists())
+
     def test_cold_boot_uses_selected_port(self):
         self.env['START_TEST_SERIAL'] = 'emulator-5556'
-        result = self.run_script('--cold-boot', '--port', '5556', mode='ready')
+        result = self.run_script('--cold-boot', '--port', '5556', mode='ready', answer='y\n')
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('emulator-5556', result.stderr)
+        self.assertNotIn('emulator-5554', result.stderr)
         calls = (self.root / 'adb-calls').read_text()
         self.assertIn('-s emulator-5556 emu kill', calls)
         self.assertNotIn('emulator-5554', calls)
+        self.assertTrue((self.root / 'launch').exists())
 
     def test_cold_boot_of_stopped_device_does_not_kill(self):
         result = self.run_script('--cold-boot')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn('emu kill', (self.root / 'adb-calls').read_text())
         self.assertTrue((self.root / 'launch').exists())
+        command = base64.b64decode((self.root / 'launch').read_text()).decode('utf-16le')
+        self.assertIn("'-no-snapshot-load'", command)
+        self.assertIn('$processes.Count -gt 0 -and $true', command)
+        self.assertIn('-match $avdPattern -or $_.CommandLine -match $portPattern', command)
+        self.assertIn('请手动关闭后重试', command)
+        self.assertIn('Start-Sleep', command)
+        self.assertNotIn('Stop-Process', command)
+        self.assertNotIn('-wipe-data', command)
 
     def test_cold_boot_refuses_unknown_or_wrong_device(self):
         for mode in ('wrong-avd', 'offline', 'name-failure', 'devices-failure'):
@@ -229,19 +314,84 @@ elif 'getprop' in args:
                 self.assertNotIn('emu kill', (self.root / 'adb-calls').read_text())
                 self.assertFalse((self.root / 'launch').exists())
 
-    def test_cold_boot_needs_launcher_before_killing(self):
+    def test_cold_boot_missing_launcher_changes_no_device(self):
         (self.bin / 'powershell.exe').unlink()
         result = self.run_script('--cold-boot', mode='ready')
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn('找不到 powershell.exe', result.stderr)
         self.assertNotIn('emu kill', (self.root / 'adb-calls').read_text())
 
-    def test_cold_boot_stop_failure_does_not_launch_duplicate(self):
+    def test_cold_boot_checks_windows_processes_when_adb_has_no_device(self):
+        result = self.run_script('--cold-boot', mode='windows-existing')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('请手动关闭后重试', result.stderr)
+        self.assertNotIn('getprop', (self.root / 'adb-calls').read_text())
+        self.assertNotIn('模拟器已就绪', result.stdout)
+
+    def test_cold_boot_close_failure_or_timeout_does_not_launch(self):
         for mode in ('kill-failure', 'shutdown-timeout'):
             with self.subTest(mode=mode):
-                result = self.run_script('--cold-boot', '--timeout', '1', mode=mode)
+                result = self.run_script('--cold-boot', '--timeout', '1', mode=mode, answer='y\n')
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse((self.root / 'launch').exists())
                 self.assertNotIn('模拟器已就绪', result.stdout)
+
+    def test_cold_boot_target_changed_after_confirmation_is_not_closed(self):
+        result = self.run_script('--cold-boot', mode='target-changed', answer='y\n')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Other_AVD', result.stderr)
+        self.assertNotIn('emu kill', (self.root / 'adb-calls').read_text())
+        self.assertFalse((self.root / 'launch').exists())
+
+    def test_cold_boot_uses_property_when_console_name_has_no_output(self):
+        result = self.run_script('--cold-boot', mode='console-name-empty', answer='y\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = (self.root / 'adb-calls').read_text()
+        self.assertIn('shell getprop ro.boot.qemu.avd_name', calls)
+        self.assertNotIn('emu avd name', calls)
+        self.assertIn('emu kill', calls)
+        self.assertTrue((self.root / 'launch').exists())
+
+    def test_cold_boot_uses_legacy_property_when_boot_name_is_empty(self):
+        result = self.run_script('--cold-boot', mode='legacy-name', answer='y\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = (self.root / 'adb-calls').read_text()
+        self.assertIn('shell getprop ro.kernel.qemu.avd_name', calls)
+        self.assertIn('emu kill', calls)
+        self.assertIn('模拟器已就绪', result.stdout)
+
+    def test_cold_boot_trims_blank_lines_and_whitespace_from_property(self):
+        result = self.run_script('--cold-boot', mode='name-leading-blank', answer='y\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('emu kill', (self.root / 'adb-calls').read_text())
+
+    def test_cold_boot_missing_name_properties_does_not_close_device(self):
+        result = self.run_script('--cold-boot', mode='name-missing', answer='y\n')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('无法读取', result.stderr)
+        self.assertNotIn('emu kill', (self.root / 'adb-calls').read_text())
+        self.assertFalse((self.root / 'launch').exists())
+
+    def test_cold_boot_windows_process_name_fallback_closes_confirmed_target(self):
+        self.env['START_TEST_WINDOWS_AVD'] = 'Medium_Phone_API_37.0\r'
+        result = self.run_script('--cold-boot', mode='windows-name', answer='y\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('是否关闭并冷启动', result.stderr)
+        self.assertIn('emu kill', (self.root / 'adb-calls').read_text())
+        self.assertTrue((self.root / 'launch').exists())
+        self.assertIn('模拟器已就绪', result.stdout)
+        command = (self.root / 'windows-name-calls').read_text()
+        self.assertIn('-port\\s+5554', command)
+        self.assertEqual(command.count('# AVD_NAME_QUERY'), 2)
+
+    def test_cold_boot_wrong_or_ambiguous_windows_name_does_not_close(self):
+        for name in ('Other_AVD', 'Medium_Phone_API_37.0\nOther_AVD'):
+            with self.subTest(name=name):
+                self.env['START_TEST_WINDOWS_AVD'] = name
+                result = self.run_script('--cold-boot', mode='name-missing', answer='y\n')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn('emu kill', (self.root / 'adb-calls').read_text())
+                self.assertFalse((self.root / 'launch').exists())
 
     def test_refresh_lock_saves_restores_values_for_same_android_user(self):
         self.env['START_TEST_REFRESH_RATE'] = '165'

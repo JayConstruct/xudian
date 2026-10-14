@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'ui_select_field.dart';
 import 'ui_surfaces.dart';
+import 'ui_feedback.dart';
 import '../../features/settings/settings_widgets.dart';
 import '../contracts/json_values.dart';
 import '../module_host/host_providers.dart';
@@ -109,13 +110,21 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
         child: stored.when(
           loading: () =>
               const Center(child: NativeUi(child: CircularProgressIndicator())),
-          error: (failure, _) => Center(child: Text('无法读取界面风格：$failure')),
+          error: (_, _) => Center(
+            child: AppErrorState(
+              message: '无法读取界面风格，请重试',
+              onRetry: () => ref.invalidate(uiSelectionProvider),
+            ),
+          ),
           data: (selection) {
             if (draft == null) baseline = draft = selection;
             return SettingsList(
               children: [
                 const SettingsNote('选择全局风格，也可为模块单独设置。修改先保留为草稿，保存后应用。'),
-                const SectionHeading(title: '全局风格'),
+                const SectionHeading(
+                  title: '全局风格',
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                ),
                 ContentSurface(
                   padding: const EdgeInsets.all(18),
                   child: Column(
@@ -139,7 +148,10 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const SectionHeading(title: '模块专属界面'),
+                const SectionHeading(
+                  title: '模块专属界面',
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                ),
                 const SettingsNote('默认跟随全局风格。单独选择后，仅影响对应模块。'),
                 if (ids.isEmpty) const SettingsNote('当前没有可单独设置的模块。'),
                 if (ids.isNotEmpty)
@@ -177,7 +189,10 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                const SectionHeading(title: '保存与恢复'),
+                const SectionHeading(
+                  title: '保存与恢复',
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                ),
                 if (error != null) ...[
                   Text(
                     error!,

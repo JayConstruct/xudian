@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,36 @@ import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
 import 'ui_pack_lifecycle_test.dart' as fixture;
+
+class _StartupQueries extends QueryInterceptor {
+  final selects = <String>[];
+  final writes = <String>[];
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    selects.add(statement);
+    return executor.runSelect(statement, args);
+  }
+
+  @override
+  Future<void> runCustom(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    writes.add(statement);
+    return executor.runCustom(statement, args);
+  }
+
+  void reset() {
+    selects.clear();
+    writes.clear();
+  }
+}
 
 class _CountedFile implements File {
   _CountedFile(this.file, this.onRead);
@@ -34,12 +65,14 @@ class _CountedFile implements File {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
+  late _StartupQueries queries;
   late CollectionStore store;
   late Directory directory;
   late ModuleHost host;
 
   setUp(() async {
-    db = AppDatabase(NativeDatabase.memory());
+    queries = _StartupQueries();
+    db = AppDatabase(NativeDatabase.memory().interceptWith(queries));
     store = CollectionStore(db);
     directory = await Directory.systemTemp.createTemp('module-startup-');
     host = ModuleHost(store: store, directory: directory);
@@ -103,10 +136,31 @@ void main() {
         await seed(package);
       }
       for (var start = 0; start < 2; start++) {
+        queries.reset();
         final reads = await restart();
+        expect(
+          queries.selects.where(
+            (sql) => sql.contains('LEFT JOIN host_packages'),
+          ),
+          hasLength(1),
+        );
+        expect(
+          queries.selects.where(
+            (sql) => sql.startsWith(
+              'SELECT * FROM host_packages WHERE module_id=? AND version=?',
+            ),
+          ),
+          isEmpty,
+          reason: 'Restore reads provenance with installations once',
+        );
         expect(reads, hasLength(3));
         expect(reads.values, everyElement(1));
         expect(host.instances.keys.toList(), [a.id, b.id, c.id]);
+        expect(
+          host.instances.values.map((instance) => instance.package.origin),
+          everyElement('local'),
+          reason: 'Persisted provenance remains the source of package origin',
+        );
         expect(host.failures, isEmpty);
       }
       await File('${directory.path}/${a.packageDigest}.xmodule')
@@ -157,6 +211,155 @@ void main() {
       );
     },
   );
+
+  test(
+    'missing provenance and identity mismatches retain restore failures',
+    () async {
+      final missing = await fixture.uiPackage(id: 'test.provenance.missing');
+      final wrongId = await fixture.uiPackage(id: 'test.provenance.identity');
+      final wrongVersion = await fixture.uiPackage(
+        id: 'test.provenance.version',
+      );
+      final replacement = await fixture.uiPackage(id: 'test.provenance.other');
+      for (final package in [missing, wrongId, wrongVersion, replacement]) {
+        await seed(package);
+      }
+      await db.customStatement('DELETE FROM host_packages WHERE module_id=?', [
+        missing.id,
+      ]);
+      await db.customStatement(
+        'UPDATE host_packages SET digest=? WHERE module_id=?',
+        [replacement.packageDigest, wrongId.id],
+      );
+      await db.customStatement(
+        'UPDATE host_packages SET version=? WHERE module_id=?',
+        ['2.0.0', wrongVersion.id],
+      );
+      await db.customStatement(
+        'UPDATE host_installations SET version=? WHERE module_id=?',
+        ['2.0.0', wrongVersion.id],
+      );
+      await db.customStatement(
+        'UPDATE host_installations SET enabled=0 WHERE module_id=?',
+        [replacement.id],
+      );
+      queries.reset();
+      final reads = await restart();
+      expect(host.instances, isEmpty);
+      expect(host.failures[missing.id], 'Bad state: No element');
+      expect(
+        host.failures[wrongId.id],
+        'Bad state: Stored package identity mismatch',
+      );
+      expect(
+        host.failures[wrongVersion.id],
+        'Bad state: Stored package identity mismatch',
+      );
+      expect(reads, hasLength(2));
+      expect(reads.values, everyElement(1));
+      expect(
+        queries.selects.where((sql) => sql.contains('LEFT JOIN host_packages')),
+        hasLength(1),
+      );
+      expect(
+        (await store.sql('SELECT enabled FROM host_installations'))
+            .map((row) => row['enabled']),
+        everyElement(0),
+      );
+    },
+  );
+
+  for (final emptyCatalog in [false, true]) {
+    test(
+      emptyCatalog ? 'empty bundled catalog does not run repository backfill' : 'repository backfill uses one statement and preserves stored sources',
+      () async {
+        final preinstalled = await fixture.uiPackage(
+          id: 'test.repository.bundled',
+        );
+        final existing = await fixture.uiPackage(
+          id: 'test.repository.existing',
+        );
+        final local = await fixture.uiPackage(id: 'test.repository.local');
+        final absent = await fixture.uiPackage(id: 'test.repository.absent');
+        for (final package in [preinstalled, existing, local]) {
+          await seed(package);
+        }
+        await db.customStatement('UPDATE host_installations SET enabled=0');
+        await db.customStatement(
+          "UPDATE host_packages SET origin='preinstalled' WHERE module_id IN (?,?)",
+          [preinstalled.id, existing.id],
+        );
+        await db.customStatement(
+          'INSERT INTO host_meta(key,value) VALUES(?,?)',
+          ['module-repository:${existing.id}', 'User/custom-repository'],
+        );
+        await db.customStatement(
+          "INSERT INTO host_meta VALUES('defaults-v3','complete')",
+        );
+        await db.customStatement(
+          "INSERT INTO host_meta VALUES('legacy-packages-v1','complete')",
+        );
+        final catalog = [
+          if (!emptyCatalog)
+            for (final package in [
+              preinstalled,
+              existing,
+              local,
+              absent,
+              preinstalled,
+            ])
+              {'id': package.id, 'default': false},
+        ];
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        const paths = MethodChannel('plugins.flutter.io/path_provider');
+        messenger.setMockMethodCallHandler(paths, (_) async => directory.path);
+        messenger.setMockMessageHandler('flutter/assets', (message) async {
+          final key = utf8.decode(message!.buffer.asUint8List());
+          if (key != 'assets/modules/catalog.json') return null;
+          return Uint8List.fromList(utf8.encode(jsonEncode(catalog))).buffer
+              .asByteData();
+        });
+        addTearDown(() {
+          messenger.setMockMethodCallHandler(paths, null);
+          messenger.setMockMessageHandler('flutter/assets', null);
+          rootBundle.evict('assets/modules/catalog.json');
+        });
+        for (var start = 0; start < 2; start++) {
+          rootBundle.evict('assets/modules/catalog.json');
+          final container = ProviderContainer(
+            overrides: [
+              databaseProvider.overrideWith((_) async => db),
+              retiredBundledModuleIdsProvider.overrideWith((_) async => {}),
+            ],
+          );
+          try {
+            queries.reset();
+            final restored = await container.read(moduleHostProvider.future);
+            expect(
+              await restored.repositoryFor(preinstalled.id),
+              emptyCatalog ? isNull : 'JayConstruct/xudian',
+            );
+            expect(
+              await restored.repositoryFor(existing.id),
+              'User/custom-repository',
+            );
+            expect(await restored.repositoryFor(local.id), isNull);
+            expect(await restored.repositoryFor(absent.id), isNull);
+            expect(
+              queries.writes.where(
+                (sql) => sql.contains("'module-repository:' || module_id"),
+              ),
+              hasLength(emptyCatalog ? 0 : 1),
+            );
+            expect(restored.failures, isEmpty);
+          } finally {
+            container.dispose();
+          }
+        }
+      },
+    );
+  }
 
   test('first default installation loads each bundled asset once', () async {
     final a = await fixture.uiPackage(id: 'test.default.a');

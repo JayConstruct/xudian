@@ -1,9 +1,12 @@
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
+import '../ui/ui_feedback.dart';
+import '../ui/ui_design.dart';
 
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_selector/file_selector.dart';
@@ -23,6 +26,7 @@ import 'host_dialogs.dart';
 import 'legacy_converter.dart';
 import 'module_management_widgets.dart';
 import 'module_catalog_page.dart';
+import 'module_source_dialog.dart';
 
 class HostManagerModule implements AppModule {
   @override
@@ -63,14 +67,40 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
   bool busy = false;
   String category = 'all';
   String? error;
+  ModuleHost? _rowsHost;
+  Future<List<Map<String, Object?>>>? _installationRows;
+  Stream<void>? _installationChanges;
+  late final _bundledCatalog = rootBundle
+      .loadString('assets/modules/catalog.json')
+      .then((text) => (jsonDecode(text) as List).map(object).toList());
 
-  Map<String, Object?> _manifest(Map<String, Object?> row) =>
-      row['definition'] is String
-      ? object(object(jsonDecode(row['definition'] as String))['manifest'])
-      : const {};
+  Future<List<Map<String, Object?>>> _readInstallations(ModuleHost host) {
+    final future = host.store.sql(
+      r"SELECT i.*, json_extract(p.definition, '$.manifest.kind') AS package_kind, "
+      r"json_extract(p.definition, '$.manifest.name') AS package_name, "
+      r"json_extract(p.definition, '$.manifest.description') AS package_description "
+      'FROM host_installations i LEFT JOIN host_packages p '
+      'ON p.module_id=i.module_id AND p.version=i.version ORDER BY i.module_id',
+    );
+    // Registry events can arrive between frames. Observe failures immediately;
+    // FutureBuilder still receives the original future and displays its error.
+    future.ignore();
+    return future;
+  }
+
+  Stream<void> _watchInstallations(ModuleHost host) {
+    if (!identical(_rowsHost, host)) {
+      _rowsHost = host;
+      _installationRows = _readInstallations(host);
+      _installationChanges = host.registryChanges.stream.map((_) {
+        _installationRows = _readInstallations(host);
+      });
+    }
+    return _installationChanges!;
+  }
 
   String _description(Map<String, Object?> row) {
-    final value = _manifest(row)['description'] as String?;
+    final value = row['package_description'] as String?;
     return value == null || value.trim().isEmpty ? '作者未提供说明' : value;
   }
 
@@ -127,16 +157,23 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
         ),
       ],
     );
-    if (file == null) return;
-    final package = file.name.toLowerCase().endsWith('.json')
-        ? await convertLegacyModule(
-            object(jsonDecode(await file.readAsString())),
-          )
-        : await ScriptPackage.verify(
-            await file.readAsBytes(),
-            allowUnsignedLocal: true,
-            publishers: await ref.read(hostPublisherRegistryProvider.future),
-          );
+    if (file == null || !mounted) return;
+    final ScriptPackage package;
+    if (file.name.toLowerCase().endsWith('.json')) {
+      package = await convertLegacyModule(
+        object(jsonDecode(await file.readAsString())),
+      );
+    } else {
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      final publishers = await ref.read(hostPublisherRegistryProvider.future);
+      if (!mounted) return;
+      package = await ScriptPackage.verify(
+        bytes,
+        allowUnsignedLocal: true,
+        publishers: publishers,
+      );
+    }
     if (!mounted) return;
     await installResolvedModules(context, ref, host, localPackages: [package]);
   }
@@ -151,8 +188,6 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
       preinstalledDigest: entry['sha256'] as String,
     );
     if (!mounted) return;
-    // Busy-state changes can recreate the catalog's FutureBuilder. The page's
-    // context remains mounted while the package is loaded and reviewed.
     await installResolvedModules(context, ref, host, localPackages: [package]);
   }
 
@@ -203,15 +238,23 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
       .when(
         loading: () =>
             const Center(child: NativeUi(child: CircularProgressIndicator())),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (host) => StreamBuilder<void>(
-          stream: host.registryChanges.stream,
-          builder: (context, _) => FutureBuilder(
-            future: host.store.sql(
-              r"SELECT i.*, p.definition, json_extract(p.definition, '$.manifest.kind') AS package_kind FROM host_installations i "
-              'LEFT JOIN host_packages p ON p.module_id=i.module_id '
-              'AND p.version=i.version ORDER BY i.module_id',
+        error: (e, _) => UiPackScope(
+          defaultOnly: true,
+          child: _template(
+            Center(
+              child: SingleChildScrollView(
+                child: AppErrorState(
+                  message: '无法加载模块管理：$e',
+                  onRetry: () => ref.invalidate(moduleHostProvider),
+                ),
+              ),
             ),
+          ),
+        ),
+        data: (host) => StreamBuilder<void>(
+          stream: _watchInstallations(host),
+          builder: (context, _) => FutureBuilder(
+            future: _installationRows,
             builder: (context, snapshot) => _template(
               ListView(
                 padding: const EdgeInsets.all(16),
@@ -238,8 +281,7 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                       ),
                     ],
                   ),
-                  if (busy)
-                    const NativeUi(child: LinearProgressIndicator()),
+                  if (busy) const NativeUi(child: LinearProgressIndicator()),
                   NativeUi(
                     child: ListTile(
                       leading: const UiIcon(Icons.palette_outlined),
@@ -278,13 +320,29 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                         color: Theme.of(context).colorScheme.error,
                       ),
                     ),
+                  if (snapshot.hasError) ...[
+                    Text(
+                      '无法读取模块列表：${snapshot.error}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    NativeUi(
+                      child: TextButton(
+                        onPressed: () => setState(() {
+                          _installationRows = _readInstallations(host);
+                        }),
+                        child: const Text('重试读取模块列表'),
+                      ),
+                    ),
+                  ],
                   for (final row in snapshot.data ?? <Map<String, Object?>>[])
                     if (category == 'all' ||
                         (category == 'ui') == _isUiPackRow(row))
                       Card(
                         child: ModuleSummaryTile(
                           name:
-                              _manifest(row)['name'] as String? ??
+                              row['package_name'] as String? ??
                               row['module_id'] as String,
                           description: _description(row),
                           version: row['version'] as String,
@@ -305,6 +363,7 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                                   id,
                                   row['version'] as String,
                                 );
+                                if (!mounted) return;
                                 final packs = await ref.read(
                                   uiPackRegistryProvider.future,
                                 );
@@ -320,49 +379,26 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                                 );
                               }
                               if (value == 'source') {
-                                final package = await host.packageSource(
-                                  id,
-                                  row['version'] as String,
-                                );
                                 if (!context.mounted) return;
                                 final input =
                                     await showDialog<Map<String, Object?>>(
                                       context: context,
-                                      builder: (_) => HostFormDialog(
-                                        title: '模块定义与文件源码',
-                                        fields: [
-                                          {
-                                            'key': 'source',
-                                            'label': '编辑私人模块时须修改 version；保存后进行隔离预览和审核',
-                                            'type': 'multiline',
-                                            'value':
-                                                const JsonEncoder.withIndent(
-                                                  '  ',
-                                                ).convert({
-                                                  'definition':
-                                                      package.definition,
-                                                  'files': {
-                                                    for (final file
-                                                        in package
-                                                            .files
-                                                            .entries)
-                                                      if (file.key !=
-                                                              'package.json' &&
-                                                          file.key !=
-                                                              'module.json')
-                                                        file.key: utf8.decode(
-                                                          file.value,
-                                                        ),
-                                                  },
-                                                }),
-                                          },
-                                        ],
+                                      builder: (_) => ModuleSourceDialog(
+                                        loadDocuments: () async {
+                                          final package = await host
+                                              .packageSource(
+                                                id,
+                                                row['version'] as String,
+                                              );
+                                          return compute(prepareModuleSource, {
+                                            'definition': package.definition,
+                                            'files': package.files,
+                                          });
+                                        },
                                       ),
                                     );
                                 if (input != null) {
-                                  final candidate = object(
-                                    jsonDecode(input['source'] as String),
-                                  );
+                                  final candidate = input;
                                   if (object(
                                         object(
                                           candidate['definition'],
@@ -404,6 +440,9 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                                 final selected = await showDialog<String>(
                                   context: context,
                                   builder: (context) => SimpleDialog(
+                                    titlePadding: AppDesign.dialogTitlePadding,
+                                    contentPadding:
+                                        AppDesign.dialogContentPadding,
                                     title: const Text('数据快照恢复'),
                                     children: [
                                       for (final snapshot in snapshots)
@@ -446,6 +485,9 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                                 final retry = await showDialog<String>(
                                   context: context,
                                   builder: (context) => SimpleDialog(
+                                    titlePadding: AppDesign.dialogTitlePadding,
+                                    contentPadding:
+                                        AppDesign.dialogContentPadding,
                                     title: const Text('规则执行记录'),
                                     children: [
                                       for (final record in records)
@@ -500,6 +542,9 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                                 final selected = await showDialog<String>(
                                   context: context,
                                   builder: (context) => SimpleDialog(
+                                    titlePadding: AppDesign.dialogTitlePadding,
+                                    contentPadding:
+                                        AppDesign.dialogContentPadding,
                                     title: const Text('版本历史'),
                                     children: [
                                       for (final v in versions)
@@ -573,25 +618,20 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                   const SizedBox(height: 24),
                   const Text('恢复随客户端发布的模块'),
                   FutureBuilder(
-                    future: rootBundle.loadString(
-                      'assets/modules/catalog.json',
-                    ),
+                    future: _bundledCatalog,
                     builder: (context, snapshot) => Column(
                       children: [
                         if (snapshot.hasData)
-                          for (final raw in jsonDecode(snapshot.data!) as List)
+                          for (final raw in snapshot.data!)
                             NativeUi(
                               child: ListTile(
-                                title: Text('${object(raw)['id']}'),
+                                title: Text('${raw['id']}'),
                                 trailing: NativeUi(
                                   child: TextButton(
                                     onPressed: busy
                                         ? null
                                         : () => action(
-                                            () => restoreBundled(
-                                              host,
-                                              object(raw),
-                                            ),
+                                            () => restoreBundled(host, raw),
                                           ),
                                     child: const Text('安装 / 恢复'),
                                   ),

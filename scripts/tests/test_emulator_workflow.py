@@ -23,7 +23,10 @@ class WorkflowTest(unittest.TestCase):
 
     def test_build_inputs_detect_native_dependency_assets_and_source_changes(self):
         for name in ['client/lib/app.dart', 'client/android/app/src/main/AndroidManifest.xml',
-                     'client/assets/catalog.json', 'client/pubspec.lock']:
+                     'client/assets/catalog.json', 'client/pubspec.lock',
+                     'packages/xquickjs/lib/xquickjs.dart', 'packages/xquickjs/src/bridge.c',
+                     'packages/xquickjs/src/vendor/quickjs.h', 'packages/xquickjs/hook/build.dart',
+                     'packages/xquickjs/pubspec.yaml']:
             with self.subTest(name=name):
                 self.write(name, 'before')
                 before = workflow.snapshot(self.root)
@@ -36,7 +39,9 @@ class WorkflowTest(unittest.TestCase):
         self.write('client/lib/app.dart', 'source')
         before = workflow.snapshot(self.root)
         for name in ['client/android/local.properties', 'client/android/.gradle/cache',
-                     'client/build/app.apk', 'client/test/host_ui_test.dart', 'docs/note.md']:
+                     'client/build/app.apk', 'client/test/host_ui_test.dart', 'docs/note.md',
+                     'packages/xquickjs/.dart_tool/cache', 'packages/xquickjs/build/lib.so',
+                     'packages/xquickjs/README.md']:
             self.write(name, 'generated or non-APK file')
         self.assertEqual(workflow.snapshot(self.root), before)
 
@@ -70,6 +75,7 @@ class WorkflowTest(unittest.TestCase):
     def test_core_changes_expand_checks_and_module_mode_stays_targeted(self):
         self.assertIsNone(workflow.select_tests(['client/lib/data/app_database.dart']))
         self.assertIsNone(workflow.select_tests(['client/pubspec.lock']))
+        self.assertIsNone(workflow.select_tests(['packages/xquickjs/src/bridge.c']))
         chosen = workflow.select_tests(['client/lib/app/app_shell.dart'])
         self.assertIn('test/schedule_layout_test.dart', chosen)
         self.assertIn('test/ui_pack_chrome_test.dart', chosen)

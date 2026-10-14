@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 
 import '../core/module_host/host_schema.dart';
+import '../core/performance/ui_load_trace.dart';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -177,28 +178,23 @@ class AppDatabase extends _$AppDatabase {
     final directory = await getApplicationSupportDirectory();
     await directory.create(recursive: true);
     final file = File(p.join(directory.path, 'xudian_v9.sqlite'));
-    if (await file.exists()) {
-      final source = sqlite.sqlite3.open(file.path);
-      try {
-        final version =
-            source.select('PRAGMA user_version').single.values.single as int;
-        if (version == 1) {
-          final snapshot = File('${file.path}.before-host-v2.sqlite');
-          if (!await snapshot.exists()) {
-            final candidate = sqlite.sqlite3.open('${snapshot.path}.candidate');
-            try {
-              await source.backup(candidate).drain<void>();
-            } finally {
-              candidate.close();
-            }
-            await File('${snapshot.path}.candidate').rename(snapshot.path);
-          }
-        }
-      } finally {
-        source.close();
-      }
+    // Keep SQLite loading, the version probe and the pre-migration backup in
+    // the same database isolate instead of opening SQLite on the UI isolate.
+    final database = AppDatabase(
+      NativeDatabase.createInBackground(
+        file,
+        sqlite3: _sqliteWithLegacyBackup(file.path),
+      ),
+    );
+    try {
+      await UiLoadTrace.run('database.ready', () async {
+        await database.customSelect('SELECT 1').get();
+      });
+      return database;
+    } catch (_) {
+      await database.close();
+      rethrow;
     }
-    return AppDatabase(NativeDatabase.createInBackground(file));
   }
 
   @override
@@ -245,3 +241,31 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 }
+
+// Capture only a path: Drift sends this resolver to its database isolate.
+// The resolver finishes the backup before Drift may open or migrate the file.
+SqliteResolver _sqliteWithLegacyBackup(String path) => () async {
+  final bindings = sqlite.sqlite3;
+  if (await File(path).exists()) {
+    final source = bindings.open(path);
+    try {
+      final version =
+          source.select('PRAGMA user_version').single.values.single as int;
+      if (version == 1) {
+        final snapshot = File('$path.before-host-v2.sqlite');
+        if (!await snapshot.exists()) {
+          final candidate = bindings.open('${snapshot.path}.candidate');
+          try {
+            await source.backup(candidate).drain<void>();
+          } finally {
+            candidate.close();
+          }
+          await File('${snapshot.path}.candidate').rename(snapshot.path);
+        }
+      }
+    } finally {
+      source.close();
+    }
+  }
+  return bindings;
+};

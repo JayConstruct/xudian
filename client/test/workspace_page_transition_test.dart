@@ -30,6 +30,7 @@ void main() {
     Map<String, Object?>? retentionKeys,
     Widget? child,
     bool deferUntilReady = false,
+    VoidCallback? onDestinationReady,
   }) => tester.pumpWidget(
     MaterialApp(
       home: MediaQuery(
@@ -43,6 +44,7 @@ void main() {
               maxRetainedPages: retainedPages,
               retentionKeys: retentionKeys,
               deferUntilReady: deferUntilReady,
+              onDestinationReady: onDestinationReady,
               child: child ?? Center(child: Text('Page $index')),
             ),
           ),
@@ -258,6 +260,86 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'ready notification waits for actual content and ignores obsolete destinations',
+    (tester) async {
+      var reports = 0;
+      final initialReady = Completer<void>();
+      await show(
+        tester,
+        0,
+        retainedPages: 3,
+        deferUntilReady: true,
+        child: _FirstFrameProbe(ready: initialReady.future),
+        onDestinationReady: () => reports++,
+      );
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(reports, 0);
+      initialReady.complete();
+      await tester.pumpAndSettle();
+      expect(reports, 1);
+      final obsoleteReady = Completer<void>();
+      await show(
+        tester,
+        1,
+        retainedPages: 3,
+        deferUntilReady: true,
+        child: _FirstFrameProbe(ready: obsoleteReady.future),
+        onDestinationReady: () => reports++,
+      );
+      await tester.pump(const Duration(milliseconds: 40));
+      await show(
+        tester,
+        0,
+        retainedPages: 3,
+        deferUntilReady: true,
+        onDestinationReady: () => reports++,
+      );
+      await tester.pumpAndSettle();
+      final reportsBeforeStale = reports;
+      obsoleteReady.complete();
+      await tester.pumpAndSettle();
+      expect(reports, reportsBeforeStale);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('readiness waits for the active entrance animation', (
+    tester,
+  ) async {
+    var reports = 0;
+    await show(
+      tester,
+      0,
+      retainedPages: 3,
+      deferUntilReady: true,
+      onDestinationReady: () => reports++,
+    );
+    await tester.pumpAndSettle();
+    expect(reports, 1);
+    final ready = Completer<void>();
+    await show(
+      tester,
+      1,
+      retainedPages: 3,
+      deferUntilReady: true,
+      child: _FirstFrameProbe(ready: ready.future),
+      onDestinationReady: () => reports++,
+    );
+    ready.complete();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(
+      reports,
+      1,
+      reason: 'Prepared hidden or moving content is not ready',
+    );
+    await tester.pumpAndSettle();
+    expect(reports, 2);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('first visit prepares content before sliding without a spinner', (
     tester,

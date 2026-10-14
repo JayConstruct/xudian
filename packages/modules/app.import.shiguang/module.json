@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.import.shiguang",
     "name": "拾光教务导入兼容",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "hostApi": "^1.22.0",
     "dataVersion": 1,
     "permissions": [
@@ -17,7 +17,7 @@
     "dependencies": [
       {
         "moduleId": "app.schedule",
-        "version": "^1.6.1"
+        "version": "^1.15.0"
       }
     ],
     "description": "按学校或通用教务系统导入课程，提供脚本说明、源码与致谢，预览确认后保存课表。",

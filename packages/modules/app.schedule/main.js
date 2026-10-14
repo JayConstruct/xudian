@@ -352,10 +352,11 @@ export async function render({state={},context={},event,formValues={}}) {
   if(page!=='app.schedule.home' && context.importPlanId && !state.adapterHandled) {
     state.adapterPlan=await services.adopt(context.importPlanId); state.adapterHandled=true;
   }
-  if(event?.type==='confirmAdapter' && state.adapterPlan) {
+  if(event?.type==='cancelAdapter') {delete state.adapterPlan;state.notice='已取消导入，课表未修改';}
+  if(event?.type==='confirmAdapter' && state.adapterPlan && !state.adapterPlan.result.blocked) {
     if(await ui.review(state.adapterPlan.planId)) {
       const result=await services.commit(state.adapterPlan.planId);
-      state.timetableId=result.timetableId; selectTimetable(result.timetableId); delete state.adapterPlan;
+      state.timetableId=result.timetableId; selectTimetable(result.timetableId); delete state.adapterPlan;state.notice='导入已保存';
     }
   }
   if(page!=='app.schedule.home' && context.draft&&!state.importDraft&&!state.importFinished) state.importDraft=context.draft;
@@ -411,7 +412,7 @@ export async function render({state={},context={},event,formValues={}}) {
     if(state.importError)children.push(text(state.importError));
     if(state.adapterPlan) {
       const summary=await importSummary(state.adapterPlan,null);
-      children.push(group('教务适配器导入预览',[text(`新增 ${summary.added} 项 · 修改 ${summary.updated} 项 · 删除 ${summary.deleted} 项`),text(`冲突 ${summary.conflicts?.length||0} 项 · 警告 ${summary.warnings?.length||0} 项`),...((summary.warnings||[]).map(text)),{type:'source',text:JSON.stringify(state.adapterPlan.result,null,2)},button('课表确认并保存导入',{type:'confirmAdapter'})]));
+      children.push(group('教务适配器导入预览',[text(`新增 ${summary.added} 项 · 修改 ${summary.updated} 项 · 删除 ${summary.deleted} 项`),text(`冲突 ${summary.conflicts?.length||0} 项 · 警告 ${summary.warnings?.length||0} 项`),...((summary.warnings||[]).map(text)),text('以下是本次导入将实际写入的变更，确认后保存。'),...summary.details,...(!state.adapterPlan.result.blocked?[button('确认导入',{type:'confirmAdapter'})]:[]),button('取消导入',{type:'cancelAdapter'})]));
     }
     if(state.importDraft) {
       const summary=state.importSummary||await importSummary(null,state.importDraft);
@@ -422,7 +423,7 @@ export async function render({state={},context={},event,formValues={}}) {
         ...summary.warnings.map(w=>text('提醒：'+w)),
         ...summary.conflicts.map(c=>listTile(c.field,`本地：${JSON.stringify(c.local)}
 来源：${JSON.stringify(c.source)}`,'history',null,'')),
-        {type:'source',text:JSON.stringify(state.importDraft,null,2)},
+        ...(state.importPlan?summary.details:[{type:'source',text:JSON.stringify(state.importDraft,null,2)}]),
         button(state.importPlan?'重新选择方式并预览':'选择方式并预览实际变更',{type:'saveImport'}),
         ...(state.importPlan?.result.conflicts?.length?[button('处理导入冲突',{type:'resolveImport'})]:[]),
         ...(state.importPlan&&!state.importPlan.result.blocked?[button('确认保存导入',{type:'confirmImport'})]:[]),

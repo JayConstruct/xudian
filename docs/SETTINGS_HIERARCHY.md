@@ -40,7 +40,7 @@
 
 关于页保留地址打开、复制、打开模块商店等操作；与“模块与连接”共用当前配置的模块目录。关闭业务模块后，设置分类及模块管理恢复路径仍然可用。
 
-“检查更新”打开独立页面，从 GitHub 查询正式 App Release，显示结果、更新说明与下载页链接，规则及发布流程见 [App 更新](APP_UPDATES.md)。
+“检查更新”打开独立页面，默认从 GitHub 查询正式 App Release，可开启并记住测试通道以接收测试版本，显示结果、更新说明与下载页链接，规则及发布流程见 [App 更新](APP_UPDATES.md)。
 
 入口为 `client/lib/core/module_host/host_settings_page.dart`。`features/settings/settings_page.dart` 为旧模块架构的兼容页面，不是生产壳层的设置入口。
 

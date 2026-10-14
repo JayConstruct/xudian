@@ -12,6 +12,7 @@
 | [拾光导入](SHIGUANG_IMPORT.md) | 学校搜索、通用系统、采集流程、兼容范围与致谢 |
 | [设置层级](SETTINGS_HIERARCHY.md) | 分类首页、二级页与模块入口 |
 | [界面规则](UI_DESIGN_SYSTEM.md) | 共用视觉、顶栏、菜单、适配与反馈 |
+| [UI 规则核对](design/UI_RULES_AUDIT.md) | 规则冲突、公共实现依据与验收覆盖边界 |
 | [全局 Toast](design/TOAST.md) | 短暂反馈的 UI、动画、去重、调用与示例验收 |
 | [实际数据审核](design/DATA_CHANGE_REVIEW.md) | 冻结计划的增改删摘要、记录对比、批量与回退规则 |
 | [时区与显示诊断](design/TIMEZONE_DISPLAY.md) | 新课表时区默认、旧课表保留规则、显示诊断与设备基线 |
@@ -25,6 +26,8 @@
 | [开发指南](../DEVELOPMENT.md) | 日常命令、检查、构建、数据库生成 |
 | [客户端入口](../client/README.md) | 生产代码路径与数据流 |
 | [UI 加载性能](UI_LOADING_PERFORMANCE.md) | 启动、缓存、批量读取、计时与真机验收 |
+| [冷启动采样与验收](STARTUP_PERFORMANCE.md) | 启动代理指标、首页就绪、采样脚本与比较口径 |
+| [冷启动与 UI 优化路线](design/STARTUP_UI_ROADMAP.md) | 下一轮优先级、启动基线、候选优化与设计规则统一 |
 | [架构](DESIGN.md) | 宿主、业务与数据边界 |
 | [模拟器更新](EMULATOR_UPDATE.md) | 热重载、缓存、模块导入和可选提交 |
 | [模块宿主](MODULE_HOST.md) | 包验证、运行权限、事务、迁移与恢复 |

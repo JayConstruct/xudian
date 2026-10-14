@@ -30,6 +30,7 @@ typedef struct Worker {
     pthread_cond_t wake;
 #endif
     Message *in_first, *in_last, *out_first, *out_last;
+    void (*notify)(void);
     Source *sources;
     JSRuntime *rt; JSContext *ctx;
     double deadline;
@@ -66,6 +67,7 @@ static int push(Worker *w, int output, const char *s) {
     *bytes+=n;
     Message **first=output?&w->out_first:&w->in_first;
     Message **last=output?&w->out_last:&w->in_last;
+    int notify_output=output && !*first;
     if(*last) (*last)->next=m; else *first=m; *last=m;
     if(!output) {
 #ifdef _WIN32
@@ -74,7 +76,11 @@ static int push(Worker *w, int output, const char *s) {
         pthread_cond_signal(&w->wake);
 #endif
     }
-    UNLOCK(&w->mutex); return 1;
+    // Never call Dart while holding the queue lock. The listener only posts to
+    // its isolate; Dart later drains the existing opaque message ABI.
+    UNLOCK(&w->mutex);
+    if(notify_output && w->notify) w->notify();
+    return 1;
 }
 static char *pop(Worker *w, int output) {
     LOCK(&w->mutex);
@@ -216,6 +222,10 @@ EXPORT int xm_start(void *handle) {
 #else
     w->started=pthread_create(&w->thread,NULL,run,w)==0; return w->started;
 #endif
+}
+EXPORT int xm_set_notify(void *handle,void (*notify)(void)) {
+    Worker *w=handle; if(w->started) return 0;
+    w->notify=notify; return 1;
 }
 EXPORT void xm_send(void *handle,const char *message) { push(handle,0,message); }
 EXPORT char *xm_poll(void *handle) { return pop(handle,1); }

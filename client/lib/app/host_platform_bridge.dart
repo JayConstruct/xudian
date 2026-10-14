@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/module_host/collection_store.dart';
@@ -73,8 +74,9 @@ class HostPlatformBridge {
   Future<Object?> invoke(
     ModuleActor caller,
     String method,
-    Map<String, Object?> args,
-  ) async {
+    Map<String, Object?> args, {
+    ThemeData? browserTheme,
+  }) async {
     _requireOpen();
     switch (method) {
       case 'secrets.delete':
@@ -86,7 +88,13 @@ class HostPlatformBridge {
         _network.cancel(caller, args['id'] as String);
         return null;
       case 'browser.capture':
-        return _browser.capture(caller, args);
+        return _browser.capture(
+          caller,
+          args,
+          appearance: browserTheme == null
+              ? null
+              : HostBrowserAppearance.fromTheme(browserTheme),
+        );
       case 'files.readText':
         final file = await openFile(
           acceptedTypeGroups: [

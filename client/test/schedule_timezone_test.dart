@@ -406,7 +406,8 @@ void main() {
   test('Shiguang new import hides timezone and stores the device zone after review', () async {
     mockDialogs();
     final state = await configureImport();
-    expect(dialogs, hasLength(2));
+    expect(dialogs, hasLength(1));
+    expect(dialogs.single['title'], '确认学期配置');
     expect(
       (dialogs.last['fields'] as List).map((f) => object(f)['key']),
       isNot(contains('timezone')),
@@ -425,6 +426,10 @@ void main() {
     systemZone = 'Asia/Tokyo';
     mockDialogs(target: tid);
     final existing = await configureImport(sourceZone: 'Europe/Paris');
+    expect(
+      dialogs.skip(1).map((dialog) => dialog['title']),
+      ['选择导入目标', '确认学期配置'],
+    );
     final input = object(existing['input']);
     expect(input['mode'], 'merge');
     expect(

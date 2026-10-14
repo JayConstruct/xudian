@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:cryptography/cryptography.dart';
@@ -101,6 +102,94 @@ void main() {
     },
   );
   test(
+    'verified files retain isolated snapshots and scripts remain independent',
+    () async {
+      final input = await ScriptPackage.build(definition, {
+        'main.js': 'export const value="模块";',
+        'helper.js': 'export const value=2;',
+      });
+      final original = Uint8List.fromList(input);
+      final verification = ScriptPackage.verify(
+        input,
+        allowUnsignedLocal: true,
+      );
+      input.fillRange(0, input.length, 0);
+      final verified = await verification;
+      expect(verified.bytes, original);
+      final restored = verified.withStoredOrigin('local');
+      expect(restored.bytes, same(verified.bytes));
+      expect(restored.files, same(verified.files));
+      expect(restored.definition, same(verified.definition));
+      expect(restored.origin, 'local');
+      expect(restored.trusted, isTrue);
+      final scripts = restored.scripts;
+      scripts['main.js'] = 'caller replacement';
+      scripts.remove('helper.js');
+      expect(restored.scripts['main.js'], 'export const value="模块";');
+      expect(restored.scripts['helper.js'], 'export const value=2;');
+      expect(verified.scripts, restored.scripts);
+      expect(() => restored.files['main.js']![0] = 0, throwsUnsupportedError);
+    },
+  );
+
+  test(
+    'stored and deflated file corruption never bypasses CRC or SHA checks',
+    () async {
+      final bytes = await ScriptPackage.build(definition, {
+        'main.js': 'export const value=1;',
+      });
+      final archive = decode(bytes);
+      final replaced = Archive();
+      for (final file in archive.files) {
+        final content = file.name == 'main.js'
+            ? utf8.encode('export const value=2;')
+            : file.content as List<int>;
+        replaced.addFile(ArchiveFile(file.name, content.length, content));
+      }
+      await expectLater(
+        ScriptPackage.verify(encode(replaced), allowUnsignedLocal: true),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            'File integrity mismatch: main.js',
+          ),
+        ),
+      );
+      final stored = Archive();
+      for (final file in archive.files) {
+        final content = file.content as List<int>;
+        stored.addFile(
+          ArchiveFile(file.name, content.length, content)..compress = false,
+        );
+      }
+      final corrupted = Uint8List.fromList(encode(stored));
+      final headers = ZipDirectory.read(InputStream(corrupted)).fileHeaders;
+      final main = headers.singleWhere(
+        (header) => header.filename == 'main.js',
+      );
+      final local = ByteData.sublistView(corrupted);
+      final offset = main.localHeaderOffset!;
+      final contentOffset =
+          offset +
+          30 +
+          local.getUint16(offset + 26, Endian.little) +
+          local.getUint16(offset + 28, Endian.little);
+      corrupted[contentOffset] ^= 1;
+      await expectLater(
+        ScriptPackage.verify(corrupted, allowUnsignedLocal: true),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            'ZIP size or CRC mismatch',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
     'market signature covers both release and complete file manifest',
     () async {
       final key = await Ed25519().newKeyPair(),
@@ -180,6 +269,29 @@ void main() {
           publishers: publishers,
         ),
         throwsFormatException,
+      );
+      final corruptedSignature = Uint8List.fromList(signed.bytes);
+      corruptedSignature[0] ^= 1;
+      await expectLater(
+        ScriptPackage.verify(
+          encode(
+            replace({
+              ...market,
+              'signature': {
+                ...object(market['signature']),
+                'value': base64Encode(corruptedSignature),
+              },
+            }),
+          ),
+          publishers: publishers,
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            'Invalid package signature',
+          ),
+        ),
       );
     },
   );

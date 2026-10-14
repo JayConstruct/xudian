@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/native_ui.dart';
 import '../ui/ui_icon.dart';
+import '../ui/ui_design.dart';
 
 class ModuleCatalogFilters extends StatelessWidget {
   const ModuleCatalogFilters({
@@ -86,11 +87,13 @@ class ModuleCatalogFilters extends StatelessWidget {
     child: ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 48),
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant,
+        decoration: ShapeDecoration(
+          shape: AppDesign.smoothShape(
+            radius: AppDesign.compactRadius,
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
           ),
-          borderRadius: BorderRadius.circular(12),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -259,5 +262,61 @@ class ModuleCatalogGrid extends StatelessWidget {
         },
       ),
     ),
+  );
+}
+
+/// Content-sized rows are built only near the viewport; each row keeps the
+/// accessible card layout without a fixed height or aspect ratio.
+class ModuleCatalogSliverGrid extends StatelessWidget {
+  const ModuleCatalogSliverGrid({
+    super.key,
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+
+  @override
+  Widget build(BuildContext context) => SliverLayoutBuilder(
+    builder: (context, constraints) {
+      const spacing = 12.0;
+      final availableWidth = constraints.crossAxisExtent.clamp(0.0, 1320.0);
+      final scale = (MediaQuery.textScalerOf(context).scale(16) / 16).clamp(
+        1.0,
+        1.6,
+      );
+      final columns = ((availableWidth + spacing) / (320 * scale + spacing))
+          .floor()
+          .clamp(1, 3);
+      final rowCount = (itemCount / columns).ceil();
+      return SliverList.builder(
+        itemCount: rowCount,
+        itemBuilder: (context, row) => Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: availableWidth,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: row + 1 < rowCount ? spacing : 0,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var column = 0; column < columns; column++) ...[
+                    if (column > 0) const SizedBox(width: spacing),
+                    Expanded(
+                      child: row * columns + column < itemCount
+                          ? itemBuilder(context, row * columns + column)
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
   );
 }

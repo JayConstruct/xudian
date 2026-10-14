@@ -10,6 +10,7 @@ import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/host_browser.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/data/app_database.dart';
+import 'package:task_app/core/ui/ui_design.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -189,4 +190,24 @@ void main() {
       );
     },
   );
+
+  test('browser gets current host theme on every capture', () async {
+    final requests = <Map>[];
+    messenger.setMockMethodCallHandler(browserChannel, (call) async {
+      requests.add((call.arguments as Map)['appearance'] as Map);
+      return null;
+    });
+    for (final brightness in [Brightness.dark, Brightness.light]) {
+      final theme = AppDesign.theme(brightness)
+          .copyWith(scaffoldBackgroundColor: const Color(0xff123456));
+      await bridge.invoke(actor, 'browser.capture', {
+        'url': 'https://school.example',
+        'script': 'capture()',
+        'appearance': {'dark': brightness != Brightness.dark},
+      }, browserTheme: theme);
+      expect(requests.last['dark'], brightness == Brightness.dark);
+      expect(requests.last['canvas'], 0xff123456);
+      expect(requests.last['primary'], theme.colorScheme.primary.toARGB32());
+    }
+  });
 }

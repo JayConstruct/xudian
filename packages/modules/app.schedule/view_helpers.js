@@ -38,13 +38,28 @@ export function appendPeriods(existing) {
 }
 export const listTile=(title,subtitle,icon,event,trailing)=>({type:'listTile',title,...(subtitle?{subtitle}:{}),...(event?{event}:{}),...(trailing!==undefined?{trailing}: {})});
 export const group=(title,children)=>({type:'column',children:[{type:'sectionHeader',title},...children]});
+const importFieldLabels={name:'名称',code:'课程代码',color:'颜色',notes:'备注',credit:'学分',firstMonday:'第一周周一',totalWeeks:'学期周数',timezone:'时区',displayWeekStart:'每周起始日',periods:'作息',weekday:'星期',startPeriod:'开始节次',endPeriod:'结束节次',weeks:'教学周',teacher:'教师',location:'地点',kind:'调整类型',originalDate:'原上课日期',date:'日期',startTime:'开始时间',endTime:'结束时间'};
+const importValue=(field,value)=>value===undefined||value===null||value===''?'未设置':field==='weekday'?'周'+['','一','二','三','四','五','六','日'][value]:field==='periods'?(value||[]).map(p=>`${p.number}: ${p.start}–${p.end}`).join('；'):Array.isArray(value)?value.join('、'):typeof value==='object'?JSON.stringify(value):String(value);
 export async function importSummary(plan,draft) {
-  const summary={courses:draft?.courses?.length||0,meetings:draft?.meetings?.length||0,changes:draft?.occurrenceChanges?.length||0,added:0,updated:0,deleted:0,conflicts:plan?.result?.conflicts||[],warnings:plan?.result?.warnings||draft?.warnings||[]};
+  const summary={courses:draft?.courses?.length||0,meetings:draft?.meetings?.length||0,changes:draft?.occurrenceChanges?.length||0,added:0,updated:0,deleted:0,details:[],conflicts:plan?.result?.conflicts||[],warnings:plan?.result?.warnings||draft?.warnings||[]};
+  const courseNames=new Map();
+  for(const write of plan?.writes||[]) if(write.collection==='courses')courseNames.set(write.id,(write.value||write.before)?.name||'课程');
   for(const write of plan?.writes||[]) {
     if(!['timetables','courses','meetings','occurrenceChanges'].includes(write.collection))continue;
-    if(write.value===null)summary.deleted++;
-    else if(await data.get(write.collection,write.id))summary.updated++;
-    else summary.added++;
+    const before=Object.prototype.hasOwnProperty.call(write,'before')?write.before:await data.get(write.collection,write.id);
+    const after=write.value;
+    const action=after===null?'删除':before?'修改':'新增';
+    if(action==='删除')summary.deleted++;else if(action==='修改')summary.updated++;else summary.added++;
+    const value=after||before||{};
+    let name=value.name||'';
+    if(!name && value.courseId) {
+      if(!courseNames.has(value.courseId))courseNames.set(value.courseId,(await data.get('courses',value.courseId))?.name||'课程');
+      name=courseNames.get(value.courseId);
+    }
+    const kind={timetables:'课表',courses:'课程',meetings:'上课安排',occurrenceChanges:'单次调整'}[write.collection];
+    const fields=Object.keys(importFieldLabels).filter(field=>JSON.stringify(before?.[field])!==JSON.stringify(after?.[field]));
+    const description=fields.map(field=>`${importFieldLabels[field]}：${before&&after?importValue(field,before[field])+' → ':''}${importValue(field,(after||before)?.[field])}`).join('\n');
+    summary.details.push(listTile(`${action}${kind}${name?' · '+name:''}`,description,'calendar',null));
   }
   return summary;
 }

@@ -1,0 +1,281 @@
+{
+  "date": "2026-10-14",
+  "scope": "Startup observability and query batching, UI rule consistency and date-transition keyboard focus.",
+  "build": {
+    "mode": "release",
+    "abi": "x86_64",
+    "buildNumber": 104,
+    "versionName": "0.2.0-beta.3",
+    "versionCode": 4104,
+    "apkSha256": "b4fbf46cdc58582a2bc44ecc776ff4d509e60b44685366b2dd383ab1b0112ab4",
+    "installedApkSha256": "b4fbf46cdc58582a2bc44ecc776ff4d509e60b44685366b2dd383ab1b0112ab4",
+    "sourceFingerprint": "fe9870b1db587b046d48f35352d11d235da3d5c700fe9931b351f79ac95b3abf"
+  },
+  "baselineBuild": {
+    "buildNumber": 103,
+    "versionCode": 4103,
+    "apkSha256": "d177295726d6888df34f9715b24cac31610a319cf0c88d553fc25749377c6979"
+  },
+  "device": {
+    "type": "Android emulator",
+    "abi": "x86_64",
+    "guestRefreshRateHz": 60
+  },
+  "checks": {
+    "flutterStartupTargetedPassed": 28,
+    "flutterDateInteractionPassed": 35,
+    "flutterIntegrationPassed": 70,
+    "pythonToolsPassed": 172,
+    "fullFlutterSuiteRun": false,
+    "flutterAnalyze": "passed",
+    "repositoryBoundaries": "passed",
+    "productionArchitecture": "passed",
+    "documentLinks": "passed",
+    "diffWhitespace": "passed"
+  },
+  "sampling": [
+    {
+      "localReport": "dist/verification/startup-20261014/before.json",
+      "mode": "proxy",
+      "buildNumber": 103,
+      "completedRuns": 20,
+      "requestedRuns": 20,
+      "complete": true,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 20,
+          "p50Ms": 750.0,
+          "p95Ms": 830,
+          "minMs": 668,
+          "maxMs": 832
+        },
+        "WaitTime": {
+          "count": 20,
+          "p50Ms": 753.5,
+          "p95Ms": 833,
+          "minMs": 672,
+          "maxMs": 855
+        }
+      },
+      "errors": []
+    },
+    {
+      "localReport": "dist/verification/startup-20261014/after.json",
+      "mode": "proxy",
+      "buildNumber": 104,
+      "completedRuns": 20,
+      "requestedRuns": 20,
+      "complete": true,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 20,
+          "p50Ms": 1002.5,
+          "p95Ms": 1130,
+          "minMs": 810,
+          "maxMs": 1430
+        },
+        "WaitTime": {
+          "count": 20,
+          "p50Ms": 1007.0,
+          "p95Ms": 1138,
+          "minMs": 822,
+          "maxMs": 1476
+        }
+      },
+      "errors": []
+    },
+    {
+      "localReport": "dist/verification/startup-20261014/after-restarted.json",
+      "mode": "proxyAfterEmulatorRestart",
+      "buildNumber": 104,
+      "completedRuns": 20,
+      "requestedRuns": 20,
+      "complete": true,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 20,
+          "p50Ms": 750.0,
+          "p95Ms": 864,
+          "minMs": 662,
+          "maxMs": 896
+        },
+        "WaitTime": {
+          "count": 20,
+          "p50Ms": 752.5,
+          "p95Ms": 866,
+          "minMs": 665,
+          "maxMs": 898
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        }
+      },
+      "errors": []
+    },
+    {
+      "localReport": "dist/verification/startup-20261014/after-ready-restarted.json",
+      "mode": "waitForWorkspaceReadyAfterEmulatorRestart",
+      "buildNumber": 104,
+      "completedRuns": 20,
+      "requestedRuns": 20,
+      "complete": true,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 20,
+          "p50Ms": 921.0,
+          "p95Ms": 1237,
+          "minMs": 745,
+          "maxMs": 1308
+        },
+        "WaitTime": {
+          "count": 20,
+          "p50Ms": 923.0,
+          "p95Ms": 1241,
+          "minMs": 749,
+          "maxMs": 1310
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 20,
+          "p50Ms": 1322.5,
+          "p95Ms": 1571,
+          "minMs": 999,
+          "maxMs": 1737
+        }
+      },
+      "errors": []
+    },
+    {
+      "localReport": "dist/verification/startup-20261014/before-failed-attempt.json",
+      "mode": "failedProxyAttempt",
+      "buildNumber": 103,
+      "completedRuns": 0,
+      "requestedRuns": 20,
+      "complete": false,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "WaitTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        }
+      },
+      "errors": [
+        {
+          "trial": 1,
+          "message": "ADB am failed (TimeoutExpired)"
+        }
+      ]
+    },
+    {
+      "localReport": "dist/verification/startup-20261014/after-ready.json",
+      "mode": "incompleteReadyAttempt",
+      "buildNumber": 104,
+      "completedRuns": 15,
+      "requestedRuns": 20,
+      "complete": false,
+      "intervalSeconds": 2.0,
+      "summary": {
+        "ThisTime": {
+          "count": 0,
+          "p50Ms": null,
+          "p95Ms": null,
+          "minMs": null,
+          "maxMs": null
+        },
+        "TotalTime": {
+          "count": 15,
+          "p50Ms": 1035,
+          "p95Ms": 1233,
+          "minMs": 970,
+          "maxMs": 1233
+        },
+        "WaitTime": {
+          "count": 15,
+          "p50Ms": 1040,
+          "p95Ms": 1234,
+          "minMs": 972,
+          "maxMs": 1234
+        },
+        "ActivityCreateToWorkspaceReadyMs": {
+          "count": 15,
+          "p50Ms": 1521,
+          "p95Ms": 1668,
+          "minMs": 1331,
+          "maxMs": 1668
+        }
+      },
+      "errors": [
+        {
+          "trial": 16,
+          "message": "ADB shell returned an error"
+        }
+      ]
+    }
+  ],
+  "interpretation": [
+    "No stable startup speedup demonstrated; initial new-build proxy group was slower and restarted new-build median matched old baseline.",
+    "ActivityCreateToWorkspaceReadyMs begins at Activity.onCreate, excludes preceding process creation and is not Android TTFD.",
+    "Ready means a visible composed content tree after entrance animation; terminal recoverable content errors can complete the renderer gate.",
+    "Default and wait-ready groups have different interval starting points and are summarized independently.",
+    "Incomplete reports are retained for diagnostics and are not complete comparison groups.",
+    "No ARM64 physical-device profiling or per-module-version and dataset-size matrix was completed."
+  ],
+  "appDataRetained": true,
+  "modulePackagesUpdated": false,
+  "logcatCleared": false,
+  "finalAppForegroundVerified": true,
+  "gitCommitCreated": false,
+  "published": false
+}

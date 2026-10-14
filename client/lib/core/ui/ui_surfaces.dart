@@ -98,14 +98,20 @@ class DetailPage extends StatelessWidget {
 }
 
 class SectionHeading extends StatelessWidget {
-  const SectionHeading({super.key, required this.title, this.action});
+  const SectionHeading({
+    super.key,
+    required this.title,
+    this.action,
+    this.padding = const EdgeInsets.fromLTRB(20, 12, 20, 12),
+  });
 
   final String title;
   final Widget? action;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+    padding: padding,
     child: Row(
       children: [
         Expanded(

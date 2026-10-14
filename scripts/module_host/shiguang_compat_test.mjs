@@ -119,6 +119,21 @@ test('selection cancellation returns null and invalid selection can be retried',
   const answers=['','0','3','2'];window.prompt=()=>answers.shift();
   assert.equal(await window.shiguangBridgePromise.showSingleSelection('学期','["秋","春"]',0),1);
 });
+test('native script dialogs use labeled choices and validate input before continuing',async()=>{
+  const calls=[],answers=['bad',true,'2026',1,false,null];
+  const window={xudianCapture:{send:()=>{},request:async(kind,details)=>{calls.push({kind,details});return answers.shift();}}};
+  vm.runInNewContext(captureScript(''),{window});
+  const api=window.shiguangBridgePromise;
+  assert.equal(await api.showPrompt('学年','选择学年','2026',value=>/^\d{4}$/.test(value)?false:'请输入四位学年'),'2026');
+  assert.deepEqual(calls.map(call=>call.kind),['prompt','alert','prompt']);
+  assert.equal(calls[2].details.initial,'bad');
+  assert.equal(await api.showSingleSelection('学期','["秋季","春季"]',0),1);
+  assert.equal(calls[3].kind,'selection');
+  assert.deepEqual(Array.from(calls[3].details.items),['秋季','春季']);
+  assert.equal(await api.showAlert('课表导入','准备采集','开始采集'),false);
+  assert.equal(calls[4].details.confirmLabel,'开始采集');
+  assert.equal(await api.showSingleSelection('学期',['秋季']),null);
+});
 test('maps exact custom times and numeric API strings without guessing',()=>{
   const draft=convert({payload:{courses:[{...row,isCustomTime:true,startSection:null,endSection:null,day:'1',weeks:['1','3'],customStartTime:'8:00:00',customEndTime:'09:35:00'}],timeSlots:[{number:'1',startTime:'8:00',endTime:'8:45'},{number:'2',startTime:'8:50:00',endTime:'9:35:00'}]},options});
   assert.equal(draft.meetings[0].startPeriod,1);assert.equal(draft.meetings[0].endPeriod,2);

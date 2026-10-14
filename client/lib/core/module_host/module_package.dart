@@ -210,6 +210,20 @@ class ScriptPackage {
       }
     }
   }
+  // Every package field was validated and frozen by verify. Relabeling its
+  // persisted provenance does not change executable bytes or declarations.
+  ScriptPackage._withStoredOrigin(ScriptPackage source, this.origin)
+    : bytes = source.bytes,
+      packageDigest = source.packageDigest,
+      definition = source.definition,
+      files = source.files,
+      release = source.release,
+      trusted = true,
+      id = source.id,
+      version = source.version,
+      _uiPack = source._uiPack,
+      _decodedScripts = source._decodedScripts;
+
   final Uint8List bytes;
   final String packageDigest;
   final Map<String, Object?> definition;
@@ -219,6 +233,7 @@ class ScriptPackage {
   final String origin;
   late final String id, version;
   UiPackDefinition? _uiPack;
+  Map<String, String>? _decodedScripts;
   bool get isUiPack => manifest['kind'] == 'uiPack';
   UiPackDefinition? get uiPack => _uiPack;
   Map<String, Object?> get manifest => object(definition['manifest']);
@@ -268,21 +283,17 @@ class ScriptPackage {
   }
 
   String get author => manifest['author'] as String? ?? '作者未提供';
-  Map<String, String> get scripts => {
-    for (final entry in files.entries)
-      if (entry.key.endsWith('.js')) entry.key: utf8.decode(entry.value),
-  };
-
-  ScriptPackage withStoredOrigin(String origin) => ScriptPackage._(
-    bytes,
-    packageDigest,
-    definition,
-    files,
-    release,
-    true,
-    origin,
-    _uiPack,
+  // Files are immutable verified snapshots. Decode once per package, while
+  // returning a fresh map so callers can still prepare their own source edits.
+  Map<String, String> get scripts => Map.of(
+    _decodedScripts ??= {
+      for (final entry in files.entries)
+        if (entry.key.endsWith('.js')) entry.key: utf8.decode(entry.value),
+    },
   );
+
+  ScriptPackage withStoredOrigin(String origin) =>
+      ScriptPackage._withStoredOrigin(this, origin);
 
   static Future<ScriptPackage> verify(
     List<int> input, {
@@ -332,11 +343,13 @@ class ScriptPackage {
       } else {
         Inflate.stream(file.rawContent!, output);
       }
-      final content = output.getBytes();
+      final content = output.getBytes() as Uint8List;
       if (content.length != size || getCrc32(content) != header.crc32) {
         throw const FormatException('ZIP size or CRC mismatch');
       }
-      files[name] = Uint8List.fromList(content).asUnmodifiableView();
+      // This output owns a fresh, exactly sized buffer and is never written
+      // again. Freeze that buffer rather than copying every inflated file.
+      files[name] = content.asUnmodifiableView();
     }
     final metadata = files.remove('package.json');
     if (metadata == null) throw const FormatException('Missing package.json');

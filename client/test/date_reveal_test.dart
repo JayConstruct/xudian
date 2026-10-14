@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/ui/date_reveal.dart';
 import 'package:task_app/core/ui/ui_motion.dart';
@@ -167,6 +168,115 @@ void main() {
       expect(await pixel(tester, 195, 195), [33, 150, 243, 255]);
       await tester.tapAt(const Offset(100, 100));
       expect(clicks, 1);
+    },
+  );
+
+  testWidgets(
+    'pending and fading content rejects keyboard focus without losing drafts',
+    (tester) async {
+      await mount(tester);
+      final inputFocus = FocusNode();
+      final businessFocus = FocusNode();
+      final navigationFocus = FocusNode();
+      final draft = TextEditingController();
+      addTearDown(inputFocus.dispose);
+      addTearDown(businessFocus.dispose);
+      addTearDown(navigationFocus.dispose);
+      addTearDown(draft.dispose);
+      var businessActions = 0;
+      var navigationActions = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                TextButton(
+                  focusNode: navigationFocus,
+                  onPressed: () => navigationActions++,
+                  child: const Text('Live navigation'),
+                ),
+                ValueListenableBuilder(
+                  valueListenable: frame,
+                  builder: (_, value, _) => DateReveal(
+                    controller: controller,
+                    revision: value.date,
+                    ready: value.ready,
+                    child: Column(
+                      children: [
+                        TextField(controller: draft, focusNode: inputFocus),
+                        TextButton(
+                          focusNode: businessFocus,
+                          onPressed: () => businessActions++,
+                          child: const Text('Submit business action'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'Keep this draft');
+      final inputState = tester.state(find.byType(TextField));
+      businessFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(businessActions, 1);
+
+      controller.prepare();
+      update(date: 2, color: Colors.blue, ready: false);
+      await tester.pump();
+      expect(businessFocus.hasFocus, isFalse);
+      expect(businessFocus.canRequestFocus, isFalse);
+      expect(inputFocus.canRequestFocus, isFalse);
+      businessFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(businessActions, 1);
+      navigationFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(navigationActions, 1);
+
+      update(date: 2, color: Colors.blue, ready: true);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(controller.isPreparing, isFalse);
+      expect(controller.isTransitioning, isTrue);
+      expect(businessFocus.canRequestFocus, isFalse);
+      businessFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(businessActions, 1);
+      expect(navigationActions, 2);
+      expect(tester.state(find.byType(TextField)), same(inputState));
+      expect(draft.text, 'Keep this draft');
+
+      await tester.pumpAndSettle();
+      expect(controller.isTransitioning, isFalse);
+      expect(businessFocus.canRequestFocus, isTrue);
+      expect(inputFocus.canRequestFocus, isTrue);
+      businessFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(businessActions, 2);
+      expect(tester.state(find.byType(TextField)), same(inputState));
+      expect(draft.text, 'Keep this draft');
+
+      controller.prepare();
+      update(date: 3, color: Colors.green, ready: false);
+      await tester.pump();
+      expect(inputFocus.canRequestFocus, isFalse);
+      controller.cancel();
+      await tester.pumpAndSettle();
+      inputFocus.requestFocus();
+      await tester.pump();
+      expect(inputFocus.hasFocus, isTrue);
+      expect(draft.text, 'Keep this draft');
     },
   );
 
@@ -461,6 +571,10 @@ void main() {
       await mount(tester);
       var navigationClicks = 0;
       var businessClicks = 0;
+      final navigationFocus = FocusNode();
+      final businessFocus = FocusNode();
+      addTearDown(navigationFocus.dispose);
+      addTearDown(businessFocus.dispose);
       final semantics = tester.ensureSemantics();
       await tester.pumpWidget(
         MaterialApp(
@@ -487,13 +601,28 @@ void main() {
                               animation: controller,
                               builder: (_, _) => IgnorePointer(
                                 ignoring: controller.isTransitioning,
-                                child: ExcludeSemantics(
+                                child: ExcludeFocus(
                                   excluding: controller.isTransitioning,
-                                  child: Semantics(
-                                    label: 'Business ${value.date}',
-                                    child: GestureDetector(
-                                      onTap: () => businessClicks++,
-                                      child: ColoredBox(color: value.color),
+                                  child: ExcludeSemantics(
+                                    excluding: controller.isTransitioning,
+                                    child: Focus(
+                                      focusNode: businessFocus,
+                                      onKeyEvent: (_, event) {
+                                        if (event is KeyDownEvent &&
+                                            event.logicalKey ==
+                                                LogicalKeyboardKey.enter) {
+                                          businessClicks++;
+                                          return KeyEventResult.handled;
+                                        }
+                                        return KeyEventResult.ignored;
+                                      },
+                                      child: Semantics(
+                                        label: 'Business ${value.date}',
+                                        child: GestureDetector(
+                                          onTap: () => businessClicks++,
+                                          child: ColoredBox(color: value.color),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -506,16 +635,28 @@ void main() {
                             top: value.date == 1 ? 0 : 60,
                             height: 40,
                             child: DateRevealNavigation(
-                              child: Semantics(
-                                label: 'Navigation ${value.date}',
-                                child: GestureDetector(
-                                  onTap: () => navigationClicks++,
-                                  child: ColoredBox(
-                                    color: value.date == 1
-                                        ? Colors.orange
-                                        : value.date == 2
-                                        ? Colors.yellow
-                                        : Colors.purple,
+                              child: Focus(
+                                focusNode: navigationFocus,
+                                onKeyEvent: (_, event) {
+                                  if (event is KeyDownEvent &&
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.enter) {
+                                    navigationClicks++;
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                },
+                                child: Semantics(
+                                  label: 'Navigation ${value.date}',
+                                  child: GestureDetector(
+                                    onTap: () => navigationClicks++,
+                                    child: ColoredBox(
+                                      color: value.date == 1
+                                          ? Colors.orange
+                                          : value.date == 2
+                                          ? Colors.yellow
+                                          : Colors.purple,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -550,6 +691,12 @@ void main() {
       await tester.tapAt(const Offset(100, 150));
       expect(navigationClicks, 1);
       expect(businessClicks, 0);
+      expect(businessFocus.canRequestFocus, isFalse);
+      expect(navigationFocus.canRequestFocus, isTrue);
+      navigationFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(navigationClicks, 2);
       final tree = tester
           .binding
           .renderViews
@@ -582,7 +729,7 @@ void main() {
       await tester.pump();
       expect(await pixel(tester, 100, 80), [156, 39, 176, 255]);
       await tester.tapAt(const Offset(100, 80));
-      expect(navigationClicks, 2);
+      expect(navigationClicks, 3);
       await tester.pump(const Duration(milliseconds: 480));
       expect(await pixel(tester, 100, 80), [156, 39, 176, 255]);
       expect(await pixel(tester, 100, 150), backgroundPixels(tester));
@@ -592,6 +739,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tapAt(const Offset(100, 150));
       expect(businessClicks, 1);
+      expect(businessFocus.canRequestFocus, isTrue);
+      businessFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(businessClicks, 2);
       semantics.dispose();
     },
   );

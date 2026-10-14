@@ -9,6 +9,7 @@ import '../../app/app_toast.dart';
 import '../../core/modules/module_registry.dart';
 import '../../core/ui/ui_component.dart';
 import '../../core/ui/ui_pack_settings_page.dart';
+import '../../core/ui/ui_feedback.dart';
 import 'app_preferences.dart';
 import 'settings_widgets.dart';
 
@@ -90,17 +91,9 @@ class _AppearanceSettingsPageState
               child: NativeUi(child: CircularProgressIndicator()),
             ),
             error: (_, _) => Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('读取外观设置失败'),
-                  NativeUi(
-                    child: TextButton(
-                      onPressed: () => ref.invalidate(appPreferencesProvider),
-                      child: const Text('重试'),
-                    ),
-                  ),
-                ],
+              child: AppErrorState(
+                message: '读取外观设置失败，请重试',
+                onRetry: () => ref.invalidate(appPreferencesProvider),
               ),
             ),
             data: (preferences) => SettingsList(

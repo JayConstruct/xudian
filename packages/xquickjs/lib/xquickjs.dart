@@ -5,7 +5,6 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 
 import 'error_message.dart';
-import 'src/worker_poll_scheduler.dart';
 
 @Native<Pointer<Void> Function(Int64)>(symbol: 'xm_create')
 external Pointer<Void> _create(int memoryLimit);
@@ -19,6 +18,13 @@ external int _add(
 );
 @Native<Int Function(Pointer<Void>)>(symbol: 'xm_start')
 external int _start(Pointer<Void> handle);
+@Native<Int Function(Pointer<Void>, Pointer<NativeFunction<Void Function()>>)>(
+  symbol: 'xm_set_notify',
+)
+external int _setNotify(
+  Pointer<Void> handle,
+  Pointer<NativeFunction<Void Function()>> notify,
+);
 @Native<Void Function(Pointer<Void>, Pointer<Utf8>)>(symbol: 'xm_send')
 external void _send(Pointer<Void> handle, Pointer<Utf8> source);
 @Native<Pointer<Utf8> Function(Pointer<Void>)>(symbol: 'xm_poll')
@@ -58,23 +64,31 @@ class JavaScriptWorker {
           calloc.free(source);
         }
       }
+      // NativeCallable.listener dispatches through an isolate port and never
+      // runs Dart on the engine thread. Bind its callback to the durable owner
+      // zone, not a transaction or widget fake clock used for construction.
+      _notifications = (ownerZone ?? Zone.current).run(
+        () => NativeCallable<Void Function()>.listener(() {
+          if (!_closed) _drain();
+        }),
+      );
+      if (_setNotify(_handle, _notifications!.nativeFunction) == 0) {
+        throw StateError('Cannot register JavaScript worker notifications');
+      }
       if (_start(_handle) == 0)
         throw StateError('Cannot start JavaScript worker');
     } catch (_) {
+      _closed = true;
       _destroy(_handle);
+      _notifications?.close();
       rethrow;
     }
-    _polling = WorkerPollScheduler(
-      drain: _drain,
-      hasPending: () => _pending.values.any((request) => !request.isCompleted),
-      ownerZone: ownerZone,
-    );
     _post(bootstrap);
   }
 
   final HostHandler host;
   late Pointer<Void> _handle;
-  late final WorkerPollScheduler _polling;
+  NativeCallable<Void Function()>? _notifications;
   final _pending = <int, Completer<Object?>>{};
   int _sequence = 0;
   bool _closed = false;
@@ -125,7 +139,6 @@ class JavaScriptWorker {
     } finally {
       calloc.free(value);
     }
-    _polling.wake();
   }
 
   bool _drain() {
@@ -177,7 +190,6 @@ class JavaScriptWorker {
   void close([Object? error]) {
     if (_closed) return;
     _closed = true;
-    _polling.close();
     _cancel(_handle);
     for (final completer in _pending.values) {
       if (!completer.isCompleted)
@@ -185,6 +197,10 @@ class JavaScriptWorker {
     }
     _pending.clear();
     _destroy(_handle);
+    // _destroy joins the native thread. Only then is it safe to close the
+    // callback trampoline: no native caller can invoke it after close. Closing
+    // the listener port also discards already queued no-argument notifications.
+    _notifications?.close();
   }
 }
 

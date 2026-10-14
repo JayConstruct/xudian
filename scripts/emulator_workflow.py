@@ -10,13 +10,16 @@ SKIP_NAMES = {'local.properties', 'GeneratedPluginRegistrant.java'}
 
 def snapshot(root):
     files = []
-    for folder in ['client/lib', 'client/assets', 'client/android']:
+    for folder in ['client/lib', 'client/assets', 'client/android',
+                   'packages/xquickjs/lib', 'packages/xquickjs/src',
+                   'packages/xquickjs/hook']:
         directory = root / folder
         if directory.exists():
             files.extend(p for p in directory.rglob('*') if p.is_file()
                          and not SKIP_PARTS.intersection(p.relative_to(directory).parts)
                          and p.name not in SKIP_NAMES)
     for name in ['client/pubspec.yaml', 'client/pubspec.lock', 'client/.flutter-plugins-dependencies',
+                 'packages/xquickjs/pubspec.yaml',
                  '.tools/flutter/bin/cache/flutter.version.json', '.tools/flutter/bin/cache/engine.stamp']:
         path = root / name
         if path.is_file():
@@ -38,7 +41,7 @@ def select_tests(changes, modules=(), *, first_run=False):
     tests = set(SMOKE_TESTS)
     if first_run:
         changes = []
-    critical = ('client/pubspec.', 'client/lib/data/', 'client/lib/core/modules/',
+    critical = ('client/pubspec.', 'packages/xquickjs/', 'client/lib/data/', 'client/lib/core/modules/',
                 'client/lib/core/module_host/module_host.dart',
                 'client/lib/core/module_host/collection_store.dart',
                 'client/lib/core/module_host/module_package.dart')

@@ -3,6 +3,7 @@ import '../ui/native_ui.dart';
 import '../ui/ui_design.dart';
 import '../../app/app_toast.dart';
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -52,16 +53,45 @@ final moduleCatalogClientProvider = FutureProvider<ModuleCatalogClient>((
   return client;
 });
 
-Future<Map<String, InstalledCatalogModule>> _installed(ModuleHost host) async {
+Future<Map<String, InstalledCatalogModule>> _installed(
+  ModuleHost host, {
+  Map<String, InstalledCatalogModule> verified = const {},
+  bool reuseVerified = false,
+}) async {
   final result = <String, InstalledCatalogModule>{};
-  for (final row in await host.store.sql(
-    'SELECT * FROM host_installations WHERE installed=1',
-  )) {
+  final rows = await host.store.sql("""
+    SELECT installations.module_id, installations.version, installations.enabled,
+           packages.digest, packages.origin, repositories.value AS repository
+    FROM host_installations AS installations
+    LEFT JOIN host_packages AS packages
+      ON packages.module_id=installations.module_id
+      AND packages.version=installations.version
+    LEFT JOIN host_meta AS repositories
+      ON repositories.key='module-repository:' || installations.module_id
+    WHERE installations.installed=1
+  """);
+  for (final row in rows) {
     final id = row['module_id'] as String;
+    final version = row['version'] as String;
+    // Both candidates have already passed full verification. Match immutable
+    // persisted identity and provenance before reusing either in-memory object.
+    final candidates = reuseVerified
+        ? [host.instances[id]?.package, verified[id]?.package]
+        : const <ScriptPackage?>[];
+    final package = candidates
+        .whereType<ScriptPackage>()
+        .where(
+          (candidate) =>
+              candidate.id == id &&
+              candidate.version == version &&
+              candidate.packageDigest == row['digest'] &&
+              candidate.origin == row['origin'],
+        )
+        .firstOrNull;
     result[id] = InstalledCatalogModule(
-      await host.packageSource(id, row['version'] as String),
+      package ?? await host.packageSource(id, version),
       enabled: row['enabled'] == 1,
-      repository: await host.repositoryFor(id),
+      repository: row['repository'] as String?,
     );
   }
   return result;
@@ -446,19 +476,34 @@ class ModuleCatalogPage extends ConsumerStatefulWidget {
 
 class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
   ModuleCatalog? catalog;
-  final indexes = <String, Future<ModuleVersionIndex>>{};
+  final indexes =
+      <
+        ({
+          String id,
+          String repository,
+          Uri indexUrl,
+          bool offline,
+          int generation,
+        }),
+        Future<ModuleVersionIndex>
+      >{};
   final loadedIndexes = <String, ModuleVersionIndex>{};
   final indexFailures = <String, String>{};
+  final latestVersions = <String, CatalogVersion>{};
+  bool indexRebuildScheduled = false;
   final searchController = TextEditingController();
   String category = '全部分类', filter = '全部';
   int loadGeneration = 0;
   Map<String, InstalledCatalogModule> installations = {};
   String? failure, repository;
-  bool loading = false, busy = false, offline = false;
+  bool loading = true, busy = false, offline = false;
   @override
   void initState() {
     super.initState();
-    Future.microtask(load);
+    // Let the first frame paint the responsive shell before starting I/O.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(load());
+    });
   }
 
   @override
@@ -468,30 +513,67 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     super.dispose();
   }
 
-  Future<ModuleVersionIndex> indexFor(CatalogModule item) =>
-      indexes.putIfAbsent(
-        item.id,
-        () async =>
-            (await ref.read(moduleCatalogClientProvider.future))
-                .loadIndex(item, offline: offline),
-      );
+  Future<ModuleVersionIndex> indexFor(CatalogModule item) {
+    final key = (
+      id: item.id,
+      repository: item.repository,
+      indexUrl: item.indexUrl,
+      offline: offline,
+      generation: loadGeneration,
+    );
+    return indexes.putIfAbsent(
+      key,
+      () async =>
+          (await ref.read(moduleCatalogClientProvider.future))
+              .loadIndex(item, offline: key.offline),
+    );
+  }
+
+  bool _isCurrentIndex(CatalogModule item, int generation) =>
+      mounted &&
+      generation == loadGeneration &&
+      identical(catalog?.modules[item.id], item);
+
+  void _scheduleIndexRebuild() {
+    if (indexRebuildScheduled) return;
+    indexRebuildScheduled = true;
+    WidgetsBinding.instance.scheduleFrameCallback((_) {
+      indexRebuildScheduled = false;
+      if (mounted) setState(() {});
+    });
+  }
 
   Future<void> loadIndexes(ModuleCatalog result, int generation) async {
-    await Future.wait([
-      for (final item in result.modules.values)
-        () async {
-          try {
-            final index = await indexFor(item);
-            if (mounted && generation == loadGeneration) {
-              setState(() => loadedIndexes[item.id] = index);
-            }
-          } catch (error) {
-            if (mounted && generation == loadGeneration) {
-              setState(() => indexFailures[item.id] = '$error');
-            }
-          }
-        }(),
-    ]);
+    final pending = result.modules.values.iterator;
+    Future<void> worker() async {
+      while (mounted && generation == loadGeneration && pending.moveNext()) {
+        final item = pending.current;
+        try {
+          final index = await indexFor(item);
+          if (!_isCurrentIndex(item, generation)) return;
+          loadedIndexes[item.id] = index;
+          final latest = index.versions
+              .where(
+                (version) =>
+                    !Version.parse(version.version).isPreRelease &&
+                    VersionConstraint.parse(
+                      version.manifest['hostApi'] as String,
+                    ).allows(hostApiVersion),
+              )
+              .firstOrNull;
+          if (latest != null) latestVersions[item.id] = latest;
+        } catch (error) {
+          if (!_isCurrentIndex(item, generation)) return;
+          indexFailures[item.id] = '$error';
+        }
+        // Coalesce indexes completing together into one update per frame.
+        _scheduleIndexRebuild();
+      }
+    }
+
+    // Bound concurrent network/parse/cache work instead of starting every
+    // module at once. Opening a detail still shares its in-flight index.
+    await Future.wait([for (var i = 0; i < 4; i++) worker()]);
   }
 
   Future<void> load() async {
@@ -500,16 +582,22 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     indexes.clear();
     loadedIndexes.clear();
     indexFailures.clear();
+    latestVersions.clear();
     setState(() {
       loading = true;
       failure = null;
     });
     try {
-      final current = await _installed(widget.host);
-      if (!mounted || generation != loadGeneration) return;
-      setState(() => installations = current);
-      final client = await ref.read(moduleCatalogClientProvider.future);
-      final result = await client.loadCatalog(offline: offline);
+      final results = await Future.wait<Object>([
+        _installed(widget.host, verified: installations, reuseVerified: true),
+        () async {
+          final client = await ref.read(moduleCatalogClientProvider.future);
+          return (client, await client.loadCatalog(offline: offline));
+        }(),
+      ]);
+      final current = results[0] as Map<String, InstalledCatalogModule>;
+      final (client, result) =
+          results[1] as (ModuleCatalogClient, ModuleCatalog);
       if (!mounted || generation != loadGeneration) return;
       setState(() {
         catalog = result;
@@ -528,7 +616,11 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
         try {
           final client = await ref.read(moduleCatalogClientProvider.future);
           final cached = await client.loadCatalog(offline: true);
-          final current = await _installed(widget.host);
+          final current = await _installed(
+            widget.host,
+            verified: installations,
+            reuseVerified: true,
+          );
           if (!mounted || generation != loadGeneration) return;
           setState(() {
             catalog = cached;
@@ -593,6 +685,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
       "INSERT OR REPLACE INTO host_meta(key,value) VALUES('module-catalog-repository',?)",
       [next],
     );
+    if (!mounted) return;
     ref.invalidate(moduleCatalogClientProvider);
     setState(() {
       catalog = null;
@@ -612,7 +705,11 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
         requests: {id: version ?? 'any'},
         offline: offline,
       );
-      final current = await _installed(widget.host);
+      final current = await _installed(
+        widget.host,
+        verified: installations,
+        reuseVerified: true,
+      );
       if (mounted) {
         setState(() {
           failure = null;
@@ -629,134 +726,11 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
   Future<void> details(String id) async {
     setState(() => busy = true);
     try {
-      final installations = await _installed(widget.host);
-      final installed = installations[id];
-      if (installed != null) {
-        if (!mounted) return;
-        final next = await showDialog<String>(
-          context: context,
-          builder: (dialogContext) => ModuleDetailsDialog(
-            package: installed.package,
-            repository: installed.repository,
-            status: installed.enabled ? '已启用' : '已停用',
-            dependents: widget.host.affectedDependents(id),
-            allDependents: [
-              for (final entry in installations.entries)
-                if (entry.value.package.dependencies.contains(id))
-                  '${entry.key}（${entry.value.enabled ? '已启用' : '已停用'}）',
-            ],
-            onDependency: (dependency) =>
-                Navigator.pop(dialogContext, dependency),
-          ),
-        );
-        if (next != null && mounted) await details(next);
-        return;
-      }
-      final item = catalog?.modules[id];
-      if (item == null) throw StateError('目录未收录模块：$id');
-      final index = await indexFor(item);
-      final versions = index.versions
-          .where(
-            (version) =>
-                !Version.parse(version.version).isPreRelease &&
-                VersionConstraint.parse(version.manifest['hostApi'] as String)
-                    .allows(hostApiVersion),
-          )
-          .toList();
-      if (versions.isEmpty) throw StateError('没有兼容当前宿主的稳定版本：$id');
-      final version = versions.first;
-      if (!mounted) return;
       final next = await showDialog<String>(
         context: context,
-        builder: (dialogContext) => NativeUi(
-          child: AlertDialog(
-            title: Text(item.name),
-            titlePadding: AppDesign.dialogTitlePadding,
-            contentPadding: AppDesign.dialogContentPadding,
-            actionsPadding: AppDesign.dialogActionsPadding,
-            content: SizedBox(
-              width: 620,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(item.description),
-                    const SizedBox(height: 12),
-                    SelectableText('模块 ID：${item.id}'),
-                    Text('版本：${version.version} · 可安装'),
-                    Text('作者：${item.author.isEmpty ? '作者未提供' : item.author}'),
-                    SelectableText('发布仓库：${item.repository}'),
-                    SelectableText('下载来源：${version.url}'),
-                    Text('宿主兼容性：${version.manifest['hostApi']}'),
-                    Text(
-                      '权限：${(version.manifest['permissions'] as List? ?? []).join('、')}',
-                    ),
-                    const Text('模块依赖（点击查看）'),
-                    for (final raw
-                        in version.manifest['dependencies'] as List? ?? [])
-                      NativeUi(
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            raw is String ? raw : '${object(raw)['moduleId']}',
-                          ),
-                          subtitle: Text(
-                            raw is String
-                                ? '任意兼容版本'
-                                : '${object(raw)['version']}',
-                          ),
-                          trailing: const UiIcon(Icons.chevron_right),
-                          onTap: () => Navigator.pop(
-                            dialogContext,
-                            raw is String ? raw : object(raw)['moduleId'],
-                          ),
-                        ),
-                      ),
-                    const Text('服务依赖（点击查看）'),
-                    for (final raw in manifestServiceRequirements(
-                      version.manifest,
-                    ))
-                      NativeUi(
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('${object(raw)['moduleId']}'),
-                          subtitle: Text(
-                            '${object(raw)['serviceId']} @ ${object(raw)['majorVersion']} ${object(raw)['kind'] ?? ''}',
-                          ),
-                          trailing: const UiIcon(Icons.chevron_right),
-                          onTap: object(raw)['moduleId'] == 'app.host'
-                              ? () => showHostService(dialogContext, raw)
-                              : () => Navigator.pop(
-                                  dialogContext,
-                                  object(raw)['moduleId'],
-                                ),
-                        ),
-                      ),
-                    Text(
-                      '历史版本：${index.versions.map((entry) => entry.version).join('、')}',
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('安装前验证摘要、身份与包格式，并展示签名状态和完整依赖计划。'),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              NativeUi(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('关闭'),
-                ),
-              ),
-              NativeUi(
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(dialogContext, 'install:$id'),
-                  child: const Text('解析依赖并安装'),
-                ),
-              ),
-            ],
-          ),
+        builder: (dialogContext) => _CatalogDetailsLoader(
+          title: catalog?.modules[id]?.name ?? id,
+          load: () => _detailsContent(id, dialogContext),
         ),
       );
       if (next != null && mounted) {
@@ -773,15 +747,133 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     }
   }
 
-  CatalogVersion? latestCompatible(CatalogModule item) => loadedIndexes[item.id]
-      ?.versions
-      .where(
-        (version) =>
-            !Version.parse(version.version).isPreRelease &&
-            VersionConstraint.parse(version.manifest['hostApi'] as String)
-                .allows(hostApiVersion),
-      )
-      .firstOrNull;
+  Future<Widget> _detailsContent(String id, BuildContext dialogContext) async {
+    final current = await _installed(
+      widget.host,
+      verified: installations,
+      reuseVerified: true,
+    );
+    if (!mounted) throw StateError('模块商店已关闭');
+    installations = current;
+    final installed = current[id];
+    if (installed != null) {
+      return ModuleDetailsDialog(
+        package: installed.package,
+        repository: installed.repository,
+        status: installed.enabled ? '已启用' : '已停用',
+        dependents: widget.host.affectedDependents(id),
+        allDependents: [
+          for (final entry in current.entries)
+            if (entry.value.package.dependencies.contains(id))
+              '${entry.key}（${entry.value.enabled ? '已启用' : '已停用'}）',
+        ],
+        onDependency: (dependency) => Navigator.pop(dialogContext, dependency),
+      );
+    }
+    final item = catalog?.modules[id];
+    if (item == null) throw StateError('目录未收录模块：$id');
+    final index = await indexFor(item);
+    final versions = index.versions
+        .where(
+          (version) =>
+              !Version.parse(version.version).isPreRelease &&
+              VersionConstraint.parse(version.manifest['hostApi'] as String)
+                  .allows(hostApiVersion),
+        )
+        .toList();
+    if (versions.isEmpty) throw StateError('没有兼容当前宿主的稳定版本：$id');
+    final version = versions.first;
+    if (!mounted) throw StateError('模块商店已关闭');
+    return NativeUi(
+      child: AlertDialog(
+        title: Text(item.name),
+        titlePadding: AppDesign.dialogTitlePadding,
+        contentPadding: AppDesign.dialogContentPadding,
+        actionsPadding: AppDesign.dialogActionsPadding,
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(item.description),
+                const SizedBox(height: 12),
+                SelectableText('模块 ID：${item.id}'),
+                Text('版本：${version.version} · 可安装'),
+                Text('作者：${item.author.isEmpty ? '作者未提供' : item.author}'),
+                SelectableText('发布仓库：${item.repository}'),
+                SelectableText('下载来源：${version.url}'),
+                Text('宿主兼容性：${version.manifest['hostApi']}'),
+                Text(
+                  '权限：${(version.manifest['permissions'] as List? ?? []).join('、')}',
+                ),
+                const Text('模块依赖（点击查看）'),
+                for (final raw
+                    in version.manifest['dependencies'] as List? ?? [])
+                  NativeUi(
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        raw is String ? raw : '${object(raw)['moduleId']}',
+                      ),
+                      subtitle: Text(
+                        raw is String ? '任意兼容版本' : '${object(raw)['version']}',
+                      ),
+                      trailing: const UiIcon(Icons.chevron_right),
+                      onTap: () => Navigator.pop(
+                        dialogContext,
+                        raw is String ? raw : object(raw)['moduleId'],
+                      ),
+                    ),
+                  ),
+                const Text('服务依赖（点击查看）'),
+                for (final raw in manifestServiceRequirements(version.manifest))
+                  NativeUi(
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${object(raw)['moduleId']}'),
+                      subtitle: Text(
+                        '${object(raw)['serviceId']} @ ${object(raw)['majorVersion']} ${object(raw)['kind'] ?? ''}',
+                      ),
+                      trailing: const UiIcon(Icons.chevron_right),
+                      onTap: object(raw)['moduleId'] == 'app.host'
+                          ? () => showHostService(dialogContext, raw)
+                          : () => Navigator.pop(
+                              dialogContext,
+                              object(raw)['moduleId'],
+                            ),
+                    ),
+                  ),
+                Text(
+                  '历史版本：${index.versions.map((entry) => entry.version).join('、')}',
+                ),
+                const SizedBox(height: 12),
+                const Text('安装前验证摘要、身份与包格式，并展示签名状态和完整依赖计划。'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          NativeUi(
+            child: TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
+          ),
+          NativeUi(
+            child: FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, 'install:$id'),
+              child: const Text('解析依赖并安装'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  CatalogVersion? latestCompatible(CatalogModule item) =>
+      latestVersions[item.id];
 
   bool canUpdate(CatalogModule item) {
     final installed = installations[item.id];
@@ -935,134 +1027,160 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
             ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            NativeUi(
-              child: TextField(
-                controller: searchController,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: '搜索名称、作用、作者或模块 ID',
-                  prefixIcon: const UiIcon(Icons.search),
-                  suffixIcon: searchController.text.isEmpty
-                      ? null
-                      : NativeUi(
-                          child: IconButton(
-                            tooltip: '清空搜索',
-                            onPressed: () =>
-                                setState(() => searchController.clear()),
-                            icon: const UiIcon(Icons.close),
-                          ),
-                        ),
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ModuleCatalogFilters(
-              status: filter,
-              category: category,
-              categories: categories,
-              onStatusChanged: (value) => setState(() => filter = value),
-              onCategoryChanged: (value) => setState(() => category = value),
-            ),
-            if (offline) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text('正在浏览缓存。离线安装需要全部模块包已缓存；可在商店设置中恢复联网。'),
-              ),
-            ],
-            const SizedBox(height: 12),
-            if (loading || busy)
-              const NativeUi(child: LinearProgressIndicator()),
-            if (failure != null) ...[
-              const SizedBox(height: 8),
-              SelectableText(failure!, style: TextStyle(color: colors.error)),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: NativeUi(
-                  child: TextButton.icon(
-                    onPressed: loading || busy ? null : load,
-                    icon: const UiIcon(Icons.refresh),
-                    label: const Text('刷新 / 重试'),
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Text(
-              '找到 ${modules.length} 个模块 · 目录共 ${catalog?.modules.length ?? 0} 个',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            if (catalog != null && catalog!.modules.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Text('目录中没有模块，请在商店设置中检查目录仓库。'),
-              )
-            else if (catalog != null && modules.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
+        body: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              sliver: SliverToBoxAdapter(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      loading && filter == '可更新' ? '正在检查模块版本…' : '没有符合筛选条件的模块',
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('试试其他关键词、分类或安装状态。'),
                     NativeUi(
-                      child: TextButton(
-                        onPressed: clearFilters,
-                        child: const Text('清除筛选'),
+                      child: TextField(
+                        controller: searchController,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: '搜索名称、作用、作者或模块 ID',
+                          prefixIcon: const UiIcon(Icons.search),
+                          suffixIcon: searchController.text.isEmpty
+                              ? null
+                              : NativeUi(
+                                  child: IconButton(
+                                    tooltip: '清空搜索',
+                                    onPressed: () => setState(
+                                      () => searchController.clear(),
+                                    ),
+                                    icon: const UiIcon(Icons.close),
+                                  ),
+                                ),
+                        ),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    ModuleCatalogFilters(
+                      status: filter,
+                      category: category,
+                      categories: categories,
+                      onStatusChanged: (value) =>
+                          setState(() => filter = value),
+                      onCategoryChanged: (value) =>
+                          setState(() => category = value),
+                    ),
+                    if (offline) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: ShapeDecoration(
+                          color: colors.surfaceContainerHighest,
+                          shape: AppDesign.smoothShape(
+                            radius: AppDesign.compactRadius,
+                          ),
+                        ),
+                        child: const Text('正在浏览缓存。离线安装需要全部模块包已缓存；可在商店设置中恢复联网。'),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    if (loading || busy)
+                      const NativeUi(child: LinearProgressIndicator()),
+                    if (failure != null) ...[
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        failure!,
+                        style: TextStyle(color: colors.error),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: NativeUi(
+                          child: TextButton.icon(
+                            onPressed: loading || busy ? null : load,
+                            icon: const UiIcon(Icons.refresh),
+                            label: const Text('刷新 / 重试'),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Text(
+                      '找到 ${modules.length} 个模块 · 目录共 ${catalog?.modules.length ?? 0} 个',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    if (catalog != null && catalog!.modules.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Text('目录中没有模块，请在商店设置中检查目录仓库。'),
+                      )
+                    else if (catalog != null && modules.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              loading && filter == '可更新'
+                                  ? '正在检查模块版本…'
+                                  : '没有符合筛选条件的模块',
+                            ),
+                            const SizedBox(height: 8),
+                            const Text('试试其他关键词、分类或安装状态。'),
+                            NativeUi(
+                              child: TextButton(
+                                onPressed: clearFilters,
+                                child: const Text('清除筛选'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
-            const SizedBox(height: 8),
-            ModuleCatalogGrid(
-              children: [for (final item in modules) moduleCard(item)],
             ),
-            const SizedBox(height: 16),
-            Card(
-              child: ExpansionTile(
-                title: const Text('商店设置'),
-                leading: const UiIcon(Icons.settings_outlined),
-                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('选择所需功能，商店会准备依赖模块并在安装前统一确认。'),
-                  const SizedBox(height: 8),
-                  if (repository != null) SelectableText('目录：$repository'),
-                  const SizedBox(height: 8),
-                  NativeUi(
-                    child: OutlinedButton.icon(
-                      onPressed: loading || busy ? null : configure,
-                      icon: const UiIcon(Icons.edit_outlined),
-                      label: const Text('修改目录仓库'),
-                    ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: ModuleCatalogSliverGrid(
+                itemCount: modules.length,
+                itemBuilder: (context, index) => moduleCard(modules[index]),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              sliver: SliverToBoxAdapter(
+                child: Card(
+                  child: ExpansionTile(
+                    title: const Text('商店设置'),
+                    leading: const UiIcon(Icons.settings_outlined),
+                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('选择所需功能，商店会准备依赖模块并在安装前统一确认。'),
+                      const SizedBox(height: 8),
+                      if (repository != null) SelectableText('目录：$repository'),
+                      const SizedBox(height: 8),
+                      NativeUi(
+                        child: OutlinedButton.icon(
+                          onPressed: loading || busy ? null : configure,
+                          icon: const UiIcon(Icons.edit_outlined),
+                          label: const Text('修改目录仓库'),
+                        ),
+                      ),
+                      NativeUi(
+                        child: SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('离线浏览缓存'),
+                          value: offline,
+                          onChanged: loading || busy
+                              ? null
+                              : (value) {
+                                  setState(() => offline = value);
+                                  load();
+                                },
+                        ),
+                      ),
+                      const Text('安装前检查模块身份、摘要、权限与完整依赖；摘要校验不代表发布者签名。'),
+                    ],
                   ),
-                  NativeUi(
-                    child: SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('离线浏览缓存'),
-                      value: offline,
-                      onChanged: loading || busy
-                          ? null
-                          : (value) {
-                              setState(() => offline = value);
-                              load();
-                            },
-                    ),
-                  ),
-                  const Text('安装前检查模块身份、摘要、权限与完整依赖；摘要校验不代表发布者签名。'),
-                ],
+                ),
               ),
             ),
           ],
@@ -1070,4 +1188,68 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
       ),
     );
   }
+}
+
+/// Paint the dialog shell before any installed-package or index work begins.
+class _CatalogDetailsLoader extends StatefulWidget {
+  const _CatalogDetailsLoader({required this.title, required this.load});
+  final String title;
+  final Future<Widget> Function() load;
+
+  @override
+  State<_CatalogDetailsLoader> createState() => _CatalogDetailsLoaderState();
+}
+
+class _CatalogDetailsLoaderState extends State<_CatalogDetailsLoader> {
+  final content = Completer<Widget>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        Future<Widget>.sync(widget.load)
+            .then<void>(content.complete, onError: content.completeError),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Widget>(
+    future: content.future,
+    builder: (context, snapshot) {
+      if (snapshot.hasData) return snapshot.data!;
+      return NativeUi(
+        child: AlertDialog(
+          title: Text(widget.title),
+          titlePadding: AppDesign.dialogTitlePadding,
+          contentPadding: AppDesign.dialogContentPadding,
+          actionsPadding: AppDesign.dialogActionsPadding,
+          content: SizedBox(
+            width: 620,
+            child: snapshot.hasError
+                ? SelectableText('${snapshot.error}')
+                : const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text('正在读取模块详情…'),
+                    ],
+                  ),
+          ),
+          actions: [
+            NativeUi(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('关闭'),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }

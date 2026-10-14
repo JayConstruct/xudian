@@ -15,6 +15,7 @@ import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
 import 'package:task_app/core/ui/app_repository_links.dart';
+import 'package:task_app/core/ui/ui_icon.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
@@ -63,6 +64,13 @@ void main() {
     expect(find.text('关于序点'), findsOneWidget);
     expect(find.text(_projectUrl), findsOneWidget);
     expect(find.text(_modulesUrl), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppRepositoryLinks),
+        matching: find.byType(UiIcon),
+      ),
+      findsNWidgets(5),
+    );
     await tester.tap(find.text('项目地址'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('模块仓库'));

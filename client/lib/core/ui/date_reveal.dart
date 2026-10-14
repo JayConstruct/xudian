@@ -401,9 +401,12 @@ class _DateRevealState extends State<DateReveal> with TickerProviderStateMixin {
         key: contentBoundaryKey,
         child: IgnorePointer(
           ignoring: prepared && widget.blockInteraction,
-          child: ExcludeSemantics(
+          child: ExcludeFocus(
             excluding: prepared && widget.blockInteraction,
-            child: widget.child,
+            child: ExcludeSemantics(
+              excluding: prepared && widget.blockInteraction,
+              child: widget.child,
+            ),
           ),
         ),
       ),

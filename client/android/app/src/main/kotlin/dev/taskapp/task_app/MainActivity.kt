@@ -2,19 +2,74 @@ package dev.taskapp.task_app
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Bundle
+import android.os.SystemClock
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.TimeZone
+import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
     private var captureWindow: BrowserCaptureDialog? = null
     private var pendingSave: MethodChannel.Result? = null
     private var pendingBytes: ByteArray? = null
     private val saveRequest = 41201
+    private var startupReported = false
+    private var activityCreateUptimeMs = 0L
+    private var startupToken = ""
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        activityCreateUptimeMs = SystemClock.uptimeMillis()
+        val token = intent.getStringExtra("xudian.benchmark.launchToken")
+        if (token != null && Regex("^[a-f0-9]{32}$").matches(token)) {
+            startupToken = " launchToken=$token"
+        }
+        super.onCreate(savedInstanceState)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "xudian.host/startup")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "startupTimings") {
+                    val phases = call.argument<List<Map<String, Any>>>("phases")
+                    if (phases == null || phases.size > 96) {
+                        result.error("arguments", "Invalid startup timings", null)
+                    } else {
+                        for (phase in phases) {
+                            Log.i("XudianStartupPhases", JSONObject(phase).toString() + startupToken)
+                        }
+                        Log.i("XudianStartupPhases", "complete=true" + startupToken)
+                        result.success(null)
+                    }
+                } else if (call.method == "startupUnavailable") {
+                    val outcome = call.argument<String>("outcome")
+                    if (outcome != "restoreError" && outcome != "noWorkspace") {
+                        result.error("arguments", "Invalid startup outcome", null)
+                    } else {
+                        if (!startupReported) {
+                            startupReported = true
+                            Log.i("XudianStartup", "outcome=$outcome workspaceReadyMs=${SystemClock.uptimeMillis() - activityCreateUptimeMs}$startupToken")
+                        }
+                        result.success(null)
+                    }
+                } else if (call.method != "reportFullyDrawn") {
+                    result.notImplemented()
+                } else if (call.arguments != null) {
+                    result.error("arguments", "reportFullyDrawn takes no arguments", null)
+                } else {
+                    if (!startupReported) {
+                        reportFullyDrawn()
+                        startupReported = true
+                        // Local, process-scoped benchmark marker with no page data.
+                        // Activity creation excludes process creation before onCreate.
+                        Log.i("XudianStartup", "outcome=ready workspaceReadyMs=${SystemClock.uptimeMillis() - activityCreateUptimeMs}$startupToken")
+                    }
+                    result.success(null)
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "xudian.host/clock")
             .setMethodCallHandler { call, result ->
                 if (call.method != "systemTimezone") {
@@ -36,7 +91,11 @@ class MainActivity : FlutterActivity() {
                                 val window = BrowserCaptureDialog(
                                     this,
                                     call.argument<String>("url") ?: "",
-                                    call.argument<String>("script") ?: ""
+                                    call.argument<String>("script") ?: "",
+                                    BrowserAppearance.from(
+                                        this,
+                                        call.argument<Map<String, Any?>>("appearance")
+                                    )
                                 ) { payload ->
                                     captureWindow = null
                                     result.success(payload)

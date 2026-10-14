@@ -11,7 +11,7 @@ class SettingsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+    padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
     children: children,
   );
 }
@@ -28,7 +28,11 @@ class SettingsGroup extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (title != null) SectionHeading(title: title!),
+          if (title != null)
+            SectionHeading(
+              title: title!,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
           for (var i = 0; i < children.length; i++) ...[
             if (i > 0) const Divider(indent: 20, endIndent: 20),
             children[i],
@@ -89,7 +93,7 @@ class SettingsNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(4, 8, 4, 16),
+    padding: const EdgeInsets.only(top: 8, bottom: 16),
     child: Text(
       text,
       style: Theme.of(context).textTheme.bodyMedium

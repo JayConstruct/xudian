@@ -54,16 +54,21 @@ final moduleHostProvider = FutureProvider<ModuleHost>(
       await rootBundle.loadString('assets/modules/catalog.json'),
     ) as List).map(object).toList();
     // Bundled identities retain the author repository even on older installs.
-    for (final entry in catalog) {
-      await store.db.customStatement(
-        '''INSERT OR IGNORE INTO host_meta(key,value)
-      SELECT ?,? WHERE EXISTS(SELECT 1 FROM host_packages
-      WHERE module_id=? AND origin='preinstalled')''',
-        [
-          'module-repository:${entry['id']}',
-          'JayConstruct/xudian',
-          entry['id'],
-        ],
+    // One statement avoids a database round trip for every catalog entry.
+    final bundledIds = catalog.map((entry) => entry['id']).toSet().toList();
+    if (bundledIds.isNotEmpty) {
+      await UiLoadTrace.run(
+        'host.defaults.metadata',
+        () => store.db.customStatement(
+          """INSERT OR IGNORE INTO host_meta(key,value)
+          SELECT DISTINCT 'module-repository:' || module_id, ?
+          FROM host_packages
+          WHERE origin='preinstalled'
+            AND module_id IN (${List.filled(bundledIds.length, '?').join(',')})
+            AND NOT EXISTS (SELECT 1 FROM host_meta
+              WHERE key='module-repository:' || host_packages.module_id)""",
+          ['JayConstruct/xudian', ...bundledIds],
+        ),
       );
     }
     final marker = await store.sql(

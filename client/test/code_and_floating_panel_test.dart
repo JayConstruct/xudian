@@ -1,10 +1,74 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:task_app/core/ui/ui_design.dart';
 import 'package:task_app/core/ui/code_preview_dialog.dart';
 import 'package:task_app/core/ui/draggable_floating_panel.dart';
 
+Widget _testApp({
+  required Widget home,
+  Brightness brightness = Brightness.light,
+}) => ProviderScope(
+  child: MaterialApp(theme: AppDesign.theme(brightness), home: home),
+);
+
 void main() {
+  testWidgets(
+    'failed code copy keeps dialog open and retry shows only a transient success',
+    (tester) async {
+      var failing = true;
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            if (failing) throw PlatformException(code: 'clipboard-unavailable');
+            copied = (call.arguments as Map)['text'] as String;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await tester.pumpWidget(
+        _testApp(
+          home: const CodePreviewDialog(
+            title: '调用方式',
+            sections: [
+              {'title': '组件', 'code': 'ui.component()'},
+            ],
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('copy-all-code')));
+      await tester.pumpAndSettle();
+      expect(find.text('复制失败，请重试'), findsOneWidget);
+      expect(find.byType(CodePreviewDialog), findsOneWidget);
+      expect(find.textContaining('已复制：'), findsNothing);
+      failing = false;
+      await tester.tap(find.text('重试复制'));
+      await tester.pumpAndSettle();
+      expect(copied, 'ui.component()');
+      expect(find.text('复制失败，请重试'), findsNothing);
+      expect(find.text('已复制：全部调用方式'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(CodePreviewDialog),
+          matching: find.textContaining('已复制：'),
+        ),
+        findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('已复制：'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('code popup copies a section and all exact multiline code', (
     tester,
   ) async {
@@ -31,7 +95,7 @@ void main() {
     const first = "await ui.notify({\n  message: '完成',\n});";
     const second = "if (event?.type === 'press') {\n  state.ready = true;\n}";
     await tester.pumpWidget(
-      MaterialApp(
+      _testApp(
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
@@ -55,6 +119,13 @@ void main() {
     await tester.pump();
     expect(clipboard, first);
     expect(find.text('已复制：组件调用'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(CodePreviewDialog),
+        matching: find.textContaining('已复制：'),
+      ),
+      findsNothing,
+    );
     await tester.tap(find.byKey(const ValueKey('copy-all-code')));
     await tester.pump();
     expect(clipboard, '$first\n\n$second');
@@ -63,6 +134,8 @@ void main() {
     await tester.tap(find.byTooltip('关闭调用方式'));
     await tester.pumpAndSettle();
     expect(find.byType(CodePreviewDialog), findsNothing);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
   });
 
   testWidgets(
@@ -72,7 +145,7 @@ void main() {
       addTearDown(viewport.dispose);
       var presses = 0, closes = 0;
       await tester.pumpWidget(
-        MaterialApp(
+        _testApp(
           home: Scaffold(
             body: ValueListenableBuilder(
               valueListenable: viewport,
@@ -143,29 +216,40 @@ void main() {
     },
   );
 
-  testWidgets(
-    'long code title keeps copying and closing accessible at large text',
-    (tester) async {
-      tester.view.physicalSize = const Size(320, 600);
-      tester.view.devicePixelRatio = 1;
-      tester.platformDispatcher.textScaleFactorTestValue = 2;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CodePreviewDialog(
-            title: '长标题' * 40,
-            sections: const [
-              {'title': '组件', 'code': 'ui.component()'},
-            ],
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'long code title keeps copying and closing accessible at large text $brightness',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 600);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pumpWidget(
+          _testApp(
+            brightness: brightness,
+            home: CodePreviewDialog(
+              title: '长标题' * 40,
+              sections: const [
+                {'title': '组件', 'code': 'ui.component()'},
+              ],
+            ),
           ),
-        ),
-      );
-      final copy = tester.getRect(find.byKey(const ValueKey('copy-all-code')));
-      expect(copy.bottom, lessThanOrEqualTo(600));
-      expect(find.byTooltip('关闭调用方式'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+        );
+        final copy = tester.getRect(
+          find.byKey(const ValueKey('copy-all-code')),
+        );
+        expect(copy.bottom, lessThanOrEqualTo(600));
+        expect(find.byTooltip('关闭调用方式'), findsOneWidget);
+        final dialog = tester.widget<Dialog>(find.byType(Dialog));
+        expect(
+          dialog.shape,
+          AppDesign.smoothShape(radius: AppDesign.floatingRadius),
+        );
+        expect(dialog.insetPadding, AppDesign.dialogInsets);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }

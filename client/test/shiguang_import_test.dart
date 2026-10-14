@@ -243,7 +243,7 @@ void main() {
         'formValues': {'schoolSearch': 'AUFE WebVPN'},
       });
       expect(object(searched['state'])['schoolPage'], 0);
-      final rows = objects(object(searched['tree'])['children']).where(
+      final rows = nodes(searched['tree']).where(
         (node) =>
             node['type'] == 'listTile' &&
             object(node['event'])['type'] == 'selectSchool',
@@ -446,6 +446,7 @@ void main() {
     expect(await store.query(schedule, 'timetables', {}), isEmpty);
     host.interaction = (_, method, args) async {
       if (method == 'browser.capture') return payload();
+      if (method == 'ui.navigate') return true;
       expect(method, 'ui.dialog');
       return args['title'] == '选择导入目标'
           ? {'target': 'new'}
@@ -627,6 +628,11 @@ void main() {
         }),
       );
       expect(object(loaded['state'])['error'], isNull);
+      expect(
+        navigation?['page'],
+        'app.schedule.home',
+        reason: 'Configuration proceeds directly to actual changes',
+      );
       final preview = object(
         await host.invokePage(adapter.moduleId, 'render', {
           'state': loaded['state'],
@@ -760,7 +766,12 @@ export async function render({event, formValues={}}) {
       'context': context,
       'state': state,
     });
-    expect(dialogs, 2, reason: 'Handoff is consumed once even on a rerender');
+    expect(
+      dialogs,
+      1,
+      reason:
+          'New timetable skips target selection and handoff is consumed once',
+    );
     final preview = object(
       await host.invokePage(adapter.moduleId, 'render', {
         'context': context,
@@ -822,4 +833,176 @@ export async function render({event, formValues={}}) {
       expect(await store.query(schedule, 'timetables', {}), isEmpty);
     },
   );
+  test(
+    'login URL is normalized and remembered across page sessions per school',
+    () async {
+      final school = objects((await schools(search: 'AUFE WebVPN'))['items'])
+          .single;
+      final selected = object(
+        await host.invokePage(adapter.moduleId, 'render', {
+          'event': {'type': 'selectSchool', 'id': school['id']},
+        }),
+      );
+      host.interaction = (_, method, args) async {
+        expect(method, 'browser.capture');
+        expect(args['url'], 'https://jw.example.edu/path');
+        return null;
+      };
+      final canceled = object(
+        await host.invokePage(adapter.moduleId, 'render', {
+          'state': selected['state'],
+          'event': {'type': 'browser'},
+          'formValues': {'url': ' jw.example.edu/path '},
+        }),
+      );
+      expect(
+        object(canceled['replaceForms'])['url'],
+        'https://jw.example.edu/path',
+      );
+      final reopened = object(
+        await host.invokePage(adapter.moduleId, 'render', {
+          'event': {'type': 'selectSchool', 'id': school['id']},
+        }),
+      );
+      expect(object(reopened['state'])['url'], 'https://jw.example.edu/path');
+      host.interaction = (_, method, args) async {
+        expect(method, 'browser.capture');
+        expect(args['url'], 'http://jw.example.edu:8080');
+        return null;
+      };
+      await host.invokePage(adapter.moduleId, 'render', {
+        'event': {'type': 'browser'},
+        'formValues': {'url': 'http://jw.example.edu:8080'},
+      });
+      final fresh = object(
+        await host.invokePage(adapter.moduleId, 'render', {}),
+      );
+      expect(object(fresh['state'])['url'], 'http://jw.example.edu:8080');
+      var captures = 0;
+      host.interaction = (_, _, _) async {
+        captures++;
+        return null;
+      };
+      for (final url in [
+        'javascript:alert(1)',
+        'https://user:password@example.edu',
+        '',
+      ]) {
+        final invalid = object(
+          await host.invokePage(adapter.moduleId, 'render', {
+            'event': {'type': 'browser'},
+            'formValues': {'url': url},
+          }),
+        );
+        expect(object(invalid['state'])['error'], isNotNull);
+      }
+      expect(captures, 0);
+      expect(await store.query(schedule, 'courses', {}), isEmpty);
+    },
+  );
+
+  test('optional source and arbitrary first-week date produce stable imports with readable actual changes', () async {
+    String? planId;
+    var configurations = 0;
+    var sourceWeeks = [1, 3, 5];
+    host.interaction = (_, method, args) async {
+      if (method == 'files.readText') {
+        return jsonEncode(payload(weeks: sourceWeeks));
+      }
+      if (method == 'ui.dialog') {
+        if (args['title'] == '选择导入目标') {
+          final tables = await store.query(schedule, 'timetables', {});
+          return {'target': object(tables.single)['id']};
+        }
+        configurations++;
+        expect(args['presentation'], 'page');
+        final scope = objects(args['fields'])
+            .singleWhere((f) => f['key'] == 'scope');
+        expect(scope['required'], isNot(true));
+        return {
+          ...options,
+          'scope': '',
+          'firstMonday': '2026-09-09',
+          'displayWeekStart': '1',
+          'mode': 'merge',
+          'complete': false,
+        };
+      }
+      if (method == 'ui.navigate') {
+        planId = object(args['context'])['importPlanId'] as String;
+        return true;
+      }
+      if (method == 'ui.review') return false;
+      throw StateError(method);
+    };
+    final loaded = object(
+      await host.invokePage(adapter.moduleId, 'render', {
+        'event': {'type': 'json'},
+      }),
+    );
+    final draft = object(object(object(loaded['state'])['input'])['draft']);
+    expect(object(draft['timetable'])['firstMonday'], '2026-09-07');
+    expect(draft['scope'], 'shiguang:json/2026-09-07');
+    expect(planId, isNotNull);
+    expect(await store.query(schedule, 'courses', {}), isEmpty);
+    final preview = object(
+      await host.invokePage(schedule.moduleId, 'render', {
+        'context': {'pageId': 'app.schedule.imports', 'importPlanId': planId},
+      }),
+    );
+    final previewNodes = nodes(preview['tree']).toList();
+    expect(previewNodes.any((n) => n['title'] == '新增课程 · 数学'), isTrue);
+    expect(previewNodes.any((n) => n['title'] == '新增上课安排 · 数学'), isTrue);
+    expect(
+      previewNodes.any((n) => '${n['subtitle']}'.contains('教学周：1、3、5')),
+      isTrue,
+    );
+    final rejected = object(
+      await host.invokePage(schedule.moduleId, 'render', {
+        'state': preview['state'],
+        'context': {'pageId': 'app.schedule.imports'},
+        'event': {'type': 'confirmAdapter'},
+      }),
+    );
+    expect(object(rejected['state'])['adapterPlan'], isNotNull);
+    expect(await store.query(schedule, 'courses', {}), isEmpty);
+    final canceled = object(
+      await host.invokePage(schedule.moduleId, 'render', {
+        'state': rejected['state'],
+        'context': {'pageId': 'app.schedule.imports'},
+        'event': {'type': 'cancelAdapter'},
+      }),
+    );
+    expect(object(canceled['state'])['adapterPlan'], isNull);
+    expect(await store.query(schedule, 'courses', {}), isEmpty);
+    final importInteraction = host.interaction;
+    await providerSave(store.plan(planId!, adapter));
+    host.interaction = importInteraction;
+    final coursesBefore = await store.query(schedule, 'courses', {});
+    sourceWeeks = [1, 3, 7];
+    await host.invokePage(adapter.moduleId, 'render', {
+      'event': {'type': 'json'},
+    });
+    final updatedPreview = object(
+      await host.invokePage(schedule.moduleId, 'render', {
+        'context': {'pageId': 'app.schedule.imports', 'importPlanId': planId},
+      }),
+    );
+    expect(
+      nodes(updatedPreview['tree'])
+          .any((n) => '${n['subtitle']}'.contains('教学周：1、3、5 → 1、3、7')),
+      isTrue,
+    );
+    expect(
+      object((await store.query(schedule, 'meetings', {})).single)['weeks'],
+      [1, 3, 5],
+    );
+    await providerSave(store.plan(planId!, adapter));
+    expect(
+      await store.query(schedule, 'courses', {}),
+      coursesBefore,
+      reason: 'Automatic source identity must not duplicate the same courses',
+    );
+    expect(configurations, 2);
+  });
 }

@@ -90,6 +90,107 @@ void main() {
     }
   });
 
+  test(
+    'testing channel orders numeric prereleases and retains release checks',
+    () async {
+      final result =
+          await withReleases([
+            release('v0.2.0-alpha.12', prerelease: true),
+            release('v0.2.0-beta.2', prerelease: true),
+            release('v0.2.0-beta.10', prerelease: true),
+            release('v0.1.9'),
+            release('v9.0.0-beta.1', draft: true, prerelease: true),
+            release('modules-2026', prerelease: true),
+            release(
+              'v8.0.0-beta.1',
+              name: 'app.schedule.xmodule',
+              prerelease: true,
+            ),
+            release(
+              'v7.0.0-beta.1',
+              name: 'xudian-windows.zip',
+              prerelease: true,
+            ),
+            release('v6.0.0-beta.1', size: 0, prerelease: true),
+            release(
+              'v5.0.0-beta.1',
+              url: 'https://example.com/release',
+              prerelease: true,
+            ),
+            release(
+              'v4.0.0-beta.1',
+              download: 'https://example.com/app.apk',
+              prerelease: true,
+            ),
+            release('v3.0.0-nightly.1', prerelease: true),
+            release('v3.0.0-beta.01', prerelease: true),
+          ]).check(
+            installed,
+            AppUpdatePlatform.android,
+            channel: AppUpdateChannel.testing,
+          );
+      expect(result.updateAvailable, isTrue);
+      expect(result.release!.version.toString(), '0.2.0-beta.10');
+      expect(result.release!.isPrerelease, isTrue);
+    },
+  );
+
+  test('testing channel recognizes prerelease tags and GitHub flags', () async {
+    for (final candidate in [
+      release('v0.2.0-beta.3'),
+      release('v0.2.0', prerelease: true),
+    ]) {
+      final service = withReleases([candidate]);
+      expect(
+        (await service.check(installed, AppUpdatePlatform.android)).release,
+        isNull,
+      );
+      final result = await service.check(
+        installed,
+        AppUpdatePlatform.android,
+        channel: AppUpdateChannel.testing,
+      );
+      expect(result.updateAvailable, isTrue);
+      expect(result.release!.isPrerelease, isTrue);
+    }
+  });
+
+  test(
+    'testing channel advances beta to rc to stable without downgrades',
+    () async {
+      for (final scenario in [
+        ('0.2.0-beta.3', 'v0.2.0-rc.1', true),
+        ('0.2.0-rc.1', 'v0.2.0', true),
+        ('0.2.0', 'v0.2.0-rc.9', false),
+        ('0.2.0-beta.3+999', 'v0.2.0-beta.3', false),
+        ('0.2.0-beta.10', 'v0.2.0-beta.3', false),
+      ]) {
+        final result = await withReleases([release(scenario.$2)]).check(
+          InstalledAppVersion(scenario.$1, '999'),
+          AppUpdatePlatform.android,
+          channel: AppUpdateChannel.testing,
+        );
+        expect(
+          result.updateAvailable,
+          scenario.$3,
+          reason: '${scenario.$1} -> ${scenario.$2}',
+        );
+      }
+      final result =
+          await withReleases([
+            release('v0.2.0-beta.10', prerelease: true),
+            release('v0.2.0'),
+            release('v0.2.0-rc.1', prerelease: true),
+          ]).check(
+            installed,
+            AppUpdatePlatform.android,
+            channel: AppUpdateChannel.testing,
+          );
+      expect(result.release!.version.toString(), '0.2.0');
+      expect(result.release!.isPrerelease, isFalse);
+    },
+  );
+
   test('selects uploaded installers for the current platform', () async {
     final service = withReleases([
       release('v2.0.0', name: 'xudian-windows-x64.zip'),

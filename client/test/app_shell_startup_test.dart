@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/app/app.dart';
+import 'package:task_app/core/performance/startup_readiness.dart';
 import 'package:task_app/app/mobile_bottom_dock.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/host_providers.dart';
@@ -89,6 +90,47 @@ void main() {
     await db.close();
     await directory.delete(recursive: true);
   });
+  for (final restoreFails in [false, true]) {
+    testWidgets(
+      restoreFails
+          ? 'restore failure reports recovery outcome without fully drawn'
+          : 'no workspace reports recovery outcome without fully drawn',
+      (tester) async {
+        var reports = 0;
+        final failures = <String>[];
+        final startup = AppStartupReadiness(
+          reportFullyDrawn: () async => reports++,
+          reportUnavailable: (outcome) async => failures.add(outcome),
+        )..start();
+        final app = XudianApp();
+        final layout = _DelayedLayout()..ready.complete(UiLayout());
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          app.registry.dispose();
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              startupReadinessProvider.overrideWithValue(startup),
+              databaseProvider.overrideWith((_) async => db),
+              appPreferencesProvider.overrideWith(_Preferences.new),
+              moduleHostProvider.overrideWith((_) async {
+                if (restoreFails) throw StateError('Host unavailable');
+                return host;
+              }),
+              uiLayoutProvider.overrideWith(() => layout),
+            ],
+            child: app,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(reports, 0);
+        expect(failures, [restoreFails ? 'restoreError' : 'noWorkspace']);
+        expect(find.text('界面风格与恢复'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   for (final layoutFails in [false, true]) {
     testWidgets(
       layoutFails
@@ -99,6 +141,12 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
+        var startupReports = 0;
+        final startup = AppStartupReadiness(
+          reportFullyDrawn: () async {
+            startupReports++;
+          },
+        )..start();
         final hostReady = Completer<ModuleHost>();
         final layout = _DelayedLayout();
         final pages = _StartupPages();
@@ -118,6 +166,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              startupReadinessProvider.overrideWithValue(startup),
               databaseProvider.overrideWith((_) async => db),
               appPreferencesProvider.overrideWith(_Preferences.new),
               moduleHostProvider.overrideWith((_) {
@@ -137,6 +186,7 @@ void main() {
           reason: 'Layout reading must start while the host is still pending',
         );
         expect(pages.builds, isEmpty);
+        expect(startupReports, 0);
         hostReady.complete(host);
         await tester.pump();
         await tester.pump();
@@ -158,6 +208,7 @@ void main() {
         }
         await tester.pumpAndSettle();
         expect(layout.reads, 1);
+        expect(startupReports, 1);
         final dock = tester.widget<MobileBottomDock>(
           find.byType(MobileBottomDock),
         );

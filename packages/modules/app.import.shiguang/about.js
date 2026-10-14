@@ -6,7 +6,7 @@ const source=(title,url)=>({type:'column',children:[text(title,'muted'),{type:'r
 const license="MIT License\n\nCopyright (c) 2025 星河欲转\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n";
 export function aboutPage() {
   return {type:'column',children:[
-    text('拾光教务导入 · 1.5.0','heading'),
+    text('拾光教务导入 · 1.7.0','heading'),
     text('基于拾光开源适配脚本，将教务课程采集后转换为序点课表。'),
     {type:'sectionHeader',title:'源码地址'},
     source('拾光学校适配脚本仓库',repository),

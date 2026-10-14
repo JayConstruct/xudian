@@ -1,4 +1,5 @@
 import '../ui/native_ui.dart';
+import '../ui/ui_icon.dart';
 
 import 'dart:convert';
 
@@ -68,8 +69,17 @@ Widget _reviewContent(Object? details) {
 }
 
 class HostFormDialog extends StatefulWidget {
-  const HostFormDialog({super.key, required this.title, required this.fields});
+  const HostFormDialog({
+    super.key,
+    required this.title,
+    required this.fields,
+    this.description,
+    this.submitLabel = '继续',
+    this.presentation,
+  });
   final String title;
+  final String? description, presentation;
+  final String submitLabel;
   final List<Map<String, Object?>> fields;
   @override
   State<HostFormDialog> createState() => _HostFormDialogState();
@@ -136,6 +146,14 @@ class _HostFormDialogState extends State<HostFormDialog> {
       final key = field['key'] as String, type = field['type'];
       final text = controllers[key]?.text;
       if (text != null) result[key] = text;
+      if (field['normalizeToMonday'] == true && type == 'date') {
+        final date = parseInputDate(text);
+        if (date != null) {
+          result[key] = formatInputDate(
+            date.subtract(Duration(days: date.weekday - DateTime.monday)),
+          );
+        }
+      }
       if (field['required'] == true &&
           (result[key] == null ||
               result[key] == '' ||
@@ -197,11 +215,22 @@ class _HostFormDialogState extends State<HostFormDialog> {
         value: ranges[key],
         errorText: errors[key],
         clearable: field['clearable'] != false,
+        editable: field['editable'] != false,
+        helperText: field['helperText'] as String?,
         minDate: field['minDate'] as String?,
         maxDate: field['maxDate'] as String?,
         legacyDateTime: true,
         onChanged: (value) => setState(() {
           if (kind == TemporalInputKind.dateRange) ranges[key] = value;
+          if (kind == TemporalInputKind.date &&
+              field['normalizeToMonday'] == true) {
+            final date = parseInputDate(value);
+            if (date != null) {
+              controllers[key]!.text = formatInputDate(
+                date.subtract(Duration(days: date.weekday - DateTime.monday)),
+              );
+            }
+          }
           errors.remove(key);
         }),
       );
@@ -367,7 +396,12 @@ class _HostFormDialogState extends State<HostFormDialog> {
               signed: true,
             )
           : null,
-      decoration: InputDecoration(labelText: label, errorText: errors[key]),
+      decoration: InputDecoration(
+        labelText: label,
+        errorText: errors[key],
+        helperText: field['helperText'] as String?,
+        helperMaxLines: 3,
+      ),
       onChanged: (_) => setState(() => errors.remove(key)),
     );
   }
@@ -385,6 +419,11 @@ class _HostFormDialogState extends State<HostFormDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (widget.description != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Text(widget.description!),
+                ),
               for (final field in widget.fields)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 14),
@@ -403,10 +442,72 @@ class _HostFormDialogState extends State<HostFormDialog> {
         ),
         if (!instantSelection)
           NativeUi(
-            child: FilledButton(onPressed: submit, child: const Text('继续')),
+            child: FilledButton(
+              onPressed: submit,
+              child: Text(widget.submitLabel),
+            ),
           ),
       ],
     );
+    if (widget.presentation == 'page') {
+      return Dialog.fullscreen(
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+            leading: IconButton(
+              tooltip: '取消',
+              icon: const UiIcon(Icons.close_rounded),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          body: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 700),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (widget.description != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 24),
+                                child: Text(widget.description!),
+                              ),
+                            for (final field in widget.fields)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 20),
+                                child: _fieldWrap(field, _field(field)),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                  child: SizedBox(
+                    width: 700,
+                    child: NativeUi(
+                      child: FilledButton(
+                        onPressed: submit,
+                        child: Text(widget.submitLabel),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final form = UiComponent(
       ref: 'ui.page.form@1',
       props: {'title': widget.title},

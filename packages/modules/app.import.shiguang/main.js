@@ -12,8 +12,44 @@ const ref=serviceId=>({moduleId:'app.schedule',serviceId,majorVersion:1});
 const text=value=>({type:'text',text:value});
 const button=(label,type)=>({type:'button',text:label,event:{type}});
 const field=(key,label,value,type='text',extra={})=>({key,label,value,type,...extra});
+// Presentation preferences survive page sessions without writing schedule data.
+export function normalizeUrl(value) {
+  let url=String(value??'').trim();
+  if (!url) throw new Error('请填写教务登录网址');
+  if (url.length>4096) throw new Error('教务网址过长');
+  if (url.startsWith('//')) url='https:'+url;
+  else if (!/^https?:\/\//i.test(url)) {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^[^/:]+:\d+(?:[/?#]|$)/.test(url)) throw new Error('教务网址只支持 http 或 https');
+    url='https://'+url;
+  }
+  url=url.replace(/^https?/i,scheme=>scheme.toLowerCase());
+  if (!/^https?:\/\/[^/?#\s@]+(?:[/?#][^\s]*)?$/.test(url)) throw new Error('请输入有效的教务网址，不要包含账号或密码');
+  return url;
+}
+function sourceIdentity(state) {
+  if (state.sourceKind==='json'||state.sourceKind==='handoff') return state.sourceKind;
+  const chosen=selectedAdapter(state);
+  if (chosen && chosen.category!=='GENERAL_TOOL') return 'school:'+chosen.school;
+  return 'web:'+(state.url||'').replace(/^https?:\/\//i,'').split(/[/?#]/)[0].toLowerCase();
+}
+function preferenceKey(prefix,identity) {
+  // Short keys keep arbitrarily long school names out of host preference keys.
+  let hash=2166136261;
+  for (const char of identity) hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;
+  return prefix+'.'+hash.toString(16);
+}
+async function rememberedUrl(state,fallback='') {
+  const chosen=selectedAdapter(state);
+  const identity=chosen?.school||chosen?.id||'custom';
+  return await ui.preferences.get(preferenceKey('loginUrl',identity))||fallback;
+}
+async function rememberUrl(state) {
+  const chosen=selectedAdapter(state);
+  await ui.preferences.set(preferenceKey('loginUrl',chosen?.school||chosen?.id||'custom'),state.url);
+  await ui.preferences.set('lastLoginUrl',state.url);
+}
 function clearSourceDraft(state) {
-  delete state.input;delete state.plan;delete state.options;delete state.error;delete state.timezoneNotice;
+  delete state.input;delete state.payload;delete state.plan;delete state.options;delete state.error;delete state.timezoneNotice;
 }
 const views=new Set(['home','schools','general','about','detail']);
 function currentView(state) {
@@ -44,11 +80,13 @@ function detailTitle(state) {
 function response(state,replaceForms={}) {
   const view=currentView(state);
   const title=view==='schools'?'选择学校':view==='general'?'通用系统导入':view==='about'?'关于与致谢':view==='detail'?detailTitle(state):'拾光教务导入';
-  return {state,replaceForms,header:{title,...(view==='home'?{}:{backEvent:{type:'back'}})},tree:tree(state)};
+  return {state,replaceForms,header:{title,...(view==='home'?{}:{backEvent:{type:'back'}})},tree:{type:'transition',key:'importNavigation',effect:'slide',duration:280,replayKey:view,child:tree(state)}};
 }
-async function configure(payload,previous={}) {
+async function configure(payload,previous={},state={}) {
+  const identity=sourceIdentity(state);
+  previous={...(await ui.preferences.get(preferenceKey('semester',identity))||{}),...previous};
   const {timetables}=await services.query(ref('schedule.query.timetables'),{});
-  const target=await ui.dialog({title:'选择导入目标',fields:[field('target','课表','new','select',{required:true,options:[{value:'new',label:'新建课表'},...timetables.map(t=>({value:t.id,label:t.name}))]})]});
+  const target=timetables.length?await ui.dialog({title:'选择导入目标',description:'新建课表或更新已有课表。课程会先展示实际变更，再确认导入。',fields:[field('target','课表','new','select',{required:true,options:[{value:'new',label:'新建课表'},...timetables.map(t=>({value:t.id,label:t.name}))]})]}):{target:'new'};
   if (!target) return null;
   const base=timetables.find(t=>t.id===target.target),config=payload.config||{};
   // Existing targets keep their zone; only new data without a source zone uses
@@ -56,18 +94,21 @@ async function configure(payload,previous={}) {
   const explicit=base?.timezone??config.timezone??payload.timezone;
   const zone=explicit===undefined?await clock.systemTimezone():{zone:explicit,source:'explicit'};
   await clock.today(zone.zone);
-  const settings=await ui.dialog({title:'确认来源与学期配置',fields:[
-    field('name','课表名称',base?.name||previous.name||'教务导入课表','text',{required:true,maxLength:120}),
-    field('scope','来源标识（学校/账号别名/学年学期）',previous.scope||'','text',{required:true,maxLength:500}),
-    field('firstMonday','第一教学周周一',config.semesterStartDate?suggestedMonday(config):(base?.firstMonday||previous.firstMonday||''),'date',{required:true}),
-    field('totalWeeks','学期周数',config.semesterTotalWeeks??base?.totalWeeks??20,'number',{integer:true,min:1,max:100}),
-    field('displayWeekStart','每周起始日',String(config.firstDayOfWeek??base?.displayWeekStart??1),'select',{required:true,options:[{value:'1',label:'周一'},{value:'7',label:'周日'}]}),
+  const settings=await ui.dialog({title:'确认学期配置',presentation:'page',submitLabel:'查看实际变更',description:'确认第一教学周和学期周数，下一步会展示新增、修改和删除的内容。',fields:[
+    field('name','课表名称',base?.name||previous.name||(selectedAdapter(state)?.school?selectedAdapter(state).school+'课表':'教务导入课表'),'text',{required:true,maxLength:120}),
+    field('firstMonday','第一教学周',config.semesterStartDate?suggestedMonday(config):(base?.firstMonday||previous.firstMonday||''),'date',{required:true,normalizeToMonday:true,editable:false,clearable:false,helperText:'请选择本学期第一教学周的任意一天，系统自动换算为该周周一。'}),
+    field('totalWeeks','学期周数',config.semesterTotalWeeks??base?.totalWeeks??previous.totalWeeks??20,'number',{integer:true,min:1,max:100}),
+    field('displayWeekStart','每周起始日',String(config.firstDayOfWeek??base?.displayWeekStart??previous.displayWeekStart??1),'select',{required:true,options:[{value:'1',label:'周一'},{value:'7',label:'周日'}]}),
     ...(base?[field('mode','导入方式','merge','select',{required:true,options:[{value:'merge',label:'合并课程，保留其他安排'},{value:'replaceSource',label:'替换该来源的课程'}]})]:[]),
-    field('complete','确认来源包含本学期全部课程',false,'boolean'),
+    ...(base?[field('complete','采集结果包含本学期全部课程',false,'boolean',{helperText:'替换来源时，只有勾选此项才会移除来源中已消失的课程。'})]:[]),
+    field('scope','来源标识（可选）',previous.scopeAlias||'','text',{maxLength:500,helperText:'自动识别学校与学期；通常留空。同一学校多个账号，或更新旧导入时，可填写固定标识。'}),
   ]});
   if (!settings) return null;
-  const options={...settings,timezone:zone.zone,totalWeeks:Number(settings.totalWeeks),displayWeekStart:Number(settings.displayWeekStart),...(base?{timeSlots:base.periods}:{})};
+  const firstMonday=suggestedMonday({semesterStartDate:settings.firstMonday,firstDayOfWeek:1});
+  const scopeAlias=String(settings.scope||'').trim();
+  const options={...settings,firstMonday,scopeAlias,scope:scopeAlias||identity+'/'+firstMonday,timezone:zone.zone,totalWeeks:Number(settings.totalWeeks),displayWeekStart:Number(settings.displayWeekStart),...(base?{timeSlots:base.periods}:{})};
   const draft=convert({payload,options});
+  await ui.preferences.set(preferenceKey('semester',identity),{name:options.name,scopeAlias,totalWeeks:options.totalWeeks,displayWeekStart:options.displayWeekStart,firstMonday:options.firstMonday});
   if(zone.source==='fallback')draft.warnings.push(`设备时区未能获取，当前使用 ${zone.zone}`);
   return {options,timezoneNotice:zone.source==='fallback'?`设备时区未能获取，当前使用 ${zone.zone}。保存后可在课表高级设置中修改。`:null,input:{draft,mode:base?settings.mode:'new',...(base?{targetTimetableId:base.id}:{}),choices:{}}};
 }
@@ -83,6 +124,7 @@ async function prepare(state) {
 export async function render({state={},event,formValues={},context={}}) {
   let replaceForms={};
   initializeNavigation(state);
+  if (!state.urlLoaded) {state.urlLoaded=true;state.url=state.url||await ui.preferences.get('lastLoginUrl')||'';}
   if (currentView(state)==='schools' && formValues.schoolSearch!==undefined) state.schoolSearch=String(formValues.schoolSearch).trim();
   if (currentView(state)==='detail' && formValues.url!==undefined) state.url=String(formValues.url).trim();
   try {
@@ -109,10 +151,10 @@ export async function render({state={},event,formValues={},context={}}) {
       if (!chosen) throw new Error('学校脚本不存在，请重新选择');
       enterView(state,'detail');
       clearSourceDraft(state);
-      state.adapterId=chosen.id;state.url=chosen.url;state.choosingSchool=false;
+      state.adapterId=chosen.id;state.url=await rememberedUrl(state,chosen.url);state.choosingSchool=false;
       state.view='detail';state.sourceKind='browser';
       delete state.script;delete state.error;delete state.notice;
-      replaceForms.url=chosen.url;
+      replaceForms.url=state.url;
     }
     // Navigation context is untrusted input, not a permission or saved draft.
     // School adapters hand off JSON only; configuration and conversion remain
@@ -121,12 +163,13 @@ export async function render({state={},event,formValues={},context={}}) {
       state.handoffConsumed=true;
       const incoming=context.shiguangImport;
       if (incoming.version!==1 || !incoming.payload || typeof incoming.payload!=='object') throw new Error('学校模块的导入数据接口无效');
-      const configured=await configure(Array.isArray(incoming.payload)?{courses:incoming.payload}:incoming.payload);
-      if (configured) {enterView(state,'detail');state.options=configured.options;state.input=configured.input;state.timezoneNotice=configured.timezoneNotice;state.sourceKind='handoff';}
+      const sourcePayload=Array.isArray(incoming.payload)?{courses:incoming.payload}:incoming.payload;
+      const configured=await configure(sourcePayload,{}, {...state,sourceKind:'handoff'});
+      if (configured) {enterView(state,'detail');state.options=configured.options;state.input=configured.input;state.timezoneNotice=configured.timezoneNotice;state.sourceKind='handoff';state.payload=sourcePayload;await prepare(state);}
       else state.notice='已取消学校模块的导入';
     }
     if (event?.type==='customScript') {
-      const result=await ui.dialog({title:'使用拾光学校适配脚本',fields:[field('script','粘贴学校适配器完整 JavaScript',state.script||'','multiline',{required:true,maxLength:240000})]});
+      const result=await ui.dialog({title:'使用学校适配脚本',presentation:'page',submitLabel:'使用此脚本',description:'粘贴完整 JavaScript。脚本仅在教务网页中执行，采集结果经过预览确认后导入。',fields:[field('script','粘贴学校适配器完整 JavaScript',state.script||'','multiline',{required:true,maxLength:240000})]});
       if (result) {enterView(state,'detail');clearSourceDraft(state);state.script=result.script;delete state.adapterId;state.sourceKind='browser';state.notice='已选用学校脚本，仅在本次运行会话中保留；原导入预览已清除';}
     }
     if (event?.type==='defaultScript') {enterView(state,'detail');clearSourceDraft(state);delete state.script;delete state.adapterId;state.sourceKind='browser';state.notice='已切换为正方 HTML 通用脚本，原导入预览已清除';}
@@ -137,22 +180,28 @@ export async function render({state={},event,formValues={},context={}}) {
         if (raw==null) {state.notice=state.input?'已取消文件选择，仍保留上一次导入草稿':'已取消文件选择';return response(state,replaceForms);}
         payload=JSON.parse(raw);
       } else {
-        const url=String(formValues.url||state.url||'').trim();
-        state.url=url;
+        const url=normalizeUrl(formValues.url??state.url);
+        state.url=url;replaceForms.url=url;
+        await rememberUrl(state);
         const chosen=state.adapterId?await loadAdapter(state.adapterId):null;
         payload=await browser.capture({url,script:captureScript(state.script||chosen?.script||zhengfang)});
         if (payload==null) {state.notice=state.input?'已取消采集，仍保留上一次导入草稿':'已取消采集';return response(state,replaceForms);}
       }
-      const configured=await configure(Array.isArray(payload)?{courses:payload}:payload,state.options);
-      if (configured) {enterView(state,'detail');state.options=configured.options;state.input=configured.input;state.timezoneNotice=configured.timezoneNotice;state.sourceKind=event.type==='json'?'json':'browser';delete state.plan;delete state.error;delete state.notice;}
+      const sourcePayload=Array.isArray(payload)?{courses:payload}:payload;
+      const configured=await configure(sourcePayload,{}, {...state,sourceKind:event.type==='json'?'json':'browser'});
+      if (configured) {enterView(state,'detail');state.options=configured.options;state.input=configured.input;state.timezoneNotice=configured.timezoneNotice;state.sourceKind=event.type==='json'?'json':'browser';delete state.plan;delete state.error;delete state.notice;state.payload=sourcePayload;await prepare(state);}
       else state.notice=state.input?'已取消导入配置，仍保留上一次导入草稿':'已取消导入配置';
+    }
+    if (event?.type==='configure' && state.payload) {
+      const configured=await configure(state.payload,state.options,state);
+      if (configured) {state.options=configured.options;state.input=configured.input;state.timezoneNotice=configured.timezoneNotice;delete state.plan;await prepare(state);}
     }
     if (event?.type==='preview' && state.input) await prepare(state);
     if (event?.type==='conflicts' && state.plan?.result.conflicts?.length) {
-      const choices=await ui.dialog({title:'处理来源与本地修改冲突',fields:state.plan.result.conflicts.map(c=>field(c.key,`${c.field}：本地 ${JSON.stringify(c.local)} / 来源 ${JSON.stringify(c.source)}`,state.input.choices[c.key]||c.options?.[0]||'local','select',{required:true,options:c.options?c.options.map(value=>({value,label:value==='extra'?'保留为临时课':'撤销失效调课'})):[{value:'local',label:'保留本地'},{value:'source',label:'采用来源'}]}))});
+      const choices=await ui.dialog({title:'处理来源与本地修改冲突',presentation:'page',submitLabel:'重新查看实际变更',fields:state.plan.result.conflicts.map(c=>field(c.key,`${c.field}：本地 ${JSON.stringify(c.local)} / 来源 ${JSON.stringify(c.source)}`,state.input.choices[c.key]||c.options?.[0]||'local','select',{required:true,options:c.options?c.options.map(value=>({value,label:value==='extra'?'保留为临时课':'撤销失效调课'})):[{value:'local',label:'保留本地'},{value:'source',label:'采用来源'}]}))});
       if (choices) {state.input.choices={...state.input.choices,...choices};await prepare(state);}
     }
-    if (event?.type==='clear') {delete state.input;delete state.plan;delete state.error;delete state.notice;delete state.timezoneNotice;}
+    if (event?.type==='clear') {delete state.input;delete state.payload;delete state.plan;delete state.error;delete state.notice;delete state.timezoneNotice;}
   } catch(error) {state.error=error.message;delete state.plan;}
   return response(state,replaceForms);
 }
@@ -207,13 +256,13 @@ function detail(state) {
       ...(chosen&&compatibilityNote(chosen)?[text(compatibilityNote(chosen))]:[]),
       ...(chosen?.category==='GENERAL_TOOL'?[text('请填写本校教务网址。通用脚本不保证适用于该系统的所有版本。')]:[]),
     ]},
-    {type:'input',key:'url',text:'教务登录网址',inputMode:'url',value:state.url||''},
+    {type:'input',key:'url',text:'教务登录网址',inputMode:'url',value:state.url||'',helperText:'可直接输入域名，自动补全 https://；http:// 网址会保留。'},
     button('打开教务浏览器','browser'),
     text(state.script?'当前使用粘贴的学校脚本':chosen?'当前使用所选学校脚本':'当前使用正方 HTML 通用脚本，需页面支持 jQuery'),
     {...text('教务浏览器当前支持 Android。'),style:'muted'},
     ]:[]),
     ...(draft?[
-      {type:'column',children:[{type:'sectionHeader',title:'导入预览'},text(`${draft.timetable.name} · ${draft.courses.length} 门课程 · ${draft.meetings.length} 个安排`),text(`第一周 ${draft.timetable.firstMonday} · ${draft.timetable.totalWeeks} 周 · ${draft.timetable.periods.length} 节`),...draft.warnings.map(text),button('预览实际变更','preview'),...(state.plan?.result.blocked?[text(`${state.plan.result.conflicts.length} 项冲突`),button('处理导入冲突','conflicts')]:[]),button('取消本次导入','clear')]}
+      {type:'column',children:[{type:'sectionHeader',title:'导入预览'},text('1 采集课程 → 2 确认学期 → 3 查看实际变更 → 4 确认导入'),text(`${draft.timetable.name} · ${draft.courses.length} 门课程 · ${draft.meetings.length} 个安排`),text(`第一周 ${draft.timetable.firstMonday} · ${draft.timetable.totalWeeks} 周 · ${draft.timetable.periods.length} 节`),...draft.warnings.map(text),text(`来源：${state.options?.scopeAlias||'自动识别学校与学期'}`),button('查看实际变更','preview'),button('修改学期配置','configure'),...(state.plan?.result.blocked?[text(`${state.plan.result.conflicts.length} 项冲突`),button('处理导入冲突','conflicts')]:[]),button('取消本次导入','clear')]}
     ]:[]),
     ...(!isFile?[{type:'column',children:[
       {type:'sectionHeader',title:'脚本来源'},

@@ -1,5 +1,7 @@
 import 'ui_icon.dart';
 import 'native_ui.dart';
+import 'ui_design.dart';
+import 'ui_toast.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,11 +35,25 @@ class CodePreviewDialog extends StatefulWidget {
 }
 
 class _CodePreviewDialogState extends State<CodePreviewDialog> {
-  String? copied;
+  bool copying = false;
+  (String, String)? failedCopy;
 
   Future<void> copy(String code, String label) async {
-    await Clipboard.setData(ClipboardData(text: code));
-    if (mounted) setState(() => copied = label);
+    if (copying) return;
+    setState(() {
+      copying = true;
+      failedCopy = null;
+    });
+    try {
+      await Clipboard.setData(ClipboardData(text: code));
+      if (mounted) {
+        AppToast.show(context, message: '已复制：$label', kind: 'success');
+      }
+    } catch (_) {
+      if (mounted) setState(() => failedCopy = (code, label));
+    } finally {
+      if (mounted) setState(() => copying = false);
+    }
   }
 
   @override
@@ -46,21 +62,21 @@ class _CodePreviewDialogState extends State<CodePreviewDialog> {
     final size = MediaQuery.sizeOf(context);
     return NativeUi(
       child: Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: AppDesign.dialogInsets,
+        shape: AppDesign.smoothShape(radius: AppDesign.floatingRadius),
         clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxWidth: 640,
             maxHeight: (size.height - 96).clamp(120, 800),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: AppDesign.dialogTitlePadding,
+                child: Row(
                   children: [
                     Expanded(
                       child: Tooltip(
@@ -82,88 +98,105 @@ class _CodePreviewDialogState extends State<CodePreviewDialog> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final (index, section) in widget.sections.indexed)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        section['title'] as String,
-                                        style: theme.textTheme.titleSmall,
-                                      ),
-                                    ),
-                                    NativeUi(
-                                      child: TextButton.icon(
-                                        key: ValueKey('copy-code-$index'),
-                                        onPressed: () => copy(
-                                          section['code'] as String,
-                                          section['title'] as String,
-                                        ),
-                                        icon: const UiIcon(
-                                          Icons.copy_rounded,
-                                          size: 16,
-                                        ),
-                                        label: const Text('复制'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: theme
-                                        .colorScheme
-                                        .surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: SelectableText(
-                                    section['code'] as String,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontFamily: 'monospace',
-                                      height: 1.6,
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: AppDesign.dialogContentPadding,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final (index, section) in widget.sections.indexed)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      section['title'] as String,
+                                      style: theme.textTheme.titleSmall,
                                     ),
                                   ),
+                                  NativeUi(
+                                    child: TextButton.icon(
+                                      key: ValueKey('copy-code-$index'),
+                                      onPressed: copying
+                                          ? null
+                                          : () => copy(
+                                              section['code'] as String,
+                                              section['title'] as String,
+                                            ),
+                                      icon: const UiIcon(
+                                        Icons.copy_rounded,
+                                        size: 16,
+                                      ),
+                                      label: const Text('复制'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: ShapeDecoration(
+                                  color:
+                                      theme.colorScheme.surfaceContainerHighest,
+                                  shape: AppDesign.smoothShape(),
                                 ),
-                              ],
-                            ),
+                                child: SelectableText(
+                                  section['code'] as String,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    height: 1.6,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
                 ),
-                if (copied != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      '已复制：$copied',
-                      style: theme.textTheme.bodySmall,
-                    ),
+              ),
+              if (failedCopy case (final code, final label))
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        '复制失败，请重试',
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
+                      NativeUi(
+                        child: TextButton(
+                          onPressed: () => copy(code, label),
+                          child: const Text('重试复制'),
+                        ),
+                      ),
+                    ],
                   ),
-                NativeUi(
+                ),
+              Padding(
+                padding: AppDesign.dialogActionsPadding,
+                child: NativeUi(
                   child: FilledButton.tonalIcon(
                     key: const ValueKey('copy-all-code'),
-                    onPressed: () => copy(
-                      widget.sections
-                          .map((section) => section['code'])
-                          .join('\n\n'),
-                      '全部调用方式',
-                    ),
+                    onPressed: copying
+                        ? null
+                        : () => copy(
+                            widget.sections
+                                .map((section) => section['code'])
+                                .join('\n\n'),
+                            '全部调用方式',
+                          ),
                     icon: const UiIcon(Icons.copy_all_rounded),
                     label: const Text('复制全部'),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

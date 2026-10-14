@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../app/design_system.dart';
 import '../../app/app_toast.dart';
+import '../../core/app_updates/app_update_channel.dart';
 import '../../core/app_updates/github_app_updates.dart';
 import '../../core/ui/app_repository_links.dart';
 import '../../core/ui/native_ui.dart';
@@ -20,6 +21,8 @@ class AppUpdatePage extends ConsumerStatefulWidget {
 
 class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
   bool checking = false;
+  bool savingChannel = false;
+  AppUpdateChannel channel = AppUpdateChannel.stable;
   AppUpdateResult? result;
   String? error;
 
@@ -30,13 +33,19 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
   }
 
   Future<void> _check() async {
-    if (checking) return;
+    if (checking || savingChannel) return;
     setState(() {
       checking = true;
       error = null;
       result = null;
     });
     try {
+      if (ref.read(appUpdateChannelProvider).hasError) {
+        ref.invalidate(appUpdateChannelProvider);
+      }
+      final selectedChannel = await ref.read(appUpdateChannelProvider.future);
+      if (!mounted) return;
+      setState(() => channel = selectedChannel);
       if (ref.read(installedAppVersionProvider).hasError) {
         ref.invalidate(installedAppVersionProvider);
       }
@@ -44,7 +53,11 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
       if (!mounted) return;
       final checked = await ref
           .read(githubAppUpdatesProvider)
-          .check(installed, ref.read(appUpdatePlatformProvider));
+          .check(
+            installed,
+            ref.read(appUpdatePlatformProvider),
+            channel: selectedChannel,
+          );
       if (mounted) setState(() => result = checked);
     } catch (failure) {
       if (mounted) {
@@ -57,6 +70,25 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     } finally {
       if (mounted) setState(() => checking = false);
     }
+  }
+
+  Future<void> _changeChannel(bool testing) async {
+    if (checking || savingChannel) return;
+    setState(() => savingChannel = true);
+    try {
+      await ref
+          .read(appUpdateChannelProvider.notifier)
+          .save(testing ? AppUpdateChannel.testing : AppUpdateChannel.stable);
+    } catch (_) {
+      if (mounted) {
+        setState(() => savingChannel = false);
+        _notify('更新通道保存失败，请重试', kind: 'error');
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => savingChannel = false);
+    await _check();
   }
 
   void _notify(String message, {required String kind}) =>
@@ -85,12 +117,15 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     final installed = ref.watch(installedAppVersionProvider);
     final release = result?.release;
     final update = result?.updateAvailable == true;
+    final testing = channel == AppUpdateChannel.testing;
     final status = checking
         ? '正在检查更新…'
         : error != null
         ? '检查未完成'
         : release == null
-        ? '暂未发布 App 正式版本'
+        ? testing
+              ? '暂未发布 App 可用版本'
+              : '暂未发布 App 正式版本'
         : update
         ? '发现新版本 ${release.version}'
         : '当前已是最新版本';
@@ -117,6 +152,22 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
               ),
             ],
           ),
+          SettingsGroup(
+            title: '更新通道',
+            children: [
+              NativeUi(
+                protected: true,
+                child: SwitchListTile(
+                  title: const Text('测试通道'),
+                  subtitle: const Text(
+                    '开启后接收正式版及 alpha、beta、rc 测试版。测试版可能不稳定，安装前请备份数据。',
+                  ),
+                  value: testing,
+                  onChanged: checking || savingChannel ? null : _changeChannel,
+                ),
+              ),
+            ],
+          ),
           ContentSurface(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -137,15 +188,23 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
                     ),
                   const SizedBox(height: 16),
                   Text(status, style: Theme.of(context).textTheme.titleLarge),
+                  if (release?.isPrerelease == true) ...[
+                    const SizedBox(height: 8),
+                    const Text('测试版本'),
+                  ],
                   const SizedBox(height: 8),
                   Text(
                     error ??
                         (checking
                             ? '正在查询 GitHub 上的应用发布版本。'
                             : release == null
-                            ? '发布正式安装包后，可在这里检查并查看更新。'
+                            ? testing
+                                  ? '发布正式或测试安装包后，可在这里检查并查看更新。'
+                                  : '发布正式安装包后，可在这里检查并查看更新。'
                             : update
                             ? '可查看更新说明，并在 GitHub 下载适合设备的安装包。'
+                            : testing
+                            ? '没有发现比当前安装版本更新的正式版或测试版。'
                             : '没有发现比当前安装版本更新的正式版本。'),
                   ),
                   if (release?.publishedAt != null) ...[
@@ -163,7 +222,7 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
                       NativeUi(
                         protected: true,
                         child: FilledButton(
-                          onPressed: checking
+                          onPressed: checking || savingChannel
                               ? null
                               : update
                               ? () => _open(url)
@@ -183,7 +242,7 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
                         NativeUi(
                           protected: true,
                           child: OutlinedButton(
-                            onPressed: _check,
+                            onPressed: savingChannel ? null : _check,
                             child: const Text('重新检查'),
                           ),
                         ),
@@ -195,7 +254,10 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
           ),
           if (release != null && release.notes.trim().isNotEmpty) ...[
             const SizedBox(height: 16),
-            const SectionHeading(title: '更新说明'),
+            const SectionHeading(
+              title: '更新说明',
+              padding: EdgeInsets.symmetric(vertical: 12),
+            ),
             ContentSurface(
               child: Padding(
                 padding: const EdgeInsets.all(20),

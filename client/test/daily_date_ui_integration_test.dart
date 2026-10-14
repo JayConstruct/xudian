@@ -1054,6 +1054,12 @@ void main() {
           .widget<TextField>(find.byType(TextField))
           .controller!;
       expect(draft.text, '预取不会修改的草稿');
+      final inputFocus = tester
+          .widget<EditableText>(find.byType(EditableText))
+          .focusNode;
+      inputFocus.requestFocus();
+      await tester.pump();
+      expect(inputFocus.hasFocus, isTrue);
       expect(interactions, isEmpty);
       final gate = Completer<void>();
       addTearDown(() {
@@ -1082,6 +1088,14 @@ void main() {
       );
       expect(find.semantics.byLabel('明天的任务'), findsNothing);
       expect(find.byType(DailyDateStrip).hitTestable(), findsNothing);
+      expect(inputFocus.hasFocus, isFalse);
+      final revealedFocus = tester
+          .widget<EditableText>(find.byType(EditableText))
+          .focusNode;
+      expect(revealedFocus.canRequestFocus, isFalse);
+      revealedFocus.requestFocus();
+      await tester.pump();
+      expect(revealedFocus.hasFocus, isFalse);
       expect(find.byTooltip('前一天').hitTestable(), findsOneWidget);
       expect(find.byTooltip('后一天').hitTestable(), findsOneWidget);
       await tester.pump();
@@ -1103,6 +1117,10 @@ void main() {
         same(draft),
       );
       expect(draft.text, '预取不会修改的草稿');
+      expect(revealedFocus.canRequestFocus, isTrue);
+      revealedFocus.requestFocus();
+      await tester.pump();
+      expect(revealedFocus.hasFocus, isTrue);
       expect(interactions, isEmpty);
       gate.complete();
       await _settle(tester);

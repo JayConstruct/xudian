@@ -31,23 +31,31 @@ function installBridge(resolveValidator) {
       return true;
     } catch(error) {failed=true;throw error;}
   };
+  const dialog=(kind,details)=>transport.request?transport.request(kind,details):null;
+  const alert=async message=>transport.request?await dialog('alert',{title:'提示',content:String(message)}):window.alert(message);
   const promise={
-    showAlert:async (title,content,confirm)=>window.confirm(String(title)+'\n'+String(content)+(confirm?'\n'+confirm:'')),
+    showAlert:async (title,content,confirm)=>transport.request?await dialog('confirm',{title:String(title),content:String(content),confirmLabel:confirm?String(confirm):'继续'}):window.confirm(String(title)+'\n'+String(content)+(confirm?'\n'+confirm:'')),
     showPrompt:async (title,tip,initial='',validator)=>{
       for (;;) {
-        const value=window.prompt(String(title)+'\n'+String(tip),String(initial));
+        const value=transport.request?await dialog('prompt',{title:String(title),content:String(tip),initial:String(initial)}):window.prompt(String(title)+'\n'+String(tip),String(initial));
         if (value===null) return null;
         if (!validator) return value;
         const validate=typeof validator==='function'?validator:resolveValidator('('+validator+')');
         if (typeof validate!=='function') throw new Error('输入校验器需为函数');
         const error=await validate(value);
         if (error===false || error===undefined || error===null || error==='' || error==='false') return value;
-        window.alert(typeof error==='string'?error:'输入无效，请重新输入');initial=value;
+        await alert(typeof error==='string'?error:'输入无效，请重新输入');initial=value;
       }
     },
     showSingleSelection:async (title,items,selected=-1)=>{
       const choices=parse(items);
       if (!Array.isArray(choices)) throw new Error('选项需为数组');
+      if (transport.request) {
+        const index=await dialog('selection',{title:String(title),items:choices.map(String),selected});
+        if (index===null) return null;
+        if (!Number.isInteger(index)||index<0||index>=choices.length) throw new Error('选择结果无效');
+        return index;
+      }
       for (;;) {
         const value=window.prompt(String(title)+'\n'+choices.map((item,i)=>`${i+1}. ${item}`).join('\n'),selected>=0?String(selected+1):'');
         if (value===null) return null;

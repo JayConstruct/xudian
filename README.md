@@ -4,7 +4,7 @@
 
 源码仓库：[JayConstruct/xudian](https://github.com/JayConstruct/xudian)。
 
-App 支持从“设置 → 关于序点 → 检查更新”查询 GitHub 正式发布，查看更新说明并打开下载页。更新规则和正式签名发布流程见 [App 更新](docs/APP_UPDATES.md)。
+App 支持从“设置 → 关于序点 → 检查更新”查询 GitHub 正式发布，也可开启测试通道接收测试版，查看更新说明并打开下载页。更新规则和正式签名发布流程见 [App 更新](docs/APP_UPDATES.md)。
 
 首次安装 Android App 并从模块商店安装功能，见 [安装指南](docs/INSTALLATION.md)。[Android Actions](https://github.com/JayConstruct/xudian/actions/workflows/android.yml) 自动检查源码并构建 ARMv7、ARM64 和 x86_64 APK。
 

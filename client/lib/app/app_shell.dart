@@ -44,6 +44,7 @@ import 'mobile_bottom_dock.dart';
 import 'frosted_toolbar_surface.dart';
 import 'workspace_popup_menu.dart';
 import 'workspace_page_transition.dart';
+import '../core/performance/startup_readiness.dart';
 import 'more_workspace_page.dart';
 import 'workspace_date_title.dart';
 
@@ -102,19 +103,18 @@ class _AppShellState extends ConsumerState<AppShell> {
     try {
       // Resolve the persisted entry mounts alongside module restoration, before
       // the first workspace can choose or load its page.
-      await Future.wait<void>(
-        [
-          ref.read(moduleHostProvider.future).then<void>((value) {
-            host = value;
-          }),
-          ref.read(uiLayoutProvider.future).then<void>(
-            (_) {},
-            // Keep the existing layout recovery action available on read failure.
-            onError: (Object error, StackTrace stack) {},
-          ),
-        ],
-        eagerError: true,
-      );
+      await Future.wait<void>([
+        ref.read(moduleHostProvider.future).then<void>((value) {
+          host = value;
+        }),
+        ref
+            .read(uiLayoutProvider.future)
+            .then<void>(
+              (_) {},
+              // Keep the existing layout recovery action available on read failure.
+              onError: (Object error, StackTrace stack) {},
+            ),
+      ], eagerError: true);
       if (!mounted) return;
       platformBridge ??= HostPlatformBridge(host!.store);
       platformBridge!.attach(host!);
@@ -142,6 +142,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       });
     } catch (error) {
       if (mounted) {
+        ref.read(startupReadinessProvider).unavailable('restoreError');
         setState(() {
           restoring = false;
           restoreError = '恢复模块状态失败：$error';
@@ -183,6 +184,13 @@ class _AppShellState extends ConsumerState<AppShell> {
         return reviewDialog(context, '审核模块文件、数据、界面和权限', args);
       case 'grants.request':
         return reviewDialog(context, '授权模块调用（30分钟，最多20次写入）', args);
+      case 'browser.capture':
+        return platformBridge!.invoke(
+          caller,
+          method,
+          args,
+          browserTheme: Theme.of(context),
+        );
       case 'ui.dialog':
         return showDialog<Map<String, Object?>>(
           context: context,
@@ -190,6 +198,9 @@ class _AppShellState extends ConsumerState<AppShell> {
             moduleId: caller.moduleId,
             child: HostFormDialog(
               title: args['title'] as String? ?? '模块输入',
+              description: args['description'] as String?,
+              submitLabel: args['submitLabel'] as String? ?? '继续',
+              presentation: args['presentation'] as String?,
               fields: [
                 for (final f in args['fields'] as List? ?? []) object(f),
               ],
@@ -1077,6 +1088,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       (entry) => entry.opening == UiOpening.workspace && !entry.content,
     );
     if (workspace.isEmpty) {
+      ref.read(startupReadinessProvider).unavailable('noWorkspace');
       return Scaffold(
         body: Center(
           child: Column(
@@ -1281,6 +1293,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                     maxRetainedPages: 4,
                     retentionKeys: retentionKeys,
                     deferUntilReady: true,
+                    onDestinationReady: () =>
+                        ref.read(startupReadinessProvider).workspaceReady(),
                     child: Column(
                       children: [
                         WorkspaceChromeHeader(

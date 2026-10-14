@@ -329,61 +329,65 @@ class DayOverview extends StatelessWidget {
           const SizedBox(height: 22),
           IgnorePointer(
             ignoring: reveal?.isTransitioning == true,
-            child: ExcludeSemantics(
+            child: ExcludeFocus(
               excluding: reveal?.isTransitioning == true,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final shown = days.take(7).toList();
-                  final occurrences = <Object?, int>{};
-                  for (final entry in shown) {
-                    final date = entry['date'];
-                    occurrences[date] = (occurrences[date] ?? 0) + 1;
-                  }
-                  Key? dateKey(Map<String, Object?> entry) =>
-                      occurrences[entry['date']] == 1
-                      ? ValueKey('daily-date:${entry['date']}')
-                      : null;
-                  final textScale =
-                      MediaQuery.textScalerOf(context).scale(14) / 14;
-                  final cellWidth = 52 * textScale.clamp(1.0, double.infinity);
-                  if (constraints.maxWidth < shown.length * cellWidth) {
-                    return _ScrollableDateStrip(
-                      selectedDate: selectedDate ?? date,
-                      selectedIndex: shown.indexWhere(
-                        (day) => day['date'] == (selectedDate ?? date),
-                      ),
-                      cellWidth: cellWidth,
-                      viewportWidth: constraints.maxWidth,
+              child: ExcludeSemantics(
+                excluding: reveal?.isTransitioning == true,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final shown = days.take(7).toList();
+                    final occurrences = <Object?, int>{};
+                    for (final entry in shown) {
+                      final date = entry['date'];
+                      occurrences[date] = (occurrences[date] ?? 0) + 1;
+                    }
+                    Key? dateKey(Map<String, Object?> entry) =>
+                        occurrences[entry['date']] == 1
+                        ? ValueKey('daily-date:${entry['date']}')
+                        : null;
+                    final textScale =
+                        MediaQuery.textScalerOf(context).scale(14) / 14;
+                    final cellWidth =
+                        52 * textScale.clamp(1.0, double.infinity);
+                    if (constraints.maxWidth < shown.length * cellWidth) {
+                      return _ScrollableDateStrip(
+                        selectedDate: selectedDate ?? date,
+                        selectedIndex: shown.indexWhere(
+                          (day) => day['date'] == (selectedDate ?? date),
+                        ),
+                        cellWidth: cellWidth,
+                        viewportWidth: constraints.maxWidth,
+                        children: [
+                          for (final entry in shown)
+                            SizedBox(
+                              key: dateKey(entry),
+                              width: cellWidth,
+                              child: day(context, entry),
+                            ),
+                        ],
+                      );
+                    }
+                    if (DailyDateStrip.supports(shown, selectedDate ?? date)) {
+                      return DailyDateStrip(
+                        days: shown,
+                        selectedDate: selectedDate ?? date,
+                        width: constraints.maxWidth,
+                        animate: reveal == null,
+                        onChanged: onChanged,
+                        cellBuilder: (entry) => day(context, entry),
+                      );
+                    }
+                    return Row(
                       children: [
                         for (final entry in shown)
-                          SizedBox(
+                          Expanded(
                             key: dateKey(entry),
-                            width: cellWidth,
                             child: day(context, entry),
                           ),
                       ],
                     );
-                  }
-                  if (DailyDateStrip.supports(shown, selectedDate ?? date)) {
-                    return DailyDateStrip(
-                      days: shown,
-                      selectedDate: selectedDate ?? date,
-                      width: constraints.maxWidth,
-                      animate: reveal == null,
-                      onChanged: onChanged,
-                      cellBuilder: (entry) => day(context, entry),
-                    );
-                  }
-                  return Row(
-                    children: [
-                      for (final entry in shown)
-                        Expanded(
-                          key: dateKey(entry),
-                          child: day(context, entry),
-                        ),
-                    ],
-                  );
-                },
+                  },
+                ),
               ),
             ),
           ),
