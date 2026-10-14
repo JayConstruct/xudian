@@ -46,7 +46,9 @@ export function convert({payload, options = {}}) {
   const totalWeeks=integer(options.totalWeeks??config.semesterTotalWeeks??20,1,100,'学期周数');
   const displayWeekStart=integer(options.displayWeekStart??config.firstDayOfWeek??1,1,7,'每周起始日');
   if (![1,7].includes(displayWeekStart)) throw new Error('每周起始日仅支持周一或周日');
-  const timezone=text(options.timezone??'Asia/Shanghai','时区');
+  // Device defaults belong to UI configuration; conversion never changes an
+  // explicit source zone or reads a clock as a side effect.
+  const timezone=text(options.timezone??config.timezone??input.timezone,'时区');
   const warnings=[];
   const slots=input.timeSlots?.length?input.timeSlots:(options.timeSlots??defaultTimeSlots);
   if (!input.timeSlots?.length) warnings.push(options.timeSlots?'使用所选课表的现有作息，请确认与学校一致':'来源没有作息，使用12节作息模板，请确认与学校一致');

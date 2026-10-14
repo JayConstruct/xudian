@@ -14,6 +14,8 @@ class DownloadCancelled implements Exception {
   String toString() => '下载已取消';
 }
 
+enum ModuleDownloadStage { preparing, downloading, verifying, saving, ready }
+
 class DownloadCancellation {
   bool _cancelled = false;
   final _signal = Completer<void>();
@@ -245,10 +247,13 @@ class ModuleCatalogClient {
     Uri url, {
     DownloadCancellation? cancellation,
     void Function(int, int)? onProgress,
+    void Function()? onAttempt,
     required int maximumBytes,
   }) async {
     for (var attempt = 0; ; attempt++) {
       try {
+        cancellation?.check();
+        onAttempt?.call();
         return await _fetch(
           url,
           cancellation: cancellation,
@@ -345,15 +350,19 @@ class ModuleCatalogClient {
     CatalogVersion release, {
     DownloadCancellation? cancellation,
     void Function(int received, int total)? onProgress,
+    void Function(ModuleDownloadStage)? onStage,
     bool offline = false,
   }) async {
     cancellation?.check();
+    onStage?.call(ModuleDownloadStage.preparing);
     final cache = await _cache('package:${release.sha256}');
     if (await cache.exists()) {
       try {
+        onStage?.call(ModuleDownloadStage.verifying);
         final package = await _verify(await cache.readAsBytes(), release);
         cancellation?.check();
         onProgress?.call(release.size, release.size);
+        onStage?.call(ModuleDownloadStage.ready);
         return package;
       } on FormatException {
         await cache.delete();
@@ -367,12 +376,20 @@ class ModuleCatalogClient {
       release.url,
       cancellation: cancellation,
       onProgress: (received, _) => onProgress?.call(received, release.size),
+      onAttempt: () {
+        onStage?.call(ModuleDownloadStage.downloading);
+        onProgress?.call(0, release.size);
+      },
       maximumBytes: release.size,
     );
     cancellation?.check();
+    onStage?.call(ModuleDownloadStage.verifying);
     final package = await _verify(bytes, release);
     cancellation?.check();
+    onStage?.call(ModuleDownloadStage.saving);
     await _save(cache, bytes);
+    cancellation?.check();
+    onStage?.call(ModuleDownloadStage.ready);
     return package;
   }
 

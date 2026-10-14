@@ -20,6 +20,10 @@ void main() {
     folder = await Directory.systemTemp.createTemp('page-preparation-');
     host = ModuleHost(store: store, directory: folder);
     await host.initialize();
+    host.nativeServices['slow'] = NativeHostService(
+      {'id': 'slow', 'major': 1, 'kind': 'query', 'input': {'type': 'object'}, 'output': {'type': 'object'}},
+      (_, _, _) async => <String, Object?>{},
+    );
     interactions = [];
     host.interaction = (_, method, _) async {
       interactions.add(method);
@@ -33,7 +37,11 @@ void main() {
           'version': '1.0.0',
           'hostApi': '^1.20.0',
           'dataVersion': 1,
-          'permissions': ['ui', 'services.query:test.prepared/read@1'],
+          'permissions': [
+            'ui',
+            'services.query:test.prepared/read@1',
+            'services.query:app.host/slow@1',
+          ],
           'dependencies': [],
         },
         'entryPoint': 'main.js',
@@ -79,6 +87,10 @@ export async function read({effect}={}) {
 }
 export async function render({context={},state={}}={}) {
   renders++;
+  if(context.effect==='unawaited') {
+    services.query({moduleId:'app.host',serviceId:'slow',majorVersion:1},{});
+    return {state,tree:{type:'text',text:'pending'}};
+  }
   switch(context.effect) {
     case 'notify': await ui.notify({message:'visible'}); break;
     case 'dialog': await ui.dialog({title:'Dialog',fields:[]}); break;
@@ -219,6 +231,75 @@ export async function render({context={},state={}}={}) {
         await host.invokePage('test.prepared', 'render', {}),
       );
       expect(result['renders'], 1);
+    },
+  );
+
+  test('only side-effect-free foreground results are replayable', () async {
+    for (final context in <Map<String, Object?>>[
+      {},
+      {'effect': 'notify'},
+      {'effect': 'preferences'},
+      {'effect': 'ids'},
+      {'nestedEffect': 'ids'},
+    ]) {
+      bool? replayable;
+      await host.invokePage('test.prepared', 'render', {
+        'context': context,
+      }, onReplayable: (value) => replayable = value);
+      expect(replayable, context.isEmpty, reason: '$context');
+    }
+    bool? replayable;
+    await host.invokePage('test.prepared', 'render', {
+      'event': {'type': 'refresh'},
+    }, onReplayable: (value) => replayable = value);
+    expect(replayable, isFalse);
+  });
+
+  test('foreground executes before an already queued date prefetch', () async {
+    final gate = Completer<void>();
+    host.instances['test.prepared']!.workflowTail = gate.future;
+    final speculative = host.invokePage(
+      'test.prepared',
+      'render',
+      {},
+      readOnly: true,
+    );
+    final foreground = host.invokePage('test.prepared', 'render', {});
+    gate.complete();
+    expect(object(await foreground)['renders'], 1);
+    expect(object(await speculative)['renders'], 2);
+  });
+
+  test(
+    'unfinished reads cannot seed a cache or contaminate the next page',
+    () async {
+      final pending = Completer<Object?>();
+      host.nativeServices['slow'] = NativeHostService({
+        'id': 'slow',
+        'major': 1,
+        'kind': 'query',
+        'input': {'type': 'object'},
+        'output': {'type': 'object'},
+      }, (_, _, _) => pending.future);
+      bool? replayable;
+      await host.invokePage(
+        'test.prepared',
+        'render',
+        {
+          'context': {'effect': 'unawaited'},
+        },
+        readOnly: true,
+        onReplayable: (value) => replayable = value,
+      );
+      expect(replayable, isFalse);
+      pending.complete({});
+      await host.invokePage(
+        'test.prepared',
+        'render',
+        {},
+        onReplayable: (value) => replayable = value,
+      );
+      expect(replayable, isTrue);
     },
   );
 

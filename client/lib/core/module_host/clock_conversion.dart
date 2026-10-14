@@ -31,6 +31,25 @@ Map<String, Object?> clockToLocal(Map<String, Object?> args) {
   return {'date': _date(local), 'time': _time(local), 'weekday': local.weekday};
 }
 
+const clockToLocalBatchLimit = 256;
+
+List<Map<String, Object?>> clockToLocalMany(Map<String, Object?> args) {
+  final items = args['items'];
+  if (items is! List || items.length > clockToLocalBatchLimit) {
+    throw const FormatException('Expected at most 256 UTC conversion items');
+  }
+  // Preserve the single-item validation, timezone/DST behavior and order.
+  // A bad item rejects the entire request; no partial result crosses the bridge.
+  return [
+    for (final item in items)
+      clockToLocal(
+        item is Map<String, Object?>
+            ? item
+            : throw const FormatException('UTC conversion item must be an object'),
+      ),
+  ];
+}
+
 Map<String, Object?> clockToUtc(Map<String, Object?> args) {
   final date = string(args['date'], 'date');
   final time = string(args['time'], 'time');

@@ -75,6 +75,8 @@ jobs:
       - name: Analyze Flutter client
         working-directory: client
         run: flutter analyze --no-pub
+      - name: Check script result parity and bridge call counts
+        run: node --experimental-vm-modules scripts/module_host/page_reads_performance_test.mjs
       - name: Run Flutter regression tests
         working-directory: client
         run: flutter test --no-pub --concurrency=2 --reporter expanded
@@ -111,6 +113,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: xudian-android-release-${{ github.sha }}
@@ -122,8 +127,13 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           release_flags=(--latest)
+          notes_flags=(--generate-notes)
           if [[ "$RELEASE_TAG" == *-* ]]; then
-            release_flags=(--prerelease --latest=false --notes '测试版：包含日程界面、任务动画和运行时优化。使用 CI 开发签名，不保证能覆盖已有安装；安装前请备份数据，签名不匹配时不要直接卸载现有应用。正式版更新检查不会推荐此版本。真机性能仍待验证。')
+            release_flags=(--prerelease --latest=false)
+            notes_flags+=(--notes '测试版：使用 CI 开发签名，不保证能覆盖已有安装；安装前请备份数据，签名不匹配时不要直接卸载现有应用。正式版更新检查不会推荐此版本。真机性能仍待验证。')
+          fi
+          if [ -f "docs/releases/$RELEASE_TAG.md" ]; then
+            notes_flags=(--generate-notes --notes-file "docs/releases/$RELEASE_TAG.md")
           fi
           gh release create "$RELEASE_TAG" apk/*-release.apk apk/SHA256SUMS apk/SOURCE_COMMIT \
-            --verify-tag --title "序点 $RELEASE_TAG" --generate-notes "${release_flags[@]}"
+            --verify-tag --title "序点 $RELEASE_TAG" "${notes_flags[@]}" "${release_flags[@]}"

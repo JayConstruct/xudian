@@ -1,4 +1,4 @@
-import {services,ui,files,browser} from '@xudian/sdk';
+import {services,ui,files,browser,clock} from '@xudian/sdk';
 import {convert,suggestedMonday} from './convert.js';
 import {captureScript} from './bridge.js';
 import zhengfang from './zhengfang.js';
@@ -13,7 +13,7 @@ const text=value=>({type:'text',text:value});
 const button=(label,type)=>({type:'button',text:label,event:{type}});
 const field=(key,label,value,type='text',extra={})=>({key,label,value,type,...extra});
 function clearSourceDraft(state) {
-  delete state.input;delete state.plan;delete state.options;delete state.error;
+  delete state.input;delete state.plan;delete state.options;delete state.error;delete state.timezoneNotice;
 }
 const views=new Set(['home','schools','general','about','detail']);
 function currentView(state) {
@@ -51,19 +51,25 @@ async function configure(payload,previous={}) {
   const target=await ui.dialog({title:'选择导入目标',fields:[field('target','课表','new','select',{required:true,options:[{value:'new',label:'新建课表'},...timetables.map(t=>({value:t.id,label:t.name}))]})]});
   if (!target) return null;
   const base=timetables.find(t=>t.id===target.target),config=payload.config||{};
+  // Existing targets keep their zone; only new data without a source zone uses
+  // the device default. Pure conversion receives this resolved value explicitly.
+  const explicit=base?.timezone??config.timezone??payload.timezone;
+  const zone=explicit===undefined?await clock.systemTimezone():{zone:explicit,source:'explicit'};
+  await clock.today(zone.zone);
   const settings=await ui.dialog({title:'确认来源与学期配置',fields:[
     field('name','课表名称',base?.name||previous.name||'教务导入课表','text',{required:true,maxLength:120}),
     field('scope','来源标识（学校/账号别名/学年学期）',previous.scope||'','text',{required:true,maxLength:500}),
     field('firstMonday','第一教学周周一',config.semesterStartDate?suggestedMonday(config):(base?.firstMonday||previous.firstMonday||''),'date',{required:true}),
     field('totalWeeks','学期周数',config.semesterTotalWeeks??base?.totalWeeks??20,'number',{integer:true,min:1,max:100}),
-    field('timezone','课表时区',base?.timezone||'Asia/Shanghai','text',{required:true}),
     field('displayWeekStart','每周起始日',String(config.firstDayOfWeek??base?.displayWeekStart??1),'select',{required:true,options:[{value:'1',label:'周一'},{value:'7',label:'周日'}]}),
     ...(base?[field('mode','导入方式','merge','select',{required:true,options:[{value:'merge',label:'合并课程，保留其他安排'},{value:'replaceSource',label:'替换该来源的课程'}]})]:[]),
     field('complete','确认来源包含本学期全部课程',false,'boolean'),
   ]});
   if (!settings) return null;
-  const options={...settings,totalWeeks:Number(settings.totalWeeks),displayWeekStart:Number(settings.displayWeekStart),...(base?{timeSlots:base.periods}:{})};
-  return {options,input:{draft:convert({payload,options}),mode:base?settings.mode:'new',...(base?{targetTimetableId:base.id}:{}),choices:{}}};
+  const options={...settings,timezone:zone.zone,totalWeeks:Number(settings.totalWeeks),displayWeekStart:Number(settings.displayWeekStart),...(base?{timeSlots:base.periods}:{})};
+  const draft=convert({payload,options});
+  if(zone.source==='fallback')draft.warnings.push(`设备时区未能获取，当前使用 ${zone.zone}`);
+  return {options,timezoneNotice:zone.source==='fallback'?`设备时区未能获取，当前使用 ${zone.zone}。保存后可在课表高级设置中修改。`:null,input:{draft,mode:base?settings.mode:'new',...(base?{targetTimetableId:base.id}:{}),choices:{}}};
 }
 async function prepare(state) {
   const plan=await services.prepare(ref('schedule.import.prepare'),state.input);
@@ -116,7 +122,7 @@ export async function render({state={},event,formValues={},context={}}) {
       const incoming=context.shiguangImport;
       if (incoming.version!==1 || !incoming.payload || typeof incoming.payload!=='object') throw new Error('学校模块的导入数据接口无效');
       const configured=await configure(Array.isArray(incoming.payload)?{courses:incoming.payload}:incoming.payload);
-      if (configured) {enterView(state,'detail');state.options=configured.options;state.input=configured.input;state.sourceKind='handoff';}
+      if (configured) {enterView(state,'detail');state.options=configured.options;state.input=configured.input;state.timezoneNotice=configured.timezoneNotice;state.sourceKind='handoff';}
       else state.notice='已取消学校模块的导入';
     }
     if (event?.type==='customScript') {
@@ -138,7 +144,7 @@ export async function render({state={},event,formValues={},context={}}) {
         if (payload==null) {state.notice=state.input?'已取消采集，仍保留上一次导入草稿':'已取消采集';return response(state,replaceForms);}
       }
       const configured=await configure(Array.isArray(payload)?{courses:payload}:payload,state.options);
-      if (configured) {enterView(state,'detail');state.options=configured.options;state.input=configured.input;state.sourceKind=event.type==='json'?'json':'browser';delete state.plan;delete state.error;delete state.notice;}
+      if (configured) {enterView(state,'detail');state.options=configured.options;state.input=configured.input;state.timezoneNotice=configured.timezoneNotice;state.sourceKind=event.type==='json'?'json':'browser';delete state.plan;delete state.error;delete state.notice;}
       else state.notice=state.input?'已取消导入配置，仍保留上一次导入草稿':'已取消导入配置';
     }
     if (event?.type==='preview' && state.input) await prepare(state);
@@ -146,7 +152,7 @@ export async function render({state={},event,formValues={},context={}}) {
       const choices=await ui.dialog({title:'处理来源与本地修改冲突',fields:state.plan.result.conflicts.map(c=>field(c.key,`${c.field}：本地 ${JSON.stringify(c.local)} / 来源 ${JSON.stringify(c.source)}`,state.input.choices[c.key]||c.options?.[0]||'local','select',{required:true,options:c.options?c.options.map(value=>({value,label:value==='extra'?'保留为临时课':'撤销失效调课'})):[{value:'local',label:'保留本地'},{value:'source',label:'采用来源'}]}))});
       if (choices) {state.input.choices={...state.input.choices,...choices};await prepare(state);}
     }
-    if (event?.type==='clear') {delete state.input;delete state.plan;delete state.error;delete state.notice;}
+    if (event?.type==='clear') {delete state.input;delete state.plan;delete state.error;delete state.notice;delete state.timezoneNotice;}
   } catch(error) {state.error=error.message;delete state.plan;}
   return response(state,replaceForms);
 }
@@ -159,7 +165,7 @@ function tree(state) {
   return detail(state);
 }
 function messages(state) {
-  return [...(state.notice?[text(state.notice)]:[]),...(state.error?[text('无法继续：'+state.error)]:[])];
+  return [...(state.timezoneNotice?[text(state.timezoneNotice)]:[]),...(state.notice?[text(state.notice)]:[]),...(state.error?[text('无法继续：'+state.error)]:[])];
 }
 function home(state) {
   const chosen=selectedAdapter(state);

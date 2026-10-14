@@ -105,7 +105,16 @@ void main() {
     load.complete(ByteData.sublistView(package.bytes));
     await fixtures.settleNative(tester);
     expect(find.text('确认模块安装计划'), findsOneWidget);
-    expect(find.textContaining('恢复测试模块 · 1.0.0'), findsOneWidget);
+    // The review groups the module name and install action into separate rows.
+    final review = find.byType(AlertDialog);
+    expect(
+      find.descendant(of: review, matching: find.text('恢复测试模块')),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(of: review, matching: find.text('安装并启用 · 1.0.0')),
+      findsOneWidget,
+    );
     expect(find.text('确认安装'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await fixtures.settleNative(tester);

@@ -10,6 +10,7 @@ import '../../app/app_icons.dart';
 import 'dart:async';
 
 import '../contracts/json_values.dart';
+import '../performance/ui_load_trace.dart';
 import '../ui/workspace_header.dart';
 import '../ui/workspace_typography.dart';
 import '../ui/ui_component.dart';
@@ -24,6 +25,7 @@ import '../ui/responsive_content_grid.dart';
 import '../ui/input_validation.dart';
 
 import 'package:flutter/material.dart';
+import 'package:xquickjs/error_message.dart';
 
 import '../../app/design_system.dart';
 import 'module_host.dart';
@@ -129,6 +131,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           next != businessRegistry ||
           (readModules?.contains(uiExamplesReadDependency) == true &&
               nextExamples != examplesRegistry);
+      if (nextExamples != examplesRegistry) {
+        dateCache.invalidateModules({uiExamplesReadDependency});
+      }
       businessRegistry = next;
       examplesRegistry = nextExamples;
       if (refresh) {
@@ -158,12 +163,14 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(ScriptPage old) {
     super.didUpdateWidget(old);
-    if (old.moduleId != widget.moduleId ||
+    if (!identical(old.host, widget.host) ||
+        old.moduleId != widget.moduleId ||
         old.handler != widget.handler ||
         canonicalJson(withoutRuntimePageContext(old.pageContext)) !=
             canonicalJson(withoutRuntimePageContext(widget.pageContext))) {
       epoch++;
       dateCache.clear();
+      cacheDataRevision = -1;
       datePrefetchRevision++;
       datePrefetchTimer?.cancel();
       busy = false;
@@ -264,9 +271,22 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   }
 
   void _checkDateCacheRevision() {
+    // Registry notifications are asynchronous too. A provider replacement can
+    // change a preparation's meaning even if this renderer's instance survives.
+    final nextRegistry = _businessRegistry();
+    final nextExamples = _examplesRegistry();
+    if (nextRegistry != businessRegistry) dateCache.clear();
+    if (nextExamples != examplesRegistry) {
+      dateCache.invalidateModules({uiExamplesReadDependency});
+    }
+    businessRegistry = nextRegistry;
+    examplesRegistry = nextExamples;
     final revision = widget.host.store.dataRevision;
     if (cacheDataRevision != revision) {
-      dateCache.clear();
+      dateCache.synchronizeDataRevision(
+        revision,
+        widget.host.store.moduleDataRevisions,
+      );
       cacheDataRevision = revision;
     }
   }
@@ -282,6 +302,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final instance = widget.host.instances[widget.moduleId];
     if (instance == null) return;
     final dataRevision = widget.host.store.dataRevision;
+    final registry = _businessRegistry();
+    final examples = _examplesRegistry();
     final selectedDate = pageContext['selectedDate'];
     bool canStart() =>
         mounted &&
@@ -290,6 +312,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         routeActive &&
         current == datePrefetchRevision &&
         dataRevision == widget.host.store.dataRevision &&
+        registry == _businessRegistry() &&
+        examples == _examplesRegistry() &&
         identical(instance, widget.host.instances[widget.moduleId]) &&
         selectedDate == pageContext['selectedDate'];
     datePrefetchTimer = Timer(delay, () async {
@@ -320,6 +344,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           shouldRun: isCurrent,
           load: (stillCurrent) async {
             Set<String> reads = const {};
+            var replayable = false;
             final result = await widget.host.invokePage(
               widget.moduleId,
               widget.handler,
@@ -327,8 +352,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               readOnly: true,
               shouldRun: stillCurrent,
               onReads: (value) => reads = value,
+              onReplayable: (value) => replayable = value,
             );
-            return result is Map
+            return result is Map && replayable
                 ? PreparedDatePage(result: object(result), reads: reads)
                 : null;
           },
@@ -381,27 +407,40 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final sentForms = Map<String, Object?>.of(formValues);
     final sentRevisions = Map<String, int>.of(formRevisions);
     try {
-      final input = <String, Object?>{
+      final input = freezeJson(<String, Object?>{
         'state': state,
         'context': requestContext,
         'event': event,
         'formValues': sentForms,
-      };
+      }) as Map<String, Object?>;
       _checkDateCacheRevision();
       final requestedDataRevision = widget.host.store.dataRevision;
+      final requestedRegistry = businessRegistry;
+      final requestedExamples = examplesRegistry;
+      final startedAt = DateTime.now();
       final prepared = instance == null
           ? null
           : dateCache.lookup(instance, input);
-      if (prepared != null) readModules = prepared.reads;
+      if (event == null && requestContext['selectedDate'] is String) {
+        UiLoadTrace.instant(
+          'page.cache',
+          arguments: {
+            'moduleId': widget.moduleId,
+            'handler': widget.handler,
+            'outcome': prepared == null ? 'miss' : 'hit',
+          },
+        );
+      }
+      Set<String>? resultReads = prepared?.reads;
+      var replayable = false;
       final result = object(
         prepared?.result ??
             await widget.host.invokePage(
               widget.moduleId,
               widget.handler,
               input,
-              onReads: (reads) {
-                if (mounted && current == epoch) readModules = reads;
-              },
+              onReads: (reads) => resultReads = reads,
+              onReplayable: (value) => replayable = value,
             ),
       );
       if (!mounted ||
@@ -415,6 +454,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           requestedDateIntent != dateIntentRevision ||
           event == null &&
               requestedDataRevision != widget.host.store.dataRevision ||
+          requestedRegistry != _businessRegistry() ||
+          resultReads?.contains(uiExamplesReadDependency) == true &&
+              requestedExamples != _examplesRegistry() ||
           runtimeRevision !=
               PageRuntimeContextScope.read(context)?.currentRevision()) {
         dirty = true;
@@ -423,6 +465,24 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       final patch = result.containsKey('runtimeContextPatch')
           ? validateRuntimeContextPatch(result['runtimeContextPatch'])
           : const <String, Object?>{};
+      readModules = resultReads;
+      // Seed only the exact successful request. Rebasing to returned state or
+      // newly registered forms could skip meaningful handler state transitions.
+      // Live draft edits and side-effectful foreground work are never replayed.
+      if (prepared == null &&
+          event == null &&
+          instance != null &&
+          replayable &&
+          resultReads != null &&
+          canonicalJson(input['formValues']) == canonicalJson(formValues) &&
+          canonicalJson(sentRevisions) == canonicalJson(formRevisions)) {
+        dateCache.remember(
+          instance,
+          input,
+          PreparedDatePage(result: result, reads: resultReads!),
+          startedAt: startedAt,
+        );
+      }
       setState(() {
         for (final key in result['clearForms'] as List? ?? []) {
           if (_unchangedForm(key as String, sentForms, sentRevisions)) {
@@ -484,7 +544,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     } catch (e) {
       if (mounted && current == epoch) {
         headerController?.clear(this);
-        setState(() => error = '$e');
+        setState(() => error = scriptErrorMessage(e));
       }
     } finally {
       if (mounted && current == epoch) {

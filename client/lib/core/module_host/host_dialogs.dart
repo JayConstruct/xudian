@@ -9,6 +9,7 @@ import '../ui/ui_component.dart';
 import '../ui/temporal_input.dart';
 import '../ui/input_validation.dart';
 import '../../app/design_system.dart';
+import 'data_change_review.dart';
 
 Future<bool> reviewDialog(
   BuildContext context,
@@ -21,14 +22,13 @@ Future<bool> reviewDialog(
         defaultOnly: true,
         child: NativeUi(
           child: AlertDialog(
+            titlePadding: AppDesign.dialogTitlePadding,
+            contentPadding: AppDesign.dialogContentPadding,
+            actionsPadding: AppDesign.dialogActionsPadding,
             title: Text(title),
             content: SizedBox(
               width: 700,
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  const JsonEncoder.withIndent('  ').convert(details),
-                ),
-              ),
+              child: SingleChildScrollView(child: _reviewContent(details)),
             ),
             actions: [
               NativeUi(
@@ -49,6 +49,23 @@ Future<bool> reviewDialog(
       ),
     ) ??
     false;
+
+Widget _reviewContent(Object? details) {
+  final summary = DataChangeSummary.tryParse(details);
+  if (summary != null) return DataChangeReview(summary: summary);
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (details is Map && details.containsKey('writes'))
+        const Text('无法生成可靠的数据摘要，请核对以下原始详情。'),
+      SelectableText(
+        const JsonEncoder.withIndent('  ').convert(details),
+        scrollPhysics: const NeverScrollableScrollPhysics(),
+      ),
+    ],
+  );
+}
 
 class HostFormDialog extends StatefulWidget {
   const HostFormDialog({super.key, required this.title, required this.fields});
@@ -358,9 +375,9 @@ class _HostFormDialogState extends State<HostFormDialog> {
   @override
   Widget build(BuildContext context) {
     final native = AlertDialog(
-      insetPadding: instantSelection
-          ? const EdgeInsets.symmetric(horizontal: 24, vertical: 24)
-          : null,
+      titlePadding: AppDesign.dialogTitlePadding,
+      contentPadding: AppDesign.dialogContentPadding,
+      actionsPadding: AppDesign.dialogActionsPadding,
       title: Text(widget.title),
       content: SizedBox(
         width: 540,

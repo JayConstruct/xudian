@@ -36,7 +36,7 @@ void main() {
           'version': '1.0.0',
           'hostApi': '^1.6.0',
           'dataVersion': 1,
-          'permissions': [],
+          'permissions': ['ui'],
           'dependencies': [],
         },
         'entryPoint': 'main.js',
@@ -52,6 +52,12 @@ void main() {
       {
         'main.js': r'''
 import {data,ui} from '@xudian/sdk';
+let stableRenders=0;
+export async function renderStable({state={},context={}}) {
+  await data.query('records',{});
+  if(context.notify) await ui.notify({message:'foreground'});
+  return {state,tree:{type:'text',text:'stable '+(++stableRenders)+' date '+context.selectedDate}};
+}
 export async function render({state={},event,context={}}) {
   await data.query('records',{});
   state={...state,count:(state.count||0)+1};
@@ -90,11 +96,12 @@ export async function render({state={},event,context={}}) {
     bool waitForRender = true,
     Map<String, Object?> pageContext = const {},
     WorkspaceHeaderController? headers,
+    String handler = 'render',
   }) async {
     Widget page = ScriptPage(
       host: host,
       moduleId: 'test.page',
-      handler: 'render',
+      handler: handler,
       pageContext: pageContext,
     );
     if (headers != null) {
@@ -122,6 +129,112 @@ export async function render({state={},event,context={}}) {
     if (waitForRender) await settle(tester);
     return ProviderScope.containerOf(tester.element(find.byType(ScriptPage)));
   }
+
+  testWidgets(
+    'a successful foreground date is replayed after an unrelated write',
+    (tester) async {
+      await show(
+        tester,
+        handler: 'renderStable',
+        pageContext: {'selectedDate': '2026-10-01'},
+      );
+      expect(find.text('stable 1 date 2026-10-01'), findsOneWidget);
+      await show(
+        tester,
+        handler: 'renderStable',
+        pageContext: {'selectedDate': '2026-10-05'},
+      );
+      expect(find.text('stable 2 date 2026-10-05'), findsOneWidget);
+      store.recordDataChange({'unrelated.module'});
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      host.instances['test.page']!.workflowTail = gate.future;
+      await show(
+        tester,
+        handler: 'renderStable',
+        pageContext: {'selectedDate': '2026-10-01'},
+      );
+      expect(find.text('stable 1 date 2026-10-01'), findsOneWidget);
+      gate.complete();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('foreground effects remain visible on every date visit', (
+    tester,
+  ) async {
+    var notifications = 0;
+    host.interaction = (_, method, _) async {
+      if (method == 'ui.notify') notifications++;
+      return null;
+    };
+    for (final date in ['2026-10-01', '2026-10-05', '2026-10-01']) {
+      await show(
+        tester,
+        handler: 'renderStable',
+        pageContext: {'selectedDate': date, 'notify': true},
+      );
+    }
+    expect(notifications, 3);
+    expect(find.text('stable 3 date 2026-10-01'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'a write without stream notification invalidates a visited date',
+    (tester) async {
+      await show(
+        tester,
+        handler: 'renderStable',
+        pageContext: {'selectedDate': '2026-10-01'},
+      );
+      await show(
+        tester,
+        handler: 'renderStable',
+        pageContext: {'selectedDate': '2026-10-05'},
+      );
+      await tester.runAsync(() async {
+        final actor = host.instances['test.page']!.actor;
+        final session = SnapshotSession(actor, 'no-notification');
+        await store.stage(session, actor, {
+          'writes': [
+            {
+              'collection': 'records',
+              'id': 'new',
+              'value': {'id': 'new'},
+            },
+          ],
+        });
+        await store.commit(
+          store.seal(session).id,
+          actor,
+          authorize: (_) {},
+          audit: false,
+        );
+      });
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      host.instances['test.page']!.workflowTail = gate.future;
+      await show(
+        tester,
+        handler: 'renderStable',
+        waitForRender: false,
+        pageContext: {'selectedDate': '2026-10-01'},
+      );
+      expect(
+        find.text('stable 1 date 2026-10-01', skipOffstage: false),
+        findsNothing,
+      );
+      gate.complete();
+      await settle(tester);
+      expect(find.text('stable 3 date 2026-10-01'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'first script frame keeps fast loading quiet and only shows feedback after 500ms',

@@ -63,16 +63,22 @@ class ResolvedCatalogModule {
     ModuleCatalogClient client, {
     DownloadCancellation? cancellation,
     void Function(int received, int total)? onProgress,
+    void Function(ModuleDownloadStage)? onStage,
     bool offline = false,
   }) async {
     cancellation?.check();
-    return package ??
-        await client.download(
-          release!,
-          cancellation: cancellation,
-          onProgress: onProgress,
-          offline: offline,
-        );
+    if (package != null) {
+      onStage?.call(ModuleDownloadStage.preparing);
+      onStage?.call(ModuleDownloadStage.ready);
+      return package!;
+    }
+    return await client.download(
+      release!,
+      cancellation: cancellation,
+      onProgress: onProgress,
+      onStage: onStage,
+      offline: offline,
+    );
   }
 }
 

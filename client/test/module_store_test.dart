@@ -237,7 +237,6 @@ Map<String, Object?> _version(
 Finder _search() => find.byWidgetPredicate(
   (widget) => widget is TextField && widget.decoration?.hintText == _searchHint,
 );
-Finder _chip(String label) => find.widgetWithText(ChoiceChip, label);
 Finder _card(String name) =>
     find.ancestor(of: find.text(name), matching: find.byType(Card));
 
@@ -247,12 +246,16 @@ Future<void> _choose(WidgetTester tester, String label) async {
       .position
       .jumpTo(0);
   await tester.pump();
-  await tester.scrollUntilVisible(
-    _chip(label),
-    200,
-    scrollable: find.byType(Scrollable).first,
-  );
-  await tester.tap(_chip(label));
+  final kind = const ['全部', '推荐', '已安装', '未安装', '可更新'].contains(label)
+      ? 'status'
+      : 'category';
+  final selector = find.byKey(ValueKey('catalog-filter-$kind'));
+  await tester.ensureVisible(selector);
+  await tester.tap(selector);
+  await tester.pumpAndSettle();
+  final option = find.widgetWithText(PopupMenuItem<String>, label);
+  await tester.ensureVisible(option);
+  await tester.tap(option);
   await tester.pumpAndSettle();
 }
 
@@ -465,7 +468,7 @@ void main() {
         () => fixture.host.installedPackages(),
       );
       expect(installed!['private.schedule']!.version, '1.1.0');
-      expect(find.text('模块安装完成'), findsOneWidget);
+      expect(find.textContaining('模块安装完成'), findsOneWidget);
       expect(find.text(_names[0]), findsNothing);
       expect(tester.takeException(), isNull);
       await fixture.closeHost(tester);
@@ -473,7 +476,7 @@ void main() {
   );
 
   testWidgets(
-    'store search, category chips and module action fit 320px at doubled text',
+    'store search, category selectors and module action fit 320px at doubled text',
     (tester) async {
       tester.view.physicalSize = const Size(320, 800);
       tester.view.devicePixelRatio = 1;

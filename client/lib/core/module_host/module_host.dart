@@ -14,10 +14,11 @@ import 'package:drift/native.dart';
 import '../../data/app_database.dart';
 
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as zones;
+import 'package:timezone/data/latest_all.dart' as zones;
 import 'package:xquickjs/xquickjs.dart';
 
 import '../contracts/json_values.dart';
+import '../performance/ui_load_trace.dart';
 import '../ui/ui_pack.dart';
 import 'collection_store.dart';
 import 'clock_conversion.dart';
@@ -25,6 +26,8 @@ import 'json_schema.dart';
 import 'legacy_data_migration.dart';
 import 'module_package.dart';
 import 'service_directory_resource.dart';
+import 'system_timezone.dart';
+import 'page_workflow_queue.dart';
 
 class ServiceRef {
   const ServiceRef(this.moduleId, this.serviceId, this.major);
@@ -46,6 +49,13 @@ class ServiceRef {
   };
 }
 
+class _PageReplayability {
+  _PageReplayability(this.safe);
+  bool safe;
+  int pendingBridges = 0;
+  void markUnsafe() => safe = false;
+}
+
 class ScriptInstance {
   ScriptInstance(this.package, this.actor);
   final ScriptPackage package;
@@ -60,14 +70,18 @@ class ScriptInstance {
   set workflow(JavaScriptWorker value) => _workflow = value;
   bool get hasWorkers => _worker != null && _workflow != null;
   void closeWorkers() {
+    pageWorkflow.close();
     _worker?.close();
     _workflow?.close();
   }
 
-  Future<void> workflowTail = Future.value();
+  final pageWorkflow = PageWorkflowQueue();
+  Future<void> get workflowTail => pageWorkflow.idle;
+  set workflowTail(Future<void> value) => pageWorkflow.waitFor(value);
   SnapshotSession? session;
   Set<String>? pageReads;
   bool pagePreparation = false;
+  _PageReplayability? _pageReplayability;
   final subscriptions = <String, StreamSubscription>{};
   Future<void> tail = Future.value();
   Future<Object?> run(
@@ -146,7 +160,13 @@ class HostInstallBatchPlan {
 }
 
 class ModuleHost {
-  ModuleHost({required this.store, required this.directory, this.interaction});
+  ModuleHost({
+    required this.store,
+    required this.directory,
+    this.interaction,
+    this.systemTimezoneResolver,
+  });
+  SystemTimezoneResolver? systemTimezoneResolver;
   final CollectionStore store;
   final Directory directory;
   // Native polling outlives installation transactions. Keep its timers in the
@@ -192,7 +212,9 @@ class ModuleHost {
     return next;
   }
 
-  Future<void> initialize() async {
+  Future<void> initialize() => UiLoadTrace.run('host.initialize', _initialize);
+
+  Future<void> _initialize() async {
     zones.initializeTimeZones();
     store.registerNativeResource(ServiceDirectoryResource(_directoryBaseline));
     await directory.create(recursive: true);
@@ -243,12 +265,18 @@ class ModuleHost {
     final pending = {
       for (final row in installations) row['module_id'] as String: row,
     };
+    // Dependency retries reuse only this restore's verified bytes. A later
+    // initialization still reads and validates every committed package again.
+    final verifiedPackages = <String, ScriptPackage>{};
     while (pending.isNotEmpty) {
       var progress = false;
       for (final id in pending.keys.toList()) {
         final row = pending[id]!;
         try {
-          final package = await _storedPackage(id, row['version'] as String);
+          final package = verifiedPackages[id] ??= await _storedPackage(
+            id,
+            row['version'] as String,
+          );
           if (package.dependencies.any(pending.containsKey)) continue;
           _validateDependencies(package);
           await _activate(
@@ -287,7 +315,14 @@ class ModuleHost {
     );
   }
 
-  Future<ScriptPackage> _storedPackage(String id, String version) async {
+  Future<ScriptPackage> _storedPackage(String id, String version) =>
+      UiLoadTrace.run(
+        'host.package.verify',
+        () => _readStoredPackage(id, version),
+        arguments: {'moduleId': id, 'version': version},
+      );
+
+  Future<ScriptPackage> _readStoredPackage(String id, String version) async {
     final row = (await store.sql(
       'SELECT * FROM host_packages WHERE module_id=? AND version=?',
       [id, version],
@@ -448,8 +483,17 @@ class ModuleHost {
       );
       instance.worker = computation;
       instance.workflow = workflow;
-      await instance.worker.load(package.definition['entryPoint'] as String);
-      await instance.workflow.load(package.definition['entryPoint'] as String);
+      await UiLoadTrace.run(
+        'host.worker.load',
+        () => instance.worker.load(package.definition['entryPoint'] as String),
+        arguments: {'moduleId': package.id, 'worker': 'computation'},
+      );
+      await UiLoadTrace.run(
+        'host.worker.load',
+        () =>
+            instance.workflow.load(package.definition['entryPoint'] as String),
+        arguments: {'moduleId': package.id, 'worker': 'workflow'},
+      );
     } catch (error) {
       computation?.close();
       workflow?.close();
@@ -656,7 +700,7 @@ class ModuleHost {
       for (final id in instances.keys.toList()) {
         _stop(id);
       }
-      await store.db.transaction(() async {
+      await store.transactionWithDataRevisions(() async {
         final previousZone = _installBatchZone;
         _installBatchZone = Zone.current;
         try {
@@ -1526,6 +1570,7 @@ class ModuleHost {
     String handler,
     Object? input, {
     void Function(Set<String>)? onReads,
+    void Function(bool)? onReplayable,
     bool readOnly = false,
     bool Function()? shouldRun,
   }) {
@@ -1534,32 +1579,44 @@ class ModuleHost {
     }
     final instance = instances[moduleId];
     if (instance == null) throw StateError('Module unavailable');
-    final result = Completer<Object?>();
-    instance.workflowTail = instance.workflowTail.then((_) async {
-      try {
-        if (shouldRun?.call() == false ||
-            !identical(instance, instances[moduleId])) {
-          result.complete(null);
-          return;
-        }
-        final reads = onReads == null ? null : <String>{};
-        instance.pageReads = reads;
-        instance.pagePreparation = readOnly;
-        final value = await instance.workflow.invoke(
-          handler,
-          input,
-          timeout: null,
-        );
-        if (reads != null) onReads!(Set.unmodifiable(reads));
-        result.complete(value);
-      } catch (error, stack) {
-        result.completeError(error, stack);
-      } finally {
-        instance.pageReads = null;
-        instance.pagePreparation = false;
-      }
-    });
-    return result.future;
+    final arguments = <String, Object>{
+      'moduleId': moduleId,
+      'handler': handler,
+      'speculative': readOnly,
+    };
+    final queued = UiLoadTrace.start('page.queue', arguments: arguments);
+    return instance.pageWorkflow
+        .run(() async {
+          queued?.finish();
+          try {
+            if (shouldRun?.call() == false ||
+                !identical(instance, instances[moduleId])) {
+              return null;
+            }
+            final reads = onReads == null ? null : <String>{};
+            instance.pageReads = reads;
+            instance.pagePreparation = readOnly;
+            final replayability = _PageReplayability(
+              input is Map && input['event'] == null,
+            );
+            instance._pageReplayability = replayability;
+            final value = await UiLoadTrace.run(
+              'page.execute',
+              () => instance.workflow.invoke(handler, input, timeout: null),
+              arguments: arguments,
+            );
+            if (reads != null) onReads!(Set.unmodifiable(reads));
+            onReplayable?.call(
+              replayability.safe && replayability.pendingBridges == 0,
+            );
+            return value;
+          } finally {
+            instance.pageReads = null;
+            instance.pagePreparation = false;
+            instance._pageReplayability = null;
+          }
+        }, speculative: readOnly)
+        .whenComplete(() => queued?.finish());
   }
 
   Future<Object?> invokeInterrupt(String moduleId, String handler) async {
@@ -1586,6 +1643,30 @@ class ModuleHost {
     String method,
     Map<String, Object?> args, {
     bool workflow = false,
+  }) {
+    final replayability = workflow ? instance._pageReplayability : null;
+    if (replayability != null) replayability.pendingBridges++;
+    return UiLoadTrace.run(
+      'page.bridge',
+      () => _dispatchBridge(
+        instance,
+        method,
+        args,
+        workflow: workflow,
+        replayability: replayability,
+      ),
+      arguments: {'moduleId': instance.actor.moduleId, 'method': method},
+    ).whenComplete(() {
+      if (replayability != null) replayability.pendingBridges--;
+    });
+  }
+
+  Future<Object?> _dispatchBridge(
+    ScriptInstance instance,
+    String method,
+    Map<String, Object?> args, {
+    bool workflow = false,
+    _PageReplayability? replayability,
   }) async {
     final actor = instance.actor;
     store.requireActive(actor);
@@ -1595,23 +1676,29 @@ class ModuleHost {
         : session?.pagePreparation == true;
     // Speculative page preparation must never submit commands, open UI,
     // subscribe, or access the network even if the module has those grants.
-    if (pagePreparation &&
-        !const {
-          'data.get',
-          'data.query',
-          'services.query',
-          'services.directory',
-          'extensions.query',
-          'extensions.queryMany',
-          'clock.now',
-          'clock.today',
-          'clock.local',
-          'clock.toLocal',
-          'clock.toUtc',
-          'ui.preferences.get',
-          'ui.catalog',
-          'ui.examples',
-        }.contains(method)) {
+    const readOnlyMethods = {
+      'data.get',
+      'data.query',
+      'services.query',
+      'services.directory',
+      'extensions.query',
+      'extensions.queryMany',
+      'clock.now',
+      'clock.today',
+      'clock.local',
+      'clock.systemTimezone',
+      'clock.toLocal',
+      'clock.toLocalMany',
+      'clock.toUtc',
+      'ui.preferences.get',
+      'ui.catalog',
+      'ui.examples',
+    };
+    if (!readOnlyMethods.contains(method)) {
+      replayability?.markUnsafe();
+      session?.onPageSideEffect?.call();
+    }
+    if (pagePreparation && !readOnlyMethods.contains(method)) {
       throw StateError('Page preparation forbids side effects: $method');
     }
     if (_batchInstalling &&
@@ -1622,6 +1709,7 @@ class ModuleHost {
           'clock.now',
           'clock.today',
           'clock.toLocal',
+          'clock.toLocalMany',
           'clock.toUtc',
           'ui.catalog',
           'ui.examples',
@@ -1712,7 +1800,8 @@ class ModuleHost {
         final snapshot =
             session ??
             (SnapshotSession(actor, const Uuid().v4())
-              ..pagePreparation = pagePreparation);
+              ..pagePreparation = pagePreparation
+              ..onPageSideEffect = replayability?.markUnsafe);
         for (final provider in instances.values) {
           for (final raw
               in provider.package.definition['services'] as List? ?? []) {
@@ -1782,10 +1871,11 @@ class ModuleHost {
         final ref = ServiceRef.parse(args['ref']);
         final querySnapshot =
             session ??
-            (pageReads == null && !pagePreparation
+            (pageReads == null && !pagePreparation && replayability == null
                 ? null
                 : (SnapshotSession(actor, const Uuid().v4())
-                    ..pagePreparation = pagePreparation));
+                    ..pagePreparation = pagePreparation
+                    ..onPageSideEffect = replayability?.markUnsafe));
         final value = await query(
           actor,
           ref,
@@ -1822,8 +1912,27 @@ class ModuleHost {
         return clockNow().toUtc().toIso8601String();
       case 'clock.toLocal':
         return clockToLocal(args);
+      case 'clock.toLocalMany':
+        return clockToLocalMany(args);
       case 'clock.toUtc':
         return clockToUtc(args);
+      case 'clock.systemTimezone':
+        if (args.isNotEmpty) {
+          throw const FormatException(
+            'clock.systemTimezone takes no arguments',
+          );
+        }
+        if (!actor.permissions.contains('clock') &&
+            !actor.permissions.contains('clock.today') &&
+            !actor.permissions.contains('clock.systemTimezone')) {
+          throw StateError('System timezone permission denied');
+        }
+        if (preview) {
+          throw StateError('Preview forbids external capabilities: $method');
+        }
+        final timezone = await readSystemTimezone(systemTimezoneResolver);
+        store.requireActive(actor);
+        return timezone;
       case 'clock.today':
       case 'clock.local':
         final local = args['zone'] == null

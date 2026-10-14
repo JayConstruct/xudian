@@ -22,6 +22,43 @@ void main() {
     );
   });
 
+  test('batch UTC conversion preserves order and single-item DST results', () {
+    final items = <Map<String, Object?>>[
+      {'utc': '2026-11-01T05:30:00Z', 'zone': 'America/New_York'},
+      {'utc': '2026-11-01T06:30:00Z', 'zone': 'America/New_York'},
+      {'utc': '2026-03-08T07:30:00Z', 'zone': 'America/New_York'},
+      {'utc': '2026-04-04T15:15:00Z', 'zone': 'Australia/Lord_Howe'},
+      {'utc': '2026-10-13T20:30:00.123456Z', 'zone': 'Asia/Shanghai'},
+      {'utc': '2011-12-30T10:00:00Z', 'zone': 'Pacific/Apia'},
+    ];
+    expect(clockToLocalMany({'items': items}), items.map(clockToLocal).toList());
+    expect(clockToLocalMany({'items': []}), isEmpty);
+    expect(
+      clockToLocalMany({'items': List.filled(256, items.first)}),
+      hasLength(256),
+    );
+  });
+
+  test('batch conversion rejects invalid shape, limits and bad items', () {
+    final good = {'utc': '2026-10-13T20:30:00Z', 'zone': 'UTC'};
+    for (final items in <Object?>[
+      null,
+      {},
+      List.filled(257, good),
+      [good, null],
+      [good, {'utc': '2026-02-30T12:00:00Z', 'zone': 'UTC'}],
+      [good, {'utc': good['utc']}],
+    ]) {
+      expect(() => clockToLocalMany({'items': items}), throwsFormatException);
+    }
+    expect(
+      () => clockToLocalMany({
+        'items': [good, {'utc': good['utc'], 'zone': 'unknown/zone'}],
+      }),
+      throwsA(isA<Exception>()),
+    );
+  });
+
   test('ordinary civil time has one UTC instant', () {
     expect(
       clockToUtc({
@@ -118,7 +155,7 @@ void main() {
               'manifest': {
                 'id': 'test.clock',
                 'version': '1.0.0',
-                'hostApi': '^1.21.0',
+                'hostApi': '^1.23.0',
                 'dataVersion': 1,
                 'permissions': <String>[],
               },
@@ -149,9 +186,14 @@ import {clock} from '@xudian/sdk';
 export async function convert() {
   const local = await clock.toLocal({utc:'2026-11-01T05:30:00Z',zone:'America/New_York'});
   const utc = await clock.toUtc({...local,zone:'America/New_York'});
-  return {local,utc};
+  const batch = await clock.toLocalMany([
+    {utc:'2026-11-01T05:30:00Z',zone:'America/New_York'},
+    {utc:'2026-11-01T06:30:00Z',zone:'America/New_York'},
+  ]);
+  return {local,utc,batch};
 }
 export async function prepare() {return {result:await convert(),writes:[]};}
+export async function invalid() {return clock.toLocalMany([{utc:'2026-02-30T12:00:00Z',zone:'UTC'}]);}
 ''',
             },
           ),
@@ -165,6 +207,10 @@ export async function prepare() {return {result:await convert(),writes:[]};}
           {},
         );
         expect(object(object(query)['utc'])['status'], 'ambiguous');
+        expect(object(query)['batch'], [
+          object(query)['local'],
+          object(query)['local'],
+        ]);
         final plan = await host.prepare(
           caller,
           const ServiceRef('test.clock', 'command', 1),
@@ -174,6 +220,10 @@ export async function prepare() {return {result:await convert(),writes:[]};}
         expect(
           await host.invokePage('test.clock', 'convert', {}, readOnly: true),
           query,
+        );
+        await expectLater(
+          host.invokePage('test.clock', 'invalid', {}, readOnly: true),
+          throwsA(isA<StateError>()),
         );
       } finally {
         await host.close();

@@ -1,5 +1,6 @@
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
+import '../ui/ui_design.dart';
 
 import 'package:flutter/material.dart';
 
@@ -142,6 +143,9 @@ class ModuleDetailsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) => NativeUi(
     child: AlertDialog(
+      titlePadding: AppDesign.dialogTitlePadding,
+      contentPadding: AppDesign.dialogContentPadding,
+      actionsPadding: AppDesign.dialogActionsPadding,
       title: Text(package.title),
       content: SizedBox(
         width: 620,
@@ -243,6 +247,9 @@ Future<bool> confirmModuleImpact(
       builder: (context) => NativeUi(
         protected: true,
         child: AlertDialog(
+          titlePadding: AppDesign.dialogTitlePadding,
+          contentPadding: AppDesign.dialogContentPadding,
+          actionsPadding: AppDesign.dialogActionsPadding,
           title: Text(title),
           content: SizedBox(
             width: 620,

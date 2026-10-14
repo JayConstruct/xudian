@@ -17,6 +17,14 @@ class AppDesign {
   );
   static const floatingRadius = 24.0;
   static const dockRadius = 28.0;
+  static const dialogInsets = EdgeInsets.symmetric(
+    horizontal: 16,
+    vertical: 24,
+  );
+  static const dialogContentPadding = EdgeInsets.fromLTRB(20, 16, 20, 20);
+  static const dialogTitlePadding = EdgeInsets.fromLTRB(20, 20, 20, 0);
+  static const dialogActionsPadding = EdgeInsets.fromLTRB(12, 0, 12, 12);
+  static const dialogConstraints = BoxConstraints(minWidth: 280, maxWidth: 760);
 
   static ThemeData theme(Brightness brightness) {
     final dark = brightness == Brightness.dark;
@@ -109,6 +117,8 @@ class AppDesign {
         ),
       ),
       dialogTheme: DialogThemeData(
+        insetPadding: dialogInsets,
+        constraints: dialogConstraints,
         backgroundColor: scheme.surface,
         shape: AppDesign.smoothShape(radius: AppDesign.floatingRadius),
         clipBehavior: Clip.antiAlias,

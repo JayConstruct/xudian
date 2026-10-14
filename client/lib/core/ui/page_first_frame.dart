@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../performance/ui_load_trace.dart';
+
 /// The workspace can prepare a destination before replacing visible content.
 class PageFirstFrameScope extends InheritedWidget {
   PageFirstFrameScope({super.key, required this.onReady, required Widget child})
@@ -113,9 +115,11 @@ class PageFirstFrameGate extends StatefulWidget {
 }
 
 class _PageFirstFrameGateState extends State<PageFirstFrameGate> {
+  final loadTrace = UiLoadTrace.start('page.firstFrame');
   PageFirstFrameReadiness? parentReadiness;
   late final readiness = PageFirstFrameReadiness(() {
     if (!mounted) return;
+    loadTrace?.finish(arguments: {'outcome': 'ready'});
     if (parentReadiness != null) {
       parentReadiness!.complete(this, painted: true);
     } else {
@@ -135,6 +139,7 @@ class _PageFirstFrameGateState extends State<PageFirstFrameGate> {
 
   @override
   void dispose() {
+    loadTrace?.finish(arguments: {'outcome': 'disposed'});
     parentReadiness?.complete(this);
     readiness.disposed = true;
     super.dispose();

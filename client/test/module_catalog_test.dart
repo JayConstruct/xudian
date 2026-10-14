@@ -490,6 +490,154 @@ void main() {
     },
   );
 
+  test('network package reports stages in verification order', () async {
+    await fixture.add(await makePackage('test.stages'));
+    final release = await fixture.release('test.stages');
+    final stages = <ModuleDownloadStage>[];
+    final result = await fixture.client.download(release, onStage: stages.add);
+    expect(result.id, release.moduleId);
+    expect(stages, [
+      ModuleDownloadStage.preparing,
+      ModuleDownloadStage.downloading,
+      ModuleDownloadStage.verifying,
+      ModuleDownloadStage.saving,
+      ModuleDownloadStage.ready,
+    ]);
+    expect(
+      (await fixture.client.download(release, offline: true)).packageDigest,
+      result.packageDigest,
+    );
+  });
+
+  test('verified cache reports verification without downloading', () async {
+    await fixture.add(await makePackage('test.cached.stages'));
+    final release = await fixture.release('test.cached.stages');
+    await fixture.client.download(release);
+    final requests = fixture.requests;
+    final stages = <ModuleDownloadStage>[];
+    final progress = <(int, int)>[];
+    await fixture.client.download(
+      release,
+      offline: true,
+      onStage: stages.add,
+      onProgress: (received, total) => progress.add((received, total)),
+    );
+    expect(stages, [
+      ModuleDownloadStage.preparing,
+      ModuleDownloadStage.verifying,
+      ModuleDownloadStage.ready,
+    ]);
+    expect(progress, [(release.size, release.size)]);
+    expect(fixture.requests, requests);
+  });
+
+  test('failed verification never reports saving or ready', () async {
+    await fixture.add(await makePackage('test.invalid.stages'));
+    final release = await fixture.release('test.invalid.stages');
+    final bytes = List<int>.of(fixture.documents[release.url.toString()]!);
+    bytes[10] ^= 1;
+    fixture.documents[release.url.toString()] = bytes;
+    final stages = <ModuleDownloadStage>[];
+    await expectLater(
+      fixture.client.download(release, onStage: stages.add),
+      throwsFormatException,
+    );
+    expect(stages, [
+      ModuleDownloadStage.preparing,
+      ModuleDownloadStage.downloading,
+      ModuleDownloadStage.verifying,
+    ]);
+    await expectLater(
+      fixture.client.download(release, offline: true),
+      throwsStateError,
+    );
+  });
+
+  test('retry resets partial transfer progress before a new attempt', () async {
+    await fixture.add(await makePackage('test.retry.stages'));
+    final release = await fixture.release('test.retry.stages');
+    var attempts = 0;
+    final client = ModuleCatalogClient(
+      cacheDirectory: directory,
+      transport:
+          (url, {cancellation, onProgress, required maximumBytes}) async {
+            if (attempts++ == 0) {
+              onProgress?.call(release.size ~/ 2, release.size);
+              throw const SocketException('connection interrupted');
+            }
+            return fixture.fetch(
+              url,
+              cancellation: cancellation,
+              onProgress: onProgress,
+              maximumBytes: maximumBytes,
+            );
+          },
+    );
+    addTearDown(client.dispose);
+    final stages = <ModuleDownloadStage>[];
+    final progress = <(int, int)>[];
+    await client.download(
+      release,
+      onStage: stages.add,
+      onProgress: (received, total) => progress.add((received, total)),
+    );
+    expect(attempts, 2);
+    expect(stages, [
+      ModuleDownloadStage.preparing,
+      ModuleDownloadStage.downloading,
+      ModuleDownloadStage.downloading,
+      ModuleDownloadStage.verifying,
+      ModuleDownloadStage.saving,
+      ModuleDownloadStage.ready,
+    ]);
+    expect(progress, [
+      (0, release.size),
+      (release.size ~/ 2, release.size),
+      (0, release.size),
+      (release.size ~/ 2, release.size),
+      (release.size, release.size),
+    ]);
+  });
+
+  test(
+    'resolved local package is ready without network or verification',
+    () async {
+      final package = await makePackage('test.local.stages');
+      final resolution = await ModuleDependencyResolver(fixture.client)
+          .resolve(requests: {}, localPackages: [package], installed: {});
+      final stages = <ModuleDownloadStage>[];
+      final loaded = await resolution.ordered.single.loadPackage(
+        fixture.client,
+        onStage: stages.add,
+      );
+      expect(loaded, same(package));
+      expect(stages, [
+        ModuleDownloadStage.preparing,
+        ModuleDownloadStage.ready,
+      ]);
+      expect(fixture.requests, 0);
+    },
+  );
+
+  test('cancelled download never reports ready', () async {
+    await fixture.add(await makePackage('test.cancelled.stages'));
+    final release = await fixture.release('test.cancelled.stages');
+    fixture.cancelDuringDownload = true;
+    final stages = <ModuleDownloadStage>[];
+    await expectLater(
+      fixture.client.download(
+        release,
+        cancellation: DownloadCancellation(),
+        onStage: stages.add,
+      ),
+      throwsA(isA<DownloadCancelled>()),
+    );
+    expect(stages, [
+      ModuleDownloadStage.preparing,
+      ModuleDownloadStage.downloading,
+    ]);
+  });
+
   test(
     'tampered digest or full metadata cannot populate package cache',
     () async {

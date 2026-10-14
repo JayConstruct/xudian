@@ -1,3 +1,3 @@
 import 'package:pub_semver/pub_semver.dart';
 
-final hostApiVersion = Version(1, 21, 0);
+final hostApiVersion = Version(1, 23, 0);

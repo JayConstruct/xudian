@@ -6,6 +6,9 @@
 
 | 日期与范围 | 结果与证据 |
 | --- | --- |
+| 2026-10-14 UI 加载链优化 | 三个 `gpt-6.1-sol high` 子 agent 分工实施启动、日期缓存和页面读取，整合前台队列及本地 Timeline。最终 230 项相关 Flutter（36 文件）、153 项 Python、Node 真实源码等价/调用次数检查通过；静态分析、129 文件架构与最终工作树仓库检查通过。50 个精确任务时间转换桥接 100→1；三层反向依赖夹具每轮包读取/验证 6→3，重启仍完整验证。API 1.23.0，日程 1.8.0 预装资源已同步，课表 1.14.0 独立候选；ARM64 目标 release 构建成功并核验 APK 内日程摘要。初轮计时参数可变性、测试异步 zone、原生服务夹具及旧审核文案断言问题均修复复验，详见[精简记录](verification/ui-loading-20261014.json)。[实现与采样说明](UI_LOADING_PERFORMANCE.md)。未部署设备、提交或发布，未测真机启动耗时/帧率，不将调用次数减少换算为提速百分比。 |
+| 2026-10-13～14 ARM 真机显示与体验验收 | Android 15 ARM64 真机与 Android 17 x86_64 模拟器同签名覆盖至 build117／versionCode2117、4117，逐项审核升级本地课表 1.13.0／拾光 1.6.0 候选包，未清业务数据。系统与新诊断页实测 480／420 DPI、360×800／411.43×914.29 逻辑视口、默认字号 1.0，无显示覆盖；默认密度解释同尺寸约 14.29% 的物理像素差异。真机商店首卡 531.67→267.67dp，前移 264dp；安装／数据审核长文本交给外层滚动，保留完整选择复制。两设备创建／导入默认时区分别为 Asia/Shanghai／UTC，取消后课表列表文字与当前选择逐项一致。模拟器 1.5 字号筛选／键盘／审核取消通过，恢复 1.0；真机 ROM 拒绝 ADB 改字号且原值保持，大字号待真机补验。最终 74 项相关 Flutter、57 项脚本回归、静态分析、127 文件架构、627 文件仓库及差异检查通过，三 ABI release 构建成功。[精简记录](verification/arm-ux-20261013.json) / [本轮详情](#2026-10-13-arm-真机显示与体验验收)。弱网、未知下载长度、实际读屏、Windows 和性能未验收；候选变更未提交发布，线上目录未更新。 |
+| 2026-10-13 跨模块导入导航与错误正文 | 宿主工作区导航先校验目标，再关闭覆盖的详情路由／模态面板；Dart／JS 桥接向界面提供业务正文，原始异常文本保留供诊断。51 项相关 Flutter／真实 QuickJS 回归通过，最终正文过滤边界另复验 9 项；静态分析、121 文件架构、627 文件仓库及差异检查通过。Android 15 ARM64 真机与 Android 17 x86_64 模拟器同签名覆盖到 build113／versionCode2113、4113；模拟器原版复现导入停留和 AI 堆栈，两台设备从设置与课表内入口直接进入确认页并保存课程。真机完成后条件撤销仍被阻止，完成记录保留，规划与 AI 提示不含异常前缀或堆栈。真机原商店模块保持；模拟器规划／任务／课表通过商店安装或更新，原数据保留，两设备恢复原工作区与课表选择。真机锁屏曾中断采集，用户解锁后完成；未清数据或卸载。[修复记录](verification/host-navigation-errors-20261013.json) / [完整报告](../dist/verification/android-host-fixes-20261013/report.md)。未调用真实模型、登录教务或测量帧率；修复尚未提交发布。 |
 | 2026-10-13 全局 Toast 规范与示例 | 最终 Toast／设置／快捷输入／原生示例／界面包／脚本参数 29 项、图库／组件示例／工作区 17 项、仓库链接／更新／标注／任务流／模块管理 26 项相关回归通过，静态分析、120 文件架构检查及 `git diff --check` 通过。宿主反馈迁至共享 UI，保留 App 兼容导出；同正文与状态去重且不延长计时，根 Overlay 分别管理，长文在安全区与键盘上方局部滚动，保留状态语义和关闭操作。普通原生消息统一接入，安装后的“打开模块”和字段保存失败的“重试”保留可执行提示。`app.ui.examples 1.4.2` 的真实交互包含三状态、长文、1／10 秒、连续／重复和面板内调用；预装资源及摘要已同步，默认启用标记保留。首次测试因沙盒禁止本地端口未加载，获自动审核许可后运行；迁移后旧测试受顶部 Toast 遮挡，补真实关闭步骤再执行页面操作后通过，并修正语义句柄清理。直接仓库检查曾因旧包删除尚未暂存失败，使用临时 Git 索引与对象目录映射最终工作树后，标准仓库检查通过，真实索引未修改。规范见 [Toast](design/TOAST.md)，核心回归见 [app_toast_test.dart](../client/test/app_toast_test.dart)，示例见 [ui_gallery_test.dart](../client/test/ui_gallery_test.dart)。本轮未构建 APK、未进行 Android／Windows 设备视觉、实际读屏或帧率验收。 |
 | 2026-10-13 App 与默认商店上线 | 源码 `4703f0c` 提交并发布 [v0.2.0-beta.2](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.2)，模块 [modules-20261013-runtime-ui](https://github.com/JayConstruct/xudian/releases/tag/modules-20261013-runtime-ui) 的 8 个新包匿名下载与本地字节一致；作者索引与默认目录已同步，两个失效退役条目移除。主分支及 App 标签线上完整检查、Flutter 回归和三 ABI APK 构建成功；本机 958 项完整 Flutter、84 项脚本与 36 项发布工具验证、静态分析和 119 文件架构检查通过。批安装长期 worker 不再保留已结束事务，初始化／迁移仍参加原事务，失败回滚与成功后立即查询均验证。下载公开三 ABI APK 核验签名、SHA256SUMS、SOURCE_COMMIT、ABI／原生库与六个内置模块固定摘要；全新独立 x86_64 Android 17 模拟器直接安装公开 APK，不配置仓库，从默认商店安装拾光 1.5.0 并自动补齐课表 1.11.0，首轮安装提示遮挡底栏中心点击，保留失败记录并校正自动化入口，在同 APK、同用户且不重新安装／不提前重启的首次会话中打开课表／拾光／日程，之后重启再次通过，APK 摘要保持不变；原模拟器与数据保持。[App 发布记录](verification/app-release-20261013.json) / [默认商店匿名复验](verification/module-store-release-20261013.json) / [公开 APK 首装](verification/fresh-install-20261013.json)。本机额外网络复验曾因 WSL socket 绑定与 VM 采样信号迟滞超时，独立 Dart 探针可复现，未修改生产网络代码或提高测试超时，线上 Ubuntu 完整回归通过；不声称该本机环境问题已根治。测试版使用 CI 开发签名；ARM 真机运行、具体学校教务登录及真机帧率未验证。 |
 | 2026-10-13 波浪水滴透镜 | 36 项局部透镜／波浪像素／真实日程／日期上下文回归、静态分析、119 文件架构及 554 文件仓库检查通过。窄环带约 1.04 倍局部径向放大、纹理偏移不足 1dp，波前及带边保持原采样位置，旧／新纹理分侧绘制；明暗细肩随原光带淡出。目标首帧就绪时捕获一次完整纹理，不增加动画等待，实际子树仅绘制一次，一组旧／新图上限合计 8MP，替换图像帧后释放。点击保持 480ms，横滑、顶栏即时反馈、五天栏统一揭示及减少动画／高对比行为保持。像素验证纹理折射、不同分辨率、导航静止及目标未揭示角落完整捕获；实际模拟器录屏核对快速反向和手动滑动。build101／versionCode4101 覆盖安装并核对摘要、保留数据。[报告](verification/water-lens-20261013.json) / [录屏](../dist/verification/water-lens-20261013/water-lens.mp4) / [连续帧](../dist/verification/water-lens-20261013/water-lens-frames.png)。仅复验本次受影响范围；图像上限不等于实测峰值内存，未测真机帧率。 |
@@ -40,12 +43,126 @@
 
 常用检查与更新命令统一见 [开发指南](../DEVELOPMENT.md) 和 [模拟器更新](EMULATOR_UPDATE.md)。课表及拾光的相关测试、只读复验脚本和历史运行范围保留在 [归档索引](archive/README.md)。需要 profile 模式与真实设备测量帧耗时、内存和启动/切换性能；功能测试不证明 FPS。
 
+## 2026-10-13 商店安装体验首批完善
+
+对应 [UX-01、UX-02、UX-04](design/UX_PLATFORM_BACKLOG.md)：下载窗口把真实阶段、当前包进度和批次字节进度前置；安装审核分组说明所选模块、必需依赖、版本变化及权限用途，技术详情保留完整计划；事务成功后合并为一条 Toast，商店保留打开入口。当前规范见 [模块目录](MODULE_CATALOG.md#安装流程反馈)。
+
+最终 64 项相关 Flutter 回归通过，覆盖下载阶段／缓存／校验失败／网络重试清零、320 宽与两倍字体可见进度、取消后晚到传输、保留已完成包数、权限与签名区别、审核取消、事务回滚、真实拾光包安装，以及 Toast 消失后的商店打开入口、界面包和 Toast 生命周期。执行：
+
+```bash
+source scripts/dev-env.sh
+cd client
+flutter test --no-pub test/module_management_ui_test.dart test/host_batch_install_test.dart test/module_catalog_test.dart test/module_download_feedback_test.dart test/module_install_review_dialog_test.dart test/native_ui_pack_test.dart test/app_toast_test.dart --concurrency=2
+flutter analyze --no-pub
+```
+
+14 项设备验收脚本单测通过（`python3 -m unittest scripts.tests.test_fresh_install_verification`）；脚本支持先核对概要再展开完整技术详情、按商店模块定位持久打开入口，并保留旧审核与 SnackBar 兼容。静态分析无问题；122 个生产 Dart 文件架构检查、627 个已跟踪文件仓库检查及 `git diff --check` 通过。
+
+首轮 Flutter 启动受沙盒本地端口限制，自动审核允许在沙盒外执行后正常加载。集成回归发现下载初始化短暂出现重试按钮，已改为初始运行态并阻止并行尝试；另修正测试等待尚未出现元素时使用 `.first` 的错误，最终整组重跑通过。本轮未构建 APK、未部署 Android ARM／模拟器／Windows；真机视觉、读屏、弱网及实际设备操作仍待验收，以上自动化结果不代表原真机体验反馈已闭环。
+
 真实学校账号/网站、Android ARM64 真机、Windows 构建与安装的验证须分别记录。已有学校快照审计、模拟 DOM 采集和 x86_64 截图不代表这些场景已经通过。
 
 新增验收时记录日期、版本、具体检查范围、结果、数据保留及证据路径，保留失败和未验证范围。完整验收产物位于被 Git 忽略的 `dist/verification/`；供公开复验的精简报告可脱敏后保存在 `docs/verification/`。归档中的本机构建/截图可能不在其他检出工作区。索引引用的不可变模块包位于 [发布目录](../releases/README.md)，历史记录中的旧目录路径保留当时含义。
+
+## 2026-10-13 商店布局弹窗与数据审核第二批完善
+
+对应 UX-03、UX-05、UX-06，[待办中的已完善记录](design/UX_PLATFORM_BACKLOG.md#已完善记录) 已登记两批实现与剩余设备验收。商店使用紧凑卡片与按可用宽度／字号排列的一至三列；全局默认弹窗减少外侧留白，核心表单与审核共用内边距；实际数据审核基于冻结写集展示增改删及记录前后字段对比，未知结构完整回退。规范见 [商店](MODULE_CATALOG.md#安装流程反馈)、[弹窗](UI_DESIGN_SYSTEM.md#弹窗尺寸与留白)、[数据审核](design/DATA_CHANGE_REVIEW.md)。
+
+最终 113 项组合 Flutter 回归通过，涵盖前批下载、安装事务、审核、Toast 与持久打开入口，以及新增商店布局 7 项、弹窗尺寸 7 项、数据审核 11 项，还包括原生界面包、类型表单、日期时间选择器、主题、代码与浮层。另单独复验既有记录／集合冲突及幂等提交 1 项通过。执行：
+
+```bash
+source scripts/dev-env.sh
+cd client
+flutter test --no-pub --concurrency=2 \
+  test/module_management_ui_test.dart test/host_batch_install_test.dart \
+  test/module_catalog_test.dart test/module_download_feedback_test.dart \
+  test/module_install_review_dialog_test.dart test/native_ui_pack_test.dart \
+  test/app_toast_test.dart test/module_catalog_layout_test.dart \
+  test/module_catalog_store_metadata_test.dart test/dialog_layout_test.dart \
+  test/data_change_review_test.dart test/app_design_theme_test.dart \
+  test/code_and_floating_panel_test.dart test/temporal_input_test.dart \
+  test/host_extension_test.dart
+flutter test --no-pub test/module_host_test.dart \
+  --plain-name 'record and collection conflicts reject commits, repeated commit emits once'
+flutter analyze --no-pub
+```
+
+20 项首装验收脚本测试通过（`python3 -m unittest scripts.tests.test_fresh_install_verification`），支持新旧商店状态文案、持久打开按钮、新卡片语义与版本解析；安装验收区分实际当前版本与更新目标，拒绝停用及多卡片歧义。静态分析无问题，124 个生产 Dart 文件架构检查、627 个已跟踪文件仓库检查及差异检查通过。
+
+窄屏标准字号测试测得 320 逻辑宽时正文宽 248；两倍字体按 Flutter 的自动内边距缩减保持正文及操作可达。横屏长内容可滚动、桌面复杂弹窗不超过 760、短确认维持内容宽；键盘进出保留宿主表单输入草稿。数据审核真实取消测试使用已封存数据库计划，确认取消后记录不变；回退不误称无变化，删除、字段不存在与 `null`、长嵌套数据、超出摘要上限的记录均能核对完整详情。
+
+首轮尺寸断言未考虑 Flutter 大字体自动缩减内边距，按实际行为调整后最终组合重跑通过；商店语义测试句柄释放时机也已修正。只读审阅发现首装脚本依赖旧状态格式，已修复并补回归；未改提交、快照、权限或模块版本。本轮未构建或部署 APK，未进行 ARM／模拟器／Windows 设备视觉、读屏或性能验收，DISPLAY-01 缩放原因仍未定位。
+
+## 2026-10-13 系统时区与显示诊断第三批完善
+
+对应 UX-07 与 DISPLAY-01 的诊断准备，规范见 [时区与显示诊断](design/TIMEZONE_DISPLAY.md)。API 1.22 增加权限控制的系统 IANA 读取，Android 和 Windows 原生通道独立于业务；完整时区库保留历史别名、明确 GMT／UTC 规范化、3 秒超时与可见回退。课表 1.13.0、拾光 1.6.0 将普通创建／导入中的时区输入移除，新建默认设备时区，旧课表、明确来源和 JSON 备份保留原时区；手动编辑在高级设置，继续审核与冲突检查。
+
+设置工具新增实时 Flutter 显示诊断，使用当前视图、根 MediaQuery 和实际 TextScaler 样本，用户主动复制白名单指标。新增 Android 只读测量脚本，系统估算与 Flutter 实测分别记录，不调整显示大小、字体或业务数据。[精简报告](verification/timezone-display-20261013.json) 保留候选模块／APK 摘要、设备基线和未验证范围。
+
+168 项相关 Flutter 组合回归通过，包括系统时区新增 11 项、真实模块时区新增 9 项、显示诊断新增 6 项，以及课表布局／时区查询／导入、拾光、规划与实际 UTC 占用、QuickJS、设置、安装事务与审核。最后拾光来源时区校验补充后重新生成候选包，核对两包与最终源码字节一致，课表时区／拾光导入／商店安装另复验 28 项通过。执行：
+
+```bash
+source scripts/dev-env.sh
+python3 scripts/module_host/build_packages.py
+cd client
+flutter test --no-pub --concurrency=2 \
+  test/system_timezone_test.dart test/schedule_timezone_test.dart \
+  test/display_diagnostics_test.dart test/clock_conversion_test.dart \
+  test/schedule_ux_test.dart test/schedule_import_test.dart \
+  test/schedule_today_feed_test.dart test/schedule_layout_test.dart \
+  test/schedule_chrome_test.dart test/schedule_underlap_test.dart \
+  test/shiguang_import_test.dart test/shiguang_school_picker_test.dart \
+  test/planner_task_schedule_test.dart test/planner_test.dart \
+  test/script_worker_test.dart test/settings_test.dart \
+  test/module_management_ui_test.dart test/module_install_review_dialog_test.dart \
+  test/host_batch_install_test.dart
+flutter analyze --no-pub
+flutter build apk --debug --no-pub --target-platform android-x64 --build-number 4114
+```
+
+36 项 Python 定点测试通过，包含显示测量 5 项、首装验收 20 项及模块打包 11 项；Node 拾光兼容测试文件通过。静态分析无问题，127 个生产 Dart 文件架构、627 个已跟踪文件仓库及差异检查通过。Android 最终 x86_64 调试 APK 已构建；第一次 Gradle 受沙盒网络接口限制未启动，自动审核允许后正常编译；未安装设备。
+
+只读测量当前模拟器：Android 17、1080×2400、420 DPI、系统字号 1.0，无显示尺寸／密度覆盖，估算像素比 2.625、逻辑显示 411.43×914.29；当前应用 Android 配置 411×914 dp。该基线属于设备原安装客户端，不代表新页面 Flutter 实测。ARM 真机未连接，DISPLAY-01 原因尚未确定；Windows 通道只有代码与官方 SDK 声明核验，原生构建／运行未验证。两候选模块没有加入默认资源、没有发布目录更新或设备升级；APK 更新本身不会自动更新这些商店模块。未登录教务、调用真实 AI 或测量性能，原业务数据和系统设置保持。
 
 ## 2026-10-13 任务规划模块
 
 新增独立 app.planner，宿主时间转换及可选查询服务、任务精确时段和完成日期、课表占用、原子批次与条件撤销。实现与复验命令见 [任务规划验证记录](design/PLANNER.md)。保留现有 UI 工作区改动；模块包输出到 dist/modules，更新已预装任务／日程／AI 包，规划模块不自动加入预装清单。
 
 发布前补充：全量 Flutter 首轮 995 项通过、11 项失败，失败项为旧 AI 版本断言及旧日期径向揭示预期；修正后 AI 4 项、日期动画 17 项、日程集成 9 项定向复验通过。保留背景波纹和内容淡入实现，未就绪业务区要求空白且不可交互。Python 工具 119 项、模块发布工具 36 项通过；静态分析无问题。
+
+## 2026-10-13 ARM 真机显示与体验验收
+
+验收开始于 10 月 13 日，结束于 14 日，证据目录沿用 `arm-ux-20261013`。对应 [DISPLAY-01 及已实现体验项](design/UX_PLATFORM_BACKLOG.md)，本轮实现真机发现的两项修正，并完成相关设备闭环：
+
+- 真机与模拟器同为 1080×2400、字号 1.0、无显示覆盖；系统密度分别为 480／420 DPI，新诊断页实际像素比 3／2.625，逻辑视口 360×800／411.43×914.29。密度差使同一逻辑尺寸在真机占用的物理像素多约 14.29%；根应用没有额外缩放，未更改显示密度或关闭字号缩放。
+- 商店移除重复说明，将状态／分类标签改为两个保留完整选项的下拉控件；长标签或大字号按实际文字宽度上下排列。真机首卡 y=1595→803px，即 531.67→267.67dp，前移 264dp；标准字号下两张完整卡片和第三张主要操作可见。搜索、组合筛选、清除、打开、更新和宽屏键盘行为继续回归。对照：[调整前](../dist/verification/arm-ux-20261013/phone/02-store-before-refinement.png) / [最终 build117](../dist/verification/arm-ux-20261013/phone/10-store-build117-standard.png)。
+- 长 `SelectableText` 内部继承弹性／始终可滚动物理规则，会在没有可滚范围时抢占竖拖；三个审核组件局部关闭文本内部滚动，由外层负责。实际生产 `AppScrollBehavior` 下的正文拖动及逐字全文复制回归通过；设备升级完整技术计划时可滚到各模块身份、权限和摘要，并精确核对后才确认。
+- 两设备实际创建表单与拾光来源配置均无时区输入。课表新建冻结计划新增 1 条，拾光样例导入的业务预览新增 3 项，实际冻结写集新增 5 条（包含来源元数据），时区分别为 `Asia/Shanghai`／`UTC`。两条路径均在最终数据审核取消；原课表列表及当前选择的全部可见文字与前置快照逐项相同，真机 2 张、模拟器 3 张，测试课程／课表未写入。证据：[真机创建](../dist/verification/arm-ux-20261013/phone/07-create-review-timezone.png) / [真机导入正文拖动](../dist/verification/arm-ux-20261013/phone/09-import-data-review-scroll.png) / [模拟器 UTC](../dist/verification/arm-ux-20261013/emulator/09-import-data-review.png)。
+- 模拟器临时系统字号 1.5：实际非线性样本为 12→18、14→22、24→28；商店筛选上下排列、状态菜单可操作，新建表单、键盘草稿、最终审核及取消通过，`finally` 恢复原 1.0。首次脚本未滚到大字号页面下方的课表管理入口，停止后已恢复字号；改用滚动定位完成剩余表单复验。真机 ROM 拒绝 ADB 字号写入（退出 255），只读复查原值仍为 1.0；真机大字号保留待验收，没有扩大系统权限。证据：[大字号商店](../dist/verification/arm-ux-20261013/emulator/10-store-large-font.png) / [实际样本](../dist/verification/arm-ux-20261013/emulator/10-diagnostics-large-bottom.png) / [键盘](../dist/verification/arm-ux-20261013/emulator/10-create-large-keyboard.png)。
+
+最终 `build117` 的 ARMv7、ARM64、x86_64 release APK 均构建成功；新旧签名证书 SHA-256 一致，ARM64 真机／x86_64 模拟器 `adb install -r` 成功，versionCode 为 2117／4117，未卸载或清数据。逐项审核本地课表 1.13.0 与拾光 1.6.0 候选包；只允许拾光本次明确新增的 `clock.today` 权限。在线目录和预装资源未更新，候选源码未提交发布。
+
+验收脚本同时修正 DocumentsUI 根目录抽屉误判、完整计划重叠字段归属及模块管理保留底部滚动位置的问题：抽屉未明确关闭时不触碰背后文件；模块版本、SHA-256 或新增权限不明确时不确认。之前安全停止和异常采集证据保留在本地目录，最终两台设备升级均通过，原业务数据保留。设备运行过程中曾有并发采集冲突，后续同一设备只串行采集。
+
+最终 74 项相关 Flutter 回归、57 项 Python 脚本回归通过；静态分析无问题，生产架构 127 个 Dart 文件、仓库 627 个已跟踪文件及 `git diff --check` 通过。回归包含真实商店筛选、布局、模块管理、下载反馈、两种审核、弹窗、系统时区、真实课表／拾光业务及显示诊断；没有用历史全套数量替代本轮结果。主要复验命令：
+
+```bash
+source scripts/dev-env.sh
+python3 -m unittest scripts.tests.test_emulator_modules scripts.tests.test_fresh_install_verification scripts.tests.test_android_display_measurement
+python3 scripts/module_host/check_architecture.py
+python3 scripts/check_repository.py
+cd client
+flutter test --no-pub test/module_catalog_filter_test.dart test/module_catalog_layout_test.dart test/module_management_ui_test.dart test/module_download_feedback_test.dart test/module_install_review_dialog_test.dart test/dialog_layout_test.dart test/data_change_review_test.dart test/system_timezone_test.dart test/schedule_timezone_test.dart test/display_diagnostics_test.dart
+flutter analyze --no-pub
+flutter build apk --release --split-per-abi --no-pub --build-number 117
+```
+
+[精简设备与构建记录](verification/arm-ux-20261013.json) 不含业务名称、记录 ID 或设备序列号；截图／XML／签名与审核扫描证据留在本地 `dist/verification/arm-ux-20261013`。本轮未完成弱网／未知下载长度／缓存和失败重试设备矩阵、Toast 批量时序视觉、横屏、实际读屏、Windows 原生、学校登录、真实 AI 或帧率／耗电验收，不将部分设备闭环记为七项反馈全部完成。
+
+## 2026-10-14 v0.2.0-beta.3 发布前校验
+
+本轮提交包含 UI 加载优化及此前已验证的商店、审核、导航、时区和显示诊断改动。客户端版本为 `0.2.0-beta.3+1`，沿用测试版渠道；准备 `modules-20261014-ui-performance` 的日程 1.8.0、课表 1.14.0、拾光 1.6.0 三个不可变包，历史版本保持原样。
+
+150 个 Flutter 测试文件全量首轮 1,113 项通过、7 项失败。五项商店失败来自旧 ChoiceChip 查找及旧安装成功文案，已按当前下拉筛选和数量文案更新；一项筛选布局测试需等待所有索引本地 I/O 完成再等待动画静止。两个修正文件共 13 项定向复测通过。一项本地 HTTP 重定向测试超时，原文件不变单独复测 3 项通过。最终全套是否通过以发布标签的 CI 重跑为准，不将定向复验记为全量一次通过。
+
+153 项 Python 工具测试、36 项模块目录测试、Node 显示结果等价及桥接调用数量校验全部通过；Flutter 静态分析和两修正文件分析无问题。129 个生产 Dart 文件架构、仓库边界、模块目录及三包摘要、版本标签、Actions 配置和差异检查通过。原始日志保存在本地 `dist/verification/releases-20261014/local/`。发布工作流新增 Node 性能等价检查，并从版本说明文件读取发布说明。

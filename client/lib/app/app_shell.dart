@@ -2,6 +2,7 @@ import '../core/ui/native_ui.dart';
 import '../core/ui/ui_icon.dart';
 import '../core/ui/workspace_typography.dart';
 import '../core/contracts/json_values.dart';
+import '../core/performance/ui_load_trace.dart';
 
 import 'dart:async';
 
@@ -94,9 +95,26 @@ class _AppShellState extends ConsumerState<AppShell> {
     _restoreInstalledModules();
   }
 
-  Future<void> _restoreInstalledModules() async {
+  Future<void> _restoreInstalledModules() =>
+      UiLoadTrace.run('shell.restore', _restoreModulesAndLayout);
+
+  Future<void> _restoreModulesAndLayout() async {
     try {
-      host = await ref.read(moduleHostProvider.future);
+      // Resolve the persisted entry mounts alongside module restoration, before
+      // the first workspace can choose or load its page.
+      await Future.wait<void>(
+        [
+          ref.read(moduleHostProvider.future).then<void>((value) {
+            host = value;
+          }),
+          ref.read(uiLayoutProvider.future).then<void>(
+            (_) {},
+            // Keep the existing layout recovery action available on read failure.
+            onError: (Object error, StackTrace stack) {},
+          ),
+        ],
+        eagerError: true,
+      );
       if (!mounted) return;
       platformBridge ??= HostPlatformBridge(host!.store);
       platformBridge!.attach(host!);
@@ -242,6 +260,15 @@ class _AppShellState extends ConsumerState<AppShell> {
                   context: pageContext,
                 ) ==
                 null) {
+              // A module can navigate from a detail route or modal panel.
+              // Reveal the shell before rendering the destination; background
+              // pages defer work while a route covers them (including handoff
+              // to another module's preview page).
+              final workspaceRoute = ModalRoute.of(context);
+              if (workspaceRoute != null) {
+                Navigator.of(context)
+                    .popUntil((route) => identical(route, workspaceRoute));
+              }
               _openEntry(entry, pageContext: pageContext);
               return true;
             }

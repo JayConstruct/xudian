@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../contracts/json_values.dart';
 import 'collection_store.dart';
 
 String uiPreferencesReadDependency(String moduleId) =>
@@ -60,12 +61,22 @@ class ModuleUiPreferences {
     if (bytes > 8192) {
       throw const FormatException('UI preference exceeds 8 KiB');
     }
+    var changed = false;
     await store.db.transaction(() async {
       store.requireActive(actor);
-      final rows = await store.sql(
-        'SELECT value FROM host_ui_preferences WHERE module_id=? AND key<>?',
-        [actor.moduleId, key],
+      final all = await store.sql(
+        'SELECT key,value FROM host_ui_preferences WHERE module_id=?',
+        [actor.moduleId],
       );
+      final current = all.where((row) => row['key'] == key);
+      if (value == null && current.isEmpty ||
+          value != null &&
+              current.isNotEmpty &&
+              canonicalJson(jsonDecode(current.single['value'] as String)) ==
+                  canonicalJson(value)) {
+        return;
+      }
+      final rows = all.where((row) => row['key'] != key).toList();
       if (value != null &&
           (rows.length >= 64 ||
               rows.fold<int>(
@@ -90,11 +101,14 @@ class ModuleUiPreferences {
           [actor.moduleId, key, encoded],
         );
       }
+      changed = true;
     });
+    final dependency = uiPreferencesReadDependency(actor.moduleId);
+    if (changed) store.recordDataChange({dependency});
     store.requireActive(actor);
     // Preference invalidation refreshes only UI readers. It is not a business
     // mutation: do not publish a module-data change or an automation event.
-    store.changes.add({uiPreferencesReadDependency(actor.moduleId)});
+    if (changed) store.changes.add({dependency});
     return value;
   }
 }

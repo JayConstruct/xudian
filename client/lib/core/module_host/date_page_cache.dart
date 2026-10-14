@@ -14,9 +14,10 @@ class PreparedDatePage {
 }
 
 class _DatePageEntry {
-  _DatePageEntry(this.instance, this.snapshot, this.expiresAt);
+  _DatePageEntry(this.instance, this.snapshot, this.startedAt, this.expiresAt);
   final Object instance;
   final PreparedDatePage snapshot;
+  final DateTime startedAt;
   final DateTime expiresAt;
 }
 
@@ -37,6 +38,8 @@ class DatePageCache {
   final DateTime Function() _now;
   final _entries = <String, _DatePageEntry>{};
   int _revision = 0;
+  int? _dataRevision;
+  Map<String, int> _moduleDataRevisions = const {};
   bool _disposed = false;
   String? _pendingKey;
   Object? _pendingInstance;
@@ -53,9 +56,11 @@ class DatePageCache {
     final key = _key(input);
     if (key == null) return null;
     final entry = _entries.remove(key);
+    final now = _now();
     if (entry == null ||
         !identical(entry.instance, instance) ||
-        !entry.expiresAt.isAfter(_now())) {
+        now.isBefore(entry.startedAt) ||
+        !entry.expiresAt.isAfter(now)) {
       return null;
     }
     _entries[key] = entry;
@@ -67,22 +72,22 @@ class DatePageCache {
   bool remember(
     Object instance,
     Map<String, Object?> input,
-    PreparedDatePage snapshot,
-  ) {
+    PreparedDatePage snapshot, {
+    DateTime? startedAt,
+  }) {
     final key = _key(input);
     if (key == null || !_replayable(input, snapshot.result)) return false;
     final now = _now();
+    final started = startedAt ?? now;
     final nextMinute = DateTime.fromMillisecondsSinceEpoch(
-      ((now.millisecondsSinceEpoch ~/ 60000) + 1) * 60000,
-      isUtc: now.isUtc,
+      ((started.millisecondsSinceEpoch ~/ 60000) + 1) * 60000,
+      isUtc: started.isUtc,
     );
-    final ttl = now.add(maxAge);
+    final ttl = started.add(maxAge);
+    final expiresAt = ttl.isBefore(nextMinute) ? ttl : nextMinute;
+    if (now.isBefore(started) || !expiresAt.isAfter(now)) return false;
     _entries.remove(key);
-    _entries[key] = _DatePageEntry(
-      instance,
-      snapshot,
-      ttl.isBefore(nextMinute) ? ttl : nextMinute,
-    );
+    _entries[key] = _DatePageEntry(instance, snapshot, started, expiresAt);
     while (_entries.length > capacity) {
       _entries.remove(_entries.keys.first);
     }
@@ -127,6 +132,7 @@ class DatePageCache {
           : Future.value(null);
     }
     final revision = _revision;
+    final startedAt = _now();
     final request = freezeJson(input) as Map<String, Object?>;
     bool isCurrent() => !_disposed && _revision == revision && shouldRun();
     _pendingKey = key;
@@ -136,7 +142,7 @@ class DatePageCache {
         final snapshot = await load(isCurrent);
         if (snapshot == null ||
             !isCurrent() ||
-            !remember(instance, request, snapshot)) {
+            !remember(instance, request, snapshot, startedAt: startedAt)) {
           return null;
         }
         return snapshot;
@@ -161,6 +167,26 @@ class DatePageCache {
     _entries.removeWhere(
       (_, entry) => entry.snapshot.reads.any(modules.contains),
     );
+  }
+
+  /// Synchronize before every lookup, including before stream notifications
+  /// have arrived. Unknown global changes still clear everything rather than
+  /// silently weakening the global revision guard. Pending reads conservatively
+  /// stop for every write because their dependencies are not yet known.
+  void synchronizeDataRevision(int revision, Map<String, int> modules) {
+    if (_dataRevision == revision) return;
+    final changed = {
+      for (final module in {..._moduleDataRevisions.keys, ...modules.keys})
+        if ((_moduleDataRevisions[module] ?? 0) != (modules[module] ?? 0))
+          module,
+    };
+    if (_dataRevision == null || changed.isEmpty) {
+      clear();
+    } else {
+      invalidateModules(changed);
+    }
+    _dataRevision = revision;
+    _moduleDataRevisions = Map.unmodifiable(modules);
   }
 
   void clear() {

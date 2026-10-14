@@ -88,16 +88,41 @@ void main() {
                     'order': order,
                   },
                 },
+              for (final id in ['detail', 'importer', 'preview'])
+                {
+                  'id': 'test.navigation.$id',
+                  'title': id,
+                  'handler': 'render',
+                  if (id == 'importer') 'headerMode': 'contributed',
+                },
             ],
           },
           {
             'main.js': """
 import {ui} from '@xudian/sdk';
-export async function render({event,context}) {
+export async function render({event,context,state={}}) {
   if(event?.type==='schedule')await ui.navigate('test.navigation.schedule',{source:'daily'});
-  return {tree:{type:'column',children:[
+  if(event?.type==='detail')await ui.navigate('test.navigation.detail');
+  if(event?.type==='panel')await ui.panel('test.navigation.importer');
+  if(event?.type==='importer')await ui.navigate('test.navigation.importer');
+  if(event?.type==='handoff')await ui.navigate('test.navigation.schedule',{source:'importer',importPlanId:'review-plan'});
+  if(event?.type==='invalid')await ui.navigate('test.navigation.missing');
+  if(context.pageId.endsWith('.schedule')&&context.importPlanId&&!state.routed) {
+    state.routed=true;await ui.navigate('test.navigation.preview',{importPlanId:context.importPlanId});
+  }
+  return {state,...(context.pageId.endsWith('.importer')?{header:{title:'导入详情',backEvent:{type:'internalBack'}}}:{}),tree:{type:'column',children:[
     {type:'text',text:'正文 '+context.pageId},
-    ...(context.pageId.endsWith('.home')?[{type:'button',text:'查看课表',event:{type:'schedule'}}]:[]),
+    ...(context.pageId.endsWith('.home')?[
+      {type:'button',text:'查看课表',event:{type:'schedule'}},
+      {type:'button',text:'打开详情',event:{type:'detail'}},
+      {type:'button',text:'打开面板',event:{type:'panel'}}
+    ]:[]),
+    ...(context.pageId.endsWith('.detail')?[{type:'button',text:'打开导入器',event:{type:'importer'}}]:[]),
+    ...(context.pageId.endsWith('.importer')?[
+      {type:'button',text:'交接预览',event:{type:'handoff'}},
+      {type:'button',text:'无效目标',event:{type:'invalid'}}
+    ]:[]),
+    ...(context.pageId.endsWith('.preview')?[{type:'text',text:'确认预览 '+context.importPlanId}]:[]),
     ...(context.source?[{type:'text',text:'来自 '+context.source}]:[])
   ]}};
 }
@@ -114,6 +139,59 @@ export async function render({event,context}) {
     await db.close();
     await dir.delete(recursive: true);
   });
+  for (final fromPanel in [false, true]) {
+    testWidgets(
+      'workspace handoff from ${fromPanel ? 'panel' : 'nested detail with internal back'} reveals the provider preview',
+      (tester) async {
+        final app = XudianApp();
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          app.registry.dispose();
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              databaseProvider.overrideWith((_) async => db),
+              moduleHostProvider.overrideWith((_) async => host),
+            ],
+            child: app,
+          ),
+        );
+        await settle(tester);
+        await tester.tap(find.text(fromPanel ? '打开面板' : '打开详情'));
+        await settle(tester);
+        if (!fromPanel) {
+          await tester.tap(find.text('打开导入器'));
+          await settle(tester);
+        }
+        expect(find.text('交接预览').hitTestable(), findsOneWidget);
+        // An unavailable target must leave the current detail/panel visible.
+        await tester.tap(find.text('无效目标'));
+        await settle(tester);
+        expect(find.text('Page unavailable'), findsOneWidget);
+        expect(find.textContaining('Bad state:'), findsNothing);
+        expect(find.text('交接预览').hitTestable(), findsOneWidget);
+        await tester.tap(find.text('交接预览'));
+        await settle(tester);
+        await tester.pumpAndSettle();
+        expect(find.text('确认预览 review-plan').hitTestable(), findsOneWidget);
+        expect(find.text('交接预览'), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
+        final dock = tester.widget<MobileBottomDock>(
+          find.byType(MobileBottomDock, skipOffstage: false),
+        );
+        expect(
+          dock.destinations[dock.selectedIndex].id,
+          'test.navigation.schedule',
+        );
+        await tester.tap(find.byTooltip('返回'));
+        await settle(tester);
+        expect(find.text('来自 importer').hitTestable(), findsOneWidget);
+        expect(find.byType(ModuleDetailPage), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   testWidgets(
     'More is a workspace, AI follows support and navigation reuses a dock page',
     (tester) async {

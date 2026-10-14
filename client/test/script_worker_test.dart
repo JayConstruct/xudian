@@ -5,6 +5,42 @@ import 'package:xquickjs/xquickjs.dart';
 
 void main() {
   test(
+    'caught host errors expose business text and retain diagnostic details',
+    () async {
+      const detail =
+          'Bad state: Error: 撤销已停止：任务已完成\n'
+          '    at batchUndo (main.js:34:375)\n';
+      final worker = JavaScriptWorker({
+        'main.js': """
+import {services} from '@xudian/sdk';
+export async function caught() {
+  try { await services.prepare({},{}); }
+  catch(error) { return {text:String(error),message:error.message,diagnostic:error.diagnostic,isError:error instanceof Error}; }
+}
+export async function uncaught() { await services.prepare({},{}); }
+""",
+      }, host: (_, _) async => throw StateError(detail));
+      addTearDown(worker.close);
+      await worker.load('main.js');
+      expect(await worker.invoke('caught', {}), {
+        'text': '撤销已停止：任务已完成',
+        'message': '撤销已停止：任务已完成',
+        'diagnostic': 'Bad state: $detail',
+        'isError': true,
+      });
+      await expectLater(
+        worker.invoke('uncaught', {}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'provider diagnostic stack',
+            contains('at batchUndo (main.js:34:375)'),
+          ),
+        ),
+      );
+    },
+  );
+  test(
     'idle worker wakes for concurrent invokes, delayed host replies and events',
     () async {
       final delivered = Completer<Object?>();

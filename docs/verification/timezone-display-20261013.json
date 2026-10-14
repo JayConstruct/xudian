@@ -1,0 +1,92 @@
+{
+  "date": "2026-10-13",
+  "status": "implementation-and-automated-verification-complete-device-acceptance-pending",
+  "hostApi": "1.22.0",
+  "items": {
+    "UX-07": "implemented",
+    "DISPLAY-01": "diagnostics-and-emulator-baseline-only-arm-cause-unresolved"
+  },
+  "validation": {
+    "flutterRelatedTests": 168,
+    "systemTimezoneTests": 11,
+    "scheduleTimezoneTests": 9,
+    "displayDiagnosticsTests": 6,
+    "pythonTargetedTests": 36,
+    "nodeCompatibilityFile": "scripts/module_host/shiguang_compat_test.mjs",
+    "flutterAnalyze": "No issues found",
+    "productionDartFiles": 127,
+    "repositoryTrackedFiles": 627,
+    "gitDiffCheck": "passed",
+    "finalPackagedRelatedTests": 28
+  },
+  "androidBuild": {
+    "kind": "debug",
+    "abi": "x86_64",
+    "buildNumber": 4114,
+    "apkSha256": "1809a94ab706405b90d1e2a4ec17e16878b0b6f8e6fb7b66c63cd924be62bbd7",
+    "installed": false
+  },
+  "modules": [
+    {
+      "id": "app.schedule",
+      "version": "1.13.0",
+      "hostApi": "^1.22.0",
+      "candidateSha256": "92b9c306b31c7401a51fe7fb187daddd40aabfc863c21757972ecb2af7d70810",
+      "published": false,
+      "installedOnDevice": false
+    },
+    {
+      "id": "app.import.shiguang",
+      "version": "1.6.0",
+      "hostApi": "^1.22.0",
+      "candidateSha256": "9bb9032e48f29d43d71d333852d531967841b6f28fe56dcc90bf44c82e55e130",
+      "published": false,
+      "installedOnDevice": false
+    }
+  ],
+  "emulatorSystemBaseline": {
+    "schemaVersion": 1,
+    "collectedAtUtc": "2026-10-13T14:26:04.521335+00:00",
+    "model": "sdk_gphone64_x86_64",
+    "android": "17",
+    "abi": "x86_64",
+    "systemTimezone": "GMT",
+    "screenPixels": {
+      "physical": {
+        "width": 1080,
+        "height": 2400
+      }
+    },
+    "densityDpi": {
+      "physical": 420
+    },
+    "systemFontScale": 1.0,
+    "estimatedPixelRatio": 2.625,
+    "estimatedLogicalDisplay": {
+      "width": 411.429,
+      "height": 914.286
+    },
+    "androidAppConfiguration": {
+      "logicalWidthDp": 411,
+      "logicalHeightDp": 914,
+      "densityDpi": 420,
+      "smallestWidthDp": 411
+    },
+    "flutterView": null,
+    "measurementNotes": [
+      "Android estimates are not measurements of the Flutter view.",
+      "System font_scale is not the nonlinear Flutter TextScaler mapping.",
+      "Read the in-app display diagnostics for actual view, safe area and text samples."
+    ],
+    "failedReads": [],
+    "deviceSettingsChanged": false
+  },
+  "limits": [
+    "ARM physical device was not connected.",
+    "Flutter view measurement from the new diagnostic page was not collected on a device.",
+    "Windows implementation has not been built or run.",
+    "Existing installed modules and published catalog were not updated."
+  ],
+  "dataPreserved": true,
+  "systemSettingsChanged": false
+}

@@ -6,7 +6,7 @@ import {captureScript,compileBridge} from '../../packages/modules/app.import.shi
 import {adapters,loadAdapter,snapshot} from '../../packages/modules/app.import.shiguang/warehouse/catalog.js';
 import {listAdapters} from '../../packages/modules/app.import.shiguang/schools.js';
 
-const options={name:'测试课表',scope:'school/student/2026-autumn',firstMonday:'2026-09-07',totalWeeks:20};
+const options={name:'测试课表',scope:'school/student/2026-autumn',firstMonday:'2026-09-07',totalWeeks:20,timezone:'Asia/Shanghai'};
 const row={name:'数学',teacher:'老师',position:'A101',day:1,startSection:1,endSection:2,weeks:[5,1,3,1]};
 test('maps course and recurrence, merges duplicate fragments with stable identities',()=>{
   const a=convert({payload:{courses:[row,{...row,weeks:[7]}]},options});

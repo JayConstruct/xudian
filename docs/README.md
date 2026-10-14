@@ -13,6 +13,9 @@
 | [设置层级](SETTINGS_HIERARCHY.md) | 分类首页、二级页与模块入口 |
 | [界面规则](UI_DESIGN_SYSTEM.md) | 共用视觉、顶栏、菜单、适配与反馈 |
 | [全局 Toast](design/TOAST.md) | 短暂反馈的 UI、动画、去重、调用与示例验收 |
+| [实际数据审核](design/DATA_CHANGE_REVIEW.md) | 冻结计划的增改删摘要、记录对比、批量与回退规则 |
+| [时区与显示诊断](design/TIMEZONE_DISPLAY.md) | 新课表时区默认、旧课表保留规则、显示诊断与设备基线 |
+| [体验优化与跨平台待办](design/UX_PLATFORM_BACKLOG.md) | 真机反馈、已完善记录、剩余任务与设备验收范围 |
 | [AI 助手](AI_ASSISTANT.md) | 当前服务工具、审核、记录与操作边界 |
 
 ## 开发与发布
@@ -21,6 +24,7 @@
 | --- | --- |
 | [开发指南](../DEVELOPMENT.md) | 日常命令、检查、构建、数据库生成 |
 | [客户端入口](../client/README.md) | 生产代码路径与数据流 |
+| [UI 加载性能](UI_LOADING_PERFORMANCE.md) | 启动、缓存、批量读取、计时与真机验收 |
 | [架构](DESIGN.md) | 宿主、业务与数据边界 |
 | [模拟器更新](EMULATOR_UPDATE.md) | 热重载、缓存、模块导入和可选提交 |
 | [模块宿主](MODULE_HOST.md) | 包验证、运行权限、事务、迁移与恢复 |

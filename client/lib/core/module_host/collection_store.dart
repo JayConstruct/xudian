@@ -45,6 +45,7 @@ class SnapshotSession {
   List<String> automationTrace = [];
   final activeServices = <String>{};
   bool pagePreparation = false;
+  void Function()? onPageSideEffect;
 }
 
 class ChangePlan {
@@ -68,10 +69,48 @@ class CollectionStore {
   final AppDatabase db;
   final changes = StreamController<Set<String>>.broadcast();
   int _dataRevision = 0;
+  final _moduleDataRevisions = <String, int>{};
+  final _dataRevisionBatchKey = Object();
 
   /// Advances synchronously after a successful write, before asynchronous
   /// change notifications are delivered. Read caches can avoid that gap.
   int get dataRevision => _dataRevision;
+
+  /// A detached snapshot of successful writes by module. Like [dataRevision],
+  /// these tokens advance before asynchronous change notifications. A cache
+  /// can retain results that read only modules unaffected by another write.
+  Map<String, int> get moduleDataRevisions =>
+      Map.unmodifiable(_moduleDataRevisions);
+
+  /// Record a committed change to business data or a synthetic read dependency.
+  /// Call only after its transaction succeeds, before publishing notifications.
+  void recordDataChange(Set<String> modules) {
+    if (modules.isEmpty) return;
+    final pending = Zone.current[_dataRevisionBatchKey] as Set<String>?;
+    if (pending != null) {
+      pending.addAll(modules);
+      return;
+    }
+    _dataRevision++;
+    for (final module in modules) {
+      _moduleDataRevisions[module] = _dataRevision;
+    }
+  }
+
+  /// An outer transaction containing nested commits (for example a batch
+  /// installation) must publish tokens only when the outermost transaction
+  /// succeeds. Nested failures discard their own changes without discarding
+  /// earlier successful work in the parent transaction.
+  Future<T> transactionWithDataRevisions<T>(Future<T> Function() action) async {
+    final pending = <String>{};
+    final result = await runZoned(
+      () => db.transaction(action),
+      zoneValues: {_dataRevisionBatchKey: pending},
+    );
+    recordDataChange(pending);
+    return result;
+  }
+
   final events = StreamController<Map<String, Object?>>.broadcast();
   final _plans = <String, ChangePlan>{};
   final _actors = <String, ModuleActor>{};
@@ -787,7 +826,13 @@ class CollectionStore {
       changed = true;
       return p.result;
     });
-    if (changed && p.writes.isNotEmpty) _dataRevision++;
+    // Publish only after the transaction succeeds: conflicts and rolled-back
+    // writes must not advance tokens, and idempotent retries change neither.
+    if (changed && p.writes.isNotEmpty) {
+      recordDataChange({
+        for (final w in p.writes) object(w)['moduleId'] as String,
+      });
+    }
     if (changed && audit) {
       changes.add({for (final w in p.writes) object(w)['moduleId'] as String});
       await drainOutbox();

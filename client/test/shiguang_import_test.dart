@@ -36,6 +36,7 @@ void main() {
   late ModuleActor adapter, schedule;
   const options = {
     'name': '正方导入',
+    'timezone': 'Asia/Shanghai',
     'scope': 'school/student/2026-autumn',
     'firstMonday': '2026-09-07',
     'totalWeeks': 20,

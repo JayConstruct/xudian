@@ -42,7 +42,19 @@ Future<void> waitForNativeWidget(
     );
     await tester.pump(const Duration(milliseconds: 20));
   }
-  expect(ready, findsOneWidget);
+  expect(
+    ready,
+    findsOneWidget,
+    reason:
+        tester
+            .widgetList<Text>(find.byType(Text))
+            .map((w) => w.data)
+            .join(' | ') +
+        tester
+            .widgetList<SelectableText>(find.byType(SelectableText))
+            .map((w) => w.data)
+            .join(' | '),
+  );
 }
 
 Future<ScriptPackage> package(
@@ -264,6 +276,7 @@ void main() {
         late ModuleHost host;
         late Directory dir;
         late ModuleCatalogClient client;
+        late String importerName;
         final navigatorKey = GlobalKey<NavigatorState>();
         Future<void>? installation;
         final gate = Completer<List<int>>();
@@ -302,6 +315,7 @@ void main() {
                   dependency: compat.id,
                   name: '课表',
                 );
+          importerName = compat.title;
           final fixtures = <String, List<int>>{};
           final catalog = <Object?>[];
           final sources = [foundation, compat, ?schedule];
@@ -399,19 +413,34 @@ void main() {
               navigatorKey: navigatorKey,
               home: Scaffold(
                 body: Consumer(
-                  builder: (context, ref, _) => FilledButton(
-                    onPressed: () {
-                      installation = installResolvedModules(
-                        context,
-                        ref,
-                        host,
-                        requests: {
-                          official ? 'app.import.shiguang' : 'private.schedule':
-                              'any',
+                  builder: (context, ref, _) => Column(
+                    children: [
+                      FilledButton(
+                        onPressed: () {
+                          installation = installResolvedModules(
+                            context,
+                            ref,
+                            host,
+                            requests: {
+                              official
+                                      ? 'app.import.shiguang'
+                                      : 'private.schedule':
+                                  'any',
+                            },
+                          );
                         },
-                      );
-                    },
-                    child: const Text('安装课表'),
+                        child: const Text('安装课表'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ModuleCatalogPage(host: host),
+                          ),
+                        ),
+                        child: const Text('查看商店'),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -435,14 +464,29 @@ void main() {
             hitTestable: true,
           );
           await tester.runAsync(() => tester.tap(find.text('确认安装')));
-          await waitForNativeWidget(tester, find.text('模块安装完成'));
+          await waitForNativeWidget(
+            tester,
+            find.text('模块安装完成，共 ${official ? 2 : 3} 个'),
+          );
+          expect(find.byType(SnackBar), findsNothing);
+          // The launch action belongs to the store and survives the Toast.
+          await tester.pump(const Duration(seconds: 4));
+          await tester.pump(const Duration(milliseconds: 200));
+          expect(find.textContaining('模块安装完成'), findsNothing);
           if (official) {
-            await waitForNativeWidget(
-              tester,
-              find.text('打开模块'),
-              hitTestable: true,
+            await tester.runAsync(() => tester.tap(find.text('查看商店')));
+            await waitForNativeWidget(tester, find.text(importerName));
+            final importerCard = find.ancestor(
+              of: find.text(importerName),
+              matching: find.byType(Card),
             );
-            await tester.runAsync(() => tester.tap(find.text('打开模块')));
+            final openImporter = find.descendant(
+              of: importerCard,
+              matching: find.text('打开模块'),
+            );
+            await tester.ensureVisible(openImporter);
+            await waitForNativeWidget(tester, openImporter, hitTestable: true);
+            await tester.runAsync(() => tester.tap(openImporter));
             await waitForNativeWidget(tester, find.text('按学校导入'));
           }
         }

@@ -1,0 +1,109 @@
+{
+  "status": "passed",
+  "date": "2026-10-13",
+  "sourceBaseCommit": "1f836b64e5483361f987ceac1428fe0fe0a1fdef",
+  "sourcePatchSha256": "9eec210371f0e7e7190e90d74ec698d48593149abe74923299ba59b886bd172a",
+  "fixes": [
+    {
+      "id": "UI-01",
+      "result": "fixed",
+      "implementation": "ui.navigate validates destination and mount before dismissing covering routes to reveal the workspace; the provider can open its confirmation page immediately.",
+      "phoneEvidence": [
+        "02-settings-handoff-direct-preview.xml",
+        "03-course-entry-handoff-direct-preview.xml",
+        "05-imported-course.xml"
+      ],
+      "emulatorBefore": "emulator/00-before-handoff-still-importer.png",
+      "emulatorAfter": [
+        "emulator/02-settings-handoff-direct-preview.png",
+        "emulator/03-course-entry-handoff-direct-preview.png"
+      ]
+    },
+    {
+      "id": "UI-02",
+      "result": "fixed",
+      "implementation": "Host failures transport a clean message; caught JS Error stringification uses that message and retains raw diagnostic text separately. Uncaught page failures use the same display formatter.",
+      "phoneEvidence": [
+        "06-planner-clean-refusal.xml",
+        "07-completion-protected.xml",
+        "08-ai-clean-error.png"
+      ],
+      "emulatorBefore": "emulator/00-before-fix-ai-error.png",
+      "emulatorAfter": "emulator/06-after-fix-ai-error.png"
+    }
+  ],
+  "validation": {
+    "relatedFlutterTests": 51,
+    "relatedTestsLog": "../android-real-20261013/fix-regression.log",
+    "finalErrorBoundaryTests": 9,
+    "finalErrorBoundaryTestsLog": "final-error-regression.log",
+    "flutterAnalyze": "No issues found",
+    "architectureDartFiles": 121,
+    "repositoryTrackedFiles": 627,
+    "gitDiffCheck": "passed",
+    "sdkDocumentation": "docs/MODULE_SDK.md"
+  },
+  "devices": [
+    {
+      "kind": "physical",
+      "android": "15",
+      "abi": "arm64-v8a",
+      "versionCode": 2113,
+      "dataPreserved": true,
+      "businessModulesChanged": false,
+      "modules": "Previously installed from default online store; unchanged script packages",
+      "verified": [
+        "Settings and course-slot imports navigate directly to confirmation",
+        "Save test course and retain it across restart",
+        "Completed planner task still prevents batch undo; only business message shown",
+        "Completed record retained",
+        "AI unconfigured message has no prefix or stack",
+        "Original course and ADB_PLAN_B retained; original timetable restored"
+      ],
+      "finalScreen": "original today agenda"
+    },
+    {
+      "kind": "emulator",
+      "android": "17",
+      "abi": "x86_64",
+      "versionCode": 4113,
+      "dataPreserved": true,
+      "modules": "Original importer 1.5.0 reused; planner 1.0.0 and task 1.4.0 installed/updated from default online store, schedule 1.11.0 updated to store 1.12.0",
+      "verified": [
+        "Original navigation and AI stack-display bugs reproduced before update",
+        "Both import entry paths navigate directly to confirmation after update",
+        "Import confirmation saved test course",
+        "AI error shows only business message after update",
+        "Store dependency installation and schedule update retain courses",
+        "Planner query page ready with compatible course provider",
+        "Original timetable and week 2 restored"
+      ],
+      "finalScreen": "original timetable week 2"
+    }
+  ],
+  "apkVerification": [
+    {
+      "device": "physical",
+      "apk": "app-arm64-build113.apk",
+      "sha256": "105f549c7673b51ed8ae23e586dd109f300dfe40a4e2a06230d337d430e3e56e",
+      "apkUnchangedDuringVerification": true,
+      "appCrashMatches": []
+    },
+    {
+      "device": "emulator",
+      "apk": "app-x86_64-build113.apk",
+      "sha256": "6c3c2d9a24ff7fbbb75a594b665232ee9c1811692c638c62bb82d15d85ee5644",
+      "apkUnchangedDuringVerification": true,
+      "appCrashMatches": []
+    }
+  ],
+  "signerSha256": "1cb124c4981ae2cb98d2ce101bc1ba8c563ac90db1c5d5029de9590c0479a7b3",
+  "notes": [
+    "No app data cleared or apps uninstalled",
+    "Host-only fix; business module source and immutable release packages unchanged",
+    "Phone lockscreen initially interrupted UI sampling; user unlocked and final physical-device verification passed",
+    "Automation route depth limit and installed-module detail/update UI differences were recovered without data reset",
+    "No real model requests, school login, FPS or battery benchmark in this fix verification"
+  ],
+  "artifactsRoot": "dist/verification/android-host-fixes-20261013"
+}

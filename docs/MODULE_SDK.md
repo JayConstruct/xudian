@@ -1,6 +1,6 @@
 # JavaScript 模块 SDK v1
 
-当前宿主 API 为 `1.21.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
+当前宿主 API 为 `1.23.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
 
 新增模块使用 `formatVersion: 3`、`packageFormat: 2`，按所用能力声明最低 `hostApi`。组件/服务的 `@1` 主版本与宿主 API 版本分别管理，下方完整契约保留兼容规则。
 
@@ -15,6 +15,7 @@
 | 详情标题与内部返回 | 1.9 |
 | 数字网格选择 | 1.10 |
 | 工作区助手、日期容器初始门控、概览日期控件开关 | 1.18 |
+| 系统 IANA 时区读取 | 1.22 |
 
 模块包目录示例：
 
@@ -75,13 +76,21 @@ query/command 的 JSON Schema 使用明确子集：type、properties、required�
 
 ## 交互和外部操作
 
-`ui.navigate(pageId,context)`、`ui.panel(pageId,context)`、`ui.dialog({title,fields})` 使用宿主交互；表单支持 text/multiline、number、date/datetime、boolean、select/multiSelect 与安全输入；可声明 required/maxLength，非法输入留在对话框中。`ui.review(planId)` 展示真实写集和结果，宿主控制最终确认。
+`ui.navigate(pageId,context)`、`ui.panel(pageId,context)`、`ui.dialog({title,fields})` 使用宿主交互；表单支持 text/multiline、number、date/datetime、boolean、select/multiSelect 与安全输入；可声明 required/maxLength，非法输入留在对话框中。`ui.review(planId)` 展示真实写集和结果，宿主控制最终确认。当前合法计划先展示增改删摘要与记录前后对比，完整原始计划可展开；未知结构回退原始审核。取消不提交，过期快照仍由提交校验拒绝，规则见 [实际数据审核](design/DATA_CHANGE_REVIEW.md)。
+
+`ui.navigate` 指向可用工作区时，宿主关闭覆盖工作区的详情路由和模态面板，再激活目标并传递上下文；目标不可用时保留当前页面。目标模块随后打开的确认详情页直接显示，不需要用户手动返回工作区。`ui.panel` 继续打开面板，不切换工作区。
+
+跨宿主调用被拒绝时，脚本捕获的 Error 的 `message` 和 `String(error)` 提供业务正文，去除重复异常前缀与调用堆栈；原始异常文本保存在 `error.diagnostic` 供诊断使用，不应展示给用户。未捕获的页面异常也以业务正文和重试操作显示，原始异常仍供宿主诊断。
 
 `http.request({id,url,method,headers,body,credential})`、`http.cancel(id)` 受网络许可、地址和容量限制。`secrets.configure({endpoint,label})` 通过安全输入返回凭据句柄；`secrets.delete(handle)` 删除自身凭据。`grants.request({scopes})` / `revoke(id)` 经宿主审核，默认 30 分钟及 20 次写入。
 
 `packages.prepare({definition,files})` 编译并在隔离临时数据空间执行预览，返回摘要绑定的提案；`packages.review(id)` 再次核验基线、来源和摘要，审核后安装。普通服务授权不包含安装权限。预览不能联网、交互或修改正式数据。
 
 `files.readText()` / `saveText(name,text)` 为用户选择的 JSON 文本交换。`clock.today(ianaZone)`、`clock.now()` 和 `ids.new()` 由宿主提供。API 1.1 增加 `clock.local(ianaZone)`，返回 `{date,time,weekday}`，分别为民用日期、`HH:mm` 和星期 1–7，按指定时区计算。JavaScript 不读取设备文件路径、进程、系统命令或凭据明文。
+
+API 1.22 增加 `await clock.systemTimezone()`，无参数，返回 `{zone,source}`。`zone` 是宿主时区库认可的 IANA 名称；`source` 为 `system` 或 `fallback`。每次调用重新读取系统设置，读取失败、无支持、无效名称或超时使用明确的 `Asia/Shanghai` 回退。`GMT`、`Etc/GMT` 和 `Etc/UTC` 等明确零时区别名规范为库支持的 `UTC`；不从数字偏移或 `CST` 等歧义缩写猜测地区。
+
+该调用需要 `clock.today`、`clock` 或精确 `clock.systemTimezone` 权限，可用于有权限的查询、命令准备和只读页面准备；隔离预览、迁移与安装验证不能访问真实系统能力。异步读取完成后重新核对调用者是否仍启用。结果用于新记录默认值，已有记录应保留存储的时区，不能因系统设置变化自动改写；`source: 'fallback'` 应向用户说明。Android 及 Windows 实现与实测限制见 [时区与显示诊断](design/TIMEZONE_DISPLAY.md)。
 
 ## 页面
 
@@ -434,6 +443,8 @@ ui.component('ui.dayOverview@1', {
 `duration` 控制退出时长，为 100–2000ms 的整数，默认 220ms；`spacing` 为 0–48 的有限数字，默认 12。UI 包仍可替换每个行组件，列表只负责稳定身份与通用呈现，不调用业务服务。这是视觉差量更新，服务查询、脚本执行和跨桥传输仍按既有刷新流程完成；不是 SQLite 或跨桥的局部更新协议。日程 `app.views.today 1.6.2` 使用此节点，在任务创建、完成的审核提交成功后提供反馈；快速添加仍使用独立的可折叠 `transition`。
 
 ## API 1.21 的纯时区转换与可选查询
+
+API 1.23 新增 `await clock.toLocalMany([{utc, zone}, ...])`，返回与输入顺序相同的本地时间数组。最多 256 项，空数组返回空数组；每项复用 `clock.toLocal` 的日期、时区与夏令时规则，任一项无效则整批失败。页面、只读准备、query、command prepare 均可调用且无需额外权限。使用它的模块需声明 `hostApi: '^1.23.0'`。日程 `app.views.today 1.8.0` 使用批量转换，50 个精确计划的时间转换桥接从 100 次减少至 1 次，超过 128 个计划分批处理。
 
 声明 `hostApi: '^1.21.0'` 后可使用两项无副作用转换，在页面、只读页面准备、query 和 command prepare 中均可调用，不需要额外权限，也不读取宿主当前时间：
 

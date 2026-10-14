@@ -3,12 +3,14 @@ import {addDays,weekday,validateTimetable,validateMeeting} from './calendar.js';
 import {defaultPeriods} from './view_helpers.js';
 
 const demoId='schedule-demo-v1',demoMarker='schedule-demo-v1';
-export async function createDemo({timezone='Asia/Shanghai'}={}) {
+export async function createDemo({timezone}={}) {
   const existing=await data.get('timetables',demoId);
   if(existing) {
     if(existing.demoMarker!==demoMarker)throw new Error('示例课表标识已被其他课表使用，未修改任何内容');
     return {writes:[],events:[],result:{timetableId:demoId,alreadyExists:true}};
   }
+  const zone=timezone===undefined?await clock.systemTimezone():{zone:timezone,source:'explicit'};
+  timezone=zone.zone;
   const today=await clock.today(timezone);
   const timetable=validateTimetable({id:demoId,datasetId:demoId,demoMarker,name:'示例课表',firstMonday:addDays(today,1-weekday(today)),totalWeeks:20,timezone,displayWeekStart:1,showWeekends:true,periods:defaultPeriods});
   const examples=[
@@ -22,5 +24,5 @@ export async function createDemo({timezone='Asia/Shanghai'}={}) {
   // leaves every existing record, including edited example records, untouched.
   const writes=[{collection:'timetables',id:demoId,value:timetable},...courses.map(value=>({collection:'courses',id:value.id,value})),...meetings.map(value=>({collection:'meetings',id:value.id,value}))];
   for(const write of writes)if(await data.get(write.collection,write.id))throw new Error('示例数据标识已被使用，未修改任何内容');
-  return {writes,events:[{type:'schedule.updated',timetableId:demoId}],result:{timetableId:demoId,date:today,courses:courses.length,alreadyExists:false}};
+  return {writes,events:[{type:'schedule.updated',timetableId:demoId}],result:{timetableId:demoId,date:today,courses:courses.length,alreadyExists:false,timezone,timezoneSource:zone.source}};
 }

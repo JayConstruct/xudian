@@ -112,6 +112,93 @@ void main() {
     expect(cache.lookup(instance, input()), isNull);
   });
 
+  test('synchronous module revisions close the notification gap', () {
+    final cache = DatePageCache();
+    final instance = Object();
+    cache.synchronizeDataRevision(0, {});
+    cache.remember(instance, input(), snapshot());
+    cache.synchronizeDataRevision(1, {'unrelated': 1});
+    expect(cache.lookup(instance, input()), isNotNull);
+    // Several commits can complete before this renderer checks again. Compare
+    // the whole detached snapshot, not merely the most recently changed module.
+    cache.synchronizeDataRevision(3, {'unrelated': 3, 'tasks': 2});
+    expect(cache.lookup(instance, input()), isNull);
+  });
+
+  test('untracked global revision changes retain the full-clear fallback', () {
+    final cache = DatePageCache();
+    final instance = Object();
+    cache.synchronizeDataRevision(0, {});
+    cache.remember(instance, input(), snapshot());
+    cache.synchronizeDataRevision(1, {});
+    expect(cache.lookup(instance, input()), isNull);
+  });
+
+  test('a result begun in the previous minute is never cached', () async {
+    var now = DateTime.utc(2026, 10, 12, 8, 59, 59);
+    final cache = DatePageCache(now: () => now);
+    final instance = Object();
+    final startedAt = now;
+    final done = Completer<PreparedDatePage?>();
+    final pending = cache.prepare(
+      instance: instance,
+      input: input(),
+      load: (_) => done.future,
+      shouldRun: () => true,
+    );
+    now = now.add(const Duration(seconds: 2));
+    done.complete(snapshot());
+    expect(await pending, isNull);
+    expect(
+      cache.remember(instance, input(), snapshot(), startedAt: startedAt),
+      isFalse,
+    );
+    expect(cache.lookup(instance, input()), isNull);
+  });
+
+  test('request latency consumes TTL and clock rollback discards results', () {
+    var now = DateTime.utc(2026, 10, 12, 8, 59, 1);
+    final cache = DatePageCache(now: () => now);
+    final instance = Object();
+    final startedAt = now;
+    now = now.add(const Duration(seconds: 20));
+    expect(
+      cache.remember(instance, input(), snapshot(), startedAt: startedAt),
+      isTrue,
+    );
+    now = startedAt.add(const Duration(seconds: 30));
+    expect(cache.lookup(instance, input()), isNull);
+    expect(
+      cache.remember(instance, input(), snapshot(), startedAt: startedAt),
+      isFalse,
+    );
+    cache.remember(instance, input(), snapshot());
+    now = startedAt;
+    expect(cache.lookup(instance, input()), isNull);
+  });
+
+  test('a synchronous unrelated write cancels pending unknown reads', () async {
+    final cache = DatePageCache();
+    final instance = Object();
+    cache.synchronizeDataRevision(0, {});
+    final done = Completer<PreparedDatePage?>();
+    late bool Function() current;
+    final pending = cache.prepare(
+      instance: instance,
+      input: input(),
+      load: (predicate) {
+        current = predicate;
+        return done.future;
+      },
+      shouldRun: () => true,
+    );
+    cache.synchronizeDataRevision(1, {'unrelated': 1});
+    expect(current(), isFalse);
+    done.complete(snapshot());
+    expect(await pending, isNull);
+    expect(cache.lookup(instance, input()), isNull);
+  });
+
   test(
     'one speculative read at a time and identical reads are shared',
     () async {

@@ -183,10 +183,14 @@ class FreshInstallVerification:
                   previousAttemptReport=archive.name)
 
     def consume_install_action(self, *, expect_open=False):
-        """An accessible action can keep a Snackbar above the dock indefinitely."""
+        """Handle legacy Snackbar actions; current stores keep an entry on the card."""
         e = self.emulator
         nodes = e.nodes()
-        if not any('模块安装完成' in e.label(node) for node in nodes):
+        # The current short Toast has no action and can disappear before the UI
+        # dump. Its persistent store entry remains available in either case.
+        if not any(e.label(node) == '模块安装完成' for node in nodes):
+            if expect_open:
+                self.open_installed_store_module()
             return
         actions = [node for node in nodes
                    if e.label(node) == '打开模块' and node.get('enabled') != 'false']
@@ -210,6 +214,81 @@ class FreshInstallVerification:
         self.step('installationActionOpenedImporterWithoutRestart' if expect_open
                   else 'installationNoticeConsumedWithoutRestart')
         e.home()
+
+    @staticmethod
+    def store_card_state(label):
+        """Read displayed status and actual version; an update target is separate."""
+        version = r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?'
+        versions = f'(?P<version>{version})(?: → (?P<updateVersion>{version}))?'
+        status = r'(?P<status>可安装|已启用|已停用)(?: · 可更新)?'
+        patterns = (f'版本：{versions} · {status}', f'{status} · {versions}')
+        states = []
+        for line in label.splitlines():
+            for pattern in patterns:
+                match = re.fullmatch(pattern, line.strip())
+                if match:
+                    states.append(match.groupdict())
+                    break
+        # A merged ancestor containing several cards cannot establish which
+        # version belongs to the requested module.
+        return states[0] if len(states) == 1 else None
+
+    def installed_store_card(self, nodes):
+        module = self.modules[-1]
+        cards = [node for node in nodes
+                 if any(line in (module['name'], f"查看 {module['name']} 详情")
+                        for line in self.emulator.label(node).splitlines())
+                 and (state := self.store_card_state(self.emulator.label(node)))
+                 and state['status'] == '已启用' and state['version'] == module['version']]
+        return cards[-1] if cards else None
+
+    def wait_for_store_installation(self):
+        """Prove the durable installed state, even after a transient Toast ends."""
+        deadline = time.monotonic() + 90
+        notice = None
+        while True:
+            nodes = self.emulator.nodes()
+            self.check_errors(nodes)
+            notice = next((self.emulator.label(node) for node in nodes
+                           if '模块安装完成' in self.emulator.label(node)), notice)
+            card = self.installed_store_card(nodes)
+            if card is not None:
+                return {'storeCard': self.emulator.label(card),
+                        'completionNotice': notice}
+            if time.monotonic() >= deadline:
+                raise RuntimeError('安装后商店未显示预期模块版本已启用：' + str(self.labels(nodes)))
+            time.sleep(.2)
+
+    def open_installed_store_module(self):
+        """Choose the importer's persistent action, not another installed module's."""
+        e = self.emulator
+        self.find_scrolling(self.modules[-1]['name'], contains=True)
+        for _ in range(16):
+            nodes = e.nodes()
+            self.check_errors(nodes)
+            card = self.installed_store_card(nodes)
+            if card is not None:
+                left, top, right, bottom = e.bounds(card)
+                actions = []
+                for node in nodes:
+                    if e.label(node) != '打开模块' or node.get('enabled') == 'false':
+                        continue
+                    x, y, xx, yy = e.bounds(node)
+                    if left <= (x + xx) / 2 <= right and top <= (y + yy) / 2 <= bottom:
+                        actions.append(node)
+                if len(actions) == 1:
+                    self.record('installed-store-entry-before-open')
+                    e.tap_node(actions[0])
+                    e.wait_for('按学校导入', timeout=30, contains=True)
+                    self.check_errors(e.nodes())
+                    self.record('importer-opened-through-store-entry')
+                    self.step('storeEntryOpenedImporterWithoutRestart')
+                    e.home()
+                    return
+                if len(actions) > 1:
+                    raise RuntimeError('拾光商店条目有多个打开模块入口，拒绝猜测')
+            self.swipe(nodes)
+        raise RuntimeError('已安装拾光商店条目缺少可用的打开模块入口')
 
     def refuse_existing_modules_on_resume(self):
         self.find_scrolling('模块商店', down=False)
@@ -323,7 +402,6 @@ class FreshInstallVerification:
         observations = []
         refreshes = []
         last_label = e.label(card)
-        expected = f'版本：{self.args.expected_importer_version} · 可安装'
         self.report['storeVersionWait'] = {
             'expectedVersion': self.args.expected_importer_version,
             'observations': observations, 'refreshes': refreshes,
@@ -333,7 +411,7 @@ class FreshInstallVerification:
             self.check_errors(nodes)
             cards = [node for node in nodes
                      if '拾光教务导入兼容' in e.label(node)
-                     and '版本：' in e.label(node)]
+                     and self.store_card_state(e.label(node)) is not None]
             if cards:
                 card = cards[-1]
                 last_label = e.label(card)
@@ -341,15 +419,17 @@ class FreshInstallVerification:
                     observations.append({'elapsedSeconds': round(time.monotonic() - started, 2),
                                          'label': last_label})
                     self.write_report()
-                if expected in last_label:
+                state = self.store_card_state(last_label)
+                if (state['status'] == '可安装'
+                        and state['version'] == self.args.expected_importer_version
+                        and state['updateVersion'] is None):
                     self.step('expectedStoreVersionReady',
                               actualVersion=self.args.expected_importer_version,
                               refreshCount=len(refreshes))
                     return card
-                match = re.search(r'版本：(\d+\.\d+\.\d+[^\s·]*)', last_label)
-                if match:
-                    stale_seen = True
-                    self.report['storeVersionWait']['actualVersion'] = match[1]
+                stale_seen = True
+                self.report['storeVersionWait']['actualVersion'] = state['version']
+                self.report['storeVersionWait']['actualStatus'] = state['status']
             now = time.monotonic()
             # An initial loading placeholder gets 90 seconds. Once a resolved
             # stale index is observed, allow the complete 120-second CDN window.
@@ -378,24 +458,84 @@ class FreshInstallVerification:
     def verify_review(self):
         e = self.emulator
         e.wait_for('确认模块安装计划', timeout=120)
+        first_nodes = self.record('03-install-review-summary-00')
+        self.check_errors(first_nodes)
+        first_lines = [line.strip() for label in self.labels(first_nodes)
+                       for line in label.splitlines() if line.strip()]
+        summary = None
+        if '你选择的模块' in first_lines:
+            groups = {'你选择的模块': set(), '自动加入的依赖': set()}
+            group = None
+            for index in range(20):
+                nodes = first_nodes if index == 0 else self.record(
+                    f'03-install-review-summary-{index:02d}')
+                self.check_errors(nodes)
+                lines = [line.strip() for label in self.labels(nodes)
+                         for line in label.splitlines() if line.strip()]
+                for line in lines:
+                    if line in groups:
+                        group = line
+                    elif line == '权限与影响':
+                        group = None
+                    elif group and line in {module['name'] for module in self.modules}:
+                        groups[group].add(line)
+                details = [node for node in nodes
+                           if '技术详情与完整计划' in e.label(node)
+                           and node.get('enabled') != 'false']
+                if details:
+                    expected_selected = {self.modules[-1]['name']}
+                    expected_dependencies = {self.modules[0]['name']}
+                    if (groups['你选择的模块'] != expected_selected
+                            or groups['自动加入的依赖'] != expected_dependencies):
+                        raise RuntimeError('安装概要未正确区分所选模块与自动依赖；不会确认安装：'
+                                           + str(groups))
+                    summary = {key: sorted(value) for key, value in groups.items()}
+                    e.tap_node(details[-1])
+                    break
+                self.swipe(nodes)
+            else:
+                raise RuntimeError('安装审核缺少技术详情与完整计划；不会确认安装')
         sections = {module['name']: set() for module in self.modules}
         headers = {f"{m['name']} · {m['version']}": m['name'] for m in self.modules}
-        active = None
+        detail_headers = {f"{index + 1}. {m['name']}": m['name']
+                          for index, m in enumerate(self.modules)}
+        identities = {f"模块标识：{m['id']}": m['name'] for m in self.modules}
+        versions = {m['name']: m['version'] for m in self.modules}
         all_lines = set()
         for index in range(20):
-            nodes = self.record(f'03-install-review-{index:02d}')
+            nodes = (first_nodes if index == 0 and summary is None
+                     else self.record(f'03-install-review-{index:02d}'))
             self.check_errors(nodes)
             lines = [line.strip() for label in self.labels(nodes)
                      for line in label.splitlines() if line.strip()]
+            # Scrolling can reveal the previous card's tail before the next
+            # header. Never carry the last card identity across snapshots.
+            active = None
             for line in lines:
                 all_lines.add(line)
-                if line in headers:
-                    active = headers[line]
+                if line in headers or line in detail_headers or line in identities:
+                    active = (headers.get(line) or detail_headers.get(line)
+                              or identities.get(line))
+                elif active is None:
+                    owners = [name for name, fields in sections.items()
+                              if line in fields]
+                    if len(owners) == 1:
+                        active = owners[0]
+                if active and line == f'安装并启用 · {versions[active]}':
+                    sections[active].update((f'{active} · {versions[active]}',
+                                             '操作：安装并启用'))
+                if active and line.startswith(('新增权限标识：', '全部权限标识：')):
+                    sections[active].add(line.replace('权限标识：', '权限：', 1))
+                if active and summary is not None:
+                    # Keep technical fields as overlap anchors, including the
+                    # module ID, when a long detail card spans multiple dumps.
+                    sections[active].add(line)
                 if active and (line in headers or line.startswith(
                         ('新增权限：', '全部权限：', 'SHA-256：', '操作：')) or line == UNSIGNED):
                     sections[active].add(line)
             complete = all(
                 f"{m['name']} · {m['version']}" in sections[m['name']]
+                and (summary is None or f"模块标识：{m['id']}" in sections[m['name']])
                 and UNSIGNED in sections[m['name']]
                 and '操作：安装并启用' in sections[m['name']]
                 and any(line.startswith('新增权限：') for line in sections[m['name']])
@@ -424,11 +564,11 @@ class FreshInstallVerification:
         if len({review['sha256'] for review in reviews}) != len(self.modules):
             raise RuntimeError('两个模块的审核摘要相同；不会确认安装')
         self.step('dependencyReviewVerified', modules=reviews,
-                  visibleReviewLines=sorted(all_lines))
+                  visibleReviewLines=sorted(all_lines), summary=summary)
         e.tap_node(self.find_scrolling('确认安装', attempts=2))
-        e.wait_for('模块安装完成', timeout=90, contains=True)
+        installation = self.wait_for_store_installation()
         self.record('04-store-install-complete')
-        self.step('modulesInstalledFromStore')
+        self.step('modulesInstalledFromStore', **installation)
 
     def verify_enabled(self, stage):
         self.manager()
@@ -467,9 +607,8 @@ class FreshInstallVerification:
                   else 'scheduleOpenedImmediatelyAfterInstall')
         e.home()
         e.open_settings()
-        nodes = e.nodes()
-        if not any('拾光教务导入' in label for label in self.labels(nodes)):
-            self.tap_scrolling('模块与连接', contains=True)
+        # Detail entries placed in settings appear under the settings home
+        # shortcuts; ModuleSettingsPage contains settings content contributions.
         self.tap_scrolling('拾光教务导入', contains=True)
         e.wait_for('按学校导入', timeout=30, contains=True)
         self.check_errors(e.nodes())

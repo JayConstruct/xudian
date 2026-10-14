@@ -4,6 +4,7 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
+import 'error_message.dart';
 import 'src/worker_poll_scheduler.dart';
 
 @Native<Pointer<Void> Function(Int64)>(symbol: 'xm_create')
@@ -168,7 +169,7 @@ class JavaScriptWorker {
       _post('__deliver(${jsonEncode({'id': message['id'], 'value': value})})');
     } catch (error) {
       _post(
-        '__deliver(${jsonEncode({'id': message['id'], 'error': '$error'})})',
+        '__deliver(${jsonEncode({'id': message['id'], 'error': scriptErrorMessage(error), 'diagnostic': '$error'})})',
       );
     }
   }
@@ -202,7 +203,14 @@ const bootstrap = r'''
   globalThis.__deliver = message => {
     const p = pending.get(message.id); if (!p) return;
     pending.delete(message.id);
-    if ('error' in message) p.reject(new Error(message.error)); else p.resolve(message.value);
+    if ('error' in message) {
+      const error = new Error(message.error);
+      // Transported host errors already have a display message. Modules that
+      // catch and stringify them must not expose native wrappers or frames.
+      error.toString = () => error.message;
+      error.diagnostic = message.diagnostic;
+      p.reject(error);
+    } else p.resolve(message.value);
   };
   globalThis.__dispatch = async message => {
     try {
@@ -216,7 +224,7 @@ const bootstrap = r'''
       }
       send(JSON.stringify({type: 'result', id: message.id, value: value ?? null}));
     } catch (error) {
-      send(JSON.stringify({type: 'result', id: message.id, error: String(error) + '\n' + String(error.stack || '')}));
+      send(JSON.stringify({type: 'result', id: message.id, error: String(error.diagnostic || error) + '\n' + String(error.stack || '')}));
     }
   };
 })();
@@ -263,7 +271,7 @@ export const grants = Object.freeze({request: spec => call('grants.request', spe
 export const packages = Object.freeze({prepare: spec => call('packages.prepare', spec), review: id => call('packages.review', {id})});
 export const files = Object.freeze({readText: () => call('files.readText', {}), saveText: (name, text) => call('files.saveText', {name, text})});
 export const browser = Object.freeze({capture: options => call('browser.capture', options)});
-export const clock = Object.freeze({today: zone => call('clock.today', {zone}), local: zone => call('clock.local', {zone}), now: () => call('clock.now', {}), toLocal: options => call('clock.toLocal', options), toUtc: options => call('clock.toUtc', options)});
+export const clock = Object.freeze({today: zone => call('clock.today', {zone}), local: zone => call('clock.local', {zone}), now: () => call('clock.now', {}), systemTimezone: () => call('clock.systemTimezone', {}), toLocal: options => call('clock.toLocal', options), toLocalMany: items => call('clock.toLocalMany', {items}), toUtc: options => call('clock.toUtc', options)});
 export const ids = Object.freeze({new: () => call('ids.new', {})});
 export default Object.freeze({data, services, extensions, events, ui, http, secrets, grants, packages, files, browser, clock, ids});
 ''';

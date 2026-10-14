@@ -5,6 +5,7 @@ import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.TimeZone
 
 class MainActivity : FlutterActivity() {
     private var captureWindow: BrowserCaptureDialog? = null
@@ -14,6 +15,16 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "xudian.host/clock")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "systemTimezone") {
+                    result.notImplemented()
+                } else if (call.arguments != null) {
+                    result.error("arguments", "systemTimezone takes no arguments", null)
+                } else {
+                    result.success(TimeZone.getDefault().id)
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "xudian.host/browser")
             .setMethodCallHandler { call, result ->
                 when (call.method) {

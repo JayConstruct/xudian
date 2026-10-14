@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/design_system.dart';
 import '../../core/ui/ui_annotation.dart';
+import 'display_diagnostics_page.dart';
 import 'settings_widgets.dart';
 
 class SettingsToolsPage extends ConsumerWidget {
@@ -20,6 +21,18 @@ class SettingsToolsPage extends ConsumerWidget {
         SettingsGroup(
           title: '界面辅助',
           children: [
+            SettingsEntry(
+              title: '显示与布局信息',
+              subtitle: '查看当前视图尺寸、字号缩放与安全区，用于高级问题反馈',
+              icon: Icons.aspect_ratio_rounded,
+              protected: true,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const DisplayDiagnosticsPage(),
+                ),
+              ),
+            ),
             NativeUi(
               child: SwitchListTile(
                 secondary: const UiIcon(Icons.label_outline),

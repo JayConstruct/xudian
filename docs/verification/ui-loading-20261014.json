@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-14",
+  "status": "implemented and locally verified; not deployed or published",
+  "hostApi": "1.23.0",
+  "changes": [
+    "restore-scoped package verification reuse",
+    "persisted layout read alongside host startup",
+    "foreground priority over queued speculative page work",
+    "side-effect and unfinished-bridge checks for replayable pages",
+    "synchronous dependency revision invalidation with outer transaction rollback protection",
+    "batch timezone conversions and timetable read reuse",
+    "local Timeline startup/page/cache/bridge instrumentation"
+  ],
+  "flutter": {
+    "finalPassed": 230,
+    "core": 163,
+    "startupLayout": 2,
+    "additionalHostPassedInitially": 64,
+    "additionalHostCorrectedTestPassed": 1,
+    "scope": "36 related test files; not entire test suite"
+  },
+  "python": {
+    "passed": 153,
+    "command": "python3 -m unittest discover -s scripts/tests -q"
+  },
+  "node": {
+    "command": "node --experimental-vm-modules scripts/module_host/page_reads_performance_test.mjs",
+    "passed": true,
+    "taskConversionCalls": [
+      {
+        "plans": 50,
+        "before": 100,
+        "after": 1
+      },
+      {
+        "plans": 129,
+        "before": 258,
+        "after": 2
+      },
+      {
+        "plans": 10000,
+        "before": 20000,
+        "after": 79
+      }
+    ],
+    "results": "complete trees and multi-timezone timetable feeds equal to the previous algorithms"
+  },
+  "analysis": "dart analyze lib test: no issues; corrected bundled restore test additionally analyzed",
+  "architecture": {
+    "productionDartFiles": 129,
+    "passed": true
+  },
+  "repository": {
+    "method": "standard check with a temporary Git index and object directory representing the final worktree; real index unchanged",
+    "passed": true
+  },
+  "build": {
+    "command": "flutter build apk --release --target-platform android-arm64 --no-pub",
+    "path": "client/build/app/outputs/flutter-apk/app-release.apk",
+    "sha256": "46c499e57b0f78b600c981b3f37fd88cbecb442bdd552d5136ede7cd78e78c85",
+    "engineAndAppAbi": "arm64-v8a",
+    "note": "JNI plugin also packages its helper library for other ABIs; no other ABI app/engine build claimed",
+    "bundledTodayDigestVerified": true
+  },
+  "modules": {
+    "app.views.today": {
+      "version": "1.8.0",
+      "hostApi": "^1.23.0",
+      "sha256": "51a3f89d3fac605daeab1801303cc823c60faf355c3dee3e26ba11d36a2f3a32"
+    },
+    "app.schedule": {
+      "version": "1.14.0",
+      "hostApi": "^1.22.0",
+      "sha256": "9fede7188a59aef9618574db87f608fa59bd9281fdd58c993f48d0e674bb2a28"
+    }
+  },
+  "resolvedVerificationIssues": [
+    "Flutter loopback socket and Gradle interface access required auto-approved sandbox escalation",
+    "TimelineTask mutates its argument map; pass a mutable copy while preserving immutable observer samples",
+    "Widget startup fixture had native resources created in a fake async zone; moved to setUp",
+    "New preparation fixture needed its native service registered before installing the dependent module",
+    "Existing bundled-restore assertion expected an earlier single-line review label; now checks module name and install version within the dialog"
+  ],
+  "limits": [
+    "No real-device startup duration, p50/p95, frame rate, power or memory measurement",
+    "Running prefetch is not forcibly interrupted; foreground overtakes queued speculation only",
+    "Task date-count aggregation and lazy activation of nonessential modules remain deferred",
+    "Existing installed modules require an explicit upgrade; defaults only affect new installs/restoration",
+    "No device installation, Git commit, remote catalog update or release"
+  ],
+  "logs": {
+    "flutter-core.log": "dist/verification/ui-loading-20261014/flutter-core.log",
+    "flutter-startup-layout.log": "dist/verification/ui-loading-20261014/flutter-startup-layout.log",
+    "flutter-host-initial.log": "dist/verification/ui-loading-20261014/flutter-host-initial.log",
+    "flutter-bundle-final.log": "dist/verification/ui-loading-20261014/flutter-bundle-final.log",
+    "flutter-preparation-final.log": "dist/verification/ui-loading-20261014/flutter-preparation-final.log",
+    "python.log": "dist/verification/ui-loading-20261014/python.log",
+    "node.log": "dist/verification/ui-loading-20261014/node.log",
+    "analyze.log": "dist/verification/ui-loading-20261014/analyze.log",
+    "build-arm64.log": "dist/verification/ui-loading-20261014/build-arm64.log",
+    "flutter-initial-integration.log": "dist/verification/ui-loading-20261014/flutter-initial-integration.log"
+  }
+}

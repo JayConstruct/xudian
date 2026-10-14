@@ -7,10 +7,16 @@ let selectedTimetableId=null,selectionRevision=0,displayRequest=0;
 function selectTimetable(id) { if(selectedTimetableId!==id) { selectedTimetableId=id; selectionRevision++; } }
 const ref=id=>({moduleId:'app.schedule',serviceId:id,majorVersion:1});
 import {defaultPeriods,periodDraft,semesterDraft,resetPeriodDraft,resetSemesterDraft,displayDraft,resetDisplayDraft,scheduleRowHeight,scheduleShowWeekends,displayDirty,periodError,appendPeriods,timeMinutes,timeString,listTile,group,importSummary} from './view_helpers.js';
-async function snapshot(timetableId) {
-  const t=await data.get('timetables',timetableId); if(!t) throw new Error('课表不存在');
+async function snapshot(timetableId,timetable) {
+  const t=timetable??await data.get('timetables',timetableId); if(!t) throw new Error('课表不存在');
   const filter={field:'timetableId',op:'eq',value:timetableId};
-  return {t,courses:await data.query('courses',{filter}),meetings:await data.query('meetings',{filter}),changes:await data.query('occurrenceChanges',{filter})};
+  // All reads retain the invocation's host SnapshotSession. Dispatch these
+  // independent requests together to avoid three JS/host wait cycles; the
+  // store remains responsible for database scheduling and revision checks.
+  const [courses,meetings,changes]=await Promise.all([
+    data.query('courses',{filter}),data.query('meetings',{filter}),data.query('occurrenceChanges',{filter}),
+  ]);
+  return {t,courses,meetings,changes};
 }
 export async function queryTimetables() {
   return {timetables:await data.query('timetables')};
@@ -30,7 +36,10 @@ function feedDate(value) {
   civil(value);return value;
 }
 export async function queryToday({timetableId,date:selectedDate}) {
-  const {t,courses,meetings,changes}=await snapshot(timetableId),today=selectedDate===undefined?await clock.today(t.timezone):feedDate(selectedDate);
+  const content=await snapshot(timetableId),today=selectedDate===undefined?await clock.today(content.t.timezone):feedDate(selectedDate);
+  return todayFromSnapshot(content,today);
+}
+function todayFromSnapshot({t,courses,meetings,changes},today) {
   // A civil-date prefix upper bound also includes 9999-12-31 without creating
   // an unsupported five-digit year for the exclusive next-day boundary.
   return {date:today,teachingWeek:teachingWeek(t,today),items:occurrences(t,courses,meetings,changes,today,today+'\uffff')};
@@ -43,7 +52,7 @@ export async function queryBusy({startDate,endDate}) {
   if(length<1||length>30)throw new Error('忙碌查询请选择1–30天');
   const items=[];
   for(const timetable of await data.query('timetables')) {
-    const {t,courses,meetings,changes}=await snapshot(timetable.id);
+    const {t,courses,meetings,changes}=await snapshot(timetable.id,timetable);
     for(const item of occurrences(t,courses,meetings,changes,startDate,endDate+'\uffff')) {
       const startTime=t.periods[item.startPeriod-1].start,endTime=t.periods[item.endPeriod-1].end;
       const start=await clock.toUtc({date:item.date,time:startTime,zone:t.timezone}),end=await clock.toUtc({date:item.date,time:endTime,zone:t.timezone});
@@ -58,7 +67,10 @@ export async function queryBusy({startDate,endDate}) {
 export async function queryTodayFeed({date:selectedDate}={}) {
   const date=selectedDate===undefined?await clock.today():feedDate(selectedDate),items=[];
   for(const timetable of await data.query('timetables')) {
-    const today=await queryToday({timetableId:timetable.id,...(selectedDate===undefined?{}:{date})}),local=await clock.local(timetable.timezone);
+    // The list query already read this timetable in the same invocation.
+    // One local-clock read supplies both today's date and sorting metadata.
+    const [content,local]=await Promise.all([snapshot(timetable.id,timetable),clock.local(timetable.timezone)]);
+    const today=todayFromSnapshot(content,selectedDate===undefined?local.date:date);
     for(const item of today.items) {
       const startTime=timetable.periods[item.startPeriod-1].start,endTime=timetable.periods[item.endPeriod-1].end;
       items.push({...item,timetableId:timetable.id,timetableName:timetable.name,timezone:timetable.timezone,startTime,endTime,
@@ -85,9 +97,10 @@ export async function renderTodayFeed({state={},event,context={}}={}) {
 }
 function normalized(value) { if(Array.isArray(value))return value.map(normalized);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(key=>[key,normalized(value[key])]));return value; }
 export async function saveTimetable({timetable,expectedTimetable}) {
-  const value={...timetable,id:timetable.id || await ids.new(),datasetId:timetable.datasetId || await ids.new()};
+  const id=timetable.id || await ids.new(),current=await data.get('timetables',id);
+  const timezone=timetable.timezone??current?.timezone??(await clock.systemTimezone()).zone;
+  const value={...timetable,id,datasetId:timetable.datasetId || current?.datasetId || await ids.new(),timezone};
   validateTimetable(value); await clock.today(value.timezone);
-  const current=await data.get('timetables',value.id);
   if(expectedTimetable && JSON.stringify(normalized(current))!==JSON.stringify(normalized(expectedTimetable))) throw new Error('课表配置已发生变化，请重新载入后编辑');
   if(current) {
     const {courses,meetings,changes}=await snapshot(value.id);
@@ -174,7 +187,7 @@ export async function render({state={},context={},event,formValues={}}) {
     const plan=await services.prepare(ref('schedule.demo.create'),{});
     if(plan.result.alreadyExists)state.notice='示例课表已存在，保留了现有内容';
     else if(await ui.review(plan.planId)) {
-      const saved=await services.commit(plan.planId);state.timetableId=saved.timetableId;selectTimetable(saved.timetableId);state.notice='已添加示例课表，今天会显示对应课程';
+      const saved=await services.commit(plan.planId);state.timetableId=saved.timetableId;selectTimetable(saved.timetableId);state.notice='已添加示例课表，今天会显示对应课程'+(saved.timezoneSource==='fallback'?`。设备时区未能获取，当前使用 ${saved.timezone}`:'');
     }
   }
   let timetables=await data.query('timetables');
@@ -214,6 +227,7 @@ export async function render({state={},context={},event,formValues={}}) {
   }
   if(t && page==='app.schedule.semester') {
     const draft=semesterDraft(t);
+    if(event?.type==='toggleTimezone')state.timezoneAdvanced=!state.timezoneAdvanced;
     if(event?.type==='semesterField') {draft.values[event.field]=String(event.value);draft.error=null;}
     if(event?.type==='resetSemester') {resetSemesterDraft(t);delete state.notice;}
     if(event?.type==='saveSemester') {
@@ -295,15 +309,16 @@ export async function render({state={},context={},event,formValues={}}) {
   }
   if(event?.type==='newTimetable'||event?.type==='settings') {
     const original=event.type==='settings'?t:null;
-    const today=await clock.today(original?.timezone || 'Asia/Shanghai');
+    const zone=original?{zone:original.timezone,source:'existing'}:await clock.systemTimezone();
+    const today=await clock.today(zone.zone);
     const values=await ui.dialog({title:original?'课表与作息':'新建课表',fields:[
       field('name','课表名称',original?.name||'大学课表'),field('firstMonday','第一周周一',original?.firstMonday||addDays(today,1-weekday(today))),
-      field('totalWeeks','总教学周数',String(original?.totalWeeks||20),'number'),field('timezone','IANA 时区',original?.timezone||'Asia/Shanghai'),
+      field('totalWeeks','总教学周数',String(original?.totalWeeks||20),'number'),
       field('displayWeekStart','显示起始',String(original?.displayWeekStart||1),'select',[{value:'1',label:'周一'},{value:'7',label:'周日'}]),
       field('periods','每行一个节次 HH:mm-HH:mm',periodsText(original?.periods||defaultPeriods),'multiline')]});
     if(values) {
-      const saved=await command('schedule.timetable.save',{timetable:{...original,...values,totalWeeks:Number(values.totalWeeks),displayWeekStart:Number(values.displayWeekStart),periods:parsePeriods(values.periods)}});
-      if(saved) { state.timetableId=saved.result.id; selectTimetable(saved.result.id); }
+      const saved=await command('schedule.timetable.save',{timetable:{...original,...values,timezone:zone.zone,totalWeeks:Number(values.totalWeeks),displayWeekStart:Number(values.displayWeekStart),periods:parsePeriods(values.periods)},...(original?{expectedTimetable:original}:{})});
+      if(saved) { state.timetableId=saved.result.id; selectTimetable(saved.result.id); if(zone.source==='fallback')state.notice=`设备时区未能获取，当前使用 ${zone.zone}。可在学期信息的高级设置中修改。`; }
     }
   }
   if(event?.type==='course') {
@@ -427,9 +442,11 @@ export async function render({state={},context={},event,formValues={}}) {
   }
   state.timetableId=t.id;
   if(page==='app.schedule.semester') {
-    const draft=semesterDraft(t),labels={name:'课表名称',firstMonday:'第一教学周周一（YYYY-MM-DD）',totalWeeks:'总教学周数',timezone:'IANA 时区',displayWeekStart:'显示起始（1=周一，7=周日）'};
+    const draft=semesterDraft(t),labels={name:'课表名称',firstMonday:'第一教学周周一（YYYY-MM-DD）',totalWeeks:'总教学周数',displayWeekStart:'显示起始（1=周一，7=周日）'};
     children.push({type:'sectionHeader',title:'学期信息',subtitle:t.name});
     for(const [key,label] of Object.entries(labels))children.push({type:'input',key:`semester.${t.id}.${key}`,text:label,value:draft.values[key],onChangeEvent:{type:'semesterField',field:key}});
+    children.push(listTile(state.timezoneAdvanced?'收起高级设置':'高级设置',`课表时区：${draft.values.timezone}`,null,{type:'toggleTimezone'}));
+    if(state.timezoneAdvanced)children.push({type:'input',key:`semester.${t.id}.timezone`,text:'课表时区',value:draft.values.timezone,onChangeEvent:{type:'semesterField',field:'timezone'}},text('修改时区会影响课程对应的实际时间，保存前请核对。'));
     const dirty=JSON.stringify(draft.values)!==draft.baseline;
     state.semesterDraft={...draft,dirty};
     if(dirty)children.push(text('尚未保存。离开页面后草稿会保留，保存前会审核实际变更。'));
