@@ -1,0 +1,104 @@
+{
+  "date": "2026-10-14",
+  "status": "published and public assets verified",
+  "sourceCommit": "5294409b729fb3011421c573372ab8a0f5e15f7e",
+  "app": {
+    "tag": "v0.2.0-beta.3",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.3",
+    "publishedAt": "2026-10-14T00:37:19Z",
+    "prerelease": true,
+    "assets": [
+      {
+        "name": "app-arm64-v8a-release.apk",
+        "size": 25507614,
+        "sha256": "12654cf9dde46850d79f96e453155b1a703faa4dbbffb7e4d7a61ea3d50ea75c"
+      },
+      {
+        "name": "app-armeabi-v7a-release.apk",
+        "size": 23281996,
+        "sha256": "fc6e7d382dd36aa9303d8cd88dfe0934c9e4c8378c4728cc8a496a8a91efb98e"
+      },
+      {
+        "name": "app-x86_64-release.apk",
+        "size": 27112903,
+        "sha256": "c6928b41f775cf323df29164b1a080267192dd947155ae71804780bfde003a0b"
+      },
+      {
+        "name": "SHA256SUMS",
+        "size": 275,
+        "sha256": "6f706e407b9bc1faae4eb06b5de2c3d945e31088ae3390e4e036e4e88b8240cf"
+      },
+      {
+        "name": "SOURCE_COMMIT",
+        "size": 41,
+        "sha256": "c25af77b7c75013411054f71f33c5983bac0a8bf140630b982e5d365d688dfa3"
+      }
+    ]
+  },
+  "modules": {
+    "tag": "modules-20261014-ui-performance",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261014-ui-performance",
+    "publishedAt": "2026-10-14T00:24:59Z",
+    "prerelease": false,
+    "assets": [
+      {
+        "name": "app.import.shiguang-1.6.0.xmodule",
+        "size": 997322,
+        "sha256": "9bb9032e48f29d43d71d333852d531967841b6f28fe56dcc90bf44c82e55e130"
+      },
+      {
+        "name": "app.schedule-1.14.0.xmodule",
+        "size": 24959,
+        "sha256": "9fede7188a59aef9618574db87f608fa59bd9281fdd58c993f48d0e674bb2a28"
+      },
+      {
+        "name": "app.views.today-1.8.0.xmodule",
+        "size": 5227,
+        "sha256": "51a3f89d3fac605daeab1801303cc823c60faf355c3dee3e26ba11d36a2f3a32"
+      }
+    ]
+  },
+  "apkValidation": [
+    {
+      "abi": "arm64-v8a",
+      "package": "package: name='dev.taskapp.task_app' versionCode='2114' versionName='0.2.0-beta.3' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+      "certificateSha256": "e577ee4d56a4797cf0f01d2de726b58c7dae97613883015965d801751bbf4bac",
+      "bundlesMatchSource": true
+    },
+    {
+      "abi": "armeabi-v7a",
+      "package": "package: name='dev.taskapp.task_app' versionCode='1114' versionName='0.2.0-beta.3' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+      "certificateSha256": "e577ee4d56a4797cf0f01d2de726b58c7dae97613883015965d801751bbf4bac",
+      "bundlesMatchSource": true
+    },
+    {
+      "abi": "x86_64",
+      "package": "package: name='dev.taskapp.task_app' versionCode='4114' versionName='0.2.0-beta.3' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+      "certificateSha256": "e577ee4d56a4797cf0f01d2de726b58c7dae97613883015965d801751bbf4bac",
+      "bundlesMatchSource": true
+    }
+  ],
+  "ci": {
+    "flutterPassed": 1120,
+    "pythonPassed": 153,
+    "catalogPythonPassed": 36,
+    "analysis": "no issues",
+    "nodeParityAndBridgeCounts": "passed",
+    "appWorkflow": "https://github.com/JayConstruct/xudian/actions/runs/38490018149",
+    "moduleWorkflow": "https://github.com/JayConstruct/xudian/actions/runs/38490018169"
+  },
+  "publicIndex": {
+    "branch": "module-catalog",
+    "commit": "5294409b729fb3011421c573372ab8a0f5e15f7e",
+    "allThreeIndexesMatchSource": true,
+    "directoryRepository": "JayConstruct/xudian-modules",
+    "directoryMatchesSourceNoChangeNeeded": true
+  },
+  "limits": [
+    "Beta release uses CI development signing; stable update checks do not recommend prereleases.",
+    "No device installation or performance timing as part of this release.",
+    "Existing installed modules still require explicit upgrade.",
+    "Windows native build not verified."
+  ],
+  "localEvidence": "dist/verification/releases-20261014/"
+}

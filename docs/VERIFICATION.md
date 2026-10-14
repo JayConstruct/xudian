@@ -166,3 +166,11 @@ flutter build apk --release --split-per-abi --no-pub --build-number 117
 150 个 Flutter 测试文件全量首轮 1,113 项通过、7 项失败。五项商店失败来自旧 ChoiceChip 查找及旧安装成功文案，已按当前下拉筛选和数量文案更新；一项筛选布局测试需等待所有索引本地 I/O 完成再等待动画静止。两个修正文件共 13 项定向复测通过。一项本地 HTTP 重定向测试超时，原文件不变单独复测 3 项通过。最终全套是否通过以发布标签的 CI 重跑为准，不将定向复验记为全量一次通过。
 
 153 项 Python 工具测试、36 项模块目录测试、Node 显示结果等价及桥接调用数量校验全部通过；Flutter 静态分析和两修正文件分析无问题。129 个生产 Dart 文件架构、仓库边界、模块目录及三包摘要、版本标签、Actions 配置和差异检查通过。原始日志保存在本地 `dist/verification/releases-20261014/local/`。发布工作流新增 Node 性能等价检查，并从版本说明文件读取发布说明。
+
+### 远端发布结果
+
+源码提交 `5294409b729fb3011421c573372ab8a0f5e15f7e` 已推送。不可变标签 [`v0.2.0-beta.3`](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.3) 与 [`modules-20261014-ui-performance`](https://github.com/JayConstruct/xudian/releases/tag/modules-20261014-ui-performance) 发布成功。[App CI](https://github.com/JayConstruct/xudian/actions/runs/38490018149) 最终全量 **1,120 项 Flutter 测试全部通过**，153 项 Python、36 项模块目录测试、静态分析、Node 等价及桥接计数检查全部通过，三个 ABI 的 release APK 构建和上传成功。
+
+从公开 Release 重新下载三个 APK、SHA256SUMS、SOURCE_COMMIT 和三个模块包。下载摘要与发布摘要、本地不可变模块包逐一相同，SOURCE_COMMIT 与标签源码一致；APK 的应用 ID、0.2.0-beta.3 版本名、ABI、签名验证及六个内置模块字节全部核对通过。三个 APK 使用同一 CI 开发证书；versionCode 为 ARMv7 1114、ARM64 2114、x86_64 4114，不代表可覆盖任意本地测试构建。模块下载资产确认存在后才更新 `module-catalog` 分支；三个公开索引与源码相同，独立目录仓库内容已匹配，无需修改。
+
+[发布摘要与文件 SHA-256](verification/release-20261014.json) 已归档，APK、签名输出和校验日志保存在本地 `dist/verification/releases-20261014/`。本轮没有安装设备或测量实际启动耗时；测试版不进入正式版更新提示，已有模块仍需独立确认升级。此前验证记录中的“未发布”描述保留其当时状态，以本节为最新发布结果。
