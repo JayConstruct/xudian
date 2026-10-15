@@ -294,9 +294,39 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         );
         if (method == 'ui.panel') {
-          final adaptive =
-              object(args['presentation'] ?? {})['adaptive'] == true;
-          if (adaptive && MediaQuery.sizeOf(context).width >= 820) {
+          final presentation = object(args['presentation'] ?? {});
+          final adaptive = presentation['adaptive'] == true;
+          final centered = presentation['wide'] == 'center';
+          if (adaptive && centered && MediaQuery.sizeOf(context).width >= 820) {
+            unawaited(
+              showDialog<void>(
+                context: context,
+                builder: (panelContext) => Dialog(
+                  clipBehavior: Clip.antiAlias,
+                  child: SizedBox(
+                    width: 560,
+                    height: MediaQuery.sizeOf(panelContext).height * .85,
+                    child: Column(
+                      children: [
+                        AppBar(
+                          automaticallyImplyLeading: false,
+                          title: Text(page.title),
+                          actions: [
+                            IconButton(
+                              tooltip: '关闭面板',
+                              onPressed: () => Navigator.pop(panelContext),
+                              icon: const UiIcon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        Expanded(child: child),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          } else if (adaptive && MediaQuery.sizeOf(context).width >= 820) {
             unawaited(
               showGeneralDialog<void>(
                 context: context,

@@ -24,6 +24,7 @@ import '../../app/app_motion.dart';
 import '../ui/responsive_content_grid.dart';
 import '../ui/input_validation.dart';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:xquickjs/error_message.dart';
 
@@ -31,6 +32,7 @@ import '../../app/design_system.dart';
 import 'module_host.dart';
 import 'module_package.dart';
 import 'time_grid.dart';
+import 'planner_board.dart';
 
 class ScriptPage extends StatefulWidget {
   const ScriptPage({
@@ -417,7 +419,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       final requestedDataRevision = widget.host.store.dataRevision;
       final requestedRegistry = businessRegistry;
       final requestedExamples = examplesRegistry;
-      final startedAt = DateTime.now();
+      final startedAt = clock.now();
       final prepared = instance == null
           ? null
           : dateCache.lookup(instance, input);
@@ -722,6 +724,40 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       }
     }
     return result;
+  }
+
+  Future<Map<String, Object?>> _previewQuery(
+    Map<String, Object?> declaration,
+    Map<String, Object?> proposal,
+  ) async {
+    final instance = widget.host.instances[widget.moduleId];
+    if (instance == null ||
+        busy ||
+        staleTree ||
+        !routeActive ||
+        !workspaceActive) {
+      throw StateError('页面已变化，请重新拖动');
+    }
+    final requestEpoch = epoch;
+    final dataRevision = widget.host.store.dataRevision;
+    final contextIdentity = canonicalJson(pageContext);
+    // This is deliberately a query: a preview cannot prepare or commit writes,
+    // and the caller's normal service permissions still apply.
+    final result = await widget.host.query(
+      instance.actor,
+      ServiceRef.parse(declaration['ref']),
+      {...object(declaration['input'] ?? {}), 'proposal': proposal},
+    );
+    if (!mounted ||
+        requestEpoch != epoch ||
+        dataRevision != widget.host.store.dataRevision ||
+        !identical(instance, widget.host.instances[widget.moduleId]) ||
+        contextIdentity != canonicalJson(pageContext) ||
+        !routeActive ||
+        !workspaceActive) {
+      throw StateError('预览依据已变化，请重新拖动');
+    }
+    return object(result);
   }
 
   Widget safeNode(Map<String, Object?> spec) {
@@ -1790,6 +1826,26 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           bottomInset: object(spec['options'] ?? {})['underlapChrome'] == true
               ? WorkspaceContentInsets.bottomOf(uiContext)
               : 0,
+          onEvent: busy ? (_) {} : _render,
+        );
+      case 'plannerBoard':
+        return PlannerBoard(
+          enabled: !busy && !staleTree && routeActive && workspaceActive,
+          previewIdentity: spec['previewIdentity'],
+          onPreview: spec['previewQuery'] is Map
+              ? (proposal) =>
+                    _previewQuery(object(spec['previewQuery']), proposal)
+              : null,
+          days: objects(spec['days'] ?? []),
+          candidates: objects(spec['candidates'] ?? []),
+          blocks: objects(spec['blocks'] ?? []),
+          previewBlocks: objects(spec['previewBlocks'] ?? []),
+          previewLabel: spec['previewLabel'] as String?,
+          selectedIds: (spec['selectedIds'] as List?)?.cast<Object?>() ?? [],
+          selectEvent: spec['selectEvent'] is Map
+              ? object(spec['selectEvent'])
+              : null,
+          options: object(spec['options'] ?? {}),
           onEvent: busy ? (_) {} : _render,
         );
       default:

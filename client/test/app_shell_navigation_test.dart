@@ -103,7 +103,7 @@ import {ui} from '@xudian/sdk';
 export async function render({event,context,state={}}) {
   if(event?.type==='schedule')await ui.navigate('test.navigation.schedule',{source:'daily'});
   if(event?.type==='detail')await ui.navigate('test.navigation.detail');
-  if(event?.type==='panel')await ui.panel('test.navigation.importer');
+  if(event?.type==='panel')await ui.panel('test.navigation.importer',{}, {adaptive:true,wide:'center'});
   if(event?.type==='importer')await ui.navigate('test.navigation.importer');
   if(event?.type==='handoff')await ui.navigate('test.navigation.schedule',{source:'importer',importPlanId:'review-plan'});
   if(event?.type==='invalid')await ui.navigate('test.navigation.missing');
@@ -139,6 +139,41 @@ export async function render({event,context,state={}}) {
     await db.close();
     await dir.delete(recursive: true);
   });
+  testWidgets(
+    'adaptive centered panel uses a wide dialog and closes on workspace navigation',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1100, 900);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final app = XudianApp();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        app.registry.dispose();
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
+          ],
+          child: app,
+        ),
+      );
+      await settle(tester);
+      await tester.tap(find.text('打开面板'));
+      await settle(tester);
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.byType(BottomSheet), findsNothing);
+      final bounds = tester.getRect(find.byType(Dialog));
+      expect(bounds.center.dx, closeTo(550, 1));
+      await tester.tap(find.text('交接预览'));
+      await settle(tester);
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.text('确认预览 review-plan').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final fromPanel in [false, true]) {
     testWidgets(
       'workspace handoff from ${fromPanel ? 'panel' : 'nested detail with internal back'} reveals the provider preview',

@@ -1,5 +1,6 @@
 import {services,ui,clock,ids} from '@xudian/sdk';
 import {add} from './engine.js';
+import {renderPlanner} from './ux.js';
 const ref=id=>({moduleId:'app.planner',serviceId:'planner.'+id,majorVersion:1});
 const query=(id,input={})=>services.query(ref(id),input);
 async function execute(id,input){const p=await services.prepare(ref(id),input);if(await ui.review(p.planId))return services.commit(p.planId);}
@@ -12,7 +13,16 @@ const kinds=[['once','单次模糊任务'],['daily','每日'],['weekly','每周�
 async function editRule(r,a,today){const values=await ui.dialog({title:r?.id?'编辑规则（默认仅影响未确认实例）':'批量录入任务',fields:[field('titles','任务名称（每行一项）',r?.title,'multiline'),field('kind','重复规则',r?.kind||'once','select',kinds),field('startDate','允许开始日期',r?.startDate||today,'date'),field('endDate','最晚日期／规则结束日',r?.endDate||add(today,6),'date'),field('estimatedMinutes','预计分钟',r?.estimatedMinutes||a.defaultMinutes,'number'),field('start','每日允许开始',r?.times?.[0]?.start||'18:00','time'),field('end','每日允许结束',r?.times?.[0]?.end||'22:00','time'),field('weekdays','允许星期（1至7，用逗号分隔）',(r?.weekdays||[1,2,3,4,5,6,7]).join(',')),field('perWeek','每周次数',r?.perWeek||2,'number'),field('maxGapDays','最大间隔自然日',r?.maxGapDays||6,'number'),field('earlyDays','允许提前天数',r?.earlyDays??2,'number'),field('lastCompletedOn','间隔任务上次实际完成日（从未执行可留空）',r?.lastCompletedOn,'date'),field('firstDeadline','从未执行：首次最晚日期',r?.firstDeadline||add(today,6),'date'),field('optional','有空再做（不能与最大间隔同时启用）',r?.optional||false,'boolean'),field('priority','优先级 0–3',r?.priority||0,'number')]});if(!values)return;const names=values.titles.split('\n').map(x=>x.trim()).filter(Boolean);if(r?.id&&names.length!==1)throw Error('编辑规则仅填写一个名称');const rules=names.map(title=>({...(r?{id:r.id,expectedVersion:r.version}:{}),title,kind:values.kind,startDate:values.startDate,endDate:values.endDate||undefined,timezone:a.timezone,estimatedMinutes:Number(values.estimatedMinutes),times:[{start:values.start,end:values.end}],weekdays:values.weekdays.split(/[,，\s]+/).filter(Boolean).map(Number),perWeek:Number(values.perWeek),maxGapDays:Number(values.maxGapDays),earlyDays:Number(values.earlyDays),lastCompletedOn:values.lastCompletedOn||null,firstDeadline:values.firstDeadline,optional:values.optional,priority:Number(values.priority),status:r?.status||'active'}));return execute('rules.save',{rules});}
 async function settings(a){const v=await ui.dialog({title:'每周可用时间',fields:[field('timezone','IANA 时区',a.timezone),field('defaultMinutes','默认耗时（分钟）',a.defaultMinutes,'number'),field('bufferMinutes','任务间缓冲（分钟）',a.bufferMinutes,'number'),...Array.from({length:7},(_,i)=>field('day'+(i+1),['周一','周二','周三','周四','周五','周六','周日'][i]+'（如 18:00-22:00，多段用逗号，留空无空闲）',(a.weekly[i+1]||[]).map(x=>x.start+'-'+x.end).join(',')))]});if(!v)return;const weekly={};for(let i=1;i<=7;i++)weekly[i]=parseSlots(v['day'+i]);return execute('availability.save',{availability:{...a,timezone:v.timezone,defaultMinutes:Number(v.defaultMinutes),bufferMinutes:Number(v.bufferMinutes),weekly}});}
 function parseSlots(s){return String(s||'').split(/[,，]/).filter(x=>x.trim()).map(x=>{const [start,end]=x.trim().split('-');return {start,end};});}
-export async function render({state={},event,context={},formValues={}}={}){state={...state};const a=await query('availability.get'),today=await clock.today(a.timezone);state.startDate=state.startDate||today;state.days=state.days||7;state.selected=state.selected||[];state.tab=state.tab||'pending';
+export async function render(input={}) {
+ const state={...input.state};
+ if(input.event?.type==='legacy')state.legacy=true;
+ if(input.event?.type==='board')state.legacy=false;
+ if(!state.legacy&&!['app.planner.editor','app.planner.summary'].includes(input.context?.pageId))return renderPlanner({...input,state});
+ const page=await legacyRender({...input,state});
+ if(page.header)page.header.actions=[{label:'图形规划',event:{type:'board'}},...(page.header.actions||[])];
+ return page;
+}
+async function legacyRender({state={},event,context={},formValues={}}={}){state={...state};const a=await query('availability.get'),today=await clock.today(a.timezone);state.startDate=state.startDate||today;state.days=state.days||7;state.selected=state.selected||[];state.tab=state.tab||'pending';
  if(context.pageId==='app.planner.editor')return editor(state,event,context,formValues);
  if(context.pageId==='app.planner.summary'){const data=await query('candidates.list',{startDate:context.selectedDate||today,days:1});const pending=data.candidates.filter(c=>['pending','overdue'].includes(c.status)).length;return {state,tree:{type:'column',children:[row('任务规划',`${pending} 项待安排或超期 · ${data.conflicts.length} 项冲突`,{type:'openPlanner'})]},...(event?.type==='openPlanner'?(await ui.navigate('app.planner.home'),{}):{})};}
  try{

@@ -7,8 +7,8 @@
   },
   {
     "id": "app.tasks",
-    "asset": "assets/modules/app.tasks-1.4.0.xmodule",
-    "sha256": "03d00a5e984fd41b6924aaa61ae6266f6736ed86013bbc62597350ae3ad9be32",
+    "asset": "assets/modules/app.tasks-1.5.1.xmodule",
+    "sha256": "cc9ea271801816a739f2f8dc2496bc84e3425a127bbaf7b37904e1eed6064821",
     "default": true
   },
   {

@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+
 import '../contracts/json_values.dart';
 
 /// A prepared, event-free page result. Applying this snapshot must still use
@@ -31,7 +33,7 @@ class DatePageCache {
     this.maxAge = const Duration(seconds: 30),
     DateTime Function()? now,
   }) : assert(capacity > 0),
-       _now = now ?? DateTime.now;
+       _now = now ?? clock.now;
 
   final int capacity;
   final Duration maxAge;

@@ -256,7 +256,11 @@ void main() {
         ],
       },
     });
-    final p = object(await query('plan.preview'));
+    final p = object(
+      await query('plan.preview', {
+        'selectedIds': ['task:${t['id']}'],
+      }),
+    );
     await run('task.updateFields', {
       'id': t['id'],
       'changes': {'priority': 2},
@@ -266,7 +270,11 @@ void main() {
       throwsA(anything),
     );
     expect(await query('batch.list'), isEmpty);
-    final fresh = object(await query('plan.preview'));
+    final fresh = object(
+      await query('plan.preview', {
+        'selectedIds': ['task:${t['id']}'],
+      }),
+    );
     await run('batch.apply', {'batchKey': 'existing', 'preview': fresh});
     var current = object(
       await host.query(actor(), ServiceRef('app.tasks', 'task.get', 1), {
@@ -522,7 +530,7 @@ void main() {
             await tester.pump(const Duration(milliseconds: 20));
           }
           expect(
-            find.text('待安排'),
+            find.text('待安排 · 0'),
             findsOneWidget,
             reason: tester
                 .widgetList<Text>(find.byType(Text))
@@ -536,7 +544,7 @@ void main() {
       );
     }
   }
-  test('render uses shared tabs and stable list keys', () async {
+  test('render uses the graphical board and stable root key', () async {
     final page = object(
       await host.invokePage('app.planner', 'render', {
         'state': {},

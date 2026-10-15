@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.tasks",
     "name": "任务",
-    "version": "1.4.0",
+    "version": "1.5.1",
     "hostApi": "^1.21.0",
     "dataVersion": 1,
     "permissions": [
@@ -376,6 +376,24 @@
               "null"
             ],
             "minimum": 1
+          },
+          "notes": {
+            "type": "string"
+          },
+          "dueAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dueTimezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "locked": {
+            "type": "boolean"
           }
         }
       },
@@ -458,6 +476,24 @@
                 "null"
               ],
               "minimum": 1
+            },
+            "notes": {
+              "type": "string"
+            },
+            "dueAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dueTimezone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "locked": {
+              "type": "boolean"
             }
           }
         }
@@ -531,6 +567,24 @@
                   "null"
                 ],
                 "minimum": 1
+              },
+              "notes": {
+                "type": "string"
+              },
+              "dueAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dueTimezone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "locked": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false
@@ -615,6 +669,24 @@
                     "null"
                   ],
                   "minimum": 1
+                },
+                "notes": {
+                  "type": "string"
+                },
+                "dueAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "dueTimezone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "locked": {
+                  "type": "boolean"
                 }
               },
               "additionalProperties": false
@@ -648,6 +720,18 @@
                   "plannedStartAt",
                   "plannedEndAt",
                   "plannedTimezone"
+                ],
+                "dueDate": [
+                  "dueAt",
+                  "dueTimezone"
+                ],
+                "dueAt": [
+                  "dueDate",
+                  "dueTimezone"
+                ],
+                "dueTimezone": [
+                  "dueDate",
+                  "dueAt"
                 ]
               }
             }

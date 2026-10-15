@@ -15,7 +15,23 @@ function utc(value,label='时间') {
   return parsed.toISOString();
 }
 const precisionFields=['plannedStartAt','plannedEndAt','plannedTimezone'];
-const extraFields=[...precisionFields,'estimatedMinutes','executionExpiresOn','actualCompletedOn','completedTimezone'];
+const deadlineFields=['dueDate','dueAt','dueTimezone'];
+const extraFields=[...precisionFields,'estimatedMinutes','executionExpiresOn','actualCompletedOn','completedTimezone','dueAt','dueTimezone','initialDeadline','deadlineHistory','locked'];
+function notes(value) { if(typeof value!=='string')throw new Error('任务描述必须为文本');return value; }
+function deadline(value) { return Object.fromEntries(deadlineFields.map(k=>[k,value[k]??null])); }
+async function normalizeDeadline(value,changes) {
+  // A date-only edit replaces the previous exact instant, while retaining its zone.
+  if('dueDate' in changes&&!('dueAt' in changes))value.dueAt=null;
+  validDate(value.dueDate);
+  if(value.dueDate==null&&value.dueAt==null){value.dueDate=null;value.dueAt=null;value.dueTimezone=null;return value;}
+  if(value.dueTimezone!=null&&(typeof value.dueTimezone!=='string'||!value.dueTimezone))throw new Error('截止时区无效');
+  if(value.dueAt!=null) {
+    if(!value.dueTimezone)throw new Error('精确截止需提供时区');
+    value.dueAt=utc(value.dueAt,'截止时间');
+    value.dueDate=(await clock.toLocal({utc:value.dueAt,zone:value.dueTimezone})).date;
+  } else if(value.dueTimezone!=null)await clock.toLocal({utc:await clock.now(),zone:value.dueTimezone});
+  return value;
+}
 async function normalizePlan(value,changes) {
   if('plannedDate' in changes&&!precisionFields.some(k=>k in changes))for(const k of precisionFields)value[k]=null;
   if(value.estimatedMinutes!=null&&(!Number.isSafeInteger(value.estimatedMinutes)||value.estimatedMinutes<1))throw new Error('预计时长必须为正整数分钟');
@@ -25,8 +41,7 @@ async function normalizePlan(value,changes) {
   if(precisionFields.some(k=>value[k]==null)||typeof value.plannedTimezone!=='string'||!value.plannedTimezone)throw new Error('精确计划需同时提供开始、结束时间和时区');
   value.plannedStartAt=utc(value.plannedStartAt,'开始时间');value.plannedEndAt=utc(value.plannedEndAt,'结束时间');
   if(value.plannedEndAt<=value.plannedStartAt)throw new Error('结束时间必须晚于开始时间');
-  const start=await clock.toLocal({utc:value.plannedStartAt,zone:value.plannedTimezone}),end=await clock.toLocal({utc:value.plannedEndAt,zone:value.plannedTimezone});
-  if(start.date!==end.date)throw new Error('精确计划不能跨午夜');
+  const start=await clock.toLocal({utc:value.plannedStartAt,zone:value.plannedTimezone});
   value.plannedDate=start.date;
   return value;
 }
@@ -119,15 +134,22 @@ export async function taskCreate(input) {
     if(!parent||parent.deletedAt||parent.archivedAt) throw new Error('父任务不可用');
     if((parent.projectId||null)!==(input.projectId||null)) throw new Error('子任务必须与父任务属于同一项目');
   }
-  const now=await clock.now(),value={id:await ids.new(),title,projectId:input.projectId||null,parentTaskId:input.parentTaskId||null,notes:'',priority:p,
+  const now=await clock.now(),value={id:await ids.new(),title,projectId:input.projectId||null,parentTaskId:input.parentTaskId||null,notes:notes(input.notes??''),priority:p,
     dueDate:input.dueDate||null,plannedDate:input.plannedDate||null,completedAt:null,archivedAt:null,deletedAt:null,createdAt:now,updatedAt:now};
   for(const k of extraFields)value[k]=input[k]??null;
   value.actualCompletedOn=null;value.completedTimezone=null;
-  await normalizePlan(value,input);
+  value.locked=input.locked??false;if(typeof value.locked!=='boolean')throw new Error('固定时间必须为布尔值');
+  await normalizePlan(value,input);await normalizeDeadline(value,input);
+  value.initialDeadline=deadline(value);value.deadlineHistory=[];
   return {writes:[{collection:'tasks',id:value.id,value}],events:[{type:'task.created',entity:{moduleId:'app.tasks',collection:'tasks',id:value.id}}],result:value};
 }
-function snapshot(t) { return Object.fromEntries(['id','title','priority','dueDate','plannedDate','projectId','parentTaskId','completedAt','archivedAt','deletedAt','updatedAt',...extraFields].map(k=>[k,t[k]??null])); }
+function snapshot(t) { return Object.fromEntries(['id','title','notes','priority','dueDate','plannedDate','projectId','parentTaskId','completedAt','archivedAt','deletedAt','updatedAt',...extraFields].map(k=>[k,t[k]??null])); }
 function canonical(v) { const stable=x=>Array.isArray(x)?x.map(stable):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,stable(x[k])])):x;return JSON.stringify(stable(v)); }
+// Keep the optimistic token advancing even when writes share a clock tick.
+async function nextUpdatedAt(previous) {
+  const now=await clock.now(),prior=Date.parse(previous||'');
+  return Number.isFinite(prior)&&prior>=Date.parse(now)?new Date(prior+1).toISOString():now;
+}
 async function check(input) {
   const t=await data.get('tasks',input.id); if(!t||t.deletedAt) throw new Error('任务已不可用');
   if(input.expectedUpdatedAt&&t.updatedAt!==input.expectedUpdatedAt||input.expectedValues&&Object.entries(input.expectedValues).some(([k,v])=>canonical(v)!==canonical(t[k]??null))) throw new Error('任务已被其他操作修改，请重新生成方案');
@@ -135,14 +157,21 @@ async function check(input) {
 }
 export async function taskUpdate(input) {
   const t=await check(input),changes={...input.changes};
-  for(const k of Object.keys(changes)) if(!['title','priority','dueDate','plannedDate',...precisionFields,'estimatedMinutes','executionExpiresOn'].includes(k)) throw new Error(`不支持修改字段：${k}`);
+  for(const k of Object.keys(changes)) if(!['title','notes','priority',...deadlineFields,'plannedDate',...precisionFields,'estimatedMinutes','executionExpiresOn','locked'].includes(k)) throw new Error(`不支持修改字段：${k}`);
   if('title' in changes) changes.title=cleanTitle(changes.title,300,'任务标题');
+  if('notes' in changes) changes.notes=notes(changes.notes);
+  if('locked' in changes&&typeof changes.locked!=='boolean')throw new Error('固定时间必须为布尔值');
   if('priority' in changes) priority(changes.priority);
   if('dueDate' in changes) validDate(changes.dueDate); if('plannedDate' in changes) validDate(changes.plannedDate);
-  const value=await normalizePlan({...t,...changes},changes);
+  const value=await normalizeDeadline(await normalizePlan({...t,...changes},changes),changes);
+  if(t.locked&&changes.locked!==false&&['plannedDate',...precisionFields,'estimatedMinutes'].some(k=>canonical(t[k]??null)!==canonical(value[k]??null)))throw new Error('任务时间已固定，请先解除固定');
+  if(canonical(deadline(t))!==canonical(deadline(value))) {
+    value.initialDeadline=t.initialDeadline??deadline(t);
+    value.deadlineHistory=[...(t.deadlineHistory||[]),{changedAt:await clock.now(),before:deadline(t),after:deadline(value)}];
+  }
   const fields=Object.keys(value).filter(k=>canonical(t[k]??null)!==canonical(value[k]??null));
   if(!fields.length)return {writes:[],events:[],result:snapshot(t)};
-  value.updatedAt=await clock.now();
+  value.updatedAt=await nextUpdatedAt(t.updatedAt);
   return {writes:[{collection:'tasks',id:t.id,value}],events:[{type:'task.updated',entity:{moduleId:'app.tasks',collection:'tasks',id:t.id},fields}],result:snapshot(value)};
 }
 export async function taskComplete(input) {
@@ -162,7 +191,7 @@ export async function taskComplete(input) {
     }
   } else {value.completedAt=null;value.actualCompletedOn=null;value.completedTimezone=null;}
   if(canonical(value)===canonical(t))return {writes:[],events:[],result:snapshot(t)};
-  value.updatedAt=await clock.now();
+  value.updatedAt=await nextUpdatedAt(t.updatedAt);
   const type=input.completed?(t.completedAt?'task.completionCorrected':'task.completed'):'task.reopened';
   return {writes:[{collection:'tasks',id:t.id,value}],events:[{type,entity:{moduleId:'app.tasks',collection:'tasks',id:t.id}}],result:snapshot(value)};
 }

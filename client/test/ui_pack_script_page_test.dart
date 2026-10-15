@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -157,34 +158,35 @@ export async function render({state={},event,context={}}) {
 
   testWidgets(
     'a successful foreground date is replayed after an unrelated write',
-    (tester) async {
-      await show(
-        tester,
-        handler: 'renderStable',
-        pageContext: {'selectedDate': '2026-10-01'},
-      );
-      expect(find.text('stable 1 date 2026-10-01'), findsOneWidget);
-      await show(
-        tester,
-        handler: 'renderStable',
-        pageContext: {'selectedDate': '2026-10-05'},
-      );
-      expect(find.text('stable 2 date 2026-10-05'), findsOneWidget);
-      store.recordDataChange({'unrelated.module'});
-      final gate = Completer<void>();
-      addTearDown(() {
-        if (!gate.isCompleted) gate.complete();
-      });
-      host.instances['test.page']!.workflowTail = gate.future;
-      await show(
-        tester,
-        handler: 'renderStable',
-        pageContext: {'selectedDate': '2026-10-01'},
-      );
-      expect(find.text('stable 1 date 2026-10-01'), findsOneWidget);
-      gate.complete();
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
+    (tester) =>
+        withClock(Clock.fixed(DateTime.utc(2026, 10, 15, 12)), () async {
+          await show(
+            tester,
+            handler: 'renderStable',
+            pageContext: {'selectedDate': '2026-10-01'},
+          );
+          expect(find.text('stable 1 date 2026-10-01'), findsOneWidget);
+          await show(
+            tester,
+            handler: 'renderStable',
+            pageContext: {'selectedDate': '2026-10-05'},
+          );
+          expect(find.text('stable 2 date 2026-10-05'), findsOneWidget);
+          store.recordDataChange({'unrelated.module'});
+          final gate = Completer<void>();
+          addTearDown(() {
+            if (!gate.isCompleted) gate.complete();
+          });
+          host.instances['test.page']!.workflowTail = gate.future;
+          await show(
+            tester,
+            handler: 'renderStable',
+            pageContext: {'selectedDate': '2026-10-01'},
+          );
+          expect(find.text('stable 1 date 2026-10-01'), findsOneWidget);
+          gate.complete();
+          await tester.pumpWidget(const SizedBox.shrink());
+        }),
   );
 
   testWidgets('foreground effects remain visible on every date visit', (

@@ -1,6 +1,6 @@
 # JavaScript 模块 SDK v1
 
-当前宿主 API 为 `1.23.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
+当前宿主 API 为 `1.25.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
 
 新增模块使用 `formatVersion: 3`、`packageFormat: 2`，按所用能力声明最低 `hostApi`。组件/服务的 `@1` 主版本与宿主 API 版本分别管理，下方完整契约保留兼容规则。
 
@@ -469,3 +469,40 @@ await clock.toUtc({date: '2026-11-01', time: '01:30', zone: 'America/New_York'})
 该声明仅排除由精确查询权限推导的必需依赖；显式 `dependencies`、`serviceDependencies` 与 command 权限仍是必需依赖。提供者缺失、停用或服务不兼容不阻止可选调用方安装、启用；停用提供者不会级联停用可选调用方。可先通过 `services.directory()` 判断服务是否存在；实际查询仍校验精确权限、服务种类、主版本与 Schema，缺少服务时抛错。可选声明本身不授予权限，也不允许 command。
 
 `services.directory()` 记录当前服务目录与实例代数作为 prepare 的读取基线，包含可选提供者尚未安装或启用的状态；目录变化后提交拒绝并要求重新准备。只读页面准备也记录声明的可选提供者 ID，即使提供者当前缺失，安装或启停后页面可重新查询。
+
+
+### API 1.24 规划交互原型
+
+`ui.panel(pageId, context, {adaptive:true, wide:'center'})` 在手机仍用底部面板，在宽屏使用居中弹窗；未传 `wide` 时保留侧边面板。面板保存后可通过 `ui.navigate` 返回工作区并关闭面板。
+
+新增原生树类型 `plannerBoard`。宿主只负责显示和发出拖动意图，合法性、来源权限、时区解析、变更审核与持久化由模块服务负责。声明 `hostApi: '^1.24.0'`。
+
+- `days: [{date, label}]`；`candidates` 与 `blocks` 为任务块数组。每项可含 `id,title,start,end,durationMinutes,deadlineSummary,overdue,fixed,readOnly,sourceLabel,event,moveEvent,selected,selectEvent`。
+- `start/end` 使用同一显示时区的无偏移本地 ISO 文本。脚本负责 `clock.toLocal` / `clock.toUtc` 转换并拒绝夏令时歧义，不能把它们直接当 UTC 写回。
+- 候选选择事件保留 `selectEvent.id` 并附加布尔 `value`。移动事件包含 `id,start,end,intent,targetId?,snapMinutes`，`intent` 可为 `move/swap/insert`，并不代表业务校验已通过。
+- `options` 支持 `minColumnWidth,startMinute,endMinute,pixelsPerMinute,initialMinute,candidateLabel`；每日显示区间仅影响渲染。`previewBlocks/previewLabel` 可展示脚本计算的变更预览。
+
+当前 app.planner 1.1.0 使用此原型：快速添加、任务详情、移动与交换及整体撤销；插入顺延和高级生成器仍待后续实施，参见 [第一阶段记录](verification/PLANNER_UX_STAGE1.md)。
+
+
+### API 1.25 规划拖动预览与时长调整
+
+`plannerBoard.previewQuery` 声明 `{ref: ServiceRef, input: {...}}`。宿主以当前页面模块身份调用只读 query，并把当前拖动事件作为 `proposal` 合并到 input；不能指定 command 绕过审核。权限、输入输出 Schema 和模块生命周期仍由宿主校验。声明此能力的模块要求 `hostApi: '^1.25.0'`。
+
+- 候选位置改变后停留180毫秒发起查询；只采用当前拖动中最新请求的结果。查询结果可包含 `previewBlocks, previewLabel, conflicts, valid, overdue`。旧结果、取消后和页面切换后的结果不继续显示。
+- `previewIdentity` 是调用方提供的稳定视图版本，改变时取消当前拖动。当前页面忙碌、上下文失效或离开页面时停止拖动、滚动和预览。宿主还校验查询返回前的数据版本与页面实例。
+- `intent` 增加 `resize`：保留原开始，移动末端，仍只发一次完整起止事件。固定／只读块没有末端手柄。边缘横纵自动滚动与手指速度分离；退出、取消或销毁时停止。
+- 交换在本地先显示保留各自时长的双位置几何预览，随后可由服务校验结果替换。预览只是提示，最终提交仍须重新校验，不能根据 `valid` 客户端标志直接写入。
+
+app.planner 1.2.0 用 `planner.operation.inspect` 提供轻量只读结果；使用 task 1.5.1 的单调编辑时间戳与轻量版本令牌阻止旧草稿覆盖。图形拖动仍走既有审核流程。详情见 [第二阶段记录](verification/PLANNER_UX_STAGE2.md)。
+
+
+### 规划模块1.3：候选分页与移动时长
+
+`planner.board.get` 增加 `candidateOffset`（默认0）、`candidateLimit`（默认100，范围1–200）、`onlyDeadline`（默认false）。输出 `candidateTotal/candidateOffset/candidateLimit/hasMoreCandidates`；只对待安排候选先过滤、稳定排序、再分页，`scheduled/busy` 不受影响。候选的选择标识跨页保留，最终排程服务会再次验证所有选中标识。只传回当前页候选与显示范围内已安排任务的轻量版本依据；服务内部候选构建仍会扫描任务和规则。
+
+`planner.operation.preview` 的 `move` 可传 `preserveDuration:true`：已安排任务按原UTC起止的实际间隔计算新结束，未安排任务使用预计时长。图形拖动与 `operation.inspect` 的移动默认启用；详情明确编辑起止时传false。这样跨夏令时切换仍保留实际耗时；新开始时刻存在歧义时依然拒绝，不自动选择时区分支。`resize` 保持其独立语义，只改结束。
+
+看板原生组件现在缓存按日局部碰撞组的几何索引，按横纵可见窗口及缓冲区构建任务块；已开始手势的源控件保留到释放，避免滚动时销毁。密集组只聚合本组，选择清单使用按需构建；业务校验仍读取完整占用，不能因任务未渲染而忽略冲突。
+
+撤销在原有快照校验之外，先验证恢复的起止位置是否与新任务、课程或手动占用冲突；失败时整体不写入。仅撤销描述、删除新建任务等不会新增占用的变更不要求排程检查。详见 [第三阶段记录](verification/PLANNER_UX_STAGE3.md)。

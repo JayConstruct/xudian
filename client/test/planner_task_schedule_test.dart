@@ -143,12 +143,11 @@ void main() {
     },
   );
 
-  test('precise tasks reject invalid instants, partial ranges and midnight crossings', () async {
+  test('precise tasks reject invalid instants and partial ranges', () async {
     for (final changes in [
       {'plannedStartAt': '2026-10-10T18:00:00+00:00'},
       {'plannedStartAt': '2026-02-30T18:00:00Z'},
       {'plannedStartAt': '2026-10-10T19:00:00Z'},
-      {'plannedEndAt': '2026-10-11T17:00:00Z'},
       {'plannedTimezone': 'Invalid/Zone'},
       {'estimatedMinutes': 0},
       {'executionExpiresOn': '2026-02-30'},
