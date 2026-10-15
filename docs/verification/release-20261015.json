@@ -1,0 +1,156 @@
+{
+  "date": "2026-10-15",
+  "sourceCommit": "b6df54a62dd1f896b358049f05884d453d6e2019",
+  "appTag": "v0.2.0-beta.4",
+  "moduleTag": "modules-20261015-planner-ux",
+  "moduleAssets": [
+    {
+      "id": "app.planner",
+      "version": "1.3.0",
+      "sha256": "1a9d2aea3a84e4458ec52c75149c585b84ebea1d76f98945e73cde3eadbd60ab",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261015-planner-ux/app.planner-1.3.0.xmodule",
+      "anonymousVerified": true
+    },
+    {
+      "id": "app.tasks",
+      "version": "1.5.1",
+      "sha256": "cc9ea271801816a739f2f8dc2496bc84e3425a127bbaf7b37904e1eed6064821",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261015-planner-ux/app.tasks-1.5.1.xmodule",
+      "anonymousVerified": true
+    },
+    {
+      "id": "app.schedule",
+      "version": "1.15.0",
+      "sha256": "93348f797d1d6cffb1b09a9c7bdf727a10b271662c4ee46ff330c4d2925761a0",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261015-planner-ux/app.schedule-1.15.0.xmodule",
+      "anonymousVerified": true
+    },
+    {
+      "id": "app.import.shiguang",
+      "version": "1.7.0",
+      "sha256": "1e979dca663df69d65a1736042a31431060c0756929d049d12c5127f13969d1f",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261015-planner-ux/app.import.shiguang-1.7.0.xmodule",
+      "anonymousVerified": true
+    }
+  ],
+  "checks": {
+    "flutterFull": 1270,
+    "flutterCacheRetest": 27,
+    "python": 208,
+    "catalogPython": 36,
+    "analysis": "passed",
+    "architecture": "passed",
+    "repository": "passed",
+    "nodeParity": "passed"
+  },
+  "ci": {
+    "app": "https://github.com/JayConstruct/xudian/actions/runs/38746846277",
+    "modules": "https://github.com/JayConstruct/xudian/actions/runs/38746845968"
+  },
+  "defaultCatalogVerified": true,
+  "publicIndexesVerified": true,
+  "status": "published, public assets verified, emulator installed and store upgrades verified",
+  "app": {
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.4",
+    "sourceCommit": "b6df54a62dd1f896b358049f05884d453d6e2019",
+    "sha256": {
+      "app-arm64-v8a-release.apk": "2304a72de0aa1b097c8078a7e370a7c9b4ab9d5db128b0491895012c169882f9",
+      "app-armeabi-v7a-release.apk": "642fe7e07ad9306bfced3e121b98261153da7e3fbbd42379a7f65806998a6242",
+      "app-x86_64-release.apk": "ffd3943f67de8249c5372c65a5f51a50f9f4b55861df38d69277096a4e942734",
+      "SHA256SUMS": "e547b4509e223c1e699417ebdc4b695782f4a775eb7d32a17d8b1236e8b1d7f8",
+      "SOURCE_COMMIT": "f5e0828d142e768919d0b6f92133d84df5bca8347fdbe2a7d1ce03f4c1197b80"
+    },
+    "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.4",
+    "validation": {
+      "apks": [
+        {
+          "abi": "x86_64",
+          "package": "package: name='dev.taskapp.task_app' versionCode='4118' versionName='0.2.0-beta.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+          "sha256": "ffd3943f67de8249c5372c65a5f51a50f9f4b55861df38d69277096a4e942734",
+          "bundlesMatchSource": true
+        },
+        {
+          "abi": "arm64-v8a",
+          "package": "package: name='dev.taskapp.task_app' versionCode='2118' versionName='0.2.0-beta.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+          "sha256": "2304a72de0aa1b097c8078a7e370a7c9b4ab9d5db128b0491895012c169882f9",
+          "bundlesMatchSource": true
+        },
+        {
+          "abi": "armeabi-v7a",
+          "package": "package: name='dev.taskapp.task_app' versionCode='1118' versionName='0.2.0-beta.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+          "sha256": "642fe7e07ad9306bfced3e121b98261153da7e3fbbd42379a7f65806998a6242",
+          "bundlesMatchSource": true
+        }
+      ],
+      "localSigningPayloadIdentical": true,
+      "localSignedSha256": "30b0328a16ee424220d97efa330b610861e56d9d6bed0c2a17df671d3fbfaf00"
+    }
+  },
+  "emulator": {
+    "serial": "emulator-5554",
+    "avd": "Medium_Phone_API_37.0",
+    "installedApp": {
+      "version": "0.2.0-beta.4",
+      "versionCode": 4118,
+      "sha256": "30b0328a16ee424220d97efa330b610861e56d9d6bed0c2a17df671d3fbfaf00",
+      "signatureSha256": "1cb124c4981ae2cb98d2ce101bc1ba8c563ac90db1c5d5029de9590c0479a7b3",
+      "installMode": "adb install -r; published payload with existing local signing; data retained"
+    },
+    "appTestingChannelDetectedRelease": true,
+    "storeInstalled": [
+      {
+        "id": "app.planner",
+        "name": "任务规划",
+        "version": "1.3.0",
+        "sha256": "1a9d2aea3a84e4458ec52c75149c585b84ebea1d76f98945e73cde3eadbd60ab",
+        "confirmed": true
+      },
+      {
+        "id": "app.views.today",
+        "name": "日程",
+        "version": "1.8.0",
+        "sha256": "51a3f89d3fac605daeab1801303cc823c60faf355c3dee3e26ba11d36a2f3a32",
+        "confirmed": true
+      },
+      {
+        "id": "app.ai",
+        "name": "AI 助手",
+        "version": "1.3.0",
+        "sha256": "4e947c7d48c99e70f343fb401cec3a585d6e608aec12fadc48b0d0505f39d7e7",
+        "confirmed": true
+      },
+      {
+        "id": "app.ui.examples",
+        "name": "UI 示例",
+        "version": "1.4.2",
+        "sha256": "f9186446a8c02a4a9b3930a8759e2f989c92c637762d2bc6ac1ac5cb602f64fd",
+        "confirmed": true
+      }
+    ],
+    "alreadyInstalledMatches": {
+      "app.schedule": {
+        "version": "1.15.0",
+        "sha256": "93348f797d1d6cffb1b09a9c7bdf727a10b271662c4ee46ff330c4d2925761a0"
+      },
+      "app.import.shiguang": {
+        "version": "1.7.0",
+        "sha256": "1e979dca663df69d65a1736042a31431060c0756929d049d12c5127f13969d1f"
+      }
+    },
+    "pendingStoreUpdates": 0,
+    "plannerOpenedThroughStore": true,
+    "existingCoursesVisibleAsReadonlyOccupancy": true,
+    "taskDependencyVerified": {
+      "id": "app.tasks",
+      "version": "1.5.1",
+      "sha256": "cc9ea271801816a739f2f8dc2496bc84e3425a127bbaf7b37904e1eed6064821"
+    }
+  },
+  "publicCatalogCommit": "49f1c268217dc8b7008b734aeddf7dd2e11c20cc",
+  "limits": [
+    "Simulator uses original local development signing on the published x86_64 APK payload; original public artifact is unchanged.",
+    "No ARM physical-device or Windows native installation verified.",
+    "No device FPS benchmark, long dragging acceptance or full planner redesign completion claimed."
+  ],
+  "localEvidence": "dist/verification/release-20261015/"
+}

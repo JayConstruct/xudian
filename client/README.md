@@ -1,6 +1,6 @@
 # 序点 Flutter 客户端
 
-生产入口为 `main.dart → XudianApp → AppShell → moduleHostProvider`。原生注册受保护的模块管理界面；任务、视图、AI 和组件示例运行 v3 JavaScript 模块。宿主 API 当前为 **1.23.0**，模块包格式为 `packageFormat: 2`，定义为 `formatVersion: 3`。
+生产入口为 `main.dart → XudianApp → AppShell → moduleHostProvider`。原生注册受保护的模块管理界面；任务、视图、AI 和组件示例运行 v3 JavaScript 模块。宿主 API 当前为 **1.25.0**，模块包格式为 `packageFormat: 2`，定义为 `formatVersion: 3`。
 
 ## 代码入口
 
