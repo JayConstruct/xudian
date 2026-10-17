@@ -1,0 +1,120 @@
+{
+  "date": "2026-10-17",
+  "sourceCommit": "9965e7fbba08219b7d2a0fcb64c9ea9192c12b82",
+  "appTag": "v0.2.0-beta.5",
+  "moduleTag": "modules-20261017-planner-display",
+  "moduleAssets": [
+    {
+      "id": "app.planner",
+      "version": "1.4.8",
+      "sha256": "da4230c2e0706af147a58e7268bc336c5182bb6fe88218ac26e8c8a3825544d4",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261017-planner-display/app.planner-1.4.8.xmodule",
+      "anonymousVerified": true
+    },
+    {
+      "id": "app.schedule",
+      "version": "1.15.1",
+      "sha256": "fb2860128c7c6cce946fd74021c349f8f7055736f321948752f9b2e38121b5b5",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261017-planner-display/app.schedule-1.15.1.xmodule",
+      "anonymousVerified": true
+    }
+  ],
+  "checks": {
+    "flutterCI": 1386,
+    "python": 210,
+    "catalogPython": 36,
+    "analysis": "passed",
+    "architecture": "passed",
+    "repository": "passed",
+    "workflowConfiguration": "passed",
+    "nodeParity": "passed",
+    "onlineCatalog": "9 entries and author packages passed"
+  },
+  "ci": {
+    "app": "https://github.com/JayConstruct/xudian/actions/runs/39036750740",
+    "modules": "https://github.com/JayConstruct/xudian/actions/runs/39036750907",
+    "main": "https://github.com/JayConstruct/xudian/actions/runs/39036731896",
+    "appRetried": "First attempt hit an existing fixed-wait storefront upgrade test race; isolated local retest and the same revision on main passed. Failed jobs were rerun without changing the immutable tag."
+  },
+  "defaultCatalogVerified": true,
+  "publicIndexesVerified": true,
+  "status": "published, public assets verified, current source built and emulator pages verified",
+  "app": {
+    "sourceCommit": "9965e7fbba08219b7d2a0fcb64c9ea9192c12b82",
+    "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.5",
+    "sha256": {
+      "app-arm64-v8a-release.apk": "773ba7633ca2539a76269bf72389fa8c64b49089a33988988111570bb94e38b0",
+      "app-armeabi-v7a-release.apk": "2a8f844a0303435cfc450775d25d67c7eed4dfa4f4a48acad0e06e39bde45201",
+      "app-x86_64-release.apk": "a9d8dfe9f5939fc8b6817524335614fb0de2366b677fbeea6810a2e1ac6afd51",
+      "SHA256SUMS": "3c0f1ad3c2e978bd40d6cb9029c1b7a6c3d5bd78f861e8b8eb64a6e303d43644",
+      "SOURCE_COMMIT": "37dad59d0ad5428919dd800a6612c2ef50ad08d0c70a75c035f47ce3671dbaef"
+    },
+    "anonymousDownloadsVerified": true,
+    "validation": [
+      {
+        "abi": "arm64-v8a",
+        "package": "package: name='dev.taskapp.task_app' versionCode='2122' versionName='0.2.0-beta.5' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+        "versionCode": 2122,
+        "sha256": "773ba7633ca2539a76269bf72389fa8c64b49089a33988988111570bb94e38b0",
+        "bundlesMatchSource": true
+      },
+      {
+        "abi": "armeabi-v7a",
+        "package": "package: name='dev.taskapp.task_app' versionCode='1122' versionName='0.2.0-beta.5' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+        "versionCode": 1122,
+        "sha256": "2a8f844a0303435cfc450775d25d67c7eed4dfa4f4a48acad0e06e39bde45201",
+        "bundlesMatchSource": true
+      },
+      {
+        "abi": "x86_64",
+        "package": "package: name='dev.taskapp.task_app' versionCode='4122' versionName='0.2.0-beta.5' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+        "versionCode": 4122,
+        "sha256": "a9d8dfe9f5939fc8b6817524335614fb0de2366b677fbeea6810a2e1ac6afd51",
+        "bundlesMatchSource": true
+      }
+    ]
+  },
+  "modules": {
+    "sourceCommit": "9965e7fbba08219b7d2a0fcb64c9ea9192c12b82",
+    "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261017-planner-display",
+    "sha256": {
+      "app.planner-1.4.8.xmodule": "da4230c2e0706af147a58e7268bc336c5182bb6fe88218ac26e8c8a3825544d4",
+      "app.schedule-1.15.1.xmodule": "fb2860128c7c6cce946fd74021c349f8f7055736f321948752f9b2e38121b5b5"
+    },
+    "anonymousDownloadsVerified": true
+  },
+  "emulator": {
+    "serial": "emulator-5554",
+    "installedApp": {
+      "version": "0.2.0-beta.5",
+      "buildNumber": 145,
+      "versionCode": 4145,
+      "sha256": "78477133f8317cce2bd73dfe4a00d0c3ced30e377afac9c6bda768730820d0a6",
+      "installMode": "Current source, existing local signing, adb install -r; data retained"
+    },
+    "modulePackages": [
+      {
+        "id": "app.planner",
+        "version": "1.4.8",
+        "sha256": "da4230c2e0706af147a58e7268bc336c5182bb6fe88218ac26e8c8a3825544d4",
+        "installedSha256": "da4230c2e0706af147a58e7268bc336c5182bb6fe88218ac26e8c8a3825544d4",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.schedule",
+        "version": "1.15.1",
+        "sha256": "fb2860128c7c6cce946fd74021c349f8f7055736f321948752f9b2e38121b5b5",
+        "installedSha256": "fb2860128c7c6cce946fd74021c349f8f7055736f321948752f9b2e38121b5b5",
+        "status": "already-installed"
+      }
+    ],
+    "plannerOpened": true,
+    "automaticBounds": "07:00–24:00",
+    "taskAndReadonlyCourseMetadataVisible": true
+  },
+  "limits": [
+    "Emulator uses the current source built with existing local signing; CI APKs were anonymously downloaded and validated separately.",
+    "ARM physical-device performance and Windows native builds were not validated."
+  ],
+  "localEvidence": "dist/verification/release-20261017/"
+}
