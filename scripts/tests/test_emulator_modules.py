@@ -280,6 +280,27 @@ class ModuleWorkflowTest(unittest.TestCase):
         self.assertEqual(emulator.state, 'installed')
         self.assertEqual(result[0]['status'], 'already-installed')
 
+    def test_same_version_closes_button_instead_of_full_screen_scrim(self):
+        class DuplicateClose(FakeEmulator):
+            def nodes(self):
+                nodes = super().nodes()
+                if self.state == 'details':
+                    for node in nodes:
+                        if self.label(node) == '关闭':
+                            node.set('class', 'android.widget.Button')
+                    nodes.append(ET.Element('node', text='关闭', **{
+                        'class': 'android.view.View', 'bounds': '[0,0][1080,2400]',
+                    }))
+                return nodes
+
+            def tap_node(self, node):
+                if self.label(node) == '关闭':
+                    assert node.get('class') == 'android.widget.Button'
+                super().tap_node(node)
+
+        result = update.update_modules(['app.schedule'], DuplicateClose(already_installed=True), self.output)
+        self.assertEqual(result[0]['status'], 'already-installed')
+
     def test_same_version_changed_source_fails_with_instruction_to_increase_version(self):
         emulator = FakeEmulator(already_installed=True, stored_digest='different')
         with self.assertRaisesRegex(RuntimeError, '请提升 module.json'):

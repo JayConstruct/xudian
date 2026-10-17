@@ -380,7 +380,12 @@ def _verify_same_package(emulator, module, row):
             if digest != module['sha256']:
                 raise RuntimeError(f'{module["id"]} {module["version"]} 已安装包与当前源码摘要不同；'
                                    '请提升 module.json 中的模块版本号后重试，同版本源码不可覆盖')
-            close = _find(emulator, nodes, ['关闭'])
+            close_nodes = [node for node in nodes if emulator.label(node) == '关闭']
+            # Android exposes the dismissible full-screen scrim with the same
+            # label. Its centre lies inside the dialog and cannot dismiss it.
+            close = next((node for node in close_nodes
+                          if node.get('class') == 'android.widget.Button'),
+                         close_nodes[0] if close_nodes else None)
             if close is None:
                 raise RuntimeError('已安装模块详情缺少关闭按钮')
             emulator.tap_node(close)
