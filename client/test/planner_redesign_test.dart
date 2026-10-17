@@ -452,7 +452,71 @@ void main() {
       bridges.where((s) => s.arguments['method'] == 'clock.toLocal'),
       isEmpty,
     );
+    // One raw task-list read supplies candidates and scheduled occupancy.
+    // Board display must not read task.range again for the same snapshot.
+    expect(
+      bridges.where(
+        (s) =>
+            s.arguments['moduleId'] == 'app.planner' &&
+            s.arguments['method'] == 'services.query',
+      ),
+      hasLength(1),
+    );
   });
+
+  test(
+    'board task snapshot preserves range and visibility filtering',
+    () async {
+      final actor = host.instances['app.tasks']!.actor;
+      final seed = SnapshotSession(actor, 'board-range-visibility');
+      await store.stage(seed, actor, {
+        'writes': [
+          for (final entry in <String, Map<String, Object?>>{
+            'cross-midnight': {
+              'plannedStartAt': '2026-10-10T15:30:00Z',
+              'plannedEndAt': '2026-10-10T17:00:00Z',
+            },
+            'before-window': {
+              'plannedStartAt': '2026-10-10T06:00:00Z',
+              'plannedEndAt': '2026-10-10T07:00:00Z',
+            },
+            'deleted': {'deletedAt': '2026-10-10T06:00:00Z'},
+            'archived': {'archivedAt': '2026-10-10T06:00:00Z'},
+            'completed': {'completedAt': '2026-10-10T06:00:00Z'},
+          }.entries)
+            {
+              'collection': 'tasks',
+              'id': entry.key,
+              'value': {
+                'id': entry.key,
+                'title': entry.key,
+                'priority': 0,
+                'plannedDate': '2026-10-11',
+                'plannedStartAt': '2026-10-11T01:00:00Z',
+                'plannedEndAt': '2026-10-11T02:00:00Z',
+                'plannedTimezone': 'Asia/Shanghai',
+                'updatedAt': '2026-10-10T06:00:00Z',
+                ...entry.value,
+              },
+            },
+        ],
+      });
+      await store.commit(
+        store.seal(seed).id,
+        actor,
+        authorize: (_) {},
+        audit: false,
+      );
+      final board = object(
+        await query('board.get', {'startDate': '2026-10-11', 'days': 1}),
+      );
+      final block = objects(board['scheduled']).single;
+      expect(block['id'], 'cross-midnight');
+      expect(block['startDate'], '2026-10-10');
+      expect(block['endDate'], '2026-10-11');
+      expect(objects(board['tasks']).single['id'], 'cross-midnight');
+    },
+  );
 
   test(
     'same clock edits invalidate board tokens and raw detail snapshots',

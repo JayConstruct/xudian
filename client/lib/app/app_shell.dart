@@ -1,6 +1,9 @@
+import '../core/ui/workspace_interaction.dart';
+import '../core/module_host/plan_confirmation.dart';
 import '../core/ui/native_ui.dart';
 import '../core/ui/ui_icon.dart';
 import '../core/ui/workspace_typography.dart';
+import '../core/ui/workspace_header_action.dart';
 import '../core/contracts/json_values.dart';
 import '../core/performance/ui_load_trace.dart';
 
@@ -80,6 +83,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   String? selectedDestinationId;
   final workspaceHeader = WorkspaceHeaderController();
   final workspaceChrome = WorkspaceChromeController();
+  final workspaceInteraction = WorkspaceInteractionController();
   double? _measuredDockHeight;
 
   void _dockSizeChanged(Size size) {
@@ -179,7 +183,16 @@ class _AppShellState extends ConsumerState<AppShell> {
         );
         return null;
       case 'ui.review':
-        return reviewDialog(context, '确认实际数据变更', args);
+        final details = Map<String, Object?>.from(args);
+        final rawConfirmation = details.remove('confirmation');
+        return reviewDialog(
+          context,
+          '确认实际数据变更',
+          details,
+          confirmation: rawConfirmation == null
+              ? null
+              : PlanConfirmation.parse(rawConfirmation),
+        );
       case 'packages.review':
         return reviewDialog(context, '审核模块文件、数据、界面和权限', args);
       case 'grants.request':
@@ -306,21 +319,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                   child: SizedBox(
                     width: 560,
                     height: MediaQuery.sizeOf(panelContext).height * .85,
-                    child: Column(
-                      children: [
-                        AppBar(
-                          automaticallyImplyLeading: false,
-                          title: Text(page.title),
-                          actions: [
-                            IconButton(
-                              tooltip: '关闭面板',
-                              onPressed: () => Navigator.pop(panelContext),
-                              icon: const UiIcon(Icons.close),
-                            ),
-                          ],
-                        ),
-                        Expanded(child: child),
-                      ],
+                    child: ModuleDetailPage(
+                      registry: widget.registry,
+                      pageId: pageId,
+                      pageContext: PageContext(values: values),
+                      title: page.title,
+                      panel: true,
+                      child: child,
                     ),
                   ),
                 ),
@@ -340,24 +345,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                       child: Material(
                         elevation: 16,
                         color: Theme.of(context).colorScheme.surface,
-                        child: Column(
-                          children: [
-                            AppBar(
-                              automaticallyImplyLeading: false,
-                              title: Text(page.title),
-                              actions: [
-                                NativeUi(
-                                  child: IconButton(
-                                    tooltip: '关闭面板',
-                                    onPressed: () =>
-                                        Navigator.pop(panelContext),
-                                    icon: const UiIcon(Icons.close),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Expanded(child: child),
-                          ],
+                        child: ModuleDetailPage(
+                          registry: widget.registry,
+                          pageId: pageId,
+                          pageContext: PageContext(values: values),
+                          title: page.title,
+                          panel: true,
+                          child: child,
                         ),
                       ),
                     ),
@@ -366,14 +360,33 @@ class _AppShellState extends ConsumerState<AppShell> {
               ),
             );
           } else {
+            final requestedHeight = presentation['heightFactor'];
+            final heightFactor =
+                requestedHeight is num && requestedHeight.isFinite
+                ? requestedHeight.toDouble().clamp(.5, .95)
+                : .9;
             unawaited(
               showModalBottomSheet<void>(
                 context: context,
                 isScrollControlled: true,
                 useSafeArea: true,
                 showDragHandle: adaptive,
-                builder: (_) =>
-                    FractionallySizedBox(heightFactor: .9, child: child),
+                builder: (panelContext) => Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(panelContext).bottom,
+                  ),
+                  child: FractionallySizedBox(
+                    heightFactor: heightFactor,
+                    child: ModuleDetailPage(
+                      registry: widget.registry,
+                      pageId: pageId,
+                      pageContext: PageContext(values: values),
+                      title: page.title,
+                      panel: true,
+                      child: child,
+                    ),
+                  ),
+                ),
               ),
             );
           }
@@ -471,6 +484,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     workspaceHeader.dispose();
     workspaceChrome.removeListener(_headerChanged);
     workspaceChrome.dispose();
+    workspaceInteraction.dispose();
     hostSubscription?.cancel();
     dataSubscription?.cancel();
     if (host?.interaction == _hostInteraction) host?.interaction = null;
@@ -910,38 +924,72 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
     );
     // The unified menu is owned by the host and cannot be removed by a recipe.
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Row(
-        children: [
-          if (spec?['backEvent'] != null)
-            BackButton(
-              onPressed: () => contribution!.dispatch(spec!['backEvent']),
-            ),
-          Expanded(
-            child: UiComponent(
-              ref: 'ui.chrome.header@1',
-              props: {'title': title},
-              slots: {
-                'title': titleWidget,
-                'leading': leadingWidget,
-                'actions': const SizedBox.shrink(),
-              },
-              fallback: fallback,
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: title, style: titleStyle),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        final reservedTitle = (painter.width + 12).clamp(100.0, 220.0);
+        painter.dispose();
+        final inline = fittingHeaderActions(
+          context,
+          actions,
+          constraints.maxWidth -
+              40 -
+              controlHeight -
+              reservedTitle -
+              (spec?['backEvent'] == null ? 0 : 48) -
+              (onAssistant == null ? 0 : 48),
+        );
+        return Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: spec?['compact'] == true ? 4 : 8,
           ),
-          if (onAssistant != null)
-            NativeUi(
-              child: IconButton(
-                key: const ValueKey('desktop-workspace-assistant'),
-                tooltip: 'AI 助手',
-                onPressed: onAssistant,
-                icon: const UiIcon(Icons.auto_awesome_outlined),
+          child: Row(
+            children: [
+              if (spec?['backEvent'] != null)
+                BackButton(
+                  onPressed: () => contribution!.dispatch(spec!['backEvent']),
+                ),
+              Expanded(
+                child: UiComponent(
+                  ref: 'ui.chrome.header@1',
+                  props: {'title': title},
+                  slots: {
+                    'title': titleWidget,
+                    'leading': leadingWidget,
+                    'actions': const SizedBox.shrink(),
+                  },
+                  fallback: fallback,
+                ),
               ),
-            ),
-          UiPackScope(defaultOnly: true, child: menu),
-        ],
-      ),
+              for (final action in inline)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 4),
+                  child: WorkspaceHeaderAction(
+                    key: ValueKey(('workspace-inline-action', action['label'])),
+                    action: action,
+                    onPressed: () =>
+                        unawaited(contribution!.dispatch(action['event'])),
+                  ),
+                ),
+              if (onAssistant != null)
+                NativeUi(
+                  child: IconButton(
+                    key: const ValueKey('desktop-workspace-assistant'),
+                    tooltip: 'AI 助手',
+                    onPressed: onAssistant,
+                    icon: const UiIcon(Icons.auto_awesome_outlined),
+                  ),
+                ),
+              UiPackScope(defaultOnly: true, child: menu),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1195,10 +1243,21 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
     final chromeCollapsed = workspaceChrome.collapsed;
     final chromeProgress = workspaceChrome.progress;
-    Widget workspaceContent() => WorkspaceHeaderScope(
-      controller: workspaceHeader,
-      lease: lease,
-      child: current.builder(context),
+    final interactionLease = workspaceInteraction.activate(
+      '${activeEntry.id}:${activeEntry.pageId}:${(workspaceContexts[activeEntry.id] ?? profile.mountFor(activeEntry).context).identity}:${instance?.actor.generation}',
+      () =>
+          mounted &&
+          selectedDestinationId == activeEntry.id &&
+          identical(host?.instances[activeEntry.moduleId], instance),
+    );
+    Widget workspaceContent() => WorkspaceInteractionScope(
+      controller: workspaceInteraction,
+      lease: interactionLease,
+      child: WorkspaceHeaderScope(
+        controller: workspaceHeader,
+        lease: lease,
+        child: current.builder(context),
+      ),
     );
     List<UiEntryRegistration> at(UiPlacement placement) => orderedEntries(
       widget.registry.ui,
@@ -1423,39 +1482,42 @@ class _AppShellState extends ConsumerState<AppShell> {
                       left: 12,
                       right: 12,
                       bottom: 12,
-                      child: IgnorePointer(
-                        ignoring: chromeCollapsed,
-                        child: ExcludeSemantics(
-                          excluding: chromeCollapsed,
-                          child: FractionalTranslation(
-                            translation: Offset(0, chromeProgress * 1.5),
-                            child: Opacity(
-                              opacity: 1 - chromeProgress,
-                              child: MobileBottomDock(
-                                onSizeChanged: _dockSizeChanged,
-                                destinations: destinations,
-                                selectedIndex: index,
-                                visibleCount: destinations.length,
-                                hasMore: false,
-                                moreSelected: false,
-                                onAssistant: assistant == null
-                                    ? null
-                                    : openAssistant,
-                                annotate: true,
-                                entryModuleIds: {
-                                  for (final entry in navigationEntries)
-                                    entry.id: entry.moduleId,
-                                },
-                                showNavigation: showNavigation,
-                                onSelected: (value) {
-                                  if (value >= 0 &&
-                                      value < navigationEntries.length) {
-                                    _openEntry(navigationEntries[value]);
-                                  }
-                                },
-                                input: current.quickAdd
-                                    ? _quickInputContent(current)
-                                    : null,
+                      child: WorkspaceInteractionDock(
+                        controller: workspaceInteraction,
+                        child: IgnorePointer(
+                          ignoring: chromeCollapsed,
+                          child: ExcludeSemantics(
+                            excluding: chromeCollapsed,
+                            child: FractionalTranslation(
+                              translation: Offset(0, chromeProgress * 1.5),
+                              child: Opacity(
+                                opacity: 1 - chromeProgress,
+                                child: MobileBottomDock(
+                                  onSizeChanged: _dockSizeChanged,
+                                  destinations: destinations,
+                                  selectedIndex: index,
+                                  visibleCount: destinations.length,
+                                  hasMore: false,
+                                  moreSelected: false,
+                                  onAssistant: assistant == null
+                                      ? null
+                                      : openAssistant,
+                                  annotate: true,
+                                  entryModuleIds: {
+                                    for (final entry in navigationEntries)
+                                      entry.id: entry.moduleId,
+                                  },
+                                  showNavigation: showNavigation,
+                                  onSelected: (value) {
+                                    if (value >= 0 &&
+                                        value < navigationEntries.length) {
+                                      _openEntry(navigationEntries[value]);
+                                    }
+                                  },
+                                  input: current.quickAdd
+                                      ? _quickInputContent(current)
+                                      : null,
+                                ),
                               ),
                             ),
                           ),

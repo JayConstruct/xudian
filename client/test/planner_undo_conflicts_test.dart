@@ -134,6 +134,125 @@ void main() {
     expect((await raw(task['id']))['plannedDate'], '2026-10-16');
   });
 
+  test('undo restores an unchanged pre-existing task overlap', () async {
+    final task = await create('原本重叠', '2026-10-15');
+    await create('原有任务占用', '2026-10-15');
+    await move(task['id'], 'old-task-overlap', '2026-10-16');
+    await run('batch.undo', {'id': 'old-task-overlap'});
+    expect(await raw(task['id']), task);
+  });
+
+  test('undo restores an unchanged pre-existing course overlap', () async {
+    await course();
+    final task = await create('原本有课', '2026-10-15');
+    await move(task['id'], 'old-course-overlap', '2026-10-16');
+    await run('batch.undo', {'id': 'old-course-overlap'});
+    expect(await raw(task['id']), task);
+  });
+
+  test('undo restores an unchanged pre-existing manual busy overlap', () async {
+    await run('availability.save', {
+      'availability': {
+        'timezone': 'UTC',
+        'busy': [
+          {'date': '2026-10-15', 'start': '10:30', 'end': '11:30'},
+        ],
+      },
+    });
+    final task = await create('原本忙碌', '2026-10-15');
+    await move(task['id'], 'old-busy-overlap', '2026-10-16');
+    await run('batch.undo', {'id': 'old-busy-overlap'});
+    expect(await raw(task['id']), task);
+  });
+
+  test(
+    'changed task overlap still prevents undo even with an old baseline',
+    () async {
+      final task = await create('返回需安全', '2026-10-15');
+      final other = await create('原有但变化的任务', '2026-10-15');
+      await move(task['id'], 'changed-task-overlap', '2026-10-16');
+      await run('task.updateFields', {
+        'id': other['id'],
+        'changes': {
+          'plannedStartAt': '2026-10-15T10:30:00Z',
+          'plannedEndAt': '2026-10-15T11:30:00Z',
+          'plannedTimezone': 'UTC',
+        },
+      }, module: 'app.tasks');
+      await rejectUnchanged('changed-task-overlap');
+    },
+  );
+
+  test(
+    'changed course overlap still prevents undo even with an old baseline',
+    () async {
+      await course();
+      final task = await create('课表变化', '2026-10-15');
+      await move(task['id'], 'changed-course-overlap', '2026-10-16');
+      await run('schedule.timetable.save', {
+        'timetable': table(
+          'timetable',
+          zone: 'UTC',
+          monday: '2026-10-12',
+          start: '10:30',
+          end: '11:30',
+        ),
+      }, module: 'app.schedule');
+      await rejectUnchanged('changed-course-overlap');
+    },
+  );
+
+  test(
+    'changed manual busy overlap still prevents undo even with an old baseline',
+    () async {
+      await run('availability.save', {
+        'availability': {
+          'timezone': 'UTC',
+          'busy': [
+            {'date': '2026-10-15', 'start': '10:30', 'end': '11:30'},
+          ],
+        },
+      });
+      final task = await create('忙碌变化', '2026-10-15');
+      await move(task['id'], 'changed-busy-overlap', '2026-10-16');
+      await run('availability.save', {
+        'availability': {
+          'timezone': 'UTC',
+          'busy': [
+            {'date': '2026-10-15', 'start': '10:45', 'end': '11:30'},
+          ],
+        },
+      });
+      await rejectUnchanged('changed-busy-overlap');
+    },
+  );
+
+  test(
+    'legacy history without an overlap baseline keeps strict protection',
+    () async {
+      final task = await create('旧版撤销', '2026-10-15');
+      await create('旧版原有重叠', '2026-10-15');
+      await move(task['id'], 'legacy-overlap', '2026-10-16');
+      final actor = host.instances['app.planner']!.actor;
+      final session = SnapshotSession(actor, 'legacy-history-fixture');
+      final batch = Map<String, Object?>.from(
+        object(await store.get(actor, 'batches', 'legacy-overlap')),
+      )..remove('undoOccupancy');
+      await store.stage(session, actor, {
+        'writes': [
+          {'collection': 'batches', 'id': 'legacy-overlap', 'value': batch},
+        ],
+      });
+      await store.commit(
+        store.seal(session).id,
+        actor,
+        authorize: (_) {},
+        audit: false,
+      );
+      await rejectUnchanged('legacy-overlap');
+    },
+  );
+
   test('undo rejects a course added at the original position', () async {
     final task = await create('原位后来有课', '2026-10-15');
     await move(task['id'], 'course-blocked', '2026-10-16');

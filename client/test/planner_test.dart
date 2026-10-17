@@ -530,14 +530,15 @@ void main() {
             await tester.pump(const Duration(milliseconds: 20));
           }
           expect(
-            find.text('待安排 · 0'),
+            find.text('待安排  0'),
             findsOneWidget,
             reason: tester
                 .widgetList<Text>(find.byType(Text))
                 .map((x) => x.data ?? '')
                 .join(' | '),
           );
-          expect(find.text('统一安排'), findsOneWidget);
+          expect(find.text('统一安排'), findsNothing);
+          expect(find.text('仅有截止'), findsOneWidget);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());
         },

@@ -279,7 +279,7 @@ export const ui = Object.freeze({
   navigate: (page, context = {}) => call('ui.navigate', {page, context}),
   panel: (page, context = {}, presentation = {}) => call('ui.panel', {page, context, presentation}),
   dialog: spec => call('ui.dialog', spec),
-  review: planId => call('ui.review', {planId}),
+  review: (planId, confirmation) => call('ui.review', {planId, ...(confirmation === undefined ? {} : {confirmation})}),
 });
 export const http = Object.freeze({request: options => call('http.request', options), cancel: id => call('http.cancel', {id})});
 export const secrets = Object.freeze({configure: options => call('secrets.configure', options), delete: handle => call('secrets.delete', {handle})});

@@ -103,6 +103,7 @@ class WorkspaceHeaderController extends ChangeNotifier {
           (spec['title'] as String).isEmpty ||
           (spec['title'] as String).length > 256 ||
           (spec['autoHideChrome'] != null && spec['autoHideChrome'] is! bool) ||
+          (spec['compact'] != null && spec['compact'] is! bool) ||
           (spec['leading'] != null &&
               (spec['leading'] is! Map ||
                   (spec['leading'] as Map)['label'] is! String)) ||
@@ -114,7 +115,19 @@ class WorkspaceHeaderController extends ChangeNotifier {
                     (action) =>
                         action is! Map ||
                         action['label'] is! String ||
-                        action['event'] is! Map,
+                        action['event'] is! Map ||
+                        action['icon'] != null && action['icon'] is! String ||
+                        action['presentation'] != null &&
+                            !const {
+                              'inline',
+                              'menu',
+                            }.contains(action['presentation']) ||
+                        action['variant'] != null &&
+                            !const {
+                              'filled',
+                              'tonal',
+                              'text',
+                            }.contains(action['variant']),
                   )))) {
         throw const FormatException('Invalid workspace header');
       }

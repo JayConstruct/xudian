@@ -256,6 +256,30 @@ class ModuleWorkflowTest(unittest.TestCase):
         self.assertEqual(result[0]['installedSha256'], result[0]['sha256'])
         self.assertNotIn(('tap', '确认安装'), emulator.calls)
 
+    def test_same_version_waits_until_details_dismissal_finishes(self):
+        class ClosingDetails(FakeEmulator):
+            closing_reads = 0
+
+            def tap_node(self, node):
+                closing = self.label(node) == '关闭'
+                super().tap_node(node)
+                if closing:
+                    self.state = 'closing'
+
+            def visible_labels(self):
+                if self.state == 'closing':
+                    self.closing_reads += 1
+                    if self.closing_reads < 3:
+                        return ['关闭', '模块 ID', 'app.schedule']
+                    self.state = 'installed'
+                return super().visible_labels()
+
+        emulator = ClosingDetails(already_installed=True)
+        result = update.update_modules(['app.schedule'], emulator, self.output)
+        self.assertEqual(emulator.closing_reads, 3)
+        self.assertEqual(emulator.state, 'installed')
+        self.assertEqual(result[0]['status'], 'already-installed')
+
     def test_same_version_changed_source_fails_with_instruction_to_increase_version(self):
         emulator = FakeEmulator(already_installed=True, stored_digest='different')
         with self.assertRaisesRegex(RuntimeError, '请提升 module.json'):

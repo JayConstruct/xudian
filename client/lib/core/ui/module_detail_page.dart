@@ -8,6 +8,8 @@ import 'ui_composition.dart';
 import 'ui_component.dart';
 import 'ui_page_host.dart';
 import 'workspace_header.dart';
+import 'ui_icon.dart';
+import 'native_ui.dart';
 
 /// A module detail route owns its header independently of the workspace below.
 class ModuleDetailPage extends StatefulWidget {
@@ -18,6 +20,7 @@ class ModuleDetailPage extends StatefulWidget {
     this.title,
     this.pageContext = const PageContext(),
     this.child,
+    this.panel = false,
   });
 
   final ModuleRegistry registry;
@@ -25,6 +28,7 @@ class ModuleDetailPage extends StatefulWidget {
   final String? title;
   final PageContext pageContext;
   final Widget? child;
+  final bool panel;
 
   @override
   State<ModuleDetailPage> createState() => _ModuleDetailPageState();
@@ -101,22 +105,77 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
         },
         child: UiPackScope(
           moduleId: page?.moduleId,
-          child: DetailPage(
-            title:
-                spec?['title'] as String? ??
-                (lease?.isActive() == true
-                    ? ''
-                    : widget.title ?? page?.title ?? '页面不可用'),
-            titleMaxLines: page?.headerMode == 'date' ? 3 : 1,
-            leading: hasInternalBack ? BackButton(onPressed: _back) : null,
-            child:
-                widget.child ??
-                UiPageHost(
-                  registry: widget.registry,
-                  pageId: widget.pageId,
-                  pageContext: widget.pageContext,
+          child: widget.panel
+              ? WorkspaceContentInsets(
+                  bottom: 0,
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 8, 4),
+                            child: Row(
+                              children: [
+                                if (hasInternalBack)
+                                  BackButton(onPressed: _back),
+                                Expanded(
+                                  child: Text(
+                                    spec?['title'] as String? ??
+                                        widget.title ??
+                                        page?.title ??
+                                        '页面不可用',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                NativeUi(
+                                  child: IconButton(
+                                    tooltip: '关闭面板',
+                                    onPressed: () => Navigator.pop(context),
+                                    icon: const UiIcon(Icons.close),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child:
+                                widget.child ??
+                                UiPageHost(
+                                  registry: widget.registry,
+                                  pageId: widget.pageId,
+                                  pageContext: widget.pageContext,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              : DetailPage(
+                  title:
+                      spec?['title'] as String? ??
+                      (lease?.isActive() == true
+                          ? ''
+                          : widget.title ?? page?.title ?? '页面不可用'),
+                  titleMaxLines: page?.headerMode == 'date' ? 3 : 1,
+                  leading: hasInternalBack
+                      ? BackButton(onPressed: _back)
+                      : null,
+                  child:
+                      widget.child ??
+                      UiPageHost(
+                        registry: widget.registry,
+                        pageId: widget.pageId,
+                        pageContext: widget.pageContext,
+                      ),
                 ),
-          ),
         ),
       ),
     );

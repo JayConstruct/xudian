@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'app_page_transition.dart';
 
 class AppDesign {
-  static const brand = Color(0xFF606EAE);
+  static const brand = Color(0xFF5965A8);
   static const lightCanvas = Color(0xFFF5F5F2);
   static const darkCanvas = Color(0xFF1D1E22);
   static const lightSurface = Color(0xFFFEFEFC);
@@ -36,10 +36,16 @@ class AppDesign {
           onPrimary: dark ? const Color(0xFF252F60) : Colors.white,
           primaryContainer: dark
               ? const Color(0xFF333B59)
-              : const Color(0xFFE9ECF6),
+              : const Color(0xFFE9ECF7),
           onPrimaryContainer: dark
               ? const Color(0xFFDCE2FB)
-              : const Color(0xFF465489),
+              : const Color(0xFF46518D),
+          secondaryContainer: dark
+              ? const Color(0xFF333B59)
+              : const Color(0xFFE9ECF7),
+          onSecondaryContainer: dark
+              ? const Color(0xFFDCE2FB)
+              : const Color(0xFF46518D),
           surface: dark ? darkSurface : lightSurface,
           onSurface: dark ? const Color(0xFFE8E8E8) : charcoal,
           onSurfaceVariant: dark

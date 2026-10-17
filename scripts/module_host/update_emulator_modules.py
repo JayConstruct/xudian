@@ -384,6 +384,15 @@ def _verify_same_package(emulator, module, row):
             if close is None:
                 raise RuntimeError('已安装模块详情缺少关闭按钮')
             emulator.tap_node(close)
+            # Dialog dismissal is asynchronous; the next module must not try
+            # opening settings through a still-visible details snapshot.
+            for _ in range(10):
+                current = emulator.nodes()
+                if (_find(emulator, current, ['模块管理']) is not None
+                        and _find(emulator, current, ['导入 .xmodule']) is not None):
+                    break
+            else:
+                raise RuntimeError('模块详情关闭后未返回模块管理；停止后续安装')
             module['installedSha256'] = digest
             return
         _swipe(emulator, nodes)

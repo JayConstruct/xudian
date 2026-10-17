@@ -1,3 +1,7 @@
+import 'package:task_app/core/ui/workspace_interaction.dart';
+import 'package:task_app/core/ui/ui_surfaces.dart';
+import 'package:task_app/core/module_host/script_page.dart';
+
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -81,6 +85,7 @@ void main() {
                   'id': 'test.navigation.$id',
                   'title': label,
                   'handler': 'render',
+                  if (id == 'home') 'headerMode': 'contributed',
                   'entry': {
                     'id': 'test.navigation.$id',
                     'opening': 'workspace',
@@ -110,7 +115,10 @@ export async function render({event,context,state={}}) {
   if(context.pageId.endsWith('.schedule')&&context.importPlanId&&!state.routed) {
     state.routed=true;await ui.navigate('test.navigation.preview',{importPlanId:context.importPlanId});
   }
-  return {state,...(context.pageId.endsWith('.importer')?{header:{title:'导入详情',backEvent:{type:'internalBack'}}}:{}),tree:{type:'column',children:[
+  return {state,...(context.pageId.endsWith('.home')?{header:{title:'日程测试',compact:true,actions:[
+    {label:'操作历史',icon:'history',presentation:'inline',event:{type:'history'}},
+    {label:'新建',icon:'add',variant:'filled',presentation:'inline',event:{type:'panel'}}
+  ]}}:{}),...(context.pageId.endsWith('.importer')?{header:{title:'导入详情',backEvent:{type:'internalBack'}}}:{}),tree:{type:'column',children:[
     {type:'text',text:'正文 '+context.pageId},
     ...(context.pageId.endsWith('.home')?[
       {type:'button',text:'查看课表',event:{type:'schedule'}},
@@ -139,6 +147,131 @@ export async function render({event,context,state={}}) {
     await db.close();
     await dir.delete(recursive: true);
   });
+  testWidgets(
+    'active workspace drag hides only the dock and navigation invalidates old drag callbacks',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final app = XudianApp();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        app.registry.dispose();
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
+          ],
+          child: app,
+        ),
+      );
+      await settle(tester);
+      final pageContext = tester.element(find.byType(ScriptPage).first);
+      final scope = WorkspaceInteractionScope.maybeOf(pageContext)!;
+      final owner = Object();
+      final pageBounds = tester.getRect(find.byType(ScriptPage).first);
+      final inset = WorkspaceContentInsets.bottomOf(pageContext);
+      final headerBounds = tester.getRect(
+        find.byKey(const ValueKey('workspace-header-region')).first,
+      );
+      scope.controller.setDragging(scope.lease, owner, true);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.byKey(const ValueKey('workspace-drag-dock-opacity')),
+            )
+            .opacity,
+        0,
+      );
+      expect(tester.getRect(find.byType(ScriptPage).first), pageBounds);
+      expect(
+        WorkspaceContentInsets.bottomOf(
+          tester.element(find.byType(ScriptPage).first),
+        ),
+        inset,
+      );
+      expect(
+        tester.getRect(
+          find.byKey(const ValueKey('workspace-header-region')).first,
+        ),
+        headerBounds,
+      );
+      expect(find.text('新建').hitTestable(), findsOneWidget);
+      scope.controller.setDragging(scope.lease, owner, false);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.byKey(const ValueKey('workspace-drag-dock-opacity')),
+            )
+            .opacity,
+        1,
+      );
+      scope.controller.setDragging(scope.lease, owner, true);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('查看课表'));
+      await settle(tester);
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.byKey(const ValueKey('workspace-drag-dock-opacity')),
+            )
+            .opacity,
+        1,
+      );
+      scope.controller.setDragging(scope.lease, owner, true);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.byKey(const ValueKey('workspace-drag-dock-opacity')),
+            )
+            .opacity,
+        1,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'mobile script panel owns a title and closes independently of internal back',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final app = XudianApp();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        app.registry.dispose();
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
+          ],
+          child: app,
+        ),
+      );
+      await settle(tester);
+      expect(find.text('新建').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('新建'));
+      await settle(tester);
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.text('导入详情').hitTestable(), findsOneWidget);
+      expect(find.byTooltip('关闭面板').hitTestable(), findsOneWidget);
+      await tester.tap(find.byTooltip('关闭面板'));
+      await settle(tester);
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.text('新建').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'adaptive centered panel uses a wide dialog and closes on workspace navigation',
     (tester) async {

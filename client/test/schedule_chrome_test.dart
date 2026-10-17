@@ -318,10 +318,13 @@ void main() {
           matching: find.byType(Opacity),
         );
         expect(tester.widget<Opacity>(opacity.first).opacity, 0);
-        expect(
+        // The shared drag wrapper stays mounted, but reduced motion must make
+        // every opacity transition immediate, including the inactive wrapper.
+        for (final animation in tester.widgetList<AnimatedOpacity>(
           find.ancestor(of: dock(), matching: find.byType(AnimatedOpacity)),
-          findsNothing,
-        );
+        )) {
+          expect(animation.duration, Duration.zero);
+        }
         expect(find.bySemanticsLabel('展开工具栏'), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('workspace-chrome-reveal')));
         await tester.pumpAndSettle();

@@ -58,7 +58,10 @@ export async function queryBusy({startDate,endDate}) {
       const start=await clock.toUtc({date:item.date,time:startTime,zone:t.timezone}),end=await clock.toUtc({date:item.date,time:endTime,zone:t.timezone});
       if(start.status!=='unique'||end.status!=='unique'||start.instants.length!==1||end.instants.length!==1)throw new Error(`${t.name} ${item.date} 的课程时间存在夏令时歧义或不存在`);
       if(end.instants[0]<=start.instants[0])throw new Error('课程结束时间必须晚于开始时间');
-      items.push({id:t.id+'|'+item.occurrenceId,startAt:start.instants[0],endAt:end.instants[0],timetableId:t.id,date:item.date,timezone:t.timezone,title:item.title});
+      items.push({id:t.id+'|'+item.occurrenceId,startAt:start.instants[0],endAt:end.instants[0],timetableId:t.id,date:item.date,timezone:t.timezone,title:item.title,
+        ...(typeof item.location==='string'&&item.location.trim()?{location:item.location.trim()}:{}),
+        ...(typeof item.teacher==='string'&&item.teacher.trim()?{teacher:item.teacher.trim()}:{}),
+      });
     }
   }
   items.sort((a,b)=>a.startAt.localeCompare(b.startAt)||a.id.localeCompare(b.id));

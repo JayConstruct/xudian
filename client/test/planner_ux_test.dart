@@ -9,7 +9,11 @@ import 'package:task_app/core/module_host/planner_board.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
+import 'package:task_app/core/performance/ui_load_trace.dart';
+import 'package:task_app/core/ui/workspace_header.dart';
 import 'package:task_app/data/app_database.dart';
+
+import 'planner_task_schedule_test.dart' show table;
 
 void main() {
   late AppDatabase db;
@@ -97,6 +101,699 @@ void main() {
       'event': event,
       'formValues': forms,
     }),
+  );
+
+  Map<String, Object?> boardOptions(Map<String, Object?> rendered) => object(
+    nodes(rendered['tree'])
+        .singleWhere((n) => n['type'] == 'plannerBoard')['options'],
+  );
+
+  Future<void> scheduled(String title, String start, String end) async {
+    await run('task.create', {
+      'title': title,
+      'plannedStartAt': start,
+      'plannedEndAt': end,
+      'plannedTimezone': 'Asia/Shanghai',
+    }, module: 'app.tasks');
+  }
+
+  test(
+    'automatic display fits visible tasks with an hour of padding',
+    () async {
+      expect(boardOptions(await page())['startMinute'], 480);
+      expect(boardOptions(await page())['endMinute'], 1320);
+      await scheduled('上午', '2026-10-13T01:15:00Z', '2026-10-13T02:30:00Z');
+      await scheduled('晚上', '2026-10-14T12:00:00Z', '2026-10-14T13:15:00Z');
+      final options = boardOptions(await page());
+      expect(options['startMinute'], 480);
+      expect(options['endMinute'], 1380);
+      final empty = boardOptions(
+        await page(state: {'startDate': '2026-11-01'}),
+      );
+      expect(empty['startMinute'], 480);
+      expect(empty['endMinute'], 1320);
+    },
+  );
+
+  test('automatic display includes both sides of overnight tasks', () async {
+    await scheduled('跨夜', '2026-10-13T15:30:00Z', '2026-10-13T17:00:00Z');
+    final options = boardOptions(await page());
+    expect(options['startMinute'], 0);
+    expect(options['endMinute'], 1440);
+    final firstDay = boardOptions(
+      await page(state: {'startDate': '2026-10-13', 'days': 1}),
+    );
+    expect(firstDay['startMinute'], 1320);
+    expect(firstDay['endMinute'], 1440);
+    final secondDay = boardOptions(
+      await page(state: {'startDate': '2026-10-14', 'days': 1}),
+    );
+    expect(secondDay['startMinute'], 0);
+    expect(secondDay['endMinute'], 120);
+  });
+
+  test(
+    'manual bounds and full day persist across fresh page sessions',
+    () async {
+      var mode = 'manual';
+      var bounds = <String, Object?>{'start': '07:30', 'end': '24:00'};
+      host.interaction = (_, method, args) async {
+      if (method != 'ui.dialog') {
+        fail('Display settings must not request a business review');
+      }
+        return args['title'] == '表格显示时段' ? {'mode': mode} : bounds;
+      };
+      var result = await page(event: {'type': 'displayHours'});
+      expect(boardOptions(result)['startMinute'], 450);
+      expect(boardOptions(result)['endMinute'], 1440);
+      expect(boardOptions(await page())['startMinute'], 450);
+      bounds = {'start': '22:00', 'end': '08:00'};
+      result = await page(event: {'type': 'displayHours'});
+      expect(object(result['state'])['error'], contains('结束必须晚于开始'));
+      expect(boardOptions(await page())['startMinute'], 450);
+      mode = 'full';
+      await page(event: {'type': 'displayHours'});
+      expect(boardOptions(await page())['startMinute'], 0);
+      expect(boardOptions(await page())['endMinute'], 1440);
+      mode = 'auto';
+      await page(event: {'type': 'displayHours'});
+      expect(boardOptions(await page())['startMinute'], 480);
+    },
+  );
+
+  test('canceling manual bounds leaves the saved display unchanged', () async {
+    host.interaction = (_, method, args) async =>
+        args['title'] == '表格显示时段' ? {'mode': 'manual'} : null;
+    await page(event: {'type': 'displayHours'});
+    expect(boardOptions(await page())['displayHoursLabel'], startsWith('自动'));
+  });
+
+  test('render bridge counts stay bounded by the visible workload', () async {
+    final taskActor = host.instances['app.tasks']!.actor;
+    final fixture = SnapshotSession(taskActor, 'render-workload');
+    await store.stage(fixture, taskActor, {
+      'writes': [
+        for (var i = 0; i < 130; i++)
+          {
+            'collection': 'tasks',
+            'id': 'render-task-$i',
+            'value': {
+              'id': 'render-task-$i',
+              'title': '性能任务$i',
+              'priority': 0,
+              'estimatedMinutes': 30,
+              'dueDate': '2026-10-20',
+              'dueAt': '2026-10-20T12:00:00Z',
+              'dueTimezone': 'UTC',
+              'createdAt': '2026-10-13T00:00:00Z',
+              'updatedAt': '2026-10-13T00:00:00Z',
+              if (i < 100) ...{
+                'plannedDate': '2026-10-14',
+                'plannedStartAt': '2026-10-14T01:00:00Z',
+                'plannedEndAt': '2026-10-14T01:30:00Z',
+                'plannedTimezone': 'Asia/Shanghai',
+              },
+            },
+          },
+      ],
+    });
+    await store.commit(
+      store.seal(fixture).id,
+      taskActor,
+      authorize: (_) {},
+      audit: false,
+    );
+    final counts = <String, Map<String, int>>{};
+    final samples = <UiLoadSample>[];
+    await host.close();
+    await UiLoadTrace.observe(() async {
+      host = ModuleHost(store: store, directory: folder);
+      host.clockNow = () => DateTime.utc(2026, 10, 13);
+      await host.initialize();
+      for (final workload in <String, Map<String, Object?>>{
+        'board': {},
+        'history': {
+          'history': true,
+          'boardVersions': {
+            'prior-task': {'revisionToken': 'prior-revision'},
+          },
+        },
+        'preview': {
+          'autoPreview': {
+            'assigned': [],
+            'unassigned': [],
+            'warnings': [],
+            'conflicts': [],
+          },
+        },
+      }.entries) {
+        samples.clear();
+        final rendered = await page(state: workload.value);
+        if (workload.key == 'history') {
+          expect(
+            object(rendered['state'])['boardVersions'],
+            workload.value['boardVersions'],
+          );
+        }
+        final methods = <String, int>{};
+        for (final sample in samples.where((s) => s.name == 'page.bridge')) {
+          final method =
+              '${sample.arguments['moduleId']}/${sample.arguments['method']}';
+          methods.update(method, (n) => n + 1, ifAbsent: () => 1);
+        }
+        counts[workload.key] = methods;
+      }
+    }, samples.add);
+    debugPrint('planner render bridge counts: ${jsonEncode(counts)}');
+    expect(counts['board']!['app.planner/services.query'], 3);
+    expect(counts['board']!['app.tasks/data.query'], 1);
+    expect(counts['board']!['app.planner/clock.today'], 2);
+    expect(counts['board']!['app.planner/clock.toUtc'], 2);
+    for (final name in ['history', 'preview']) {
+      expect(
+        counts[name]!.keys.any((key) => key.startsWith('app.tasks/')),
+        false,
+      );
+      expect(counts[name]!['app.planner/clock.toLocalMany'], isNull);
+      expect(counts[name]!['app.planner/clock.toUtc'], isNull);
+    }
+    expect(counts['history']!['app.planner/services.query'], 2);
+    expect(counts['preview']!['app.planner/services.query'], 1);
+  });
+
+  test(
+    'course metadata reaches board blocks without copying task descriptions',
+    () async {
+      await install('app.schedule');
+      await run('schedule.timetable.save', {
+        'timetable': table('metadata-table'),
+      }, module: 'app.schedule');
+      await run('schedule.course.save', {
+        'course': {
+          'id': 'metadata-course',
+          'timetableId': 'metadata-table',
+          'name': '真实地点课程',
+        },
+        'meeting': {
+          'id': 'metadata-meeting',
+          'weekday': 2,
+          'startPeriod': 1,
+          'endPeriod': 1,
+          'weeks': [2],
+          'location': ' 教学楼 A301 ',
+          'teacher': ' 陈老师 ',
+        },
+      }, module: 'app.schedule');
+      await run('schedule.course.save', {
+        'course': {
+          'id': 'empty-course',
+          'timetableId': 'metadata-table',
+          'name': '没有地点课程',
+        },
+        'meeting': {
+          'id': 'empty-meeting',
+          'weekday': 3,
+          'startPeriod': 1,
+          'endPeriod': 1,
+          'weeks': [2],
+        },
+      }, module: 'app.schedule');
+      await run('task.create', {
+        'title': '真实任务',
+        'notes': '任意详细描述不作为块内地点',
+        'plannedStartAt': '2026-10-13T10:00:00Z',
+        'plannedEndAt': '2026-10-13T11:00:00Z',
+        'plannedTimezone': 'Asia/Shanghai',
+      }, module: 'app.tasks');
+      final busy = object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.schedule', 'schedule.query.busy', 1),
+          {'startDate': '2026-10-13', 'endDate': '2026-10-14'},
+        ),
+      );
+      final course = (busy['items'] as List)
+          .map(object)
+          .singleWhere((item) => item['title'] == '真实地点课程');
+      expect(course['location'], '教学楼 A301');
+      expect(course['teacher'], '陈老师');
+      final boardData = object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.planner', 'planner.board.get', 1),
+          {'startDate': '2026-10-13', 'days': 5},
+        ),
+      );
+      final storedBlock = (boardData['busy'] as List)
+          .map(object)
+          .singleWhere((item) => item['title'] == '真实地点课程');
+      expect(storedBlock['location'], course['location']);
+      expect(storedBlock['teacher'], course['teacher']);
+      final rendered = await page();
+      final board = nodes(rendered['tree'])
+          .singleWhere((n) => n['type'] == 'plannerBoard');
+      final blocks = (board['blocks'] as List).map(object).toList();
+      final block = blocks.singleWhere((item) => item['title'] == '真实地点课程');
+      expect(block['location'], course['location']);
+      expect(block['teacher'], course['teacher']);
+      expect(block['readOnly'], true);
+      final empty = blocks.singleWhere((item) => item['title'] == '没有地点课程');
+      expect(empty.containsKey('location'), false);
+      expect(empty.containsKey('teacher'), false);
+      final taskBlock = blocks.singleWhere((item) => item['title'] == '真实任务');
+      expect(taskBlock.containsKey('location'), false);
+      expect(taskBlock.containsKey('notes'), false);
+      expect(jsonEncode(board), isNot(contains('任意详细描述不作为块内地点')));
+    },
+  );
+
+  Future<void> settlePlanner(WidgetTester tester) async {
+    for (var i = 0; i < 20; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 15)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+  }
+
+  Future<WorkspaceHeaderController> showPlanner(WidgetTester tester) async {
+    final headers = WorkspaceHeaderController();
+    addTearDown(headers.dispose);
+    headers.activate(
+      identity: 'planner-widget-test',
+      moduleId: 'app.planner',
+      pageId: 'app.planner.home',
+      enabled: true,
+      isActive: () => true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WorkspaceHeaderScope(
+            controller: headers,
+            lease: headers.lease,
+            child: ScriptPage(
+              host: host,
+              moduleId: 'app.planner',
+              handler: 'render',
+              pageContext: const {'pageId': 'app.planner.home'},
+            ),
+          ),
+        ),
+      ),
+    );
+    await settlePlanner(tester);
+    return headers;
+  }
+
+  testWidgets('history renders a real move and clicking undo restores it', (
+    tester,
+  ) async {
+    late Map<String, Object?> original;
+    await tester.runAsync(() async {
+      original = object(
+        await run('task.create', {
+          'title': '可视历史撤销',
+          'plannedStartAt': '2026-10-14T10:00:00Z',
+          'plannedEndAt': '2026-10-14T10:30:00Z',
+          'plannedTimezone': 'Asia/Shanghai',
+        }, module: 'app.tasks'),
+      );
+      final preview = object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.planner', 'planner.operation.preview', 1),
+          {
+            'kind': 'move',
+            'taskId': original['id'],
+            'date': '2026-10-14',
+            'start': '19:00',
+            'endDate': '2026-10-14',
+            'end': '19:30',
+            'timezone': 'Asia/Shanghai',
+          },
+        ),
+      );
+      await run('operation.apply', {
+        'operationKey': 'visible-move',
+        'preview': preview,
+      });
+    });
+    var reviews = 0;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.review') reviews++;
+      return true;
+    };
+    final headers = await showPlanner(tester);
+    final historyAction = (headers.content!.spec['actions'] as List)
+        .map(object)
+        .singleWhere((action) => action['label'] == '操作历史');
+    await tester.runAsync(
+      () => headers.content!.dispatch(historyAction['event']),
+    );
+    await settlePlanner(tester);
+    expect(headers.content!.spec['title'], '操作历史');
+    expect(find.text('点击撤销整次操作'), findsOneWidget);
+    expect(find.textContaining('模块界面无效'), findsNothing);
+    await tester.tap(find.text('点击撤销整次操作'));
+    await settlePlanner(tester);
+    expect(find.text('已撤销'), findsOneWidget);
+    expect(reviews, 1);
+    await tester.runAsync(() async {
+      final restored = object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.tasks', 'task.get', 1),
+          {'id': original['id']},
+        ),
+      );
+      expect(restored['plannedStartAt'], original['plannedStartAt']);
+      expect(restored['plannedEndAt'], original['plannedEndAt']);
+    });
+    expect(object(headers.content!.spec['backEvent'])['type'], 'board');
+    await tester.runAsync(
+      () => headers.content!.dispatch(headers.content!.spec['backEvent']),
+    );
+    await settlePlanner(tester);
+    expect(find.byType(PlannerBoard), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('candidate selection and arrangement preview render and apply', (
+    tester,
+  ) async {
+    late Map<String, Object?> original;
+    await tester.runAsync(() async {
+      await run('availability.save', {
+        'availability': {
+          'bufferMinutes': 0,
+          'weekly': {
+            for (var day = 1; day <= 7; day++)
+              '$day': [
+                {'start': '09:00', 'end': '17:00'},
+              ],
+          },
+        },
+      });
+      original = object(
+        await run('task.create', {
+          'title': '真实预览任务',
+          'dueDate': '2026-10-17',
+        }, module: 'app.tasks'),
+      );
+    });
+    host.interaction = (_, method, args) async => method == 'ui.review';
+    final headers = await showPlanner(tester);
+    final autoAction = (headers.content!.spec['actions'] as List)
+        .map(object)
+        .singleWhere((action) => action['label'] == '自动安排');
+    await tester.runAsync(() => headers.content!.dispatch(autoAction['event']));
+    await settlePlanner(tester);
+    expect(find.byType(Checkbox), findsOneWidget);
+    expect(find.textContaining('模块界面无效'), findsNothing);
+    await tester.tap(find.byType(Checkbox));
+    await settlePlanner(tester);
+    await tester.tap(find.text('预览安排（1项）'));
+    await settlePlanner(tester);
+    expect(headers.content!.spec['title'], '安排预览');
+    expect(find.text('建议预览 · 1项安排 · 0项待安排'), findsOneWidget);
+    expect(find.text('真实预览任务'), findsOneWidget);
+    expect(find.textContaining('模块界面无效'), findsNothing);
+    await tester.tap(find.text('确认安排'));
+    await settlePlanner(tester);
+    expect(find.byType(PlannerBoard), findsOneWidget);
+    await tester.runAsync(() async {
+      final arranged = object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.tasks', 'task.get', 1),
+          {'id': original['id']},
+        ),
+      );
+      expect(arranged['plannedStartAt'], isNotNull);
+      expect(arranged['plannedEndAt'], isNotNull);
+      expect(arranged['dueDate'], original['dueDate']);
+    });
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('quick-add save button fills the panel width', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              key: const ValueKey('quick-add-panel'),
+              width: 380,
+              child: ScriptPage(
+                host: host,
+                moduleId: 'app.planner',
+                handler: 'render',
+                pageContext: const {'pageId': 'app.planner.quickAdd'},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settlePlanner(tester);
+    final save = find.widgetWithText(FilledButton, '保存任务');
+    expect(save, findsOneWidget);
+    final panelWidth = tester
+        .getSize(find.byKey(const ValueKey('quick-add-panel')))
+        .width;
+    expect(tester.getSize(save).width, greaterThan(panelWidth * .85));
+    expect(find.textContaining('模块界面无效'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test(
+    'dashboard is the only home layout with compact header actions',
+    () async {
+      final rendered = await page(state: {'legacy': true});
+      final tree = object(rendered['tree']);
+      expect(tree['fillHeight'], true);
+      expect(tree['footer'], isNull);
+      final all = nodes(tree).toList();
+      expect(all.where((n) => n['type'] == 'plannerBoard'), hasLength(1));
+      expect(all.where((n) => n['type'] == 'checkbox'), isEmpty);
+      expect(all.where((n) => n['type'] == 'tabs'), isEmpty);
+      final board = all.singleWhere((n) => n['type'] == 'plannerBoard');
+      final options = object(board['options']);
+      expect(options['dashboard'], true);
+      expect(options['rangeLabel'], '10月13日—17日');
+      expect(options['periodLabel'], '5天');
+      expect(object(options['todayEvent'])['type'], 'today');
+      expect(object(options['filterEvent'])['type'], 'onlyDeadline');
+      final actions = (object(rendered['header'])['actions'] as List)
+          .map(object)
+          .toList();
+      expect(
+        actions
+            .where((a) => a['presentation'] == 'inline')
+            .map((a) => a['icon']),
+        ['history', 'add'],
+      );
+      expect(
+        actions
+            .where((a) => a['presentation'] == 'menu')
+            .map((a) => a['label']),
+        ['自动安排', '表格显示时段', '规划规则', '规划设置'],
+      );
+      expect(jsonEncode(rendered), isNot(contains('规划设置与持续规则')));
+    },
+  );
+
+  test(
+    'candidate summaries use deadline, duration, and overdue status',
+    () async {
+      await run('task.create', {
+        'title': '有截止',
+        'dueDate': '2026-10-17',
+        'estimatedMinutes': 45,
+      });
+      await run('task.create', {'title': '长任务', 'estimatedMinutes': 150});
+      await run('task.create', {'title': '过期任务', 'dueDate': '2026-10-12'});
+      final rendered = await page();
+      final board = nodes(rendered['tree'])
+          .singleWhere((n) => n['type'] == 'plannerBoard');
+      final candidates = {
+        for (final item in (board['candidates'] as List).map(object))
+          item['title']: item,
+      };
+      expect(candidates['有截止']!['preferredSummary'], '10/17截止');
+      expect(candidates['长任务']!['preferredSummary'], '耗时2.5h');
+      expect(candidates['过期任务']!['preferredSummary'], '已逾期');
+      final filtered = await page(
+        state: object(rendered['state']),
+        event: {'type': 'onlyDeadline'},
+      );
+      expect(object(filtered['state'])['onlyDeadline'], true);
+      final reset = await page(
+        state: {...object(filtered['state']), 'startDate': '2026-10-20'},
+        event: {'type': 'today'},
+      );
+      expect(object(reset['state'])['startDate'], '2026-10-13');
+    },
+  );
+
+  test('automatic arrangement offers explicit selection for tasks without deadline', () async {
+    final created = object(
+      await run('task.create', {'title': '无截止也可选中'}, module: 'app.tasks'),
+    );
+    var rendered = await page(event: {'type': 'chooseAuto'});
+    expect(object(rendered['header'])['title'], '自动安排');
+    final select = nodes(rendered['tree'])
+        .singleWhere((n) => n['type'] == 'checkbox');
+    expect(select['text'], contains('无截止也可选中'));
+    rendered = await page(
+      state: object(rendered['state']),
+      event: {...object(select['event']), 'value': true},
+    );
+    rendered = await page(
+      state: object(rendered['state']),
+      event: {'type': 'auto'},
+    );
+    final preview = object(object(rendered['state'])['autoPreview']);
+    expect(
+      object(preview['input'])['selectedIds'],
+      contains('task:${created['id']}'),
+    );
+  });
+
+  test('edit-time action opens the precise editor directly', () async {
+    final contexts = <Map<String, Object?>>[];
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.panel') contexts.add(object(args['context']));
+      return true;
+    };
+    final created = object(
+      await run('task.create', {'title': '编辑安排'}, module: 'app.tasks'),
+    );
+    await page(event: {'type': 'editTime', 'id': created['id']});
+    expect(contexts.single['step'], 'time');
+    final detail = await page(
+      pageId: 'app.planner.taskDetail',
+      context: contexts.single,
+    );
+    final visible = nodes(detail['tree']).toList();
+    expect(
+      visible.where((n) => n['type'] == 'timeInput' && n['key'] == 'start'),
+      hasLength(1),
+    );
+    expect(visible.where((n) => n['key'] == 'dueDate'), isEmpty);
+    expect(visible.where((n) => n['text'] == '应用安排'), hasLength(1));
+  });
+
+  test('detail completes and reopens a task without changing its schedule or deadline', () async {
+    final original = object(
+      await run('task.create', {
+        'title': '完成后重新打开',
+        'dueDate': '2026-10-15',
+        'dueTimezone': 'Asia/Shanghai',
+        'plannedStartAt': '2026-10-14T10:00:00Z',
+        'plannedEndAt': '2026-10-14T10:30:00Z',
+        'plannedTimezone': 'Asia/Shanghai',
+      }, module: 'app.tasks'),
+    );
+    var completed = true;
+    var reviews = 0;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.dialog') {
+        // The dialog retains its date field when completion is switched off.
+        return {'completed': completed, 'actualCompletedOn': '2026-10-12'};
+      }
+      if (method == 'ui.review') reviews++;
+      return true;
+    };
+    Future<Map<String, Object?>> currentTask() async => object(
+      await host.query(actor(), const ServiceRef('app.tasks', 'task.get', 1), {
+        'id': original['id'],
+      }),
+    );
+    Future<void> applyCompletion() async {
+      final initial = await page(
+        pageId: 'app.planner.taskDetail',
+        context: {'taskId': original['id']},
+      );
+      final saved = await page(
+        pageId: 'app.planner.taskDetail',
+        context: {'taskId': original['id']},
+        state: object(initial['state']),
+        event: {'type': 'complete'},
+      );
+      expect(object(saved['state'])['error'], isNull);
+      final task = await currentTask();
+      expect(task['dueDate'], original['dueDate']);
+      expect(task['plannedStartAt'], original['plannedStartAt']);
+      expect(task['plannedEndAt'], original['plannedEndAt']);
+    }
+
+    await applyCompletion();
+    final finished = await currentTask();
+    expect(finished['completedAt'], isNotNull);
+    expect(finished['actualCompletedOn'], '2026-10-12');
+    expect(finished['completedTimezone'], 'Asia/Shanghai');
+    completed = false;
+    await applyCompletion();
+    final reopened = await currentTask();
+    expect(reopened['completedAt'], isNull);
+    expect(reopened['actualCompletedOn'], isNull);
+    expect(reopened['completedTimezone'], isNull);
+    expect(reviews, 2);
+  });
+
+  test(
+    'rules retain draft across categories and save through existing service',
+    () async {
+      host.interaction = (_, method, args) async => method == 'ui.review';
+      var rendered = await page(
+        pageId: 'app.planner.tools',
+        context: {'screen': 'rules'},
+        event: {'type': 'editRule'},
+      );
+      rendered = await page(
+        pageId: 'app.planner.tools',
+        state: object(rendered['state']),
+        forms: {'titles': '新的持续规则'},
+        event: {'type': 'ruleStep', 'step': 'repeat'},
+      );
+      expect(
+        nodes(rendered['tree']).singleWhere(
+          (n) => n['type'] == 'select' && n['key'] == 'kind',
+        )['items'],
+        hasLength(4),
+      );
+      rendered = await page(
+        pageId: 'app.planner.tools',
+        state: object(rendered['state']),
+        event: {'type': 'field', 'key': 'kind', 'value': 'daily'},
+      );
+      rendered = await page(
+        pageId: 'app.planner.tools',
+        state: object(rendered['state']),
+        event: {'type': 'ruleBack'},
+      );
+      expect(object(object(rendered['state'])['draft'])['titles'], '新的持续规则');
+      rendered = await page(
+        pageId: 'app.planner.tools',
+        state: object(rendered['state']),
+        event: {'type': 'saveRule'},
+      );
+      expect(object(rendered['state'])['error'], isNull);
+      final rules = (await host.query(
+        actor(),
+        const ServiceRef('app.planner', 'planner.rules.list', 1),
+        {},
+      ) as List).map(object);
+      expect(rules, hasLength(1));
+      expect(object((rules.single['versions'] as List).last)['kind'], 'daily');
+    },
   );
 
   test(
@@ -397,6 +1094,192 @@ void main() {
     },
   );
 
+  test('drag confirmation describes the validated schedule and cancel keeps the task untouched', () async {
+    final original = object(
+      await run('task.create', {
+        'title': '普通安排',
+        'estimatedMinutes': 30,
+      }, module: 'app.tasks'),
+    );
+    final calls = <Map<String, Object?>>[];
+    host.interaction = (_, method, args) async {
+      calls.add({'method': method, ...args});
+      return false;
+    };
+    final rendered = await page(
+      event: {
+        'type': 'move',
+        'taskId': original['id'],
+        'start': '2026-10-14T18:00:00',
+        'end': '2026-10-14T18:45:00',
+        'intent': 'move',
+      },
+    );
+    expect(object(rendered['state'])['error'], isNull);
+    expect(calls, hasLength(1));
+    expect(calls.single['method'], 'ui.review');
+    final confirmation = object(calls.single['confirmation']);
+    expect(confirmation['title'], '确认安排任务');
+    expect(confirmation['confirmLabel'], '确认安排');
+    final message = confirmation['message'] as String;
+    expect(message, contains('普通安排\n原安排：待安排'));
+    expect(message, contains('2026-10-14 18:00 — 18:30'));
+    expect(message, contains('时长30分钟'));
+    expect(message, isNot(contains('18:45')));
+    expect(message, isNot(contains('plannedStartAt')));
+    expect(confirmation['acknowledgement'], isNull);
+    expect(
+      object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.tasks', 'task.get', 1),
+          {'id': original['id']},
+        ),
+      ),
+      original,
+    );
+  });
+
+  test(
+    'overdue drag uses one acknowledged confirmation and retains its deadline',
+    () async {
+      final original = object(
+        await run('task.create', {
+          'title': '超出截止',
+          'dueDate': '2026-10-13',
+          'estimatedMinutes': 30,
+        }, module: 'app.tasks'),
+      );
+      final calls = <Map<String, Object?>>[];
+      host.interaction = (_, method, args) async {
+        calls.add({'method': method, ...args});
+        return true;
+      };
+      final rendered = await page(
+        event: {
+          'type': 'move',
+          'taskId': original['id'],
+          'start': '2026-10-14T18:00:00',
+          'end': '2026-10-14T18:30:00',
+          'intent': 'move',
+        },
+      );
+      expect(object(rendered['state'])['error'], isNull);
+      expect(calls, hasLength(1));
+      expect(calls.single['method'], 'ui.review');
+      expect(
+        object(calls.single['confirmation'])['acknowledgement'],
+        contains('安排超出截止时间'),
+      );
+      final saved = object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.tasks', 'task.get', 1),
+          {'id': original['id']},
+        ),
+      );
+      expect(saved['plannedStartAt'], '2026-10-14T10:00:00.000Z');
+      expect(saved['dueDate'], original['dueDate']);
+    },
+  );
+
+  test('swap confirmation includes both real schedules and resize keeps the original start', () async {
+    final first = object(
+      await run('task.create', {
+        'title': '交换甲',
+        'plannedStartAt': '2026-10-14T10:00:00Z',
+        'plannedEndAt': '2026-10-14T10:30:00Z',
+        'plannedTimezone': 'Asia/Shanghai',
+      }, module: 'app.tasks'),
+    );
+    final second = object(
+      await run('task.create', {
+        'title': '交换乙',
+        'plannedStartAt': '2026-10-14T12:00:00Z',
+        'plannedEndAt': '2026-10-14T13:00:00Z',
+        'plannedTimezone': 'Asia/Shanghai',
+      }, module: 'app.tasks'),
+    );
+    final confirmations = <Map<String, Object?>>[];
+    host.interaction = (_, method, args) async {
+      confirmations.add(object(args['confirmation']));
+      return false;
+    };
+    await page(
+      event: {
+        'type': 'move',
+        'taskId': first['id'],
+        'targetId': second['id'],
+        'intent': 'swap',
+      },
+    );
+    expect(confirmations.single['title'], '确认交换时间');
+    final message = confirmations.single['message'] as String;
+    expect(
+      message,
+      contains(
+        '交换甲\n原安排：2026-10-14 18:00 — 18:30\n调整为：2026-10-14 20:00 — 20:30',
+      ),
+    );
+    expect(
+      message,
+      contains(
+        '交换乙\n原安排：2026-10-14 20:00 — 21:00\n调整为：2026-10-14 18:00 — 19:00',
+      ),
+    );
+    confirmations.clear();
+    await page(
+      event: {
+        'type': 'move',
+        'taskId': first['id'],
+        'intent': 'resize',
+        'start': '2026-10-14T17:55:00',
+        'end': '2026-10-14T18:45:00',
+      },
+    );
+    expect(confirmations.single['title'], '确认调整时长');
+    expect(
+      confirmations.single['message'],
+      contains('调整为：2026-10-14 18:00 — 18:45'),
+    );
+    expect(confirmations.single['message'], contains('时长45分钟'));
+  });
+
+  test(
+    'a task changed during compact confirmation still rejects the frozen plan',
+    () async {
+      final original = object(
+        await run('task.create', {'title': '确认时被改动'}, module: 'app.tasks'),
+      );
+      host.interaction = (_, method, args) async {
+        expect(args['confirmation'], isNotNull);
+        await run('task.updateFields', {
+          'id': original['id'],
+          'changes': {'notes': '后来更新'},
+        }, module: 'app.tasks');
+        return true;
+      };
+      final rendered = await page(
+        event: {
+          'type': 'move',
+          'taskId': original['id'],
+          'intent': 'move',
+          'start': '2026-10-14T18:00:00',
+          'end': '2026-10-14T18:30:00',
+        },
+      );
+      expect(object(rendered['state'])['error'], isNotNull);
+      final saved = object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.tasks', 'task.get', 1),
+          {'id': original['id']},
+        ),
+      );
+      expect(saved['plannedStartAt'], isNull);
+      expect(saved['notes'], '后来更新');
+    },
+  );
   test(
     'board uses local deadline text and a compact preview query contract',
     () async {
@@ -568,7 +1451,7 @@ void main() {
     expect(board()['candidates'], hasLength(5));
     expect(object(rendered['state'])['selected'], [firstId]);
     expect(
-      nodes(rendered['tree']).any((n) => '${n['text']}'.contains('其他页或筛选外')),
+      '${object(board()['options'])['noticeText']}'.contains('其他页或筛选外'),
       true,
     );
     final secondId = object(

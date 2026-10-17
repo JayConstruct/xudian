@@ -78,6 +78,8 @@ query/command 的 JSON Schema 使用明确子集：type、properties、required�
 
 `ui.navigate(pageId,context)`、`ui.panel(pageId,context)`、`ui.dialog({title,fields})` 使用宿主交互；表单支持 text/multiline、number、date/datetime、boolean、select/multiSelect 与安全输入；可声明 required/maxLength，非法输入留在对话框中。`ui.review(planId)` 展示真实写集和结果，宿主控制最终确认。当前合法计划先展示增改删摘要与记录前后对比，完整原始计划可展开；未知结构回退原始审核。取消不提交，过期快照仍由提交校验拒绝，规则见 [实际数据审核](design/DATA_CHANGE_REVIEW.md)。
 
+宿主API `^1.27.0` 支持 `ui.review(planId, {title, message, confirmLabel, acknowledgement?})`，将日常操作显示为简洁确认框。标题、说明和按钮文字由模块从当前已校验预览生成，宿主绑定原冻结计划并负责最终确认；真实写集与完整前后值收进“查看变更详情”，存在真实删除时仍显示删除提醒。`acknowledgement` 是可选的风险确认文字，初始未勾选，勾选前确认按钮不可用，适合“安排超出截止”等需要明确接受的情况。不能用该参数绕过准备、权限、审核或提交前快照检查；未知计划结构继续回退原始审核。所有参数是非空纯文本，长度上限分别为120／6000／48／1000，未知参数拒绝；省略第二个参数保持原审核行为。
+
 `ui.navigate` 指向可用工作区时，宿主关闭覆盖工作区的详情路由和模态面板，再激活目标并传递上下文；目标不可用时保留当前页面。目标模块随后打开的确认详情页直接显示，不需要用户手动返回工作区。`ui.panel` 继续打开面板，不切换工作区。
 
 跨宿主调用被拒绝时，脚本捕获的 Error 的 `message` 和 `String(error)` 提供业务正文，去除重复异常前缀与调用堆栈；原始异常文本保存在 `error.diagnostic` 供诊断使用，不应展示给用户。未捕获的页面异常也以业务正文和重试操作显示，原始异常仍供宿主诊断。
@@ -479,6 +481,7 @@ await clock.toUtc({date: '2026-11-01', time: '01:30', zone: 'America/New_York'})
 
 - `days: [{date, label}]`；`candidates` 与 `blocks` 为任务块数组。每项可含 `id,title,start,end,durationMinutes,deadlineSummary,overdue,fixed,readOnly,sourceLabel,event,moveEvent,selected,selectEvent`。
 - `start/end` 使用同一显示时区的无偏移本地 ISO 文本。脚本负责 `clock.toLocal` / `clock.toUtc` 转换并拒绝夏令时歧义，不能把它们直接当 UTC 写回。
+- `blocks` 可附带真实来源提供的 `location` 与 `teacher` 文本；空间足够时地点优先、教师其次，未提供时省略，不从任意任务描述推断地点。`schedule.query.busy@1` 可选返回这两个字段，来自本次课程实例的地点和教师（包含调课覆盖），不改变只读来源及时间语义。
 - 候选选择事件保留 `selectEvent.id` 并附加布尔 `value`。移动事件包含 `id,start,end,intent,targetId?,snapMinutes`，`intent` 可为 `move/swap/insert`，并不代表业务校验已通过。
 - `options` 支持 `minColumnWidth,startMinute,endMinute,pixelsPerMinute,initialMinute,candidateLabel`；每日显示区间仅影响渲染。`previewBlocks/previewLabel` 可展示脚本计算的变更预览。
 
@@ -488,6 +491,12 @@ await clock.toUtc({date: '2026-11-01', time: '01:30', zone: 'America/New_York'})
 ### API 1.25 规划拖动预览与时长调整
 
 `plannerBoard.previewQuery` 声明 `{ref: ServiceRef, input: {...}}`。宿主以当前页面模块身份调用只读 query，并把当前拖动事件作为 `proposal` 合并到 input；不能指定 command 绕过审核。权限、输入输出 Schema 和模块生命周期仍由宿主校验。声明此能力的模块要求 `hostApi: '^1.25.0'`。
+
+宿主API `^1.28.0` 的 dashboard 看板会向当前工作区报告拖动状态，宿主仅将手机底栏淡出并停止其命中与语义，页面尺寸和底部避让值保持稳定；切页、取消与销毁自动清理，旧页面不能影响当前底栏。首页根节点可设置 `underlapChrome: true`，时间表绘制延伸到底栏下，宿主传入的底部避让仍用于选中面板、缩放操作和滚动末尾。dashboard 拖动默认5分钟步长，短横移进入1分钟精调并锁定日期，大幅横移进入新列换日，保留当前时刻并恢复5分钟步长；停留不换档。模式和日期转换重新锚定候选时刻，纵向精调降低灵敏度，手指附近显示模式、任务、日期起止和手势提示，并限制在屏幕安全区域。通用非dashboard看板保留15分钟普通吸附与停留1分钟细调。正常块与选中块不改变真实几何，调整时长手柄仅在选中后出现。
+
+宿主API `^1.29.0` 的 `plannerBoard` 可声明顶层 `quickAdjustment: {taskModuleId, applyServiceId, undoServiceId}`；两个服务必须属于当前页面模块、major为1，任务来源仍须具备已有服务权限。此声明仅显示原生“快速调整”按钮，脚本不能设置开启状态或声明免审核。用户点亮按钮后，真实 `move`／`resize` 手势可对同一落点、单一任务的时间字段及配套历史写集授权一次；来源为通用 `tasks` 集合，配套 `batches`／`receipts`／`occurrences` 使用当前规划事务契约。冻结写集、服务参数、任务快照与时区瞬间均须一致，交换、插入、超截止及不匹配计划回到原确认。成功后提供8秒“撤销”，只恢复该次快照；后续编辑或完成仍阻止撤销。现有 `ui.review(planId, confirmation)` 和 `services.commit(planId)` 不增加脚本免审核参数。
+
+原生页面自行维护快速调整的保存中显示，模块不需要传临时假任务：松手后目标位置显示一份任务，原候选／原安排临时隐藏，失败时恢复。保存不改变表格尺寸，用户可继续滚动。成功提示从宿主实际提交回执和冻结任务快照生成，最多两行展示具体任务与新时间，连续成功替换提示、撤销绑定最新操作；较早操作仍可在模块历史中处理。此原生显示优化不改变上述脚本契约与模块版本要求。
 
 - 候选位置改变后停留180毫秒发起查询；只采用当前拖动中最新请求的结果。查询结果可包含 `previewBlocks, previewLabel, conflicts, valid, overdue`。旧结果、取消后和页面切换后的结果不继续显示。
 - `previewIdentity` 是调用方提供的稳定视图版本，改变时取消当前拖动。当前页面忙碌、上下文失效或离开页面时停止拖动、滚动和预览。宿主还校验查询返回前的数据版本与页面实例。

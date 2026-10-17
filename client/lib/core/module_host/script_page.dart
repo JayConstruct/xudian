@@ -1,3 +1,4 @@
+import '../ui/workspace_interaction.dart';
 import '../ui/ui_icon.dart';
 import '../ui/page_runtime_context.dart';
 import '../ui/page_composition_readiness.dart';
@@ -33,6 +34,7 @@ import 'module_host.dart';
 import 'module_package.dart';
 import 'time_grid.dart';
 import 'planner_board.dart';
+import 'planner_quick_adjust.dart';
 
 class ScriptPage extends StatefulWidget {
   const ScriptPage({
@@ -100,6 +102,147 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   PageFirstFrameReadiness? firstFrameReadiness;
   WorkspaceHeaderController? headerController;
   BuildContext? nodeContext;
+  // Rendering a frozen script tree again (busy/chrome/lifecycle changes) must
+  // not allocate a new board snapshot and invalidate all its geometry caches.
+  final _plannerLists = Expando<List<BoardItem>>('planner snapshot lists');
+  bool _quickAdjust = false;
+  BoardItem? _pendingPlannerAdjustment;
+  BoardItem? _retryPlannerMove;
+  ScaffoldMessengerState? _plannerNoticeMessenger;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _plannerUndoNotice;
+  final _plannerApprovals = Expando<PlannerQuickAdjustment>(
+    'native planner gesture',
+  );
+  BoardItem? _quickAdjustmentConfig(BoardItem spec) {
+    final config = spec['quickAdjustment'];
+    if (config is! Map ||
+        !['taskModuleId', 'applyServiceId', 'undoServiceId'].every(
+          (key) => config[key] is String && (config[key] as String).isNotEmpty,
+        )) {
+      return null;
+    }
+    return object(config);
+  }
+
+  void _plannerEvent(Object? event, BoardItem? quickConfig) {
+    if (busy || staleTree || !routeActive || !workspaceActive) return;
+    if (event is Map && event['type'] == 'dismissMove') {
+      _retryPlannerMove = null;
+    }
+    if (event is Map &&
+        event['type'] == 'retryMove' &&
+        quickConfig != null &&
+        _quickAdjust &&
+        _retryPlannerMove != null) {
+      _plannerEvent(Map<String, Object?>.of(_retryPlannerMove!), quickConfig);
+      return;
+    }
+    if (quickConfig != null &&
+        _quickAdjust &&
+        event is Map &&
+        event['type'] == 'move') {
+      _plannerApprovals[event] = PlannerQuickAdjustment.move(
+        object(event),
+        moduleId: widget.moduleId,
+        taskModuleId: quickConfig['taskModuleId'] as String,
+        applyServiceId: quickConfig['applyServiceId'] as String,
+        undoServiceId: quickConfig['undoServiceId'] as String,
+      );
+      if (event['intent'] == null ||
+          event['intent'] == 'move' ||
+          event['intent'] == 'resize') {
+        _retryPlannerMove = object(freezeJson(event));
+        setState(() {
+          _pendingPlannerAdjustment = Map.unmodifiable({
+            'id': event['taskId'] ?? event['id'],
+            'start': event['start'],
+            'end': event['end'],
+          });
+        });
+      }
+    }
+    unawaited(_render(event));
+  }
+
+  void _showPlannerUndo(PlannerQuickAdjustment adjustment, Object instance) {
+    final undo = adjustment.undoAdjustment;
+    final batchId = adjustment.batchId;
+    if (undo == null || batchId == null || !routeActive || !workspaceActive) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.maybeOf(uiContext);
+    if (messenger == null) return;
+    // A new adjustment replaces its predecessor immediately, without queuing
+    // an outgoing notice/animation during consecutive scheduling gestures.
+    messenger.clearSnackBars();
+    messenger.removeCurrentSnackBar();
+    final message = adjustment.successMessage ?? '已调整';
+    final notice = messenger.showSnackBar(
+      SnackBar(
+        content: Tooltip(
+          message: message,
+          child: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
+        ),
+        duration: const Duration(seconds: 8),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          WorkspaceContentInsets.bottomOf(uiContext) + 12,
+        ),
+        action: SnackBarAction(
+          label: '撤销',
+          onPressed: () {
+            if (!mounted ||
+                !routeActive ||
+                !workspaceActive ||
+                !identical(instance, widget.host.instances[widget.moduleId])) {
+              return;
+            }
+            final event = <String, Object?>{'type': 'undo', 'id': batchId};
+            _plannerApprovals[event] = undo;
+            unawaited(_render(event));
+          },
+        ),
+      ),
+    );
+    _plannerUndoNotice = notice;
+    _plannerNoticeMessenger = messenger;
+    unawaited(
+      notice.closed.then((_) {
+        if (identical(_plannerUndoNotice, notice)) {
+          _plannerUndoNotice = null;
+          _plannerNoticeMessenger = null;
+        }
+      }),
+    );
+  }
+
+  void _closePlannerUndo() {
+    final notice = _plannerUndoNotice;
+    final messenger = _plannerNoticeMessenger;
+    // Closing an owned controller removes only this page's notice. Defer the
+    // messenger state update when navigation is currently building the tree.
+    if (notice != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        scheduleMicrotask(() {
+          if (!identical(_plannerUndoNotice, notice)) return;
+          _plannerUndoNotice = null;
+          _plannerNoticeMessenger = null;
+          // FeatureController.close assumes a live, nonempty queue. The
+          // messenger may have been disposed along with this entire page.
+          if (messenger?.mounted == true) messenger!.removeCurrentSnackBar();
+        });
+      });
+    }
+  }
+
+  List<BoardItem> _plannerItems(Object? value) {
+    if (value is! List) return const [];
+    return _plannerLists[value] ??= objects(value);
+  }
+
   bool retainDateNavigation = false;
   bool get staleTree =>
       tree != null && treeContextIdentity != canonicalJson(pageContext);
@@ -176,6 +319,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       datePrefetchRevision++;
       datePrefetchTimer?.cancel();
       busy = false;
+      _quickAdjust = false;
+      _pendingPlannerAdjustment = null;
+      _retryPlannerMove = null;
+      _closePlannerUndo();
       showProgress = false;
       progressTimer?.cancel();
       for (final controller in controllers.values) {
@@ -226,6 +373,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final active = ModalRoute.isCurrentOf(context) != false && workspaceActive;
     if (active == routeActive) return;
     routeActive = active;
+    if (!active) _closePlannerUndo();
     if (!workspaceActive) headerController?.clear(this);
     progressTimer?.cancel();
     showProgress = false;
@@ -256,7 +404,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   void _delayProgress(int current) {
     progressTimer?.cancel();
-    if (!routeActive) return;
+    if (!routeActive || _pendingPlannerAdjustment != null) return;
     progressTimer = Timer(const Duration(milliseconds: 500), () {
       if (mounted && current == epoch && busy) {
         setState(() => showProgress = true);
@@ -376,10 +524,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       return;
     }
     firstFrameReadiness = PageFirstFrameReadinessScope.read(context);
-    firstFrameReadiness?.begin(this);
+    if (_pendingPlannerAdjustment == null) firstFrameReadiness?.begin(this);
     final readiness = PageCompositionReadinessScope.read(context);
     compositionReadiness = readiness;
-    readiness?.begin(this);
+    if (_pendingPlannerAdjustment == null) readiness?.begin(this);
     if (busy) {
       dirty = true;
       if (event != null) _queueEvent(event);
@@ -408,6 +556,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     _delayProgress(current);
     final sentForms = Map<String, Object?>.of(formValues);
     final sentRevisions = Map<String, int>.of(formRevisions);
+    final adjustment = event is Map ? _plannerApprovals[event] : null;
+    String? approvedPlanId;
     try {
       final input = freezeJson(<String, Object?>{
         'state': state,
@@ -443,6 +593,49 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               input,
               onReads: (reads) => resultReads = reads,
               onReplayable: (value) => replayable = value,
+              onReview: adjustment != null
+                  ? (reference, preparedInput, plan, confirmation) {
+                      if (reference.major != 1 ||
+                          !mounted ||
+                          !routeActive ||
+                          !workspaceActive ||
+                          !identical(
+                            instance,
+                            widget.host.instances[widget.moduleId],
+                          )) {
+                        return false;
+                      }
+                      final accepted = adjustment.allows(
+                        moduleId: reference.moduleId,
+                        serviceId: reference.serviceId,
+                        input: preparedInput,
+                        writes: plan.writes,
+                        result: plan.result,
+                        confirmation: confirmation,
+                      );
+                      if (accepted) {
+                        approvedPlanId = plan.id;
+                      } else if (_pendingPlannerAdjustment != null) {
+                        setState(() => _pendingPlannerAdjustment = null);
+                      }
+                      return accepted;
+                    }
+                  : null,
+              onCommit: adjustment == null
+                  ? null
+                  : (plan) {
+                      if (plan.id == approvedPlanId &&
+                          mounted &&
+                          current == epoch &&
+                          instance != null &&
+                          identical(
+                            instance,
+                            widget.host.instances[widget.moduleId],
+                          )) {
+                        _retryPlannerMove = null;
+                        _showPlannerUndo(adjustment, instance);
+                      }
+                    },
             ),
       );
       if (!mounted ||
@@ -505,6 +698,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           }
         }
         state = object(result['state'] ?? state);
+        if (state['moveIntent'] == null) _retryPlannerMove = null;
+        _pendingPlannerAdjustment = null;
         tree = object(result['tree']);
         treeContextIdentity = canonicalJson({...requestContext, ...patch});
         renderedInstance = instance;
@@ -554,6 +749,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         setState(() {
           busy = false;
           showProgress = false;
+          _pendingPlannerAdjustment = null;
         });
         if (dirty) {
           dirty = false;
@@ -657,6 +853,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _closePlannerUndo();
     compositionReadiness?.complete(this);
     firstFrameReadiness?.complete(this);
     headerController?.clear(this);
@@ -1317,6 +1514,28 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           ],
         );
       case 'row':
+        if (spec['layout'] == 'flex') {
+          final specifications = objects(spec['children']);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                if (specifications[i]['flex'] is num &&
+                    (specifications[i]['flex'] as num) > 0)
+                  Expanded(
+                    flex: (specifications[i]['flex'] as num).toInt().clamp(
+                      1,
+                      10,
+                    ),
+                    child: children[i],
+                  )
+                else
+                  children[i],
+              ],
+            ],
+          );
+        }
         return Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -1829,24 +2048,38 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           onEvent: busy ? (_) {} : _render,
         );
       case 'plannerBoard':
-        return PlannerBoard(
-          enabled: !busy && !staleTree && routeActive && workspaceActive,
-          previewIdentity: spec['previewIdentity'],
-          onPreview: spec['previewQuery'] is Map
-              ? (proposal) =>
-                    _previewQuery(object(spec['previewQuery']), proposal)
-              : null,
-          days: objects(spec['days'] ?? []),
-          candidates: objects(spec['candidates'] ?? []),
-          blocks: objects(spec['blocks'] ?? []),
-          previewBlocks: objects(spec['previewBlocks'] ?? []),
-          previewLabel: spec['previewLabel'] as String?,
-          selectedIds: (spec['selectedIds'] as List?)?.cast<Object?>() ?? [],
-          selectEvent: spec['selectEvent'] is Map
-              ? object(spec['selectEvent'])
-              : null,
-          options: object(spec['options'] ?? {}),
-          onEvent: busy ? (_) {} : _render,
+        final quickConfig = _quickAdjustmentConfig(spec);
+        return WorkspaceDragRegion(
+          builder: (context, onDragActiveChanged) => PlannerBoard(
+            bottomInset: WorkspaceContentInsets.bottomOf(uiContext),
+            onDragActiveChanged: onDragActiveChanged,
+            enabled: !busy && !staleTree && routeActive && workspaceActive,
+            previewIdentity: spec['previewIdentity'],
+            quickAdjust: _quickAdjust,
+            pendingAdjustment: quickConfig != null
+                ? _pendingPlannerAdjustment
+                : null,
+            onQuickAdjustChanged: quickConfig != null
+                ? (value) => setState(() => _quickAdjust = value)
+                : null,
+            onPreview: spec['previewQuery'] is Map
+                ? (proposal) =>
+                      _previewQuery(object(spec['previewQuery']), proposal)
+                : null,
+            days: _plannerItems(spec['days']),
+            candidates: _plannerItems(spec['candidates']),
+            blocks: _plannerItems(spec['blocks']),
+            previewBlocks: _plannerItems(spec['previewBlocks']),
+            previewLabel: spec['previewLabel'] as String?,
+            selectedIds: (spec['selectedIds'] as List?)?.cast<Object?>() ?? [],
+            selectEvent: spec['selectEvent'] is Map
+                ? object(spec['selectEvent'])
+                : null,
+            options: object(spec['options'] ?? {}),
+            onEvent: busy
+                ? (_) {}
+                : (event) => _plannerEvent(event, quickConfig),
+          ),
         );
       default:
         return Text('不支持的组件：${spec['type']}');
@@ -1955,7 +2188,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         retainDateNavigation = _hasDateNavigation(tree);
         // Inline compositions provide one shared progress indicator.
         final loading =
-            busy && showProgress && routeActive && compositionReadiness == null;
+            busy &&
+            showProgress &&
+            routeActive &&
+            compositionReadiness == null &&
+            _pendingPlannerAdjustment == null;
         final contextController =
             compositionReadiness?.controller.contextControllers.contains(
               compositionReadiness!.memberId,

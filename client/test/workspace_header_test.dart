@@ -147,6 +147,27 @@ void main() {
         {'title': 42},
         {'title': 'Title', 'leading': 'bad'},
         {'title': 'Title', 'backEvent': 'bad'},
+        {'title': 'Title', 'compact': 'bad'},
+        {
+          'title': 'Title',
+          'actions': [
+            {
+              'label': 'New',
+              'event': <String, Object?>{},
+              'presentation': 'unknown',
+            },
+          ],
+        },
+        {
+          'title': 'Title',
+          'actions': [
+            {
+              'label': 'New',
+              'event': <String, Object?>{},
+              'variant': 'unknown',
+            },
+          ],
+        },
         {
           'title': 'Title',
           'actions': [

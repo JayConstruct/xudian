@@ -11,45 +11,145 @@ import '../ui/temporal_input.dart';
 import '../ui/input_validation.dart';
 import '../../app/design_system.dart';
 import 'data_change_review.dart';
+import 'plan_confirmation.dart';
 
 Future<bool> reviewDialog(
   BuildContext context,
   String title,
-  Object? details,
-) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (context) => UiPackScope(
-        defaultOnly: true,
-        child: NativeUi(
-          child: AlertDialog(
-            titlePadding: AppDesign.dialogTitlePadding,
-            contentPadding: AppDesign.dialogContentPadding,
-            actionsPadding: AppDesign.dialogActionsPadding,
-            title: Text(title),
-            content: SizedBox(
-              width: 700,
-              child: SingleChildScrollView(child: _reviewContent(details)),
-            ),
-            actions: [
-              NativeUi(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('取消'),
-                ),
+  Object? details, {
+  PlanConfirmation? confirmation,
+}) async {
+  final summary = confirmation == null
+      ? null
+      : DataChangeSummary.tryParse(details);
+  if (confirmation != null && summary != null) {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => UiPackScope(
+            defaultOnly: true,
+            child: NativeUi(
+              child: _CompactPlanReview(
+                confirmation: confirmation,
+                summary: summary,
               ),
+            ),
+          ),
+        ) ??
+        false;
+  }
+  return await showDialog<bool>(
+        context: context,
+        builder: (context) => UiPackScope(
+          defaultOnly: true,
+          child: NativeUi(
+            child: AlertDialog(
+              titlePadding: AppDesign.dialogTitlePadding,
+              contentPadding: AppDesign.dialogContentPadding,
+              actionsPadding: AppDesign.dialogActionsPadding,
+              title: Text(title),
+              content: SizedBox(
+                width: 700,
+                child: SingleChildScrollView(child: _reviewContent(details)),
+              ),
+              actions: [
+                NativeUi(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('取消'),
+                  ),
+                ),
+                NativeUi(
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('确认'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ) ??
+      false;
+}
+
+class _CompactPlanReview extends StatefulWidget {
+  const _CompactPlanReview({required this.confirmation, required this.summary});
+  final PlanConfirmation confirmation;
+  final DataChangeSummary summary;
+  @override
+  State<_CompactPlanReview> createState() => _CompactPlanReviewState();
+}
+
+class _CompactPlanReviewState extends State<_CompactPlanReview> {
+  bool acknowledged = false;
+  @override
+  Widget build(BuildContext context) {
+    final options = widget.confirmation;
+    final deletions = widget.summary.count(DataChangeKind.delete);
+    return AlertDialog(
+      titlePadding: AppDesign.dialogTitlePadding,
+      contentPadding: AppDesign.dialogContentPadding,
+      actionsPadding: AppDesign.dialogActionsPadding,
+      title: Text(options.title),
+      content: SizedBox(
+        width: 540,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(options.message),
+              if (deletions > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    '将删除 $deletions 条记录，请核对后确认。',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              if (options.acknowledgement != null)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(options.acknowledgement!),
+                  value: acknowledged,
+                  onChanged: (value) =>
+                      setState(() => acknowledged = value == true),
+                ),
               NativeUi(
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('确认'),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('查看变更详情'),
+                  initiallyExpanded: false,
+                  children: [DataChangeReview(summary: widget.summary)],
                 ),
               ),
             ],
           ),
         ),
       ),
-    ) ??
-    false;
+      actions: [
+        NativeUi(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+        ),
+        NativeUi(
+          child: FilledButton(
+            onPressed: options.acknowledgement != null && !acknowledged
+                ? null
+                : () => Navigator.pop(context, true),
+            child: Text(options.confirmLabel),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 Widget _reviewContent(Object? details) {
   final summary = DataChangeSummary.tryParse(details);

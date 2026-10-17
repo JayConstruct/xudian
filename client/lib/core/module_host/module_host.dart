@@ -28,6 +28,7 @@ import 'module_package.dart';
 import 'service_directory_resource.dart';
 import 'system_timezone.dart';
 import 'page_workflow_queue.dart';
+import 'plan_confirmation.dart';
 
 class ServiceRef {
   const ServiceRef(this.moduleId, this.serviceId, this.major);
@@ -56,6 +57,14 @@ class _PageReplayability {
   void markUnsafe() => safe = false;
 }
 
+/// Native, gesture-scoped review policy. Scripts cannot supply this callback.
+typedef PagePlanReview = bool Function(
+  ServiceRef reference,
+  Object? input,
+  ChangePlan plan,
+  PlanConfirmation? confirmation,
+);
+
 class ScriptInstance {
   ScriptInstance(this.package, this.actor);
   final ScriptPackage package;
@@ -82,6 +91,8 @@ class ScriptInstance {
   Set<String>? pageReads;
   bool pagePreparation = false;
   _PageReplayability? _pageReplayability;
+  PagePlanReview? _pagePlanReview;
+  void Function(ChangePlan plan)? _pagePlanCommitted;
   final subscriptions = <String, StreamSubscription>{};
   Future<void> tail = Future.value();
   Future<Object?> run(
@@ -199,6 +210,9 @@ class ModuleHost {
   final failures = <String, String>{};
   final pageSessions = <String, Map<String, Object?>>{};
   final _reviewed = <String>{};
+  final _preparedInvocations = Expando<({ServiceRef reference, Object? input})>(
+    'prepared service',
+  );
   final _grantsUsed = <String, Set<String>>{};
   final _proposals = <String, Map<String, Object?>>{};
   final _migrationInstances = <String>{};
@@ -1450,7 +1464,9 @@ class ModuleHost {
       ref,
       input,
     ).timeout(const Duration(seconds: 10));
-    return store.seal(session);
+    final plan = store.seal(session);
+    _preparedInvocations[plan] = (reference: ref, input: freezeJson(input));
+    return plan;
   }
 
   Future<Object?> _prepareInto(
@@ -1602,6 +1618,8 @@ class ModuleHost {
     void Function(bool)? onReplayable,
     bool readOnly = false,
     bool Function()? shouldRun,
+    PagePlanReview? onReview,
+    void Function(ChangePlan plan)? onCommit,
   }) {
     if (readOnly && input is Map && input['event'] != null) {
       throw StateError('Page preparation cannot dispatch events');
@@ -1625,6 +1643,8 @@ class ModuleHost {
             final reads = onReads == null ? null : <String>{};
             instance.pageReads = reads;
             instance.pagePreparation = readOnly;
+            instance._pagePlanReview = readOnly ? null : onReview;
+            instance._pagePlanCommitted = readOnly ? null : onCommit;
             final replayability = _PageReplayability(
               input is Map && input['event'] == null,
             );
@@ -1643,6 +1663,8 @@ class ModuleHost {
             instance.pageReads = null;
             instance.pagePreparation = false;
             instance._pageReplayability = null;
+            instance._pagePlanReview = null;
+            instance._pagePlanCommitted = null;
           }
         }, speculative: readOnly)
         .whenComplete(() => queued?.finish());
@@ -2139,14 +2161,39 @@ class ModuleHost {
         });
         return id;
       case 'services.commit':
-        return commit(actor, string(args['planId'], 'planId'));
+        final committedPlan = store.plan(
+          string(args['planId'], 'planId'),
+          actor,
+        );
+        final commitResult = await commit(actor, committedPlan.id);
+        if (workflow) instance._pagePlanCommitted?.call(committedPlan);
+        return commitResult;
       case 'ui.review':
         final plan = store.plan(string(args['planId'], 'planId'), actor);
-        final accepted = await interaction?.call(actor, 'ui.review', {
-          'planId': plan.id,
-          'writes': plan.writes,
-          'result': plan.result,
-        });
+        final confirmation = args.containsKey('confirmation')
+            ? PlanConfirmation.parse(args['confirmation'])
+            : null;
+        final preparedInvocation = _preparedInvocations[plan];
+        final quickAccepted =
+            workflow &&
+            preparedInvocation != null &&
+            instance._pagePlanReview?.call(
+                  preparedInvocation.reference,
+                  preparedInvocation.input,
+                  plan,
+                  confirmation,
+                ) ==
+                true;
+        final accepted =
+            quickAccepted ||
+            (await interaction?.call(actor, 'ui.review', {
+                  'planId': plan.id,
+                  'writes': plan.writes,
+                  'result': plan.result,
+                  if (confirmation != null)
+                    'confirmation': confirmation.toJson(),
+                })) ==
+                true;
         store.requireActive(actor);
         if (accepted != true) return false;
         review(plan.id, actor);
