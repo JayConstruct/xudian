@@ -1,0 +1,203 @@
+{
+  "date": "2026-10-20",
+  "sourceCommit": "dcbc4107d28e10d0cc616184ec744b817b0342d8",
+  "appTag": "v0.2.0-beta.6",
+  "moduleTag": "modules-20261019-color-workspaces",
+  "hostApi": "1.31.0",
+  "status": "published; release workflows, anonymous assets, indexes and emulator pages verified",
+  "moduleAssets": [
+    {
+      "id": "app.ai",
+      "version": "1.5.0",
+      "sha256": "e0b838f33f44bc3498a8bb24ba1ca3dc8c5f9e189567d82933b1d68669f19506",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261019-color-workspaces/app.ai-1.5.0.xmodule",
+      "anonymousVerified": true,
+      "publicIndexVerified": true
+    },
+    {
+      "id": "app.planner",
+      "version": "1.5.2",
+      "sha256": "ec9e7b9961e382782c39acb54ff07bb28beb764c4c0fd7930215aefe1a685d42",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261019-color-workspaces/app.planner-1.5.2.xmodule",
+      "anonymousVerified": true,
+      "publicIndexVerified": true
+    },
+    {
+      "id": "app.schedule",
+      "version": "1.16.0",
+      "sha256": "a6e655cd813c6a3da0cc9024b525005b7aec5205f836fa9cacf5bf25e695ef32",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261019-color-workspaces/app.schedule-1.16.0.xmodule",
+      "anonymousVerified": true,
+      "publicIndexVerified": true
+    }
+  ],
+  "ci": {
+    "app": {
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39283945099",
+      "status": "completed",
+      "conclusion": "success",
+      "runAttempt": 1,
+      "sourceCommit": "dcbc4107d28e10d0cc616184ec744b817b0342d8"
+    },
+    "modules": {
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39283945205",
+      "status": "completed",
+      "conclusion": "success",
+      "runAttempt": 1,
+      "sourceCommit": "dcbc4107d28e10d0cc616184ec744b817b0342d8"
+    },
+    "main": {
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39283945287",
+      "status": "completed",
+      "conclusion": "success",
+      "runAttempt": 1,
+      "sourceCommit": "dcbc4107d28e10d0cc616184ec744b817b0342d8"
+    }
+  },
+  "defaultCatalogVerified": true,
+  "publicIndexesVerified": true,
+  "checks": {
+    "flutterCI": "Release workflow succeeded including the complete Flutter regression step; this is the final full-suite evidence.",
+    "releaseWorkflowChecks": "Both immutable app and module release workflows completed successfully.",
+    "publicIndexesVerified": true,
+    "anonymousAppAndModuleDownloadsVerified": true,
+    "apkAbiAndBundledModuleValidation": "passed for all three ABIs",
+    "localFlutterFullAttempt": {
+      "passed": 1448,
+      "failed": 2,
+      "failureCause": "Two existing test expectations needed updates for the new AI message protocol and the scrolled About settings entry."
+    },
+    "localFlutterAfterTestCorrections": {
+      "scope": "targeted regression",
+      "passed": 11,
+      "failed": 0
+    },
+    "localFullSuiteLimitation": "The initial local full-suite failures are retained above; the targeted rerun is not a local full-suite pass."
+  },
+  "app": {
+    "tag": "v0.2.0-beta.6",
+    "sourceCommit": "dcbc4107d28e10d0cc616184ec744b817b0342d8",
+    "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.6",
+    "sha256": {
+      "SHA256SUMS": "c930184b0e4f5cc86342975bb9e96fe530f28acef49ac8dac0513f506df95c75",
+      "SOURCE_COMMIT": "64db4b2188ff090f6f505d38fcbff8d95f4ef2b7d33d08e4ac81d598817d9c0b",
+      "app-arm64-v8a-release.apk": "b04b8dbf76a52868316f32265494f30ecdd653aecc1823c0e65e9cb00e1ef602",
+      "app-armeabi-v7a-release.apk": "faf96e99b1271f6e2cec203f835e01344195383e462a9e036dd77b1c86babc1d",
+      "app-x86_64-release.apk": "ae6cb4f53f18e7b9878d36e22ee82192775b9407988ad34e93df10f00ac9d739"
+    },
+    "anonymousDownloadsVerified": true,
+    "validation": [
+      {
+        "abi": "arm64-v8a",
+        "applicationId": "dev.taskapp.task_app",
+        "version": "0.2.0-beta.6",
+        "versionCode": 2124,
+        "sha256": "b04b8dbf76a52868316f32265494f30ecdd653aecc1823c0e65e9cb00e1ef602",
+        "bundlesMatchSource": true,
+        "signatureVerified": true,
+        "signerCertificateSha256": [
+          "74c0e4539fe5c5f896206726d8d6782c02b92b391286a8a50c33be4a50d5b4c3"
+        ],
+        "catalogMatchesTag": true,
+        "bundledModuleCount": 6
+      },
+      {
+        "abi": "armeabi-v7a",
+        "applicationId": "dev.taskapp.task_app",
+        "version": "0.2.0-beta.6",
+        "versionCode": 1124,
+        "sha256": "faf96e99b1271f6e2cec203f835e01344195383e462a9e036dd77b1c86babc1d",
+        "bundlesMatchSource": true,
+        "signatureVerified": true,
+        "signerCertificateSha256": [
+          "74c0e4539fe5c5f896206726d8d6782c02b92b391286a8a50c33be4a50d5b4c3"
+        ],
+        "catalogMatchesTag": true,
+        "bundledModuleCount": 6
+      },
+      {
+        "abi": "x86_64",
+        "applicationId": "dev.taskapp.task_app",
+        "version": "0.2.0-beta.6",
+        "versionCode": 4124,
+        "sha256": "ae6cb4f53f18e7b9878d36e22ee82192775b9407988ad34e93df10f00ac9d739",
+        "bundlesMatchSource": true,
+        "signatureVerified": true,
+        "signerCertificateSha256": [
+          "74c0e4539fe5c5f896206726d8d6782c02b92b391286a8a50c33be4a50d5b4c3"
+        ],
+        "catalogMatchesTag": true,
+        "bundledModuleCount": 6
+      }
+    ]
+  },
+  "modules": {
+    "tag": "modules-20261019-color-workspaces",
+    "sourceCommit": "dcbc4107d28e10d0cc616184ec744b817b0342d8",
+    "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261019-color-workspaces",
+    "sha256": {
+      "app.ai-1.5.0.xmodule": "e0b838f33f44bc3498a8bb24ba1ca3dc8c5f9e189567d82933b1d68669f19506",
+      "app.planner-1.5.2.xmodule": "ec9e7b9961e382782c39acb54ff07bb28beb764c4c0fd7930215aefe1a685d42",
+      "app.schedule-1.16.0.xmodule": "a6e655cd813c6a3da0cc9024b525005b7aec5205f836fa9cacf5bf25e695ef32"
+    },
+    "anonymousDownloadsVerified": true
+  },
+  "emulator": {
+    "serial": "emulator-5554",
+    "installedApp": {
+      "version": "0.2.0-beta.6",
+      "buildNumber": 155,
+      "versionCode": 4155,
+      "sha256": "5dfea5c1476e2b2fc121f9ecab45b1194bfe7ec670741c626baea243dd7c4628",
+      "installMode": "Current source, existing local signing, adb install -r; data retained"
+    },
+    "modulePackages": [
+      {
+        "id": "app.ai",
+        "version": "1.5.0",
+        "sha256": "e0b838f33f44bc3498a8bb24ba1ca3dc8c5f9e189567d82933b1d68669f19506",
+        "installedSha256": "e0b838f33f44bc3498a8bb24ba1ca3dc8c5f9e189567d82933b1d68669f19506",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.planner",
+        "version": "1.5.2",
+        "sha256": "ec9e7b9961e382782c39acb54ff07bb28beb764c4c0fd7930215aefe1a685d42",
+        "installedSha256": "ec9e7b9961e382782c39acb54ff07bb28beb764c4c0fd7930215aefe1a685d42",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.schedule",
+        "version": "1.16.0",
+        "sha256": "a6e655cd813c6a3da0cc9024b525005b7aec5205f836fa9cacf5bf25e695ef32",
+        "installedSha256": "a6e655cd813c6a3da0cc9024b525005b7aec5205f836fa9cacf5bf25e695ef32",
+        "status": "already-installed"
+      }
+    ],
+    "pageAcceptance": {
+      "status": "passed",
+      "snapshotCount": 10,
+      "checks": [
+        "ai-conversation-settings-and-back",
+        "configuration-export-opened-secret-option-off-without-export",
+        "planner-board-opened",
+        "restart-and-planner-board-confirmed-apk-digest-unchanged",
+        "schedule-opened-without-module-error",
+        "settings-ai-entry-and-return-to-planner"
+      ],
+      "restartSucceeded": true,
+      "configurationSecretSwitchChecked": false,
+      "chatSent": false,
+      "historyCleared": false,
+      "configurationExportTriggered": false,
+      "secretOptionChanged": false,
+      "applicationDataCleared": false
+    }
+  },
+  "limits": [
+    "The emulator ran current source built with existing local signing; anonymously downloaded CI APKs were validated separately.",
+    "This final UI check opened configuration export without exporting or enabling secrets and sent no AI messages.",
+    "ARM physical-device performance, Windows native builds and actual model service calls were not validated by this final release check."
+  ],
+  "localEvidence": "dist/verification/release-20261019-beta6/"
+}

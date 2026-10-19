@@ -2,6 +2,16 @@
 
 本页索引实际执行证据，测试数量只代表对应日期和范围。生产代码的 `host_*`、`script_*`、`schedule_*` 等回归与旧行为夹具分别核对；Linux 测试不能替代各平台运行及性能验收。
 
+## 2026-10-20 beta.6 发布与彩色规划验收
+
+已发布 [`v0.2.0-beta.6`](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.6) 与 [`modules-20261019-color-workspaces`](https://github.com/JayConstruct/xudian/releases/tag/modules-20261019-color-workspaces)，源码提交 `dcbc410`。包含稳定自动配色、任务规划分级菜单与缩放、AI 紧凑对话和连接设置、配置导出。AI 1.5.0、规划 1.5.2、课表 1.16.0 的公开包、版本索引和当前源码一致，商店作者索引已同步，9 个目录条目与作者包在线校验通过。
+
+发布标签和同一源码的 main CI 完整回归、静态分析、架构、Python 工具、模块目录、工作流配置及三架构 APK 构建全部通过。本地首次全量运行 1448 项通过、2 项旧界面断言失败；修正 AI 消息协议和设置滚动定位后，两个测试文件 11 项通过。最终全量结果以发布 CI 为准，不将定点复验记为本地单次全量通过。
+
+三个公开 APK、SHA256SUMS、SOURCE_COMMIT 和三个模块包已匿名下载核对。APK 应用身份、版本、ABI、有效签名、跨 ABI 签名一致性及六个内置模块均验证通过。当前源码使用既有本机签名构建 beta.6 / build155 / versionCode4155，保留数据覆盖安装并核对摘要；三个已安装模块的版本与包摘要一致。实际打开课表、规划、AI 对话与两处设置入口、配置导出，完成十组页面和重启验证，没有发送消息、导出密钥或清除数据。公开 CI APK 与本机安装 APK 分别核验，未将两种签名产物混为同一包。
+
+[结构化发布与安装记录](verification/release-20261020.json)。ARM 真机性能及 Windows 原生安装未在本轮验证。
+
 ## 2026-10-15 beta.4 发布与模拟器商店安装
 
 已发布 [`v0.2.0-beta.4`](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.4) 与 [`modules-20261015-planner-ux`](https://github.com/JayConstruct/xudian/releases/tag/modules-20261015-planner-ux)，源码提交 `b6df54a`。最终 CI 的1270项 Flutter、208项 Python、36项目录测试、静态分析及三架构 APK 构建通过。三个公开 APK、校验文件、源码提交、预装模块摘要与四个新模块包均已核验，作者索引和默认目录已同步。
