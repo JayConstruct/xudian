@@ -106,6 +106,8 @@ void main() {
             'main.js': """
 import {ui} from '@xudian/sdk';
 export async function render({event,context,state={}}) {
+  if(event?.type==='history')state.history=true;
+  if(event?.type==='historyBack')state.history=false;
   if(event?.type==='schedule')await ui.navigate('test.navigation.schedule',{source:'daily'});
   if(event?.type==='detail')await ui.navigate('test.navigation.detail');
   if(event?.type==='panel')await ui.panel('test.navigation.importer',{}, {adaptive:true,wide:'center'});
@@ -115,7 +117,7 @@ export async function render({event,context,state={}}) {
   if(context.pageId.endsWith('.schedule')&&context.importPlanId&&!state.routed) {
     state.routed=true;await ui.navigate('test.navigation.preview',{importPlanId:context.importPlanId});
   }
-  return {state,...(context.pageId.endsWith('.home')?{header:{title:'日程测试',compact:true,actions:[
+  return {state,...(context.pageId.endsWith('.home')?{header:{title:state.history?'操作记录':'日程测试',...(state.history?{backEvent:{type:'historyBack'}}:{}),compact:true,actions:[
     {label:'操作历史',icon:'history',presentation:'inline',event:{type:'history'}},
     {label:'新建',icon:'add',variant:'filled',presentation:'inline',event:{type:'panel'}}
   ]}}:{}),...(context.pageId.endsWith('.importer')?{header:{title:'导入详情',backEvent:{type:'internalBack'}}}:{}),tree:{type:'column',children:[
@@ -147,6 +149,40 @@ export async function render({event,context,state={}}) {
     await db.close();
     await dir.delete(recursive: true);
   });
+  testWidgets(
+    'system Back dispatches the active workspace internal back action',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final app = XudianApp();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        app.registry.dispose();
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
+          ],
+          child: app,
+        ),
+      );
+      await settle(tester);
+      await tester.tap(find.byTooltip('操作历史'));
+      await settle(tester);
+      expect(find.text('操作记录'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+      expect(find.text('操作记录'), findsNothing);
+      expect(find.byTooltip('操作历史'), findsOneWidget);
+      expect(find.byTooltip('页面菜单'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'active workspace drag hides only the dock and navigation invalidates old drag callbacks',
     (tester) async {

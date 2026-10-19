@@ -530,7 +530,10 @@ void main() {
             await tester.pump(const Duration(milliseconds: 20));
           }
           expect(
-            find.text('待安排  0'),
+            find.descendant(
+              of: find.byKey(const ValueKey('planner-candidate-count')),
+              matching: find.text('0'),
+            ),
             findsOneWidget,
             reason: tester
                 .widgetList<Text>(find.byType(Text))
@@ -538,7 +541,7 @@ void main() {
                 .join(' | '),
           );
           expect(find.text('统一安排'), findsNothing);
-          expect(find.text('仅有截止'), findsOneWidget);
+          expect(find.text('仅有截止'), findsNothing);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());
         },

@@ -1,14 +1,37 @@
 # AI 助手
 
-核对日期：2026-10-09。当前生产实现为 `packages/modules/app.ai` 的 v3 脚本模块；运行、授权及提交契约见 [模块宿主](MODULE_HOST.md) 和 [JavaScript SDK](MODULE_SDK.md)。
+核对日期：2026-10-18。当前生产实现为 `packages/modules/app.ai` 的 v3 脚本模块（1.5.0，最低宿主 API 1.31）；运行、授权及提交契约见 [模块宿主](MODULE_HOST.md) 和 [JavaScript SDK](MODULE_SDK.md)。
 
 ## 入口与连接
 
 - AI 提供应用内悬浮入口与工作区页面；启停由模块管理控制，停用保留已保存数据。
+- 对话页右上角齿轮和 App 设置中的“AI 助手”共用 `app.ai.settings` 设置页。模型连接、工作模式和清空记录收在设置内；聊天正文使用 App 的 14px 正文、12px 辅助文字与紧凑消息间距，输入和发送共用一行。请求中发送按钮切换为取消，仍可编辑下一条草稿。
+- 工作模式保存在 `preferences` 配置集合，独立设置实例与对话页共用；设置清空记录后，下次读取以持久历史为准。高级模块源码默认折叠。连接页展示配置并通过宿主对话框编辑，API Key 继续使用安全输入，不向模块或页面暴露正文。
 - “模型连接”配置 OpenAI Chat Completions 兼容地址、模型和 API Key，由设备直接请求用户指定服务。
 - 远程连接仅允许 HTTPS；localhost、127.0.0.1 和 ::1 可使用 HTTP。宿主禁止重定向，并限制请求容量和超时。
 - 端点、模型与凭据句柄保存在 AI 的 `connections` 集合；API Key 写入系统安全存储。`host_meta` 只登记凭据所属模块、端点和安全存储别名。
 - 脚本通过句柄请求认证，不能读取密钥正文；宿主检查模块身份及目标地址后注入 Bearer 认证。
+
+### CLIProxyAPI
+
+1. 打开 AI 助手 → 模型连接 → 接入 CLIProxyAPI，填写服务地址。支持根地址（自动添加 `/v1`）、API 基址和完整 `/chat/completions` 地址；反向代理子路径应填写完整 API 基址，例如 `https://example.com/proxy/v1`。
+2. 在宿主安全输入框填写 CLIProxyAPI 的**客户端 API Key**，不要填写管理密钥或上游 OAuth 凭据。模型 ID 可暂时留空。审核并保存连接后，点击“获取并选择模型”，通过 `GET /v1/models` 获取当前账号可用的模型 ID；也可重新接入并手动填写。
+3. 点击“测试连接”，对所选模型发送一条独立的短聊天请求。只有实际返回非空文字才显示连接成功；测试不携带历史和业务工具，也不保存到对话历史。返回对话后即可聊天或调用宿主工具。
+
+调用使用 `POST /v1/chat/completions` 和 `stream: false`；CLIProxyAPI 连接不强制指定 temperature。模型列表与聊天使用同一个绑定 API 基址的凭据句柄。HTTP 401/403、404、429 和上游错误分别提示排查方向，不展示服务端错误正文。获取模型和连接测试支持取消。
+
+同一地址修改模型可保留已有密钥；更换地址需要重新输入密钥。取消安全输入或拒绝连接审核会保留原连接，拒绝审核时删除新建凭据；成功更换密钥后删除旧凭据。旧版 Chat Completions 连接继续可用；若旧密钥绑定完整聊天地址，获取模型前需重新接入，将新密钥绑定到 API 基址。
+
+CLIProxyAPI 默认端口为 8317。Android 的 `127.0.0.1` 指向设备自身；代理在开发电脑运行时，先使用与模拟器连接相同的 Linux ADB 转发端口：
+
+```bash
+source scripts/dev-env.sh
+adb -H 127.0.0.1 -P 5037 -s emulator-5554 reverse tcp:8317 tcp:8317
+```
+
+随后填写 `http://127.0.0.1:8317`。真机 USB 调试可使用对应设备序列号；远程部署填写可达的 HTTPS 地址。本机端口转发只影响连接路由，不会把电脑账号或上游凭据导入应用。
+
+接口和客户端密钥配置参考 [CLIProxyAPI 官方项目](https://github.com/router-for-me/CLIProxyAPI) 与[官方配置示例](https://github.com/router-for-me/CLIProxyAPI/blob/main/config.example.yaml)。本地测试安装、配置、密钥和截图保存在 `.cache/` / `dist/verification/`，不上传 GitHub。
 
 ## 普通聊天与工具
 

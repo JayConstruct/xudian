@@ -19,6 +19,169 @@ void main() {
     },
   );
 
+  test('nested action schema accepts controls and rejects unbounded or malformed nodes', () {
+    const event = <String, Object?>{'type': 'change'};
+    final actions = [
+      {
+        'label': '新建',
+        'icon': 'add',
+        'iconOnly': true,
+        'overflowOnly': true,
+        'event': event,
+      },
+      {
+        'label': '视图',
+        'children': [
+          {
+            'kind': 'choiceGrid',
+            'label': '显示天数',
+            'children': [
+              {'label': '5天', 'event': event, 'selected': true},
+            ],
+          },
+          {
+            'kind': 'stepper',
+            'label': '时间轴缩放',
+            'valueLabel': '标准',
+            'decreaseEvent': event,
+            'increaseEvent': event,
+          },
+        ],
+      },
+    ];
+    expect(validWorkspaceHeaderActions(actions), isTrue);
+    expect(
+      validWorkspaceHeaderActions([
+        {'label': 'missing event'},
+      ]),
+      isFalse,
+    );
+    expect(
+      validWorkspaceHeaderActions([
+        {'label': 'bad', 'children': []},
+      ]),
+      isFalse,
+    );
+    expect(
+      validWorkspaceHeaderActions([
+        {'label': 'bad', 'kind': 'stepper', 'increaseEvent': event},
+      ]),
+      isFalse,
+    );
+    expect(
+      validWorkspaceHeaderActions([
+        {'label': 'bad', 'event': event, 'iconOnly': 'true'},
+      ]),
+      isFalse,
+    );
+    expect(
+      validWorkspaceHeaderActions([
+        {
+          'label': 'bad',
+          'presentation': 'inline',
+          'children': [
+            {'label': 'child', 'event': event},
+          ],
+        },
+      ]),
+      isFalse,
+    );
+    expect(
+      validWorkspaceHeaderActions([
+        {'label': 'bad', 'iconOnly': true, 'event': event},
+      ]),
+      isFalse,
+    );
+    expect(
+      validWorkspaceHeaderActions([
+        {
+          'label': 'bad',
+          'kind': 'choiceGrid',
+          'children': [
+            {
+              'label': 'child',
+              'children': [
+                {'label': 'grandchild', 'event': event},
+              ],
+            },
+          ],
+        },
+      ]),
+      isFalse,
+    );
+    Object nested = {'label': 'leaf', 'event': event};
+    for (var i = 0; i < 6; i++) {
+      nested = {
+        'label': 'nested',
+        'children': [nested],
+      };
+    }
+    expect(validWorkspaceHeaderActions([nested]), isFalse);
+    expect(
+      validWorkspaceHeaderActions(
+        List.filled(13, {'label': 'leaf', 'event': event}),
+      ),
+      isFalse,
+    );
+  });
+
+  testWidgets(
+    'native menus track only the current active owner and release independent sessions',
+    (tester) async {
+      final controller = WorkspaceHeaderController();
+      addTearDown(controller.dispose);
+      final owner = Object();
+      final otherOwner = Object();
+      var active = true;
+      final lease = controller.activate(
+        identity: 'planner',
+        moduleId: 'planner',
+        pageId: 'home',
+        enabled: true,
+        isActive: () => active,
+      )!;
+      Future<void> dispatch(Object? event) async {}
+      expect(controller.beginMenu(lease, owner), isNull);
+      controller.publish(lease, owner, {'title': '规划'}, dispatch);
+      expect(controller.beginMenu(lease, otherOwner), isNull);
+      final first = controller.beginMenu(lease, owner);
+      final second = controller.beginMenu(lease, owner);
+      expect(first, isNotNull);
+      expect(controller.isMenuOpenFor(lease, owner), isTrue);
+      expect(controller.isMenuOpenFor(lease, otherOwner), isFalse);
+      controller.endMenu(first);
+      expect(controller.isMenuOpenFor(lease, owner), isTrue);
+      active = false;
+      expect(controller.isMenuOpenFor(lease, owner), isFalse);
+      expect(controller.beginMenu(lease, owner), isNull);
+      active = true;
+      controller.endMenu(second);
+      expect(controller.isMenuOpenFor(lease, owner), isFalse);
+      controller.beginMenu(lease, owner);
+      controller.publish(lease, owner, {'title': '更新规划'}, dispatch);
+      expect(controller.isMenuOpenFor(lease, owner), isTrue);
+      controller.publish(lease, otherOwner, {'title': '新实例'}, dispatch);
+      expect(controller.isMenuOpenFor(lease, owner), isFalse);
+      controller.publish(lease, owner, {'title': '规划'}, dispatch);
+      expect(controller.isMenuOpenFor(lease, owner), isFalse);
+      controller.beginMenu(lease, owner);
+      controller.clear(owner);
+      controller.publish(lease, owner, {'title': '规划'}, dispatch);
+      expect(controller.isMenuOpenFor(lease, owner), isFalse);
+      controller.beginMenu(lease, owner);
+      controller.activate(
+        identity: 'different',
+        moduleId: 'other',
+        pageId: 'home',
+        enabled: true,
+        isActive: () => true,
+      );
+      expect(controller.isMenuOpenFor(lease, owner), isFalse);
+      expect(controller.beginMenu(lease, owner), isNull);
+      await tester.pump();
+    },
+  );
+
   testWidgets(
     'date leases reject script headers, stale publishers and mode changes; identical dates do not notify twice',
     (tester) async {

@@ -1,5 +1,7 @@
 import '../core/ui/native_ui.dart';
 import '../core/ui/ui_icon.dart';
+import '../core/ui/workspace_header.dart';
+import '../core/ui/workspace_header_menu.dart';
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -18,12 +20,20 @@ class WorkspacePopupMenu extends StatefulWidget {
     required this.onSelected,
     this.haptics = true,
     this.reduceMotion = false,
+    this.headerController,
+    this.headerOwner,
+    this.headerLease,
+    this.inlineActionLabels = const {},
   });
 
   final List<PopupMenuEntry<int>> items;
   final ValueChanged<int> onSelected;
   final bool haptics;
   final bool reduceMotion;
+  final WorkspaceHeaderController? headerController;
+  final Object? headerOwner;
+  final WorkspaceHeaderLease? headerLease;
+  final Set<String> inlineActionLabels;
 
   @override
   State<WorkspacePopupMenu> createState() => _WorkspacePopupMenuState();
@@ -46,6 +56,10 @@ class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
     final selected = await navigator.push<int>(
       _WorkspaceMenuRoute(
         items: widget.items,
+        headerController: widget.headerController,
+        headerOwner: widget.headerOwner,
+        headerLease: widget.headerLease,
+        inlineActionLabels: widget.inlineActionLabels,
         themes: themes,
         menuLabel: localizations.popupMenuLabel,
         dismissLabel: localizations.modalBarrierDismissLabel,
@@ -103,6 +117,10 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
     required this.dismissLabel,
     required this.reduceMotion,
     required this.anchor,
+    this.headerController,
+    this.headerOwner,
+    this.headerLease,
+    this.inlineActionLabels = const {},
   }) : super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop);
 
   final List<PopupMenuEntry<int>> items;
@@ -110,6 +128,10 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
   final String menuLabel;
   final String dismissLabel;
   final bool reduceMotion;
+  final WorkspaceHeaderController? headerController;
+  final Object? headerOwner;
+  final WorkspaceHeaderLease? headerLease;
+  final Set<String> inlineActionLabels;
   final Rect Function() anchor;
 
   @override
@@ -128,6 +150,36 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
 
   @override
   String get barrierLabel => dismissLabel;
+
+  @override
+  Widget buildModalBarrier() {
+    void dismissMenu() {
+      // Tapping outside dismisses the surface; system Back still uses the
+      // submenu's PopScope to return through its levels.
+      if (isCurrent) navigator?.pop();
+    }
+
+    if (!offstage) {
+      return AnimatedModalBarrier(
+        color: animation!.drive(
+          ColorTween(
+            begin: barrierColor.withValues(alpha: 0),
+            end: barrierColor,
+          ).chain(CurveTween(curve: barrierCurve)),
+        ),
+        dismissible: barrierDismissible,
+        semanticsLabel: barrierLabel,
+        barrierSemanticsDismissible: semanticsDismissible,
+        onDismiss: dismissMenu,
+      );
+    }
+    return ModalBarrier(
+      dismissible: barrierDismissible,
+      semanticsLabel: barrierLabel,
+      barrierSemanticsDismissible: semanticsDismissible,
+      onDismiss: dismissMenu,
+    );
+  }
 
   @override
   Widget buildPage(
@@ -170,7 +222,17 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
                     clipBehavior: Clip.antiAlias,
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: IntrinsicWidth(child: ListBody(children: items)),
+                      child: IntrinsicWidth(
+                        child: headerController == null
+                            ? ListBody(children: items)
+                            : WorkspaceHeaderMenu(
+                                controller: headerController!,
+                                owner: headerOwner,
+                                lease: headerLease,
+                                inlineActionLabels: inlineActionLabels,
+                                hostItems: items,
+                              ),
+                      ),
                     ),
                   ),
                 );

@@ -94,20 +94,32 @@ void main() {
       final ai = await ScriptPackage.verify(
         await ScriptPackage.build(definition.cast<String, Object?>(), {
           'main.js': await File('${source.path}/main.js').readAsString(),
+          'connection.js': await File('${source.path}/connection.js')
+              .readAsString(),
         }),
         allowUnsignedLocal: true,
       );
-      expect(ai.version, '1.3.0');
-      expect(ai.manifest['hostApi'], '^1.18.0');
+      expect(ai.version, '1.5.0');
+      expect(ai.manifest['hostApi'], '^1.31.0');
       await host.install(ai);
       final registrations = ScriptAppModule(host, ai).ui;
-      final page = registrations.whereType<UiPageRegistration>().single;
-      final pageEntry = registrations.whereType<UiEntryRegistration>().single;
+      final page = registrations.whereType<UiPageRegistration>().singleWhere(
+        (page) => page.id == 'app.ai.page',
+      );
+      final pageEntry = registrations
+          .whereType<UiEntryRegistration>()
+          .singleWhere((entry) => entry.id == 'app.ai.entry');
       expect(page.id, 'app.ai.page');
       expect(pageEntry.id, 'app.ai.entry');
       expect(pageEntry.pageId, page.id);
       expect(pageEntry.defaultMount.placement, UiPlacement.hidden);
       expect(pageEntry.opening, UiOpening.adaptivePanel);
+      final settings = registrations
+          .whereType<UiEntryRegistration>()
+          .singleWhere((entry) => entry.id == 'app.ai.settings.entry');
+      expect(settings.pageId, 'app.ai.settings');
+      expect(settings.defaultMount.placement, UiPlacement.settings);
+      expect(settings.opening, UiOpening.detail);
       final assistant = registrations
           .whereType<WorkspaceAssistantRegistration>()
           .single;

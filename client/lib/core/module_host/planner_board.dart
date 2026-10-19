@@ -8,6 +8,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+import '../ui/content_colors.dart';
+
 typedef BoardItem = Map<String, Object?>;
 
 /// A presentation-only date/time board. Scripts own scheduling, validation,
@@ -117,6 +119,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
   final _header = ScrollController();
   final _candidatesScroll = ScrollController();
   bool _candidatesExpanded = true;
+  double _candidateScrollOffset = 0;
   final _vertical = ScrollController();
   final _gridKey = GlobalKey();
   final _viewportKey = GlobalKey();
@@ -190,6 +193,25 @@ class _PlannerBoardState extends State<PlannerBoard> {
     }
   }
 
+  void _toggleCandidates() {
+    if (_candidatesExpanded && _candidatesScroll.hasClients) {
+      _candidateScrollOffset = _candidatesScroll.offset;
+    }
+    setState(() => _candidatesExpanded = !_candidatesExpanded);
+    if (_candidatesExpanded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _candidatesScroll.hasClients) {
+          _candidatesScroll.jumpTo(
+            _candidateScrollOffset.clamp(
+              0,
+              _candidatesScroll.position.maxScrollExtent,
+            ),
+          );
+        }
+      });
+    }
+  }
+
   String _elapsed(Duration duration) {
     final minutes = duration.inMicroseconds / Duration.microsecondsPerMinute;
     if (minutes < 1) return '${duration.inSeconds}秒';
@@ -214,19 +236,17 @@ class _PlannerBoardState extends State<PlannerBoard> {
         : '耗时${_elapsed(duration).replaceAll('分钟', 'min')}';
   }
 
-  Color _accent(BoardItem item) {
-    final scheme = Theme.of(context).colorScheme;
-    final dark = scheme.brightness == Brightness.dark;
-    if (item['readOnly'] == true) {
-      return dark ? const Color(0xFF97C6F0) : const Color(0xFF6AA9E3);
-    }
-    if (item['fixed'] == true) {
-      return dark ? const Color(0xFFADC99C) : const Color(0xFF8BAB75);
-    }
-    return dark
-        ? Color.lerp(scheme.primary, const Color(0xFFC2BAFF), .35)!
-        : Color.lerp(scheme.primary, const Color(0xFFAAA0F0), .58)!;
-  }
+  Color _accent(BoardItem item) => ContentColors.accent(
+    item['colorKey'] ??
+        item['courseId'] ??
+        item['taskId'] ??
+        item['id'] ??
+        item['title'],
+    color: item['color'],
+  );
+
+  Color _surface(BoardItem item) =>
+      ContentColors.surface(_accent(item), Theme.of(context).colorScheme);
 
   void _activate(BoardItem item) {
     if (!widget.enabled) return;
@@ -464,6 +484,28 @@ class _PlannerBoardState extends State<PlannerBoard> {
                         _startMinute) *
                     _scale)
                 .clamp(0, _vertical.position.maxScrollExtent),
+          );
+          _refreshWindow();
+        }
+      });
+    } else if (_focusScale == null &&
+        widget.options['pixelsPerMinute'] !=
+            oldWidget.options['pixelsPerMinute']) {
+      // Keep the minute at the top of the viewport fixed when changing the
+      // display scale. Tasks and horizontal position remain untouched.
+      final oldScale = (oldWidget.options['pixelsPerMinute'] as num? ?? 1)
+          .toDouble()
+          .clamp(.5, 3.0);
+      final minute =
+          _startMinute +
+          (_vertical.hasClients ? _vertical.offset : 0) / oldScale;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _vertical.hasClients) {
+          _vertical.jumpTo(
+            ((minute - _startMinute) * _scale).clamp(
+              0,
+              _vertical.position.maxScrollExtent,
+            ),
           );
           _refreshWindow();
         }
@@ -1330,7 +1372,11 @@ class _PlannerBoardState extends State<PlannerBoard> {
               fontWeight: FontWeight.w600,
               fontSize: titleLines > 1 ? 11 : null,
               height: titleLines > 1 ? 1.15 : null,
-              color: scheme.onSurface,
+              color: ContentColors.foreground(
+                accent,
+                _surface(item),
+                scheme.onSurface,
+              ),
             ),
           ),
         ),
@@ -1350,98 +1396,103 @@ class _PlannerBoardState extends State<PlannerBoard> {
         shadowColor: scheme.primary.withValues(alpha: .2),
         color: item['_resident'] == true
             ? Colors.transparent
-            : scheduled
-            ? (_selectedItem?['id'] == item['id']
-                  ? scheme.primaryContainer
-                  : _accent(item).withValues(alpha: .12))
-            : scheme.surfaceContainerLow,
+            : _selectedItem?['id'] == item['id']
+            ? Color.lerp(_surface(item), scheme.surface, .2)
+            : _surface(item),
         borderRadius: BorderRadius.circular(9),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(9),
-          onTap: () => _activate(item),
-          child: Container(
-            height: height,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
-              border:
-                  _selectedItem?['id'] == item['id'] ||
-                      item['selected'] == true ||
-                      widget.selectedIds.contains(item['id'])
-                  ? Border.all(
-                      color: scheme.primary,
-                      width: scheduled ? 2 : 1.5,
-                    )
-                  : scheduled && item['_resident'] != true
-                  ? Border(left: BorderSide(color: accent, width: 2))
-                  : null,
-            ),
-            padding: EdgeInsets.symmetric(
-              horizontal: scheduled ? (titleLines > 1 ? 2 : 7) : 10,
-              vertical: item['_resident'] == true ? 2 : 4,
-            ),
-            child: scheduled
-                ? _dashboard && full
-                      ? _PlannerBlockContents(
-                          key: ValueKey(
-                            'resident:${sourceSegment ?? item['id']}',
+        clipBehavior: Clip.antiAlias,
+        child: CustomPaint(
+          painter:
+              scheduled && item['readOnly'] == true && item['_resident'] != true
+              ? _SourceHatching(accent)
+              : null,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(9),
+            onTap: () => _activate(item),
+            child: Container(
+              height: height,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(9),
+                border:
+                    _selectedItem?['id'] == item['id'] ||
+                        item['selected'] == true ||
+                        widget.selectedIds.contains(item['id'])
+                    ? Border.all(
+                        color: scheme.primary,
+                        width: scheduled ? 2 : 1.5,
+                      )
+                    : item['_resident'] != true
+                    ? Border(left: BorderSide(color: accent, width: 2))
+                    : null,
+              ),
+              padding: EdgeInsets.symmetric(
+                horizontal: scheduled ? (titleLines > 1 ? 2 : 7) : 10,
+                vertical: item['_resident'] == true ? 2 : 4,
+              ),
+              child: scheduled
+                  ? _dashboard && full
+                        ? _PlannerBlockContents(
+                            key: ValueKey(
+                              'resident:${sourceSegment ?? item['id']}',
+                            ),
+                            item: item,
+                            identity: sourceSegment ?? '${item['id']}',
+                            continuation: continuation ?? '',
+                            startLabel: _edgeTime(item, true),
+                            endLabel: _edgeTime(item, false),
+                            timeHeight: timeHeight,
+                            accent: accent,
+                            vertical: _vertical,
+                            dragActive: _dragActive,
+                            segmentTop: segmentTop,
+                            bottomInset: widget.bottomInset,
+                            viewportHeight: _viewport?.height ?? height,
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (full)
+                                Text(
+                                  _edgeTime(item, true),
+                                  maxLines: 1,
+                                  style: textTheme.labelSmall?.copyWith(
+                                    fontSize: 10,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              title,
+                              if (full) const Spacer(),
+                              if (two)
+                                Text(
+                                  full
+                                      ? _edgeTime(item, false)
+                                      : '${_time(start)}–${_time(end)}',
+                                  maxLines: 1,
+                                  style: textTheme.labelSmall?.copyWith(
+                                    fontSize: 10,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
+                          )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        title,
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.labelSmall?.copyWith(
+                            color: item['overdue'] == true
+                                ? scheme.error
+                                : scheme.onSurfaceVariant,
                           ),
-                          item: item,
-                          identity: sourceSegment ?? '${item['id']}',
-                          continuation: continuation ?? '',
-                          startLabel: _edgeTime(item, true),
-                          endLabel: _edgeTime(item, false),
-                          timeHeight: timeHeight,
-                          accent: accent,
-                          vertical: _vertical,
-                          dragActive: _dragActive,
-                          segmentTop: segmentTop,
-                          bottomInset: widget.bottomInset,
-                          viewportHeight: _viewport?.height ?? height,
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (full)
-                              Text(
-                                _edgeTime(item, true),
-                                maxLines: 1,
-                                style: textTheme.labelSmall?.copyWith(
-                                  fontSize: 10,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            title,
-                            if (full) const Spacer(),
-                            if (two)
-                              Text(
-                                full
-                                    ? _edgeTime(item, false)
-                                    : '${_time(start)}–${_time(end)}',
-                                maxLines: 1,
-                                style: textTheme.labelSmall?.copyWith(
-                                  fontSize: 10,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                          ],
-                        )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      title,
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: item['overdue'] == true
-                              ? scheme.error
-                              : scheme.onSurfaceVariant,
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+            ),
           ),
         ),
       ),
@@ -2061,8 +2112,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                                       vertical: 1,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: _accent(segment.item)
-                                          .withValues(alpha: .12),
+                                      color: _surface(segment.item),
                                       borderRadius: BorderRadius.circular(4),
                                       border: Border(
                                         left: BorderSide(
@@ -2153,8 +2203,9 @@ class _PlannerBoardState extends State<PlannerBoard> {
                         ? Colors.transparent
                         : outline
                         ? Colors.transparent
-                        : (preview ? scheme.tertiary : _accent(item))
-                              .withValues(alpha: .085),
+                        : preview
+                        ? scheme.tertiary.withValues(alpha: .085)
+                        : _surface(item),
                     borderRadius: BorderRadius.circular(8),
                     border:
                         !preview &&
@@ -2696,9 +2747,10 @@ class _PlannerBoardState extends State<PlannerBoard> {
     );
   }
 
-  Widget _dateToolbar() {
+  Widget _dateToolbar(double viewportWidth) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
+      key: const ValueKey('planner-date-toolbar'),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(color: scheme.outlineVariant.withValues(alpha: .35)),
@@ -2707,39 +2759,159 @@ class _PlannerBoardState extends State<PlannerBoard> {
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       child: Row(
         children: [
           Expanded(
             child: InkWell(
-              onTap: () => _optionEvent('rangeEvent'),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      '${widget.options['rangeLabel'] ?? ''}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
+              onTap: widget.enabled ? () => _optionEvent('rangeEvent') : null,
+              borderRadius: BorderRadius.circular(8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '${widget.options['rangeLabel'] ?? ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const Icon(Icons.expand_more, size: 18),
+                      ],
                     ),
-                  ),
-                  const Icon(Icons.expand_more, size: 18),
-                ],
+                    const SizedBox(height: 1),
+                    Row(
+                      children: [
+                        Text(
+                          '${widget.options['periodLabel'] ?? '${_days.length}天'}',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 200),
+                            child: AnimatedBuilder(
+                              animation: _horizontal,
+                              builder: (context, _) {
+                                if (_days.isEmpty) {
+                                  return const SizedBox.shrink();
+                                }
+                                final left =
+                                    (_horizontal.hasClients
+                                        ? _horizontal.offset
+                                        : 0) /
+                                    _columnWidth;
+                                final right =
+                                    left + viewportWidth / _columnWidth;
+                                final first = left.floor().clamp(
+                                  0,
+                                  _days.length - 1,
+                                );
+                                final last = (right.ceil() - 1).clamp(
+                                  0,
+                                  _days.length - 1,
+                                );
+                                return Semantics(
+                                  key: const ValueKey('planner-range-rail'),
+                                  label:
+                                      '当前可见第${first + 1}至${last + 1}天，共${_days.length}天',
+                                  child: ExcludeSemantics(
+                                    child: Row(
+                                      children: [
+                                        for (
+                                          var index = 0;
+                                          index < _days.length;
+                                          index++
+                                        )
+                                          Expanded(
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(
+                                                right: 3,
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
+                                                child: SizedBox(
+                                                  height: 5,
+                                                  child: LayoutBuilder(
+                                                    builder: (context, constraints) {
+                                                      final start =
+                                                          (left - index).clamp(
+                                                            0.0,
+                                                            1.0,
+                                                          );
+                                                      final end =
+                                                          (right - index).clamp(
+                                                            0.0,
+                                                            1.0,
+                                                          );
+                                                      return Stack(
+                                                        children: [
+                                                          Positioned.fill(
+                                                            child: ColoredBox(
+                                                              color: scheme
+                                                                  .outlineVariant
+                                                                  .withValues(
+                                                                    alpha: .45,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                          if (end > start)
+                                                            Positioned(
+                                                              key: ValueKey(
+                                                                'planner-range-visible:$index',
+                                                              ),
+                                                              left:
+                                                                  start *
+                                                                  constraints
+                                                                      .maxWidth,
+                                                              width:
+                                                                  (end -
+                                                                      start) *
+                                                                  constraints
+                                                                      .maxWidth,
+                                                              top: 0,
+                                                              bottom: 0,
+                                                              child: ColoredBox(
+                                                                color: scheme
+                                                                    .primary
+                                                                    .withValues(
+                                                                      alpha: .5,
+                                                                    ),
+                                                              ),
+                                                            ),
+                                                        ],
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(
-              backgroundColor: scheme.primary.withValues(alpha: .075),
-              shape: const StadiumBorder(),
-              minimumSize: const Size(44, 32),
-              padding: const EdgeInsets.symmetric(horizontal: 11),
-              visualDensity: VisualDensity.compact,
-            ),
-            onPressed: () => _optionEvent('todayEvent'),
-            child: const Text('今天'),
           ),
           const SizedBox(width: 6),
           TextButton(
@@ -2750,8 +2922,8 @@ class _PlannerBoardState extends State<PlannerBoard> {
               padding: const EdgeInsets.symmetric(horizontal: 11),
               visualDensity: VisualDensity.compact,
             ),
-            onPressed: () => _optionEvent('periodEvent'),
-            child: Text('${widget.options['periodLabel'] ?? '5天'}'),
+            onPressed: () => _optionEvent('todayEvent'),
+            child: const Text('今天'),
           ),
           IconButton(
             onPressed: () => _optionEvent('previousEvent'),
@@ -2765,16 +2937,6 @@ class _PlannerBoardState extends State<PlannerBoard> {
             visualDensity: VisualDensity.compact,
             tooltip: '下一时段',
           ),
-          if (widget.options['displayHoursEvent'] is Map)
-            IconButton(
-              key: const ValueKey('planner-display-hours'),
-              onPressed: widget.enabled
-                  ? () => _optionEvent('displayHoursEvent')
-                  : null,
-              icon: const Icon(Icons.schedule_outlined),
-              visualDensity: VisualDensity.compact,
-              tooltip: '显示时段：${widget.options['displayHoursLabel'] ?? ''}',
-            ),
         ],
       ),
     );
@@ -2849,27 +3011,55 @@ class _PlannerBoardState extends State<PlannerBoard> {
                 child: LayoutBuilder(
                   builder: (context, headerConstraints) {
                     final candidateLabel =
-                        '${widget.options['candidateLabel'] ?? '待安排'}  $_candidateCount';
+                        '${widget.options['candidateLabel'] ?? '待安排'}';
                     final candidateToggle = _dashboard
                         ? Semantics(
                             expanded: _candidatesExpanded,
                             child: TextButton.icon(
                               key: const ValueKey('planner-toggle-candidates'),
-                              onPressed: () => setState(
-                                () =>
-                                    _candidatesExpanded = !_candidatesExpanded,
-                              ),
+                              onPressed: _toggleCandidates,
                               icon: AnimatedRotation(
                                 turns: _candidatesExpanded ? 0 : -.25,
                                 duration: const Duration(milliseconds: 200),
                                 child: const Icon(Icons.expand_more, size: 18),
                               ),
-                              label: Text(
-                                candidateLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              label: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      candidateLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    key: const ValueKey(
+                                      'planner-candidate-count',
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 9,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: scheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      '$_candidateCount',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium,
+                                    ),
+                                  ),
+                                ],
                               ),
                               style: TextButton.styleFrom(
                                 foregroundColor: scheme.onSurface,
@@ -2880,7 +3070,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                             ),
                           )
                         : Text(
-                            candidateLabel,
+                            '$candidateLabel  $_candidateCount',
                             style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(fontWeight: FontWeight.w600),
                           );
@@ -2908,7 +3098,13 @@ class _PlannerBoardState extends State<PlannerBoard> {
                                   foregroundColor: widget.quickAdjust
                                       ? scheme.onPrimaryContainer
                                       : scheme.onSurfaceVariant,
-                                  minimumSize: const Size(0, 36),
+                                  side: widget.quickAdjust
+                                      ? BorderSide.none
+                                      : BorderSide(
+                                          color: scheme.outlineVariant,
+                                        ),
+                                  shape: const StadiumBorder(),
+                                  minimumSize: const Size(0, 32),
                                   visualDensity: VisualDensity.compact,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
@@ -2919,26 +3115,9 @@ class _PlannerBoardState extends State<PlannerBoard> {
                             ),
                           )
                         : null;
-                    final filter = _dashboard
-                        ? TextButton(
-                            onPressed: () => _optionEvent('filterEvent'),
-                            style: TextButton.styleFrom(
-                              backgroundColor:
-                                  widget.options['onlyDeadline'] == true
-                                  ? scheme.primaryContainer
-                                  : scheme.surfaceContainerLow,
-                              minimumSize: const Size(0, 36),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            child: const Text('仅有截止'),
-                          )
-                        : null;
                     final stacked =
                         quickToggle != null &&
-                        headerConstraints.maxWidth < scaler.scale(330);
+                        headerConstraints.maxWidth < scaler.scale(260);
                     if (stacked) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2950,7 +3129,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                           Wrap(
                             alignment: WrapAlignment.end,
                             spacing: 4,
-                            children: [quickToggle, ?filter],
+                            children: [quickToggle],
                           ),
                         ],
                       );
@@ -2967,10 +3146,21 @@ class _PlannerBoardState extends State<PlannerBoard> {
                           quickToggle,
                           const SizedBox(width: 4),
                         ],
-                        ?filter,
                       ],
                     );
                   },
+                ),
+              ),
+            if (_dashboard &&
+                _focusDays == null &&
+                widget.options['onlyDeadline'] == true)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Text(
+                  '筛选：仅有截止',
+                  key: const ValueKey('planner-active-filter'),
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
             if (_focusDays == null)
@@ -2982,14 +3172,14 @@ class _PlannerBoardState extends State<PlannerBoard> {
                 child: _dashboard && !_candidatesExpanded
                     ? const SizedBox(width: double.infinity)
                     : SizedBox(
-                        height: cardHeight * 2 + 18,
+                        height: cardHeight * 2 + 12,
                         child: _candidates.isEmpty
                             ? const Center(child: Text('暂无待安排任务'))
                             : GridView.builder(
                                 key: const ValueKey('planner-candidates'),
                                 controller: _candidatesScroll,
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
+                                  horizontal: 12,
                                   vertical: 3,
                                 ),
                                 scrollDirection: Axis.horizontal,
@@ -2998,8 +3188,8 @@ class _PlannerBoardState extends State<PlannerBoard> {
                                       crossAxisCount: 2,
                                       mainAxisExtent: _dashboard
                                           ? math.max(
-                                              104,
-                                              (constraints.maxWidth - 40) / 3,
+                                              math.max(136, scaler.scale(90)),
+                                              (constraints.maxWidth - 32) / 2,
                                             )
                                           : math.max(112, scaler.scale(112)) +
                                                 (widget.selectEvent != null ||
@@ -3011,23 +3201,23 @@ class _PlannerBoardState extends State<PlannerBoard> {
                                                     ? 48
                                                     : 0),
                                       crossAxisSpacing: 6,
-                                      mainAxisSpacing: 6,
+                                      mainAxisSpacing: 8,
                                     ),
-                                itemCount: _candidates.length,
+                                itemCount: _dashboard
+                                    ? ((_candidates.length + 3) ~/ 4) * 4
+                                    : _candidates.length,
                                 itemBuilder: (context, index) {
-                                  final chunkStart = (index ~/ 6) * 6;
-                                  final count = math.min(
-                                    6,
-                                    _candidates.length - chunkStart,
-                                  );
-                                  final offset = index % 6;
+                                  // The horizontal grid fills columns first;
+                                  // present each two-column page in reading order.
                                   final displayIndex = _dashboard
-                                      ? chunkStart +
-                                            (offset.isEven
-                                                ? offset ~/ 2
-                                                : (count + 1) ~/ 2 +
-                                                      offset ~/ 2)
+                                      ? (index ~/ 4) * 4 +
+                                            ((index % 4).isEven
+                                                ? index % 4 ~/ 2
+                                                : 2 + index % 4 ~/ 2)
                                       : index;
+                                  if (displayIndex >= _candidates.length) {
+                                    return const SizedBox.shrink();
+                                  }
                                   final item = _candidates[displayIndex];
                                   return Row(
                                     children: [
@@ -3076,7 +3266,8 @@ class _PlannerBoardState extends State<PlannerBoard> {
                               ),
                       ),
               ),
-            if (_dashboard && _focusDays == null) _dateToolbar(),
+            if (_dashboard && _focusDays == null)
+              _dateToolbar(math.max(0, constraints.maxWidth - 48)),
             if (_focusDays != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -3740,7 +3931,11 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
       fontWeight: FontWeight.w600,
       fontSize: item['_titleLines'] == 2 ? 11 : null,
       height: item['_titleLines'] == 2 ? 1.15 : null,
-      color: theme.colorScheme.onSurface,
+      color: ContentColors.foreground(
+        accent,
+        ContentColors.surface(accent, theme.colorScheme),
+        theme.colorScheme.onSurface,
+      ),
     );
     final detailStyle = theme.textTheme.labelSmall!.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
@@ -4078,14 +4273,14 @@ class _DenseOccupancy extends CustomPainter {
       old.visibleBottom != visibleBottom;
 }
 
-/// Texture belongs to the exact source occupancy rather than its hit target.
+/// Source texture is shared by the card and compact occupancy indicators.
 class _SourceHatching extends CustomPainter {
   const _SourceHatching(this.color);
   final Color color;
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color.withValues(alpha: .055)
+      ..color = color.withValues(alpha: .14)
       ..strokeWidth = .6;
     for (double x = -size.height; x < size.width; x += 7) {
       canvas.drawLine(

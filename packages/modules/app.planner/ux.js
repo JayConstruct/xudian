@@ -62,6 +62,15 @@ function draft(state, forms, event) {
 
 const displayKey = 'board.displayHours';
 const displayDefaults = {mode: 'auto', start: '08:00', end: '22:00'};
+const zoomKey = 'board.zoom';
+const zoomLevels = [
+  {pixelsPerMinute: .75, label: '紧凑'},
+  {pixelsPerMinute: 1.1, label: '标准'},
+  {pixelsPerMinute: 1.5, label: '舒展'},
+  {pixelsPerMinute: 2, label: '宽松'},
+  {pixelsPerMinute: 3, label: '最大'},
+];
+const zoomIndex = value => Number.isInteger(value) && value >= 0 && value < zoomLevels.length ? value : 1;
 function displayMinute(value, allowMidnight = false) {
   if (allowMidnight && value === '24:00') return 1440;
   if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw Error('时间请填写 HH:mm，结束时间可填 24:00');
@@ -109,6 +118,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   if (context.pageId === 'app.planner.quickAdd') return quickAdd(state, event, formValues, a);
   if (context.pageId === 'app.planner.taskDetail') return detail(state, event, context, formValues, a);
   state.displayHours = displayPreference(await ui.preferences.get(displayKey));
+  state.zoom = zoomIndex(await ui.preferences.get(zoomKey));
   state.startDate ||= today;
   state.days ||= 5;
   state.selected ||= [];
@@ -146,6 +156,10 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     if (event?.type === 'chooseAuto') { state.chooseAuto = true; delete state.autoPreview; }
     if (event?.type === 'occurrence') await panel('editor', {candidate: event.candidate});
     if (event?.type === 'onlyDeadline') { state.onlyDeadline = event.value ?? !state.onlyDeadline; state.candidateOffset = 0; }
+    if (event?.type === 'zoom') {
+      if (event.delta !== -1 && event.delta !== 1) throw Error('请选择放大或缩小时间轴');
+      state.zoom = await ui.preferences.set(zoomKey, Math.max(0, Math.min(zoomLevels.length - 1, state.zoom + event.delta)));
+    }
     if (event?.type === 'select') {
       const selected = event.value ? [...new Set([...state.selected, event.id])] : state.selected.filter(id => id !== event.id);
       if (selected.length > 200) throw Error('每次最多选择200项，请先安排或清空选择');
@@ -166,6 +180,10 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
         day(v.startDate);
         state.startDate = v.startDate; state.days = Number(v.days); state.candidateOffset = 0;
       }
+    }
+    if (event?.type === 'periodShortcut') {
+      if (!Number.isInteger(event.days) || event.days < 1 || event.days > 28) throw Error('请选择1至28天');
+      state.days = event.days; state.candidateOffset = 0;
     }
     if (event?.type === 'browse') { state.startDate = add(state.startDate, event.offset * state.days); state.candidateOffset = 0; }
     if (event?.type === 'history') state.history = !state.history;
@@ -211,7 +229,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   // validates every selected ID, including items outside this visible page.
   if (event?.type === 'move' && !state.moveIntent) state.selected = state.selected.filter(id => id !== event.candidateId);
   const candidates = pending.filter(c => !state.onlyDeadline || c.task?.dueDate).map(c => ({
-    id: c.taskId || c.id, title: c.title, durationMinutes: c.estimatedMinutes || a.defaultMinutes,
+    id: c.taskId || c.id, colorKey: c.taskId || c.id, title: c.title, durationMinutes: c.estimatedMinutes || a.defaultMinutes,
     preferredSummary: overdue(c.task) ? '已逾期' : summary(c.task) || duration(c.estimatedMinutes || a.defaultMinutes),
     deadlineSummary: summary(c.task), deadlineText: c.task?.dueDate ? '截止 ' + labelDeadline(c.task) : '', overdue: overdue(c.task),
     selected: state.selected.includes(c.id),
@@ -221,7 +239,10 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     ...(c.taskId ? {moveEvent: {type: 'move', taskId: c.taskId, candidateId: c.id, expectedTasks: expectedTasks[c.taskId] ? {[c.taskId]: expectedTasks[c.taskId]} : {}}} : {}),
   }));
   const blocks = [...data.scheduled, ...data.busy].map(t => ({
-    id: t.taskId || t.id, title: t.title, start: stamp(t.startDate, t.start), end: stamp(t.endDate, t.end),
+    id: t.taskId || t.id, colorKey: t.courseId || t.taskId || t.id,
+    ...(t.courseId ? {courseId: t.courseId} : {}),
+    ...(typeof t.color === 'string' ? {color: t.color} : {}),
+    title: t.title, start: stamp(t.startDate, t.start), end: stamp(t.endDate, t.end),
     durationMinutes: (Date.parse(t.plannedEndAt || t.endAt || stamp(t.endDate, t.end) + 'Z') - Date.parse(t.plannedStartAt || t.startAt || stamp(t.startDate, t.start) + 'Z')) / 60000,
     deadlineSummary: summary(t), deadlineText: t.dueDate ? '截止 ' + labelDeadline(t) : '', overdue: overdue(t),
     fixed: !!t.locked, readOnly: !!t.readOnly, sourceLabel: t.sourceLabel,
@@ -234,6 +255,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   if (event?.type === 'source') await ui.notify({message: `${event.title} · ${event.source}，请到来源修改`});
   const notices = [...data.warnings, ...data.conflicts];
   const selectedText = state.selected.length ? `已选 ${state.selected.length} 项${state.selected.some(id => !pending.some(c => c.id === id)) ? '（含其他页或筛选外任务）' : ''}` : '';
+  const visibleHours = displayHours(state.displayHours, blocks, state.startDate, state.days);
   let content;
   if (state.chooseAuto) {
     content = keyedList('planner:chooseAuto', [
@@ -255,8 +277,8 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     previewIdentity: JSON.stringify([a.timezone, state.startDate, state.days, state.candidateOffset, state.onlyDeadline, expectedTasks, data.busy]),
     days: Array.from({length: state.days}, (_, i) => { const date = add(state.startDate, i); return {date, label: date.slice(5).replace('-', '/')}; }),
     options: {
-      dashboard: true, minColumnWidth: 112, pixelsPerMinute: 1.1, candidateLabel: '待安排', candidateCount: data.candidateTotal,
-      ...displayHours(state.displayHours, blocks, state.startDate, state.days), displayHoursEvent: {type: 'displayHours'},
+      dashboard: true, minColumnWidth: 112, pixelsPerMinute: zoomLevels[state.zoom].pixelsPerMinute, candidateLabel: '待安排', candidateCount: data.candidateTotal,
+      ...visibleHours, displayHoursEvent: {type: 'displayHours'},
       rangeLabel: rangeLabel(state.startDate, add(state.startDate, state.days - 1)), periodLabel: `${state.days}天`, today,
       onlyDeadline: !!state.onlyDeadline, filterEvent: {type: 'onlyDeadline'},
       rangeEvent: {type: 'period'}, periodEvent: {type: 'period'}, todayEvent: {type: 'today'},
@@ -272,19 +294,30 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       } : {}),
     },
   };
-  return plannerPage(state, content);
+  return plannerPage(state, content, visibleHours.displayHoursLabel);
 }
 
-function plannerPage(state, content) {
+function plannerPage(state, content, displayHoursLabel = '') {
   const alternate = state.history || state.autoPreview || state.chooseAuto;
   return {state, header: {compact: true, title: state.history ? '操作历史' : state.autoPreview ? '安排预览' : state.chooseAuto ? '自动安排' : '任务规划',
     ...(alternate ? {backEvent: {type: 'board'}} : {}), actions: alternate ? [] : [
-    {label: '操作历史', icon: 'history', presentation: 'inline', event: {type: 'history'}},
-    {label: '新建', icon: 'add', variant: 'filled', presentation: 'inline', event: {type: 'add'}},
-    {label: '自动安排', presentation: 'menu', event: {type: 'chooseAuto'}},
-    {label: '表格显示时段', presentation: 'menu', event: {type: 'displayHours'}},
-    {label: '规划规则', presentation: 'menu', event: {type: 'tools', screen: 'rules'}},
-    {label: '规划设置', presentation: 'menu', event: {type: 'tools', screen: 'settings'}},
+    {label: '新建', icon: 'add', variant: 'filled', presentation: 'inline', iconOnly: true, overflowOnly: true, event: {type: 'add'}},
+    {label: '自动安排', icon: 'sparkles', presentation: 'menu', event: {type: 'chooseAuto'}},
+    {label: '操作历史', icon: 'history', presentation: 'menu', event: {type: 'history'}},
+    {label: '视图与显示', icon: 'calendar', presentation: 'menu', separatorBefore: true, children: [
+      {kind: 'choiceGrid', label: '显示天数', children: [1, 3, 5, 7].map(days => ({label: `${days}天`, selected: state.days === days, event: {type: 'periodShortcut', days}}))},
+      {label: '自定义范围…', icon: 'dateRange', subtitle: `当前 ${state.days}天`, event: {type: 'period'}},
+      {label: '每日显示时段', icon: 'schedule', subtitle: displayHoursLabel, separatorBefore: true, event: {type: 'displayHours'}},
+      {kind: 'stepper', label: '时间轴缩放', valueLabel: zoomLevels[state.zoom].label,
+        decreaseEvent: {type: 'zoom', delta: -1}, increaseEvent: {type: 'zoom', delta: 1},
+        decreaseEnabled: state.zoom > 0, increaseEnabled: state.zoom < zoomLevels.length - 1},
+    ]},
+    {label: '待安排筛选', icon: 'tune', presentation: 'menu', valueLabel: state.onlyDeadline ? '仅有截止' : '全部', children: [
+      {label: '全部任务', selected: !state.onlyDeadline, event: {type: 'onlyDeadline', value: false}},
+      {label: '仅有截止', selected: !!state.onlyDeadline, event: {type: 'onlyDeadline', value: true}},
+    ]},
+    {label: '规划规则', icon: 'list', presentation: 'menu', separatorBefore: true, event: {type: 'tools', screen: 'rules'}},
+    {label: '规划设置', icon: 'settings', presentation: 'menu', event: {type: 'tools', screen: 'settings'}},
   ]}, tree: alternate ? content : {type: 'column', key: 'planner', underlapChrome: true, fillHeight: true, spacing: 0, children: [content]}};
 
 }

@@ -11,6 +11,7 @@ import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/performance/ui_load_trace.dart';
 import 'package:task_app/core/ui/workspace_header.dart';
+import 'package:task_app/app/workspace_popup_menu.dart';
 import 'package:task_app/data/app_database.dart';
 
 import 'planner_task_schedule_test.dart' show table;
@@ -158,9 +159,9 @@ void main() {
       var mode = 'manual';
       var bounds = <String, Object?>{'start': '07:30', 'end': '24:00'};
       host.interaction = (_, method, args) async {
-      if (method != 'ui.dialog') {
-        fail('Display settings must not request a business review');
-      }
+        if (method != 'ui.dialog') {
+          fail('Display settings must not request a business review');
+        }
         return args['title'] == '表格显示时段' ? {'mode': mode} : bounds;
       };
       var result = await page(event: {'type': 'displayHours'});
@@ -376,7 +377,10 @@ void main() {
     }
   }
 
-  Future<WorkspaceHeaderController> showPlanner(WidgetTester tester) async {
+  Future<WorkspaceHeaderController> showPlanner(
+    WidgetTester tester, {
+    bool withMenu = false,
+  }) async {
     final headers = WorkspaceHeaderController();
     addTearDown(headers.dispose);
     headers.activate(
@@ -389,6 +393,24 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
+          appBar: withMenu
+              ? AppBar(
+                  actions: [
+                    AnimatedBuilder(
+                      animation: headers,
+                      builder: (context, _) => WorkspacePopupMenu(
+                        headerController: headers,
+                        headerOwner: headers.content?.owner,
+                        headerLease: headers.lease,
+                        items: const [
+                          PopupMenuItem(value: -1, child: Text('设置')),
+                        ],
+                        onSelected: (_) {},
+                      ),
+                    ),
+                  ],
+                )
+              : null,
           body: WorkspaceHeaderScope(
             controller: headers,
             lease: headers.lease,
@@ -405,6 +427,56 @@ void main() {
     await settlePlanner(tester);
     return headers;
   }
+
+  testWidgets(
+    'real planner updates open submenu and preserves rapid zoom steps',
+    (tester) async {
+      final headers = await showPlanner(tester, withMenu: true);
+      await tester.tap(find.byTooltip('页面菜单'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('视图与显示'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('3天'));
+      await settlePlanner(tester);
+      final board = tester.widget<PlannerBoard>(find.byType(PlannerBoard));
+      expect(board.days, hasLength(3));
+      final view = (headers.content!.spec['actions'] as List)
+          .map(object)
+          .singleWhere((action) => action['label'] == '视图与显示');
+      final grid = (view['children'] as List).map(object).first;
+      expect(
+        (grid['children'] as List)
+            .map(object)
+            .singleWhere((choice) => choice['label'] == '3天')['selected'],
+        isTrue,
+      );
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.byTooltip('放大时间轴'));
+      }
+      // Each preference write also invalidates the real page. Wait for the
+      // serialized actions and their refreshes rather than a fixed one-frame
+      // timing assumption on a busy test worker.
+      for (var attempt = 0; attempt < 8; attempt++) {
+        await settlePlanner(tester);
+        if (tester
+                .widget<PlannerBoard>(find.byType(PlannerBoard))
+                .options['pixelsPerMinute'] ==
+            3) {
+          break;
+        }
+      }
+      expect(
+        tester
+            .widget<PlannerBoard>(find.byType(PlannerBoard))
+            .options['pixelsPerMinute'],
+        3,
+      );
+      expect(find.text('最大'), findsOneWidget);
+      expect(find.text('显示天数'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('history renders a real move and clicking undo restores it', (
     tester,
@@ -597,15 +669,150 @@ void main() {
         actions
             .where((a) => a['presentation'] == 'inline')
             .map((a) => a['icon']),
-        ['history', 'add'],
+        ['add'],
       );
+      expect(actions.first['iconOnly'], true);
+      expect(actions.first['overflowOnly'], true);
       expect(
         actions
             .where((a) => a['presentation'] == 'menu')
             .map((a) => a['label']),
-        ['自动安排', '表格显示时段', '规划规则', '规划设置'],
+        ['自动安排', '操作历史', '视图与显示', '待安排筛选', '规划规则', '规划设置'],
+      );
+      final view = actions.singleWhere((a) => a['label'] == '视图与显示');
+      final choices = nodes(view).singleWhere((n) => n['kind'] == 'choiceGrid');
+      expect((choices['children'] as List).map(object).map((c) => c['label']), [
+        '1天',
+        '3天',
+        '5天',
+        '7天',
+      ]);
+      expect(
+        (choices['children'] as List)
+            .map(object)
+            .singleWhere((c) => c['selected'] == true)['label'],
+        '5天',
+      );
+      expect(
+        nodes(view).singleWhere((n) => n['label'] == '每日显示时段')['subtitle'],
+        options['displayHoursLabel'],
       );
       expect(jsonEncode(rendered), isNot(contains('规划设置与持续规则')));
+    },
+  );
+
+  test(
+    'day shortcuts validate their bounds and keep the visible start date',
+    () async {
+      host.interaction = (_, method, args) async {
+        fail('A day shortcut must not open a dialog or request a review');
+      };
+      var rendered = await page(
+        state: {
+          'startDate': '2026-10-18',
+          'selected': ['preserved-selection'],
+        },
+      );
+      for (final days in [1, 3, 5, 7, 28]) {
+        rendered = await page(
+          state: object(rendered['state']),
+          event: {'type': 'periodShortcut', 'days': days},
+        );
+        final board = nodes(rendered['tree'])
+            .singleWhere((n) => n['type'] == 'plannerBoard');
+        expect(board['days'], hasLength(days));
+        expect(object(rendered['state'])['startDate'], '2026-10-18');
+        expect(object(rendered['state'])['selected'], ['preserved-selection']);
+      }
+      for (final days in [0, 29, 1.5, '5']) {
+        rendered = await page(
+          state: object(rendered['state']),
+          event: {'type': 'periodShortcut', 'days': days},
+        );
+        expect(object(rendered['state'])['error'], contains('1至28天'));
+        expect(object(rendered['state'])['days'], 28);
+      }
+    },
+  );
+
+  test('zoom steps persist and stop at both bounds', () async {
+    host.interaction = (_, method, args) async {
+      fail('Zoom must not open a dialog or request a business review');
+    };
+    Map<String, Object?> zoomControl(Map<String, Object?> rendered) =>
+        nodes(rendered['header']).singleWhere((n) => n['kind'] == 'stepper');
+    expect(boardOptions(await page())['pixelsPerMinute'], 1.1);
+    var rendered = await page(event: {'type': 'zoom', 'delta': -1});
+    expect(boardOptions(rendered)['pixelsPerMinute'], .75);
+    expect(zoomControl(rendered)['decreaseEnabled'], false);
+    rendered = await page(event: {'type': 'zoom', 'delta': -1});
+    expect(boardOptions(rendered)['pixelsPerMinute'], .75);
+    for (final scale in [1.1, 1.5, 2, 3]) {
+      rendered = await page(event: {'type': 'zoom', 'delta': 1});
+      expect(boardOptions(rendered)['pixelsPerMinute'], scale);
+    }
+    expect(zoomControl(rendered)['increaseEnabled'], false);
+    rendered = await page(event: {'type': 'zoom', 'delta': 1});
+    expect(boardOptions(rendered)['pixelsPerMinute'], 3);
+    expect(boardOptions(await page())['pixelsPerMinute'], 3);
+    rendered = await page(event: {'type': 'zoom', 'delta': 99});
+    expect(object(rendered['state'])['error'], contains('放大或缩小'));
+    expect(boardOptions(rendered)['pixelsPerMinute'], 3);
+  });
+
+  test(
+    'view and filter menu actions preserve task data and scheduled blocks',
+    () async {
+      final original = object(
+        await run('task.create', {
+          'title': '安排与截止保持',
+          'dueDate': '2026-10-17',
+          'dueTimezone': 'Asia/Shanghai',
+          'plannedStartAt': '2026-10-13T02:00:00Z',
+          'plannedEndAt': '2026-10-13T03:00:00Z',
+          'plannedTimezone': 'Asia/Shanghai',
+        }, module: 'app.tasks'),
+      );
+      await run('task.create', {'title': '无截止候选'});
+      await run('task.create', {'title': '有截止候选', 'dueDate': '2026-10-17'});
+      host.interaction = (_, method, args) async {
+        if (method == 'ui.dialog') return {'mode': 'full'};
+        fail('View and filter actions must not request a business review');
+      };
+      var rendered = await page();
+      for (final event in [
+        {'type': 'periodShortcut', 'days': 3},
+        {'type': 'zoom', 'delta': 1},
+        {'type': 'displayHours'},
+        {'type': 'onlyDeadline', 'value': true},
+      ]) {
+        rendered = await page(state: object(rendered['state']), event: event);
+        expect(object(rendered['state'])['error'], isNull);
+      }
+      final board = nodes(rendered['tree'])
+          .singleWhere((n) => n['type'] == 'plannerBoard');
+      expect(
+        (board['blocks'] as List).map(object).map((b) => b['title']),
+        contains('安排与截止保持'),
+      );
+      expect((board['candidates'] as List).map(object).map((c) => c['title']), [
+        '有截止候选',
+      ]);
+      final filter = nodes(rendered['header'])
+          .singleWhere((n) => n['label'] == '待安排筛选');
+      expect(filter['valueLabel'], '仅有截止');
+      expect(
+        nodes(filter).singleWhere((n) => n['label'] == '仅有截止')['selected'],
+        true,
+      );
+      final current = object(
+        await host.query(
+          actor(),
+          const ServiceRef('app.tasks', 'task.get', 1),
+          {'id': original['id']},
+        ),
+      );
+      expect(current, original);
     },
   );
 

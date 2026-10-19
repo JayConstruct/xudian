@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/design_system.dart';
 import '../../features/settings/app_preferences.dart';
+import '../../features/settings/configuration_export_page.dart';
 import '../../features/settings/appearance_settings_page.dart';
 import '../../features/settings/settings_tools_page.dart';
 import '../../features/settings/settings_widgets.dart';
@@ -106,6 +107,13 @@ class HostSettingsPage extends ConsumerWidget {
                   icon: Icons.extension_outlined,
                   protected: true,
                   onTap: () => open(ModuleSettingsPage(registry: registry)),
+                ),
+                SettingsEntry(
+                  title: '导出所有配置',
+                  subtitle: '保存应用设置、模块偏好与连接配置',
+                  icon: Icons.file_download_outlined,
+                  protected: true,
+                  onTap: () => open(const ConfigurationExportPage()),
                 ),
                 SettingsEntry(
                   title: '辅助工具',

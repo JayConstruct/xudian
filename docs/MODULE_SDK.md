@@ -102,6 +102,8 @@ API 1.6 增加 `ui.component(ref, options)` 纯构造函数，返回 `{type:'com
 
 handler 接收 `{state,context,event,formValues}`，返回 `{state,tree,header?,queryResult?,clearForms?,replaceForms?}`。组件包括 column、row、card、text、richText、source、input、sourceEditor、button、checkbox、switch、select、slider、progress、spinner、list、tabs、divider、timeGrid。column 根节点可带 footer 固定输入栏。组件嵌套最多 32 层。
 
+API `^1.31.0` 增加通用紧凑对话呈现：根节点 `compact:true` 采用16px水平、8px顶端内边距，页内卡片内边距8px，列表使用14px正文、12px辅助文字和紧凑行距；`header` 子节点固定在滚动区上方。`pageHeader` 使用 `title/subtitle/actions:[{label,icon,event}]`，采用主题标题和辅助字号；`chatMessage` 使用 `text/role/label`，`role:'user'` 为右侧淡色消息，其余为左侧回复，正文可选择复制。`messageComposer` 使用 `key/text/event/interrupt`，复用页面表单控制器和草稿修订保护；请求中按钮执行声明的中断处理器，输入保持可编辑。作为根 `footer` 时自行提供一层浮动表面。根 `followEnd` 是消息变化令牌：初次或距底部不足80px时跟随末尾，用户向上阅读时保留位置。上述布局均沿用宿主主题、系统字号缩放和公共原生 UI 契约，不绑定业务模块身份。
+
 值可以使用 `{bind:["state","selected",0,"name"]}` 的类型化路径，根支持 state/context/queryResult/formValues/event。异步迟到结果不能覆盖新上下文；清空和替换表单只作用于提交后没有被用户继续编辑的值。页面切换、面板最小化保留短期草稿。
 
 `timeGrid` 输入 columns、rows、blocks。每块 column 引用列的 id，行范围为 start/end，包含 start 不包含 end，可带 title、subtitle、color、event。同一时段重叠块分栏显示。日期、实例合并和课程内容由模块计算。
@@ -137,6 +139,31 @@ header: {
 ```
 
 宿主只接收活动工作区对应页面和实际模块实例的贡献；旧页面、停用实例、更新前实例的迟到响应不能改写顶栏。声明委托顶栏的页面从第一帧起由模块提供标题与页面操作；首次返回前预留标题区域，不用导航入口名作临时标题。普通页面继续显示宿主标题，脚本错误通过内容区错误提示和重试处理。工作区右上角统一保留一个「页面菜单」按钮，依次包含当前页面操作、全部顶部模块入口和设置；普通页面也使用同一个菜单。界面风格与恢复从“设置 → 外观与交互 → 界面风格”进入。顶部入口按布局顺序完整显示，菜单可以滚动，不再按屏幕宽度将顶部入口移至底部「更多」。菜单由宿主独立保留，界面包的顶栏模板不能移除它；`ui.chrome.header@1` 的 `actions` 槽位继续提供，当前为空槽位。
+
+### API 1.30 的图标按钮与分级菜单
+
+使用下列新增顶栏能力的模块声明 `hostApi: '^1.30.0'`。普通动作继续使用 `{label,event}`；`presentation:'inline'` 请求顶栏快捷入口，`variant:'filled'|'tonal'|'text'` 控制外观。`iconOnly:true` 显示纯图标按钮，仍须提供 `label` 作为读屏名称与提示。`overflowOnly:true` 仅在该快捷入口实际显示时从菜单隐藏，窄屏放不下时自动恢复菜单入口，不会丢失动作。
+
+```javascript
+actions: [
+  {label:'新建', icon:'add', presentation:'inline', variant:'filled',
+   iconOnly:true, overflowOnly:true, event:{type:'add'}},
+  {label:'视图与显示', presentation:'menu', separatorBefore:true, children:[
+    {kind:'choiceGrid', label:'显示天数', children:[
+      {label:'3天', event:{type:'periodShortcut',days:3}},
+      {label:'5天', selected:true, event:{type:'periodShortcut',days:5}},
+    ]},
+    {label:'每日显示时段', subtitle:'自动 07:00–22:00', event:{type:'displayHours'}},
+    {kind:'stepper', label:'时间轴缩放', valueLabel:'标准',
+     decreaseEvent:{type:'zoom',delta:-1}, increaseEvent:{type:'zoom',delta:1},
+     decreaseEnabled:true, increaseEnabled:true},
+  ]},
+]
+```
+
+有 `children` 的普通菜单项进入子菜单，不要求 `event`；`valueLabel` 显示当前选择，`subtitle` 显示说明，`separatorBefore:true` 增加组间分隔。叶子项的 `selected:true` 显示当前选项。`choiceGrid` 的子项是带事件的选项，`stepper` 必须同时提供两个事件，可分别禁用。网格选择与步进保持菜单打开，从当前活动页面的最新贡献更新选中状态和标签；其他叶子动作关闭菜单后分发事件。子菜单在同一锚定浮层中替换当前内容，按钮或系统返回键逐级返回。
+
+动作总数最多64项，根列表最多12项，每组最多16个子项，根层计为0、最大深度4；标签及可选文字非空且不超过256字符。事件仍经当前页面租约分发，失活、替换或停用实例不能继续调用旧页面；宿主入口、设置及恢复能力不由模块菜单控制。活动工作区声明 `backEvent` 时，Android系统返回与顶栏返回发送相同事件；子菜单、弹窗和详情路由先处理自身返回，不向下层工作区发送事件。
 
 `listTile` 使用 `title/subtitle/icon/trailing/event`，适合分组设置、内容概览及导航；无 event 时显示信息行。`timeInput` 使用 `key/text/value/event`，打开原生 24 小时时间选择器并返回 `{...event,value:"HH:mm"}`。普通 input 的 `onChangeEvent` 在输入变化后防抖 150ms；提交命令仍需读取最新 formValues，避免防抖期间的旧状态。输入控制器与定时器在页面上下文变化时清理；原生时间选择器还会拒绝更新或停用实例的迟到结果。
 
@@ -515,3 +542,12 @@ app.planner 1.2.0 用 `planner.operation.inspect` 提供轻量只读结果；使
 看板原生组件现在缓存按日局部碰撞组的几何索引，按横纵可见窗口及缓冲区构建任务块；已开始手势的源控件保留到释放，避免滚动时销毁。密集组只聚合本组，选择清单使用按需构建；业务校验仍读取完整占用，不能因任务未渲染而忽略冲突。
 
 撤销在原有快照校验之外，先验证恢复的起止位置是否与新任务、课程或手动占用冲突；失败时整体不写入。仅撤销描述、删除新建任务等不会新增占用的变更不要求排程检查。详见 [第三阶段记录](verification/PLANNER_UX_STAGE3.md)。
+
+
+### 配置导出声明
+
+“设置 → 导出所有配置”导出应用设置、模块清单与版本摘要、启停状态、仓库来源，以及所有模块的 `ui.preferences`。模块可在 `collections` 条目上声明 `"configuration": true`，将该集合当前数据空间内未删除的记录纳入配置 JSON；未声明的业务集合、历史快照和操作日志不导出。宿主按声明读取，不按模块 ID 判断。声明或内容变化仍须提升模块版本，已安装旧版本需先更新。
+
+此标记应仅用于连接参数、显示设置、规则等配置；不要标记任务、课程安排或聊天记录。密钥应继续通过 `secrets` 保存在系统安全存储中。导出默认不读取安全存储；用户开启“包含 API 密钥”后，文件会额外包含宿主保存的连接密钥明文。数据库部分通过同一只读事务获取，安全存储在事务后单独读取，读取失败会终止导出。
+
+文件标识为 `format: "xudian.configuration"`、`formatVersion: 1`，包含 `exportedAt`、`includesSecrets`、`appSettings`、`session`、`modules`、`hostSettings`、`moduleUiPreferences`、`moduleConfiguration` 和 `scope`；仅在显式选择时包含 `secrets`。三个 UI 设置值保留 JSON 结构，其余 `appSettings` 值保留数据库字符串；缺失的 UI 设置与更新渠道填入默认值。当前仅支持导出，尚未实现导入恢复。保存使用系统文件对话框，UTF-8 文件上限为 2 MiB。

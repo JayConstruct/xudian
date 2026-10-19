@@ -4,7 +4,7 @@ import 'native_ui.dart';
 import 'ui_icon.dart';
 import 'ui_icons.dart';
 
-/// Optional shortcuts; every action also remains in the protected host menu.
+/// Optional shortcuts; actions that do not fit remain in the host menu.
 /// Measuring the real labels keeps large text and narrow headers usable.
 List<Map<String, Object?>> fittingHeaderActions(
   BuildContext context,
@@ -24,7 +24,8 @@ List<Map<String, Object?>> fittingHeaderActions(
     );
   for (final action in prioritized) {
     var width = 48.0;
-    if (action['variant'] == 'filled' || action['variant'] == 'tonal') {
+    if (action['iconOnly'] != true &&
+        (action['variant'] == 'filled' || action['variant'] == 'tonal')) {
       final painter = TextPainter(
         text: TextSpan(
           text: '${action['label']}',
@@ -59,6 +60,37 @@ class WorkspaceHeaderAction extends StatelessWidget {
     final label = '${action['label']}';
     final icon = appIconData(action['icon']);
     final variant = action['variant'];
+    if (action['iconOnly'] == true) {
+      final style = IconButton.styleFrom(
+        minimumSize: const Size.square(kMinInteractiveDimension),
+        fixedSize: const Size.square(kMinInteractiveDimension),
+        padding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      );
+      final child = UiIcon(icon ?? Icons.more_horiz, size: 22);
+      return NativeUi(
+        child: variant == 'filled'
+            ? IconButton.filled(
+                tooltip: label,
+                onPressed: onPressed,
+                style: style,
+                icon: child,
+              )
+            : variant == 'tonal'
+            ? IconButton.filledTonal(
+                tooltip: label,
+                onPressed: onPressed,
+                style: style,
+                icon: child,
+              )
+            : IconButton(
+                tooltip: label,
+                onPressed: onPressed,
+                style: style,
+                icon: child,
+              ),
+      );
+    }
     if (variant != 'filled' && variant != 'tonal') {
       return NativeUi(
         child: IconButton(

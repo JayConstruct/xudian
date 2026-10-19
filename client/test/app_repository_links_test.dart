@@ -289,17 +289,38 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 20));
       }
-      await tester.tap(find.text('关于序点'));
+      await tester.scrollUntilVisible(
+        find.text('关于序点'),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(HostSettingsPage),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
+      expect(find.text('关于序点').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('关于序点').hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.byType(AboutSettingsPage), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('打开模块商店'),
         200,
-        scrollable: find.byType(Scrollable).last,
+        scrollable: find
+            .descendant(
+              of: find.byType(AboutSettingsPage),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('打开模块商店'));
       await tester.pumpAndSettle();
-      await tester.runAsync(() => tester.tap(find.text('打开模块商店')));
+      expect(find.text('打开模块商店').hitTestable(), findsOneWidget);
+      await tester.runAsync(
+        () => tester.tap(find.text('打开模块商店').hitTestable()),
+      );
       for (var i = 0; i < 48; i++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),

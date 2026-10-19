@@ -1,13 +1,17 @@
-import {data,services,ui,http,secrets,grants,packages,clock,ids} from '@xudian/sdk';
+import {data,services,ui,http,grants,packages} from '@xudian/sdk';
+import {connectionValue,editConnection,chooseModel,connectionTree,requestJson,providerName} from './connection.js';
 const ref=id=>({moduleId:'app.ai',serviceId:id,majorVersion:1});
 let cancelled=false,requestId=null,currentGrant=null;
 const button=(text,event,extra={})=>({type:'button',text,event,variant:'text',...extra});
 async function persistUndo(undo) { const plan=await services.prepare(undo.ref,undo.input);if(await ui.review(plan.planId)) return services.commit(plan.planId); }
 async function persist(id,input) { const p=await services.prepare(ref(id),input); if(await ui.review(p.planId)) return services.commit(p.planId); }
 export async function saveConnection({connection}) {
-  if(typeof connection.endpoint!=='string'||typeof connection.model!=='string'||!connection.model.trim()) throw new Error('连接地址和模型不能为空');
-  const value={...connection,id:'default'};
+  const value=connectionValue(connection);
   return {writes:[{collection:'connections',id:'default',value}],events:[],result:{id:'default'}};
+}
+export async function savePreferences({advanced}) {
+  if(typeof advanced!=='boolean') throw new Error('工作模式无效');
+  return {writes:[{collection:'preferences',id:'default',value:{id:'default',advanced}}],events:[],result:{advanced}};
 }
 export async function saveHistory({messages}) {
   if(!Array.isArray(messages)) throw new Error('历史记录无效');
@@ -21,23 +25,16 @@ export async function cancel() {
   return true;
 }
 function check() { if(cancelled) throw new Error('已取消'); }
-function parseBody(body) {
-  let response;
-  try { response=JSON.parse(body); } catch { throw new Error('模型服务返回的内容不是 JSON'); }
-  const message=response.choices?.[0]?.message;
+function parseBody(response) {
+  const message=response?.choices?.[0]?.message;
   if(!message||typeof message!=='object'||!('content' in message||'tool_calls' in message)) throw new Error('模型响应缺少消息');
   return message;
 }
 async function model(connection,messages,tools) {
-  check(); requestId=await ids.new();
-  const base=connection.endpoint.replace(/\/$/,'');
-  const url=base.endsWith('/chat/completions')?base:base+'/chat/completions';
-  const response=await http.request({id:requestId,url,method:'POST',credential:connection.credential,
-    body:{model:connection.model,messages,temperature:0.3,...(tools.length?{tools}: {})}});
-  requestId=null; check();
-  if(response.status<200||response.status>=300) throw new Error(`模型服务请求失败（HTTP ${response.status}）`);
-  return parseBody(response.body);
+  return parseBody(await requestJson(connection,'/chat/completions',
+    {model:connection.model,messages,stream:false,...(connection.provider==='cliproxyapi'?{}:{temperature:0.3}),...(tools.length?{tools}: {})},lifecycle));
 }
+const lifecycle={check,start:id=>{requestId=id;},finish:id=>{if(requestId===id)requestId=null;}};
 function undoInput(spec,scope) {
   if(spec&&typeof spec==='object'&&!Array.isArray(spec)) {
     if(spec.when&&!undoInput(spec.when,scope))return undefined;
@@ -58,22 +55,56 @@ function proposal(text) {
   if(!v.definition||!v.files) throw new Error('高级模式需输出 definition 和 files');
   return v;
 }
-export async function render({state={},event,formValues={}}) {
+export async function render({state={},event,formValues={},context={}}) {
   state={...state}; let sent=false;
   let connection=await data.get('connections','default');
-  let messages=state.messages || (await data.get('history','conversation'))?.messages || [];
+  let messages=(await data.get('history','conversation'))?.messages || state.messages || [];
+  const preferences=await data.get('preferences','default');
+  state.advanced=preferences?.advanced ?? state.advanced ?? false;
+  if(event?.type==='settings') await ui.navigate('app.ai.settings');
   if(event?.type==='configure') {
-    const values=await ui.dialog({title:'AI 连接',fields:[{key:'endpoint',label:'HTTPS 或本机 HTTP 地址',value:connection?.endpoint||''},{key:'model',label:'模型名称',value:connection?.model||''}]});
+    state.connectionSettings=true;
+  }
+  if(event?.type==='connectionBack') state.connectionSettings=false;
+  if(['configureCliProxy','configureOpenAi','configureService','configureCurrent','chooseModel','testConnection'].includes(event?.type)) {
+    state.connectionSettings=true;cancelled=false;delete state.connectionStatus;
+    try {
+      const save=input=>persist('ai.connection.save',input);
+      if(['configureCliProxy','configureOpenAi','configureService','configureCurrent'].includes(event.type)) {
+        let provider=event.type==='configureCliProxy'?'cliproxyapi':event.type==='configureCurrent'?(connection?.provider||'openai'):'openai';
+        if(event.type==='configureService') {
+          const values=await ui.dialog({title:'模型服务',fields:[{key:'provider',label:'服务类型',type:'select',required:true,value:connection?.provider||'openai',options:[{value:'openai',label:'OpenAI 兼容服务'},{value:'cliproxyapi',label:'CLIProxyAPI'}]}]});
+          provider=values?.provider;
+        }
+        if(provider && await editConnection(connection,provider,save)) state.connectionStatus='连接已保存，可获取模型并测试连接';
+      } else {
+        if(!connection?.endpoint) throw new Error('请先接入模型服务');
+        if(event.type==='chooseModel') {
+          if(await chooseModel(connection,lifecycle,save)) state.connectionStatus='模型已保存，可测试连接或返回对话';
+        } else {
+          if(!connection.model) throw new Error('请先获取并选择模型，或手动填写模型 ID');
+          const reply=await model(connection,[{role:'user',content:'请只回复 OK。'}],[]);
+          if(typeof reply.content!=='string'||!reply.content.trim()) throw new Error('服务未返回文字回复，请检查所选模型是否支持聊天');
+          state.connectionStatus=`连接成功：${providerName(connection)} · ${connection.model} 已返回聊天回复`;
+        }
+      }
+    } catch(error) {
+      state.connectionStatus=cancelled?'已取消连接操作':error.message||'无法连接服务，请检查地址、端口转发和服务状态';
+    }
+    connection=await data.get('connections','default');
+  }
+  if(state.connectionSettings) return {state,header:{title:'模型连接',backEvent:{type:'connectionBack'}},tree:connectionTree(connection,state.connectionStatus)};
+  if(event?.type==='advanced') {
+    const values=await ui.dialog({title:'工作模式',fields:[{key:'mode',label:'模式',type:'select',value:state.advanced?'advanced':'chat',required:true,options:[{value:'chat',label:'普通聊天'},{value:'advanced',label:'高级模块开发'}]}]});
     if(values) {
-      const credential=await secrets.configure({endpoint:values.endpoint,label:'AI API Key'});
-      if(credential) { await persist('ai.connection.save',{connection:{...values,credential}}); connection=await data.get('connections','default'); }
+      await persist('ai.preferences.save',{advanced:values.mode==='advanced'});
+      state.advanced=(await data.get('preferences','default'))?.advanced ?? state.advanced;
     }
   }
-  if(event?.type==='advanced') state.advanced=!state.advanced;
   if(event?.type==='undo'&&state.lastUndo) {
     await persistUndo(state.lastUndo); delete state.lastUndo;
   }
-  if(event?.type==='clear') { messages=[]; state.messages=[]; await persist('ai.history.save',{messages}); }
+  if(event?.type==='clear' && await persist('ai.history.save',{messages:[]})) { messages=[]; state.messages=[]; }
   if(event?.type==='installSource') {
     const p=await packages.prepare(proposal(formValues.moduleSource||state.moduleSource||''));
     await packages.review(p.id);
@@ -129,10 +160,27 @@ export async function render({state={},event,formValues={}}) {
     sent=true;
     if(state.advanced) { state.moduleSource=JSON.stringify(proposal(reply),null,2); const p=await packages.prepare(proposal(reply)); await packages.review(p.id); }
   }
-  const children=[{type:'sectionHeader',title:'对话设置',subtitle:connection?.model||'配置模型后开始聊天'},{type:'row',children:[button('模型连接',{type:'configure'}),button(state.advanced?'切换普通聊天':'高级模块开发',{type:'advanced'}),button('清空历史',{type:'clear'}),button('取消当前操作',{type:'cancel'},{interrupt:'cancel'})]}];
-  if(state.lastUndo) children.push(button('撤销上次操作（校验当前状态）',{type:'undo'}));
-  for(const message of messages) children.push({type:'column',children:[{type:'sectionHeader',title:message.role==='user'?'你':'AI'},{type:'richText',text:message.content}]});
-  const footer={type:'column',children:[{type:'input',key:'message',text:state.advanced?'描述要生成或更新的模块':'输入消息',multiline:true,minLines:1,maxLines:5,event:{type:'send'}},button('发送',{type:'send'},{variant:'filled'})]};
-  if(state.advanced) children.push({type:'sectionHeader',title:'模块源码'}, {type:'sourceEditor',key:'moduleSource',text:'模块 definition 与源码 JSON',value:state.moduleSource||'',multiline:true},button('审核并安装源码',{type:'installSource'}));
-  return {state,clearForms:sent?['message']:[],replaceForms:state.advanced?{moduleSource:state.moduleSource||''}:{},tree:{type:'column',children,footer}};
+  if(context.aiSettings) return {state,header:{title:'AI 设置'},tree:{type:'column',compact:true,spacing:8,children:[
+    {type:'text',text:'模型与连接',style:'muted'},
+    {type:'card',children:[{type:'listTile',icon:'link',title:'模型连接',subtitle:connection?.model?`${providerName(connection)} · ${connection.model}`:'配置模型服务与密钥',event:{type:'configure'}}]},
+    {type:'text',text:'对话',style:'muted'},
+    {type:'card',children:[
+      {type:'listTile',icon:'ai',title:'工作模式',subtitle:state.advanced?'高级模块开发':'普通聊天',event:{type:'advanced'}},
+      {type:'divider'},
+      {type:'listTile',icon:'delete',title:'清空对话记录',subtitle:'清除本机历史，保留连接配置',event:{type:'clear'}}
+    ]}
+  ]}};
+  const children=[];
+  if(!messages.length) children.push({type:'card',children:[
+    {type:'text',text:state.advanced?'描述要生成或更新的模块':'有什么需要我帮忙的？',style:'heading'},
+    {type:'text',text:connection?.model?'可以直接聊天，或让我协助查看任务与安排。':'点击右上角设置，连接模型后开始对话。',style:'muted'}
+  ]});
+  if(state.lastUndo) children.push(button('撤销上次操作',{type:'undo'}));
+  for(const [index,message] of messages.entries()) children.push({type:'chatMessage',key:`message:${index}`,role:message.role,label:message.role==='user'?'你':'AI 助手',text:message.content});
+  const footer={type:'messageComposer',key:'message',text:state.advanced?'描述要生成或更新的模块…':'输入消息…',event:{type:'send'},interrupt:'cancel'};
+  if(state.advanced) children.push({type:'disclosure',key:'moduleSourceSection',text:'模块源码',children:[{type:'sourceEditor',key:'moduleSource',text:'模块 definition 与源码 JSON',value:state.moduleSource||'',multiline:true},button('审核并安装源码',{type:'installSource'})]});
+  return {state,clearForms:sent?['message']:[],replaceForms:state.advanced?{moduleSource:state.moduleSource||''}:{},tree:{type:'column',compact:true,spacing:12,followEnd:messages.length,header:{type:'pageHeader',title:'AI 助手',subtitle:connection?.model?`${state.advanced?'高级模式':'普通聊天'} · ${connection.model}`:'尚未配置模型',actions:[{icon:'settings',label:'AI 设置',event:{type:'settings'}}]},children,footer}};
+}
+export async function renderSettings(args) {
+  return render({...args,context:{...args.context,aiSettings:true}});
 }

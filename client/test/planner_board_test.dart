@@ -113,8 +113,119 @@ List<BoardItem> _month() => List.generate(28, (index) {
 });
 
 void main() {
+  testWidgets('date rail tracks the visible portion of the scrollable days', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _mount(tester, options: const {'dashboard': true});
+    final rail = find.byKey(const ValueKey('planner-range-rail'));
+    final toolbar = find.byKey(const ValueKey('planner-date-toolbar'));
+    expect(tester.getSize(toolbar).height, lessThanOrEqualTo(52));
+    expect(
+      tester.getRect(rail).right,
+      lessThan(tester.getRect(find.text('今天')).left),
+    );
+    expect(tester.widget<Semantics>(rail).properties.label, '当前可见第1至3天，共5天');
+    final horizontal = tester
+        .widget<SingleChildScrollView>(
+          find.byKey(const ValueKey('planner-horizontal')),
+        )
+        .controller!;
+    horizontal.jumpTo(112);
+    await tester.pump();
+    expect(tester.widget<Semantics>(rail).properties.label, '当前可见第2至4天，共5天');
+    expect(find.byKey(const ValueKey('planner-range-visible:0')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('planner-range-visible:3')),
+      findsOneWidget,
+    );
+    horizontal.jumpTo(horizontal.position.maxScrollExtent);
+    await tester.pump();
+    expect(tester.widget<Semantics>(rail).properties.label, '当前可见第3至5天，共5天');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('display zoom keeps the visible minute and horizontal position', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final blocks = [
+      _block('缩放任务', '2026-10-15T09:00:00', '2026-10-15T10:00:00'),
+    ];
+    const options = {'dashboard': true, 'startMinute': 360, 'endMinute': 1440};
+    await _mount(
+      tester,
+      blocks: blocks,
+      options: {...options, 'pixelsPerMinute': 1},
+    );
+    final vertical = tester
+        .widget<SingleChildScrollView>(
+          find.byKey(const ValueKey('planner-vertical')),
+        )
+        .controller!;
+    final horizontal = tester
+        .widget<SingleChildScrollView>(
+          find.byKey(const ValueKey('planner-horizontal')),
+        )
+        .controller!;
+    vertical.jumpTo(240);
+    horizontal.jumpTo(112);
+    await tester.pump();
+    await _mount(
+      tester,
+      blocks: blocks,
+      options: {...options, 'pixelsPerMinute': 2},
+    );
+    expect(vertical.offset, 480);
+    expect(horizontal.offset, 112);
+    expect(tester.getSize(find.byType(DragTarget<BoardItem>)).height, 2160);
+    expect(blocks.single['start'], '2026-10-15T09:00:00');
+    await _mount(
+      tester,
+      blocks: blocks,
+      options: {...options, 'pixelsPerMinute': .75},
+    );
+    // The compact toolbar can expose enough of the final day to reach the
+    // bottom; preserve the requested minute up to that real scroll boundary.
+    expect(vertical.offset, 180.0.clamp(0, vertical.position.maxScrollExtent));
+    expect(horizontal.offset, 112);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('candidate tray restores horizontal offset after collapse', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _mount(
+      tester,
+      candidates: List.generate(12, (i) => {'id': '$i', 'title': '候选$i'}),
+      options: const {'dashboard': true},
+    );
+    final tray = find.byKey(const ValueKey('planner-candidates'));
+    final controller = tester.widget<GridView>(tray).controller!;
+    controller.jumpTo(200);
+    await tester.pump();
+    final toggle = find.byKey(const ValueKey('planner-toggle-candidates'));
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tray, findsNothing);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<GridView>(tray).controller!.offset, 200);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
-    'display hours control emits settings and refreshes cropped geometry',
+    'display hours comes from menu settings and refreshes cropped geometry',
     (tester) async {
       final events = <Object?>[];
       final blocks = [
@@ -133,12 +244,9 @@ void main() {
         },
         onEvent: events.add,
       );
-      final button = find.byKey(const ValueKey('planner-display-hours'));
-      expect(find.byTooltip('显示时段：手动 08:00–22:00'), findsOneWidget);
-      await tester.tap(button);
-      expect(events, [
-        {'type': 'displayHours'},
-      ]);
+      expect(find.byKey(const ValueKey('planner-display-hours')), findsNothing);
+      expect(find.byIcon(Icons.schedule_outlined), findsNothing);
+      expect(events, isEmpty);
       expect(tester.getSize(find.byType(DragTarget<BoardItem>)).height, 840);
       await _mount(
         tester,
@@ -378,7 +486,13 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('待保存候选'), findsOneWidget);
-      expect(find.text('待安排  1'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('planner-candidate-count')),
+          matching: find.text('1'),
+        ),
+        findsOneWidget,
+      );
       final target = find.byKey(
         const ValueKey('occupancy:candidate:待保存:2026-10-16'),
       );
@@ -393,7 +507,13 @@ void main() {
         find.descendant(of: tray, matching: find.text('待保存候选')),
         findsOneWidget,
       );
-      expect(find.text('待安排  2'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('planner-candidate-count')),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
       expect(target, findsNothing);
       expect(
         find.byKey(const ValueKey('planner-saving:candidate:待保存')),
@@ -561,13 +681,13 @@ void main() {
       expect(tester.widget<Semantics>(semantics).properties.enabled, isFalse);
       await tester.tap(button);
       expect(toggles, [true, false]);
-      expect(find.text('仅有截止'), findsOneWidget);
+      expect(find.text('仅有截止'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
 
   testWidgets(
-    'native quick adjust and deadline controls stay usable at 320 width and double text',
+    'native quick adjust and active filter stay readable at 320 width and double text',
     (tester) async {
       tester.view.physicalSize = const Size(320, 900);
       tester.view.devicePixelRatio = 1;
@@ -581,6 +701,7 @@ void main() {
         options: const {
           'dashboard': true,
           'filterEvent': {'type': 'filter'},
+          'onlyDeadline': true,
         },
         quickAdjust: true,
         onQuickAdjustChanged: toggles.add,
@@ -589,18 +710,16 @@ void main() {
       expect(tester.takeException(), isNull);
       final quick = find.byKey(const ValueKey('planner-quick-adjust'));
       expect(quick.hitTestable(), findsOneWidget);
-      expect(find.text('仅有截止').hitTestable(), findsOneWidget);
+      expect(find.text('筛选：仅有截止'), findsOneWidget);
+      expect(find.text('仅有截止'), findsNothing);
       expect(
         find.byKey(const ValueKey('planner-toggle-candidates')).hitTestable(),
         findsOneWidget,
       );
       expect(tester.getRect(quick).right, lessThanOrEqualTo(320));
       await tester.tap(quick);
-      await tester.tap(find.text('仅有截止'));
       expect(toggles, [false]);
-      expect(events, [
-        {'type': 'filter'},
-      ]);
+      expect(events, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
@@ -1389,16 +1508,32 @@ void main() {
     },
   );
 
+  testWidgets('two dashboard candidates share the first row', (tester) async {
+    await _mount(
+      tester,
+      candidates: const [
+        {'id': 'first', 'title': '第一候选'},
+        {'id': 'second', 'title': '第二候选'},
+      ],
+      options: const {'dashboard': true},
+    );
+    final first = tester.getRect(find.text('第一候选'));
+    final second = tester.getRect(find.text('第二候选'));
+    expect(first.top, second.top);
+    expect(second.left, greaterThan(first.left));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
-    'dashboard uses two-line candidate summaries and forwards date/filter controls',
+    'dashboard uses two readable candidate columns and compact date controls',
     (tester) async {
       final events = <Object?>[];
       await _mount(
         tester,
         candidates: const [
           {'id': 'a', 'title': '阅读论文', 'deadlineSummary': '10/17截止'},
-          {'id': 'b', 'title': '整理笔记', 'durationMinutes': 150},
           {'id': 'c', 'title': '采购清单', 'durationMinutes': 30},
+          {'id': 'b', 'title': '整理笔记', 'durationMinutes': 150},
         ],
         options: const {
           'dashboard': true,
@@ -1411,14 +1546,30 @@ void main() {
       expect(find.text('10/17截止'), findsOneWidget);
       expect(find.text('耗时2.5h'), findsOneWidget);
       expect(find.text('耗时30min'), findsOneWidget);
+      final paper = tester.getRect(find.text('阅读论文'));
+      final notes = tester.getRect(find.text('整理笔记'));
+      final shopping = tester.getRect(find.text('采购清单'));
+      expect(paper.top, shopping.top);
+      expect(notes.top, greaterThan(paper.top));
+      expect(notes.left, paper.left);
+      expect(shopping.left, greaterThan(paper.left));
+      final tray = tester.widget<GridView>(
+        find.byKey(const ValueKey('planner-candidates')),
+      );
+      final delegate =
+          tray.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(delegate.crossAxisCount, 2);
+      expect(delegate.mainAxisExtent, closeTo((800 - 32) / 2, .1));
+      expect(
+        find.byKey(const ValueKey('planner-candidate-count')),
+        findsOneWidget,
+      );
       final summary = tester.widget<Text>(find.text('10/17截止'));
       final scheme = Theme.of(tester.element(find.text('10/17截止'))).colorScheme;
       expect(summary.style!.color, isNot(scheme.error));
       await tester.tap(find.text('今天'));
-      await tester.tap(find.text('仅有截止'));
       expect(events, [
         {'type': 'today'},
-        {'type': 'filter'},
       ]);
       expect(tester.takeException(), isNull);
     },

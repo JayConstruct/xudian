@@ -20,15 +20,20 @@ Future<void> openScriptLauncher(
     useSafeArea: true,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => Semantics(
-      label: label,
-      child: FractionallySizedBox(
-        heightFactor: .9,
-        child: ScriptPage(
-          host: host,
-          moduleId: moduleId,
-          handler: handler,
-          pageContext: pageContext.toJson(),
+    builder: (panelContext) => Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewInsetsOf(panelContext).bottom,
+      ),
+      child: Semantics(
+        label: label,
+        child: FractionallySizedBox(
+          heightFactor: .9,
+          child: ScriptPage(
+            host: host,
+            moduleId: moduleId,
+            handler: handler,
+            pageContext: pageContext.toJson(),
+          ),
         ),
       ),
     ),

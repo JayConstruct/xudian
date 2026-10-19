@@ -60,6 +60,11 @@ void main() {
 
   Future<void> tap(WidgetTester tester, String text) async {
     if (find.text(text).evaluate().isEmpty) {
+      tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .jumpTo(0);
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.text(text), 200);
     }
     await Scrollable.ensureVisible(

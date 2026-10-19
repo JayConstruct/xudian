@@ -18,6 +18,8 @@ import '../ui/ui_component.dart';
 import '../ui/ui_pack.dart';
 import '../ui/temporal_input.dart';
 import '../ui/script_transition.dart';
+import '../ui/conversation_widgets.dart';
+import '../ui/native_ui.dart';
 import '../ui/script_keyed_list.dart';
 import '../ui/draggable_floating_panel.dart';
 import '../../app/app_ui_feedback.dart';
@@ -89,6 +91,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   String get sessionKey =>
       '${widget.moduleId}:${widget.handler}:${canonicalJson(withoutRuntimePageContext(widget.pageContext))}';
   bool busy = false, dirty = false;
+  Completer<void>? _renderFinished;
   bool showProgress = false;
   bool routeActive = true;
   bool workspaceActive = true;
@@ -399,7 +402,30 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       return;
     }
     headerController = scope!.controller;
-    scope.controller.publish(lease!, this, renderedHeader, _render);
+    scope.controller.publish(lease!, this, renderedHeader, _renderHeaderEvent);
+  }
+
+  // Open-menu controls may be pressed while a preference invalidation is
+  // refreshing the page. Preserve each accepted action instead of feeding it
+  // through the ordinary latest-intent slot used by date navigation.
+  Future<void> _renderHeaderEvent(Object? event) async {
+    final instance = widget.host.instances[widget.moduleId];
+    final identity = canonicalJson(pageContext);
+    final controller = headerController;
+    final lease = controller?.lease;
+    bool valid() =>
+        mounted &&
+        workspaceActive &&
+        identical(instance, widget.host.instances[widget.moduleId]) &&
+        canonicalJson(pageContext) == identity &&
+        identical(controller?.lease, lease) &&
+        lease?.isActive() == true;
+    while (valid() && busy) {
+      final finished = _renderFinished;
+      if (finished == null) return;
+      await finished.future;
+    }
+    if (valid()) await _render(event);
   }
 
   void _delayProgress(int current) {
@@ -534,6 +560,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       return;
     }
     final current = ++epoch;
+    final finished = _renderFinished = Completer<void>();
     final requestedDateIntent = dateIntentRevision;
     final requestContext = pageContext;
     final runtimeScope = PageRuntimeContextScope.read(context);
@@ -729,13 +756,15 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           dirty = true;
         }
       }
-      if (ownsHeader && routeActive) {
+      if (ownsHeader &&
+          (routeActive ||
+              headerScope!.controller.isMenuOpenFor(headerLease, this))) {
         final raw = result['header'];
         headerScope!.controller.publish(
           headerLease!,
           this,
           raw is Map ? object(raw) : null,
-          _render,
+          _renderHeaderEvent,
         );
       }
     } catch (e) {
@@ -763,6 +792,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         refreshTimer?.cancel();
         refreshTimer = Timer(const Duration(minutes: 1), () => _render());
       }
+      finished.complete();
     }
   }
 
@@ -1451,6 +1481,82 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final text = '${bind(spec['text']) ?? ''}';
     final event = bind(spec['event']);
     switch (spec['type']) {
+      case 'pageHeader':
+        return NativeUi(
+          ref: 'ui.chrome.pageHeader@1',
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${bind(spec['title']) ?? ''}',
+                        style: Theme.of(uiContext).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      if (spec['subtitle'] != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          '${bind(spec['subtitle'])}',
+                          style: Theme.of(uiContext).textTheme.bodySmall
+                              ?.copyWith(color: AppDesign.muted(uiContext)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                for (final action in objects(spec['actions']))
+                  NativeUi(
+                    child: IconButton(
+                      tooltip: '${action['label'] ?? ''}',
+                      onPressed: busy || action['disabled'] == true
+                          ? null
+                          : () => _render(action['event']),
+                      icon: UiIcon(_icon(action['icon'])),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      case 'chatMessage':
+        final message = ConversationMessage(
+          text: text,
+          outgoing: spec['role'] == 'user',
+          label: '${spec['label'] ?? ''}',
+        );
+        return UiComponent(
+          ref: 'ui.nativeSection@1',
+          props: {'title': '${spec['label'] ?? ''}'},
+          slots: {'content': message},
+          fallback: message,
+        );
+      case 'messageComposer':
+        final key = spec['key'] as String;
+        final controller = controllers.putIfAbsent(
+          key,
+          () => TextEditingController(text: '${formValues[key] ?? ''}'),
+        );
+        return ConversationComposer(
+          controller: controller,
+          focusNode: focusNodes.putIfAbsent(key, FocusNode.new),
+          hint: text,
+          busy: busy,
+          enabled: bind(spec['disabled']) != true,
+          onChanged: (value) => _changeForm(key, value, null),
+          onSend: () {
+            if (!busy) _render(event);
+          },
+          onCancel: spec['interrupt'] is String
+              ? () => widget.host.invokeInterrupt(
+                  widget.moduleId,
+                  spec['interrupt'] as String,
+                )
+              : null,
+        );
       case 'transition':
         final effect = bind(spec['effect']) ?? 'fade';
         final visible = spec['visible'] == null ? true : bind(spec['visible']);
@@ -1568,7 +1674,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       case 'card':
         return ContentSurface(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+            padding: EdgeInsets.all(tree?['compact'] == true ? 8 : 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: children,
@@ -1600,6 +1706,17 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         final enabled = !busy && bind(spec['disabled']) != true;
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          dense: tree?['compact'] == true,
+          visualDensity: tree?['compact'] == true
+              ? const VisualDensity(vertical: -2)
+              : null,
+          titleTextStyle: tree?['compact'] == true
+              ? Theme.of(uiContext).textTheme.bodyMedium
+              : null,
+          subtitleTextStyle: tree?['compact'] == true
+              ? Theme.of(uiContext).textTheme.bodySmall
+                    ?.copyWith(color: AppDesign.muted(uiContext))
+              : null,
           leading: icon == null ? null : UiIcon(icon),
           title: Text('${bind(spec['title']) ?? text}'),
           subtitle: subtitle == null ? null : Text('$subtitle'),
@@ -2089,6 +2206,23 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   Widget pageContent() {
     final spec = tree!;
     final rootChildren = objects(spec['children']);
+    final controller = scrollControllers.putIfAbsent(
+      'page',
+      ScrollController.new,
+    );
+    if (spec['followEnd'] != null &&
+        scrollRequests['followEnd'] != spec['followEnd']) {
+      final follow =
+          !controller.hasClients || controller.position.extentAfter < 80;
+      scrollRequests['followEnd'] = spec['followEnd'];
+      if (follow) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && identical(tree, spec) && controller.hasClients) {
+            controller.jumpTo(controller.position.maxScrollExtent);
+          }
+        });
+      }
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final rawPanel = spec['floatingPanel'];
@@ -2125,9 +2259,21 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                         ScrollController.new,
                       ),
                       padding: EdgeInsets.fromLTRB(
-                        spec['edgeToEdge'] == true ? 0 : 20,
-                        spec['edgeToEdge'] == true ? 0 : 16,
-                        spec['edgeToEdge'] == true ? 0 : 20,
+                        spec['edgeToEdge'] == true
+                            ? 0
+                            : spec['compact'] == true
+                            ? 16
+                            : 20,
+                        spec['edgeToEdge'] == true
+                            ? 0
+                            : spec['compact'] == true
+                            ? 8
+                            : 16,
+                        spec['edgeToEdge'] == true
+                            ? 0
+                            : spec['compact'] == true
+                            ? 16
+                            : 20,
                         16 + bottom,
                       ),
                       itemCount: rootChildren.length,
@@ -2152,9 +2298,21 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                         ScrollController.new,
                       ),
                       padding: EdgeInsets.fromLTRB(
-                        spec['edgeToEdge'] == true ? 0 : 20,
-                        spec['edgeToEdge'] == true ? 0 : 16,
-                        spec['edgeToEdge'] == true ? 0 : 20,
+                        spec['edgeToEdge'] == true
+                            ? 0
+                            : spec['compact'] == true
+                            ? 16
+                            : 20,
+                        spec['edgeToEdge'] == true
+                            ? 0
+                            : spec['compact'] == true
+                            ? 8
+                            : 16,
+                        spec['edgeToEdge'] == true
+                            ? 0
+                            : spec['compact'] == true
+                            ? 16
+                            : 20,
                         16 + bottom,
                       ),
                       child: safeNode(spec),
@@ -2220,6 +2378,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   ),
                 ],
               ),
+            if (!widget.embedded && currentTree && tree?['header'] is Map)
+              safeNode(object(tree!['header'])),
             if (widget.embedded)
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -2268,10 +2428,14 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                     16,
                     12 + WorkspaceContentInsets.bottomOf(context),
                   ),
-                  child: FloatingSurface(
-                    padding: const EdgeInsets.all(12),
-                    child: safeNode(object(tree!['footer'])),
-                  ),
+                  child:
+                      tree!['footer'] is Map &&
+                          object(tree!['footer'])['type'] == 'messageComposer'
+                      ? safeNode(object(tree!['footer']))
+                      : FloatingSurface(
+                          padding: const EdgeInsets.all(12),
+                          child: safeNode(object(tree!['footer'])),
+                        ),
                 ),
               ),
           ],

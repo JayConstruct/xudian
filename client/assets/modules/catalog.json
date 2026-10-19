@@ -1,8 +1,8 @@
 [
   {
     "id": "app.ai",
-    "asset": "assets/modules/app.ai-1.3.0.xmodule",
-    "sha256": "4e947c7d48c99e70f343fb401cec3a585d6e608aec12fadc48b0d0505f39d7e7",
+    "asset": "assets/modules/app.ai-1.5.0.xmodule",
+    "sha256": "e0b838f33f44bc3498a8bb24ba1ca3dc8c5f9e189567d82933b1d68669f19506",
     "default": true
   },
   {

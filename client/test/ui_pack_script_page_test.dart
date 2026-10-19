@@ -66,6 +66,19 @@ export function renderDisclosure({state={},event}) {
     ...(event?.type==='confirm'?[{type:'text',text:'已确认'}]:[])
   ]}};
 }
+export async function renderConversation({state={},event,formValues={}}) {
+  const messages=state.messages||Array.from({length:16},(_,i)=>'历史消息 '+i);
+  if(event?.type==='send') {
+    await ui.dialog({title:'等待回复',fields:[{key:'answer',label:'回复'}]});
+    messages.push(formValues.message);
+  }
+  return {state:{messages},clearForms:event?.type==='send'?['message']:[],tree:{
+    type:'column',compact:true,spacing:12,followEnd:messages.length,
+    header:{type:'pageHeader',title:'测试对话',subtitle:'当前模型',actions:[{label:'对话设置',icon:'settings',event:{type:'settings'}}]},
+    children:messages.map((text,i)=>({type:'chatMessage',key:'message:'+i,text,role:i%2?'assistant':'user',label:'助手'})),
+    footer:{type:'messageComposer',key:'message',text:'输入消息…',event:{type:'send'}}
+  }};
+}
 export async function render({state={},event,context={}}) {
   await data.query('records',{});
   state={...state,count:(state.count||0)+1};
@@ -137,6 +150,33 @@ export async function render({state={},event,context={}}) {
     if (waitForRender) await settle(tester);
     return ProviderScope.containerOf(tester.element(find.byType(ScriptPage)));
   }
+
+  testWidgets(
+    'conversation pins header and protects an edited draft during send',
+    (tester) async {
+      final response = Completer<Object?>();
+      host.interaction = (_, method, args) async {
+        expect(method, 'ui.dialog');
+        return response.future;
+      };
+      await show(tester, handler: 'renderConversation');
+      expect(find.text('历史消息 15').hitTestable(), findsOneWidget);
+      expect(find.text('测试对话').hitTestable(), findsOneWidget);
+      final input = find.byType(TextField);
+      await tester.enterText(input, '发送的消息');
+      await tester.pump();
+      await tester.tap(find.byTooltip('发送'));
+      await settle(tester);
+      await tester.enterText(input, '下一条草稿');
+      response.complete({'answer': 'OK'});
+      await settle(tester);
+      expect(tester.widget<TextField>(input).controller!.text, '下一条草稿');
+      expect(find.text('发送的消息'), findsOneWidget);
+      expect(find.text('测试对话').hitTestable(), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'disclosure shares continuous shape and retains expansion and actions',

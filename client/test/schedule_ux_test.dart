@@ -1094,6 +1094,9 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.widgetWithText(PopupMenuItem<int>, '设置'));
           await _settle(tester);
+          if (find.text('课表设置').evaluate().isEmpty) {
+            await tester.scrollUntilVisible(find.text('课表设置'), 200);
+          }
           await Scrollable.ensureVisible(
             tester.element(find.text('课表设置')),
             alignment: .5,

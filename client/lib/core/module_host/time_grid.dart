@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/design_system.dart';
+import '../ui/content_colors.dart';
 import 'module_package.dart';
 
 /// Half-open row intervals; every overlapping block remains selectable.
@@ -364,13 +365,18 @@ class _TimeGridState extends State<TimeGrid> {
                               final column = columnIds.indexOf(b['column']),
                                   position = positions[b]!,
                                   width = columnWidth / position[1];
-                              final color =
-                                  _color(b['color']) ?? scheme.primary;
-                              final courseSurface = Color.alphaBlend(
-                                color.withValues(alpha: .12),
-                                scheme.surface,
+                              final color = ContentColors.accent(
+                                b['colorKey'] ??
+                                    b['courseId'] ??
+                                    b['id'] ??
+                                    b['title'],
+                                color: b['color'],
                               );
-                              final courseForeground = _readableCourseColor(
+                              final courseSurface = ContentColors.surface(
+                                color,
+                                scheme,
+                              );
+                              final courseForeground = ContentColors.foreground(
                                 color,
                                 courseSurface,
                                 scheme.onSurface,
@@ -496,29 +502,6 @@ class _TimeGridState extends State<TimeGrid> {
         );
       },
     );
-  }
-
-  Color? _color(Object? value) {
-    if (value is int) return Color(value);
-    if (value is String && RegExp(r'^#[a-fA-F0-9]{6}$').hasMatch(value)) {
-      return Color(int.parse('FF${value.substring(1)}', radix: 16));
-    }
-    return null;
-  }
-
-  // Module palettes identify courses, but a light swatch must not make the
-  // course title unreadable. Retain its hue while moving toward theme ink.
-  Color _readableCourseColor(Color color, Color background, Color ink) {
-    final backgroundLuminance = background.computeLuminance();
-    for (var step = 0; step <= 10; step++) {
-      final candidate = Color.lerp(color.withValues(alpha: 1), ink, step / 10)!;
-      final luminance = candidate.computeLuminance();
-      final contrast = luminance > backgroundLuminance
-          ? (luminance + .05) / (backgroundLuminance + .05)
-          : (backgroundLuminance + .05) / (luminance + .05);
-      if (contrast >= 4.5) return candidate;
-    }
-    return ink;
   }
 }
 

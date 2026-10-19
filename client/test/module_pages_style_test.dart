@@ -300,16 +300,23 @@ void main() {
     expect(transcript.where((node) => node['type'] == 'card'), isEmpty);
     expect(
       transcript
-          .where((node) => node['type'] == 'richText')
+          .where((node) => node['type'] == 'chatMessage')
           .map((node) => node['text']),
       ['本地会话', '本地回复'],
     );
-    final cancel = transcript.singleWhere((node) => node['text'] == '取消当前操作');
-    expect(cancel['interrupt'], 'cancel');
     expect(
-      transcript.singleWhere((node) => node['text'] == '发送')['variant'],
-      'filled',
+      transcript
+          .where((node) => node['type'] == 'chatMessage')
+          .map((node) => node['role']),
+      ['user', 'assistant'],
     );
+    final composer = transcript.singleWhere(
+      (node) => node['type'] == 'messageComposer',
+    );
+    expect(object(ai['tree'])['footer'], composer);
+    expect(composer['key'], 'message');
+    expect(object(composer['event'])['type'], 'send');
+    expect(composer['interrupt'], 'cancel');
     final home = await render('app.ui.examples', page: 'page');
     expect(
       _nodes(home['tree']).where((node) => node['type'] == 'card'),

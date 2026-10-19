@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.ai",
     "name": "AI 助手",
-    "version": "1.3.0",
-    "hostApi": "^1.18.0",
+    "version": "1.5.0",
+    "hostApi": "^1.31.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -36,7 +36,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "configuration": true
     },
     {
       "id": "history",
@@ -51,6 +52,25 @@
           }
         }
       }
+    },
+    {
+      "id": "preferences",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id",
+          "advanced"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "advanced": {
+            "type": "boolean"
+          }
+        }
+      },
+      "configuration": true
     }
   ],
   "services": [
@@ -77,6 +97,27 @@
       "output": {
         "type": "object"
       }
+    },
+    {
+      "id": "ai.preferences.save",
+      "major": 1,
+      "handler": "savePreferences",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "required": [
+          "advanced"
+        ],
+        "properties": {
+          "advanced": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      }
     }
   ],
   "pages": [
@@ -89,6 +130,19 @@
         "id": "app.ai.entry",
         "opening": "adaptivePanel",
         "placement": "hidden"
+      }
+    },
+    {
+      "id": "app.ai.settings",
+      "title": "AI 设置",
+      "icon": "ai",
+      "handler": "renderSettings",
+      "headerMode": "contributed",
+      "entry": {
+        "id": "app.ai.settings.entry",
+        "label": "AI 助手",
+        "opening": "detail",
+        "placement": "settings"
       }
     }
   ],

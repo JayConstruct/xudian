@@ -1,6 +1,7 @@
 import {data,services,ui,clock,ids,files} from '@xudian/sdk';
 import {civil,date,dayMs,addDays,teachingWeek,weekday,normalizeWeeks,validateTimetable,validateMeeting,validateChange,validOriginal,occurrences,overlaps} from './calendar.js';
 import {draftFromBackup,importPlan} from './import.js';
+import {customCourseColor} from './colors.js';
 export {importPlan};
 export {createDemo} from './demo.js';
 let selectedTimetableId=null,selectionRevision=0,displayRequest=0;
@@ -58,7 +59,7 @@ export async function queryBusy({startDate,endDate}) {
       const start=await clock.toUtc({date:item.date,time:startTime,zone:t.timezone}),end=await clock.toUtc({date:item.date,time:endTime,zone:t.timezone});
       if(start.status!=='unique'||end.status!=='unique'||start.instants.length!==1||end.instants.length!==1)throw new Error(`${t.name} ${item.date} 的课程时间存在夏令时歧义或不存在`);
       if(end.instants[0]<=start.instants[0])throw new Error('课程结束时间必须晚于开始时间');
-      items.push({id:t.id+'|'+item.occurrenceId,startAt:start.instants[0],endAt:end.instants[0],timetableId:t.id,date:item.date,timezone:t.timezone,title:item.title,
+      items.push({id:t.id+'|'+item.occurrenceId,startAt:start.instants[0],endAt:end.instants[0],timetableId:t.id,date:item.date,timezone:t.timezone,title:item.title,courseId:item.courseId,colorKey:item.courseId,color:item.color,
         ...(typeof item.location==='string'&&item.location.trim()?{location:item.location.trim()}:{}),
         ...(typeof item.teacher==='string'&&item.teacher.trim()?{teacher:item.teacher.trim()}:{}),
       });
@@ -327,11 +328,11 @@ export async function render({state={},context={},event,formValues={}}) {
   if(event?.type==='course') {
     if(!t) throw new Error('先创建课表');
     const current=event.course?.id?await data.get('courses',event.course.id):event.course,meeting=event.meeting?.id?await data.get('meetings',event.meeting.id):event.meeting;
-    const values=await ui.dialog({title:current?'编辑课程与安排':'添加课程',fields:[field('name','课程名称',current?.name),field('code','课程代码',current?.code),field('color','颜色 #RRGGBB',current?.color||'#486DA4'),field('notes','备注',current?.notes,'multiline'),
+    const values=await ui.dialog({title:current?'编辑课程与安排':'添加课程',fields:[field('name','课程名称',current?.name),field('code','课程代码',current?.code),field('color','颜色 #RRGGBB（留空自动）',current?customCourseColor(current):''),field('notes','备注',current?.notes,'multiline'),
       field('weekday','星期（1–7）',String(meeting?.weekday||1),'number'),field('startPeriod','开始节次',String(meeting?.startPeriod||1),'number'),field('endPeriod','结束节次',String(meeting?.endPeriod||2),'number'),
       field('weeks','周次（例如1-16单、1,4,8-10）',meeting?.weeks.join(',')||`1-${t.totalWeeks}`),field('teacher','教师',meeting?.teacher),field('location','地点',meeting?.location),
       field('orphanPolicy','失效调课处理','ask','select',[{value:'ask',label:'有失效调课时阻止保存'},{value:'discard',label:'撤销失效调课'},{value:'extra',label:'保留为临时课程'}])]});
-    if(values) await command('schedule.course.save',{course:{...current,id:current?.id,timetableId:t.id,name:values.name,code:values.code,color:values.color,notes:values.notes},
+    if(values) await command('schedule.course.save',{course:{...current,id:current?.id,timetableId:t.id,name:values.name,code:values.code,color:values.color,colorMode:values.color?.trim()?'custom':'auto',notes:values.notes},
       meeting:{...meeting,id:meeting?.id,timetableId:t.id,weekday:Number(values.weekday),startPeriod:Number(values.startPeriod),endPeriod:Number(values.endPeriod),weeks:normalizeWeeks(values.weeks,t.totalWeeks),teacher:values.teacher,location:values.location},orphanPolicy:values.orphanPolicy});
   }
   if(event?.type==='editOccurrence'||event?.type==='extra') {

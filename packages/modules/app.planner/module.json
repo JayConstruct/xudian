@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.planner",
     "name": "任务规划",
-    "version": "1.4.8",
-    "hostApi": "^1.29.0",
+    "version": "1.5.2",
+    "hostApi": "^1.30.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -102,7 +102,8 @@
           "id"
         ],
         "additionalProperties": true
-      }
+      },
+      "configuration": true
     },
     {
       "id": "occurrences",
@@ -132,7 +133,8 @@
           "id"
         ],
         "additionalProperties": true
-      }
+      },
+      "configuration": true
     },
     {
       "id": "batches",

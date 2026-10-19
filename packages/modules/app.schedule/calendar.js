@@ -1,3 +1,4 @@
+import {courseColor} from './colors.js';
 // All arithmetic is on civil dates. Device timezone and DST never affect weeks.
 export const dayMs = 86400000;
 export function civil(value) {
@@ -80,7 +81,7 @@ export function occurrences(t,courses,meetings,changes,start,end) {
   const append=(m,day,change=null)=> {
     const course=byCourse.get(change?.courseId || m?.courseId);
     if(!course) return;
-    const item={...m,...change,courseId:course.id,date:day,title:course.name,color:course.color,
+    const item={...m,...change,courseId:course.id,date:day,title:course.name,color:courseColor(course),
       originalDate:change?.originalDate || day,meetingId:change?.meetingId || m?.id,
       occurrenceId:change?.kind==='extra'?change.id:`${m.id}:${change?.originalDate || day}`};
     delete item.weeks; result.push(item);

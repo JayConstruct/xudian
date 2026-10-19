@@ -12,6 +12,7 @@ import '../ai/settings/ai_settings_store.dart';
 import '../module_manager/module_manager_page.dart';
 import '../tasks/application/providers.dart';
 import 'app_preferences.dart';
+import 'configuration_export_page.dart';
 import 'ui_layout_page.dart';
 import 'ui_layout.dart';
 import '../../core/ui/ui_composition.dart';
@@ -300,6 +301,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
             ],
             const SectionHeading(title: '关于'),
+            NativeUi(
+              child: ListTile(
+                leading: const UiIcon(Icons.file_download_outlined),
+                title: const Text('导出所有配置'),
+                subtitle: const Text('保存应用设置、模块偏好与连接配置'),
+                onTap: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ConfigurationExportPage(),
+                  ),
+                ),
+              ),
+            ),
             ContentSurface(
               child: Column(
                 children: [

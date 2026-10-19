@@ -1,5 +1,6 @@
 import {data,ids} from '@xudian/sdk';
 import {validateTimetable,validateMeeting,validateChange,occurrences,overlaps,addDays,validOriginal} from './calendar.js';
+import {customCourseColor} from './colors.js';
 const canon=value=>JSON.stringify(normalize(value));
 function normalize(v) { if(Array.isArray(v)) return v.map(normalize); if(v&&typeof v==='object') return Object.fromEntries(Object.keys(v).sort().map(k=>[k,normalize(v[k])])); return v; }
 export function draftFromBackup(backup) {
@@ -10,6 +11,14 @@ export function draftFromBackup(backup) {
     occurrenceChanges:source('occurrenceChanges'),warnings:[]};
 }
 function clean(value) { const result={...value}; for(const key of ['sourceId','id','timetableId','createdAt','updatedAt']) delete result[key]; return result; }
+function identicalEntity(collection,left,right) {
+  const a=clean(left),b=clean(right);
+  // Presentation provenance must not create a second copy of an otherwise
+  // identical course when a new source first establishes its mappings.
+  // Keep this field in the actual records and three-way merge baselines.
+  if(collection==='courses') {delete a.colorMode;delete b.colorMode;}
+  return canon(a)===canon(b);
+}
 export async function importPlan(input) {
   const {draft,targetTimetableId,mode='new',choices={}}=input;
   if(draft?.draftVersion!==1 || typeof draft.scope!=='string'||!draft.scope || typeof draft.adapterVersion!=='string'||typeof draft.complete!=='boolean') throw new Error('ScheduleImportDraft v1 无效');
@@ -70,12 +79,16 @@ export async function importPlan(input) {
       if(seen.has(key)) throw new Error('来源实体标识重复'); seen.add(key);
       let mapping=mappings[key],local=mapping?working[collection].find(x=>x.id===mapping.localId):null;
       if(!mapping) {
-        const identical=working[collection].find(x=>canon(clean(x))===canon(value));
+        const identical=working[collection].find(x=>identicalEntity(collection,x,value));
         mapping={localId:identical?.id || await ids.new(),baseline:identical?clean(identical):null,deleted:false};
         local=identical;
       }
       refs[collection]?.set(raw.sourceId ?? raw.id ?? stable,mapping.localId);
       const incoming={...value,id:mapping.localId,timetableId:tid};
+      // Add presentation provenance after identity matching, so an existing
+      // identical course without this metadata still deduplicates normally.
+      // Backups keep their own mode; external adapters provide actual palettes.
+      if(collection==='courses'&&caller!=='app.schedule'&&incoming.colorMode===undefined&&customCourseColor({...incoming,colorMode:'custom'})) incoming.colorMode='custom';
       if(mapping.deleted || (!local&&mapping.baseline)) {
         mappings[key]={...mapping,deleted:true,baseline:clean(incoming)};
         continue; // Re-import never resurrects local deletions.

@@ -828,13 +828,19 @@ class _AppShellState extends ConsumerState<AppShell> {
         spec?['dateNavigation'] == true &&
         spec?['todayDate'] is String &&
         spec?['selectedDate'] != spec?['todayDate'];
-    final menu = Builder(
+    Widget menu(List<Map<String, Object?>> inline) => Builder(
       builder: (menuContext) => UiAnnotation(
         id: 'app.shell.menu',
         name: '页面菜单',
         purpose: '打开页面操作、模块入口及设置',
         child: WorkspacePopupMenu(
           key: const ValueKey('workspace-menu'),
+          headerController: workspaceHeader,
+          headerOwner: contribution?.owner,
+          headerLease: workspaceHeader.lease,
+          inlineActionLabels: inline
+              .map((action) => '${action['label']}')
+              .toSet(),
           haptics: menuPreferences?.haptics ?? true,
           reduceMotion: menuPreferences?.reduceMotion ?? false,
           onSelected: (index) {
@@ -851,10 +857,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                     'originBounds': box.localToGlobal(Offset.zero) & box.size,
                 }),
               );
-            } else if (index < actions.length) {
-              contribution?.dispatch(actions[index]['event']);
             } else {
-              _openEntry(entries[index - actions.length]);
+              _openEntry(entries[index]);
             }
           },
           items: [
@@ -865,20 +869,11 @@ class _AppShellState extends ConsumerState<AppShell> {
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: menuLabel('回到今天', Icons.today_outlined),
               ),
-            if (returnToToday && (actions.isNotEmpty || entries.isNotEmpty))
-              const PopupMenuDivider(height: 8),
-            for (var i = 0; i < actions.length; i++)
-              PopupMenuItem(
-                value: i,
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Text('${actions[i]['label'] ?? ''}'),
-              ),
-            if (actions.isNotEmpty && entries.isNotEmpty)
+            if (returnToToday && entries.isNotEmpty)
               const PopupMenuDivider(height: 8),
             for (var i = 0; i < entries.length; i++)
               PopupMenuItem(
-                value: actions.length + i,
+                value: i,
                 height: 44,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: UiAnnotation(
@@ -890,7 +885,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   child: menuLabel(entries[i].label, entries[i].icon),
                 ),
               ),
-            if (returnToToday || actions.isNotEmpty || entries.isNotEmpty)
+            if (returnToToday || entries.isNotEmpty)
               const PopupMenuDivider(height: 8),
             if (!_profile.morePageEnabled)
               PopupMenuItem(
@@ -985,7 +980,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                     icon: const UiIcon(Icons.auto_awesome_outlined),
                   ),
                 ),
-              UiPackScope(defaultOnly: true, child: menu),
+              UiPackScope(defaultOnly: true, child: menu(inline)),
             ],
           ),
         );
@@ -1363,7 +1358,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         ]),
       if (profile.morePageEnabled) _moreEntry.id: workspaceRevision,
     };
-    return Scaffold(
+    return _workspaceScaffold(
       backgroundColor: AppDesign.canvas(context),
       body: SafeArea(
         child: Row(
@@ -1541,6 +1536,27 @@ class _AppShellState extends ConsumerState<AppShell> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _workspaceScaffold({
+    required Color backgroundColor,
+    required Widget body,
+  }) {
+    final content = workspaceHeader.lease?.isActive() == true
+        ? workspaceHeader.content
+        : null;
+    final backEvent = content?.spec['backEvent'];
+    return PopScope<void>(
+      canPop: backEvent is! Map,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop &&
+            backEvent is Map &&
+            identical(workspaceHeader.content, content)) {
+          unawaited(content!.dispatch(backEvent));
+        }
+      },
+      child: Scaffold(backgroundColor: backgroundColor, body: body),
     );
   }
 
