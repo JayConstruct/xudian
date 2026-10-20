@@ -1,0 +1,242 @@
+{
+  "date": "2026-10-20",
+  "sourceCommit": "f624cfa6434055bc1da6be54916eb6d1672b4f5a",
+  "appTag": "v0.2.0-beta.8",
+  "moduleTag": "modules-20261020-import-schedule-ux",
+  "hostApi": "1.34.0",
+  "status": "published-and-verified",
+  "checks": {
+    "pythonTests": 220,
+    "moduleCatalogTests": 36,
+    "relatedFlutterTests": 199,
+    "fullFlutterCI": {
+      "passed": 1484,
+      "failed": 0,
+      "sourceRunId": 39381779089
+    },
+    "flutterAnalyze": "passed",
+    "architecture": "passed (148 Dart files)",
+    "repositoryBoundaries": "passed",
+    "moduleIndexes": "online validation passed",
+    "localFullSuiteDuringDevelopment": {
+      "passed": 1481,
+      "failed": 1,
+      "failure": "host_ai_connection_test.dart local HTTP timeout; final complete suite verified in release CI"
+    }
+  },
+  "emulator": {
+    "buildNumber": 164,
+    "installedVersionCode": 4164,
+    "apkSha256": "126f933cbb61dfa17c670c1dce6d477d426cf33fe0e69d0d4bff14cec9125b53",
+    "installedApkSha256": "126f933cbb61dfa17c670c1dce6d477d426cf33fe0e69d0d4bff14cec9125b53",
+    "completed": true
+  },
+  "pages": {
+    "aboutPageOpened": true,
+    "updatePageOpened": true,
+    "version": "0.2.0-beta.8",
+    "installedVersionCode": 4164,
+    "testingChannelVisible": true,
+    "channelPreferenceChanged": false,
+    "appAndModuleDataRetained": true,
+    "installedApkSha256": "126f933cbb61dfa17c670c1dce6d477d426cf33fe0e69d0d4bff14cec9125b53",
+    "usedExistingEmulatorSigning": true
+  },
+  "functionalPages": {
+    "installedVersion": "0.2.0-beta.8",
+    "periodTableOpened": true,
+    "plannerRoundedBlocksOpened": true,
+    "originalTimetableRestored": true,
+    "appAndModuleDataRetained": true
+  },
+  "publishedUpdatePage": {
+    "publishedReleaseNotesVisible": true,
+    "releaseVersion": "0.2.0-beta.8",
+    "fixedSigningNotesVisible": true,
+    "status": "current-is-latest",
+    "channelPreferenceChanged": false,
+    "existingAppDataRetained": true,
+    "installedApkSha256": "126f933cbb61dfa17c670c1dce6d477d426cf33fe0e69d0d4bff14cec9125b53"
+  },
+  "actualBehaviorVerification": {
+    "fixedImportPreviewActions": true,
+    "noDuplicateImportReview": true,
+    "importCompletionOpensMainSchedule": true,
+    "directionalModuleTransitions": true,
+    "headerCollapsesBeforeGridScroll": true,
+    "independentToolbarAnimation": true,
+    "localTimeTableEdits": true,
+    "automaticAndManualEndTimesVerified": true,
+    "roundedPlanningBlocksAndSelection": true,
+    "semanticTimeCellClicksVerified": true,
+    "temporaryFixtureCleanedAndOriginalTimetableRestored": true
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.8",
+    "sourceCommit": "f624cfa6434055bc1da6be54916eb6d1672b4f5a",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.8",
+    "publishedAt": "2026-10-20T06:51:29Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 130,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "name": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "version": "0.2.0-beta.8",
+        "versionCode": 1130,
+        "sha256": "c934b34ad1ea593854cb6336061246496a1f88ebd7d3689b507e198086d09217",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "version": "0.2.0-beta.8",
+        "versionCode": 2130,
+        "sha256": "5b2843fb892f9b0154208c1c6fac6afbf05ba7845cb00f664402d967f57b4b1f",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "version": "0.2.0-beta.8",
+        "versionCode": 4130,
+        "sha256": "4899db13302df74bcb65069f4b300b59614dc4167880cdd6eff75dab14e25ba0",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false
+  },
+  "moduleRelease": {
+    "tag": "modules-20261020-import-schedule-ux",
+    "sourceCommit": "f624cfa6434055bc1da6be54916eb6d1672b4f5a",
+    "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261020-import-schedule-ux",
+    "publishedAt": "2026-10-20T06:40:58Z",
+    "assets": [
+      {
+        "id": "app.schedule",
+        "version": "1.16.2",
+        "sha256": "6e92f39cc625d4f76fa97280bdba7566a8cd08e5fea29727d9aa927258b2c56b",
+        "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261020-import-schedule-ux/app.schedule-1.16.2.xmodule",
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.import.shiguang",
+        "version": "1.7.2",
+        "sha256": "8639f336cd6ec40314574bf953891860bfc02a953f0511f36df358784eb8b865",
+        "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261020-import-schedule-ux/app.import.shiguang-1.7.2.xmodule",
+        "anonymousDownloadVerified": true
+      }
+    ]
+  },
+  "publicIndexes": {
+    "defaultCatalogVerified": true,
+    "onlineDirectoryEntriesValidated": 9,
+    "indexes": [
+      {
+        "id": "app.schedule",
+        "version": "1.16.2",
+        "sha256": "6e92f39cc625d4f76fa97280bdba7566a8cd08e5fea29727d9aa927258b2c56b",
+        "indexUrl": "https://raw.githubusercontent.com/JayConstruct/xudian/module-catalog/module-index/app.schedule.json",
+        "indexMatchesSource": true
+      },
+      {
+        "id": "app.import.shiguang",
+        "version": "1.7.2",
+        "sha256": "8639f336cd6ec40314574bf953891860bfc02a953f0511f36df358784eb8b865",
+        "indexUrl": "https://raw.githubusercontent.com/JayConstruct/xudian/module-catalog/module-index/app.import.shiguang.json",
+        "indexMatchesSource": true
+      }
+    ]
+  },
+  "ci": [
+    {
+      "branch": "main",
+      "runId": 39381779121,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39381779121",
+      "headSha": "f624cfa6434055bc1da6be54916eb6d1672b4f5a",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "sign",
+          "status": "completed",
+          "conclusion": "skipped",
+          "currentSteps": []
+        },
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "skipped",
+          "currentSteps": []
+        }
+      ]
+    },
+    {
+      "branch": "v0.2.0-beta.8",
+      "runId": 39381779089,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39381779089",
+      "headSha": "f624cfa6434055bc1da6be54916eb6d1672b4f5a",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "sign",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        }
+      ]
+    },
+    {
+      "branch": "modules-20261020-import-schedule-ux",
+      "runId": 39381779126,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39381779126",
+      "headSha": "f624cfa6434055bc1da6be54916eb6d1672b4f5a",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        }
+      ]
+    }
+  ],
+  "detailsDirectory": "dist/verification/release-20261020-beta8",
+  "limitations": [
+    "ARM physical device and Windows runtime are not verified.",
+    "Emulator retains its existing local signing identity; public fixed-signature APKs were downloaded and verified without replacing that installation."
+  ]
+}
