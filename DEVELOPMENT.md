@@ -63,7 +63,7 @@ flutter test --no-pub --concurrency=2
 flutter build apk --release --split-per-abi --no-pub
 ```
 
-输出在 `client/build/app/outputs/flutter-apk/`，多数手机使用 ARM64 包。覆盖已有应用时，构建号与 ABI 偏移后的 Android versionCode 必须满足设备版本要求，并保持签名一致；模拟器脚本自动处理构建号。当前 release 使用 debug 签名，正式发布签名仍待配置。
+输出在 `client/build/app/outputs/flutter-apk/`，多数手机使用 ARM64 包。覆盖已有应用时，构建号与 ABI 偏移后的 Android versionCode 必须满足设备版本要求，并保持签名一致；模拟器脚本自动处理构建号。本机未设置 `XUDIAN_KEYSTORE_*` 时使用 debug 签名；所有 tag 发布（包括测试版）在独立 CI 任务中使用固定签名，缺少密钥或公开指纹配置就停止发布。配置和密钥保管见 [App 更新](docs/APP_UPDATES.md) 与 [Android 签名保管](docs/ANDROID_SIGNING.md)。
 
 临时下载从仓库根目录运行 `scripts/share-apk.sh`；调试包用 `--debug`。需要 `python3` 与 `cloudflared`，默认端口 8765，可设置 `APK_SHARE_PORT`。终端打印 HTTPS 地址，按 `Ctrl+C` 关闭；重启隧道会更换域名，持有地址的人可下载当前 APK。SSH 长会话可用 `screen` 保持服务。
 

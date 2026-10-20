@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-20",
+  "changesPublished": false,
+  "workflow": {
+    "allAppTagsUseFixedSigning": true,
+    "separateSigningRunner": true,
+    "signingEnvironment": "android-release",
+    "certificatePinRequired": true,
+    "actionsPinned": true,
+    "remoteExecutionVerified": false
+  },
+  "persistentKey": {
+    "created": true,
+    "algorithm": "RSA-3072",
+    "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "storedOutsideRepository": true,
+    "privateFilesMode": "0600",
+    "githubSecretsConfigured": true,
+    "offlineBackupCreated": false
+  },
+  "historicalPublicApks": [
+    {
+      "version": "beta.3",
+      "apk": "dist/verification/releases-20261014/v0.2.0-beta.3/app-arm64-v8a-release.apk",
+      "sha256": "12654cf9dde46850d79f96e453155b1a703faa4dbbffb7e4d7a61ea3d50ea75c",
+      "certificateSha256": [
+        "e577ee4d56a4797cf0f01d2de726b58c7dae97613883015965d801751bbf4bac"
+      ]
+    },
+    {
+      "version": "beta.4",
+      "apk": "dist/verification/release-20261015/apks/app-arm64-v8a-release.apk",
+      "sha256": "2304a72de0aa1b097c8078a7e370a7c9b4ab9d5db128b0491895012c169882f9",
+      "certificateSha256": [
+        "bcdb1c9cef6294834c5c55afb0e529c53b645e51270021ef441e9b0f3d4208ff"
+      ]
+    },
+    {
+      "version": "beta.5",
+      "apk": "dist/verification/release-20261017/app/app-arm64-v8a-release.apk",
+      "sha256": "773ba7633ca2539a76269bf72389fa8c64b49089a33988988111570bb94e38b0",
+      "certificateSha256": [
+        "932423be965aa0497febafad713366d29bf63694568bb1275f8430baf59209fd"
+      ]
+    },
+    {
+      "version": "beta.6",
+      "apk": "dist/verification/release-20261019-beta6/app/app-arm64-v8a-release.apk",
+      "sha256": "b04b8dbf76a52868316f32265494f30ecdd653aecc1823c0e65e9cb00e1ef602",
+      "certificateSha256": [
+        "74c0e4539fe5c5f896206726d8d6782c02b92b391286a8a50c33be4a50d5b4c3"
+      ]
+    }
+  ],
+  "existingDevelopmentKeysMatchPublicApks": false,
+  "phoneInspected": false,
+  "userWillReinstall": true,
+  "checks": {
+    "pythonTests": 220,
+    "signingTestsIncluded": 10,
+    "flutterTests": 21,
+    "flutterAnalyze": "passed",
+    "architectureDartFiles": 145,
+    "repositoryBoundaries": "passed",
+    "actionlint": "passed"
+  },
+  "emulator": {
+    "buildNumber": 156,
+    "installedVersionCode": 4156,
+    "apkSha256": "122c207b3aaaf77d6d46c81c8be730b9eb1fa7d6527b252a7adba1661007c2b9",
+    "installedApkSha256": "122c207b3aaaf77d6d46c81c8be730b9eb1fa7d6527b252a7adba1661007c2b9",
+    "completed": true
+  },
+  "pages": {
+    "aboutPageOpened": true,
+    "updatePageOpened": true,
+    "installedVersionVisible": "0.2.0-beta.6（构建 4156）",
+    "testingChannelVisible": true,
+    "channelPreferenceChanged": false,
+    "appAndModuleDataRetained": true,
+    "apkSha256": "122c207b3aaaf77d6d46c81c8be730b9eb1fa7d6527b252a7adba1661007c2b9",
+    "flutterBuildNumber": 156
+  },
+  "localSigningTools": "34.0.0",
+  "ciSigningTools": "36.0.0",
+  "detailsDirectory": "dist/verification/android-fixed-signing-20261020",
+  "limitations": [
+    "This record covers initial beta.6/build156 local acceptance; beta.7 release is recorded separately.",
+    "No ARM device installation performed.",
+    "Emulator retains its original local signing and data.",
+    "Offline backup and repository tag ruleset have not been configured."
+  ],
+  "githubEnvironment": {
+    "name": "android-release",
+    "allowedTags": [
+      "v*"
+    ],
+    "allowedBranches": [],
+    "secretNamesVerified": [
+      "ANDROID_KEYSTORE_BASE64",
+      "ANDROID_KEYSTORE_PASSWORD",
+      "ANDROID_KEY_ALIAS",
+      "ANDROID_KEY_PASSWORD"
+    ],
+    "certificateFingerprintVerified": true
+  }
+}

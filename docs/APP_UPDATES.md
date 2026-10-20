@@ -10,21 +10,25 @@
 
 网络错误、超时、GitHub 请求限制和格式错误显示可重试的失败状态。没有符合当前通道和平台的 App Release 时，正式通道显示“暂未发布 App 正式版本”，测试通道显示“暂未发布 App 可用版本”。检查最多读取 5 页、每页 100 条记录，达到上限会提示查看发布页，不将不完整的查询视为已是最新版。
 
-## 发布正式 Android 更新
+## 发布 Android 更新
 
 Android 检查工作流支持 `v*` tag 触发。正式版使用 `vMAJOR.MINOR.PATCH`；测试版使用 `vMAJOR.MINOR.PATCH-alpha.N`、`-beta.N` 或 `-rc.N`，tag 必须与 `client/pubspec.yaml` 的完整版本号一致（不含 `+` 后的构建号）。普通分支检查继续上传 Actions 构建产物；tag 在检查、测试、构建全部通过后，额外发布 Release，包括三个 ABI 的 APK、`SHA256SUMS` 和 `SOURCE_COMMIT`。发布不会覆盖已有 Release。
 
-测试版自动标记为 GitHub Pre-release，不设为 Latest，App 正式更新检查仍会过滤它，开启测试通道后可检查并打开对应下载页。测试版使用 CI 开发签名，不保证不同 CI 构建或现有安装之间的签名一致；安装前备份数据，签名不匹配时不要通过卸载现有应用来强行覆盖。需要固定签名的版本使用下述正式发布流程。
+测试版自动标记为 GitHub Pre-release，不设为 Latest，App 正式更新检查仍会过滤它，开启测试通道后可检查并打开对应下载页。所有 App tag（包括 alpha／beta／rc）发布均使用同一固定签名；历史 CI 临时签名或本机开发签名安装不因此自动兼容。安装前备份数据，签名不匹配时不要通过卸载现有应用来强行覆盖。
 
-正式 Release 必须使用固定 Android 签名。仓库需配置四个 Actions secrets：
+在 GitHub 的 `Settings → Environments` 创建 `android-release`，在该 Environment 中配置四个 secrets：
 
 - `ANDROID_KEYSTORE_BASE64`：固定 keystore 的 Base64 内容。
 - `ANDROID_KEYSTORE_PASSWORD`：keystore 密码。
 - `ANDROID_KEY_ALIAS`：签名别名。
 - `ANDROID_KEY_PASSWORD`：签名密钥密码。
 
-tag 构建缺少其中任一项时会停止发布。keystore 只在 runner 临时目录使用；仓库中不保存密钥。本机发布构建可设置对应 `XUDIAN_KEYSTORE_PATH`、`XUDIAN_KEYSTORE_PASSWORD`、`XUDIAN_KEY_ALIAS`、`XUDIAN_KEY_PASSWORD` 环境变量。普通本机开发构建继续使用开发签名。覆盖安装必须与原安装签名一致，应保管原签名密钥；已有开发签名安装不会因此自动转换为正式签名。
+同一 Environment 还需配置变量 `ANDROID_SIGNING_CERT_SHA256`，填入这把密钥的公开证书 SHA-256 指纹（64 位十六进制，也接受冒号分隔和大写）。每个 ABI 签名后都必须验证签名有效且指纹匹配；缺少配置、密钥解码／签名失败或指纹不符时停止发布，不回退临时签名。
 
-正式发布步骤（示例）：将 `client/pubspec.yaml` 的语义版本改为 `0.2.0`，提交并合入主分支，确认签名 secrets 已配置，再创建和推送 `v0.2.0` tag。tag 触发流程后，安装 `0.1.x` 的用户即可查到正式更新。测试版则先将版本改为如 `0.2.0-beta.1`，提交后推送同名 `v0.2.0-beta.1` 标签；只有发布任务成功并附带安装包，才算完成发布。
+编译、依赖和测试任务不读取任何签名 secrets，生成的 tag 候选包仅供后续签名。独立 GitHub 托管 runner 的签名任务不检出仓库、不执行应用、Gradle 或测试代码，只运行 Android 官方签名工具。密钥以仅当前用户可读写的权限临时解码，密码通过环境变量传入工具，步骤退出时删除密钥；只上传明确列出的已签名 APK、摘要和源码提交号。工作流 Action 使用完整提交 SHA 固定。分支／PR 构建仍为开发签名，不能作为固定签名更新包分发。
+
+私钥生成、Environment 的 tag 限制、备份与泄露预防见 [Android 签名保管](ANDROID_SIGNING.md)。本机发布构建仍可设置 `XUDIAN_KEYSTORE_PATH`、`XUDIAN_KEYSTORE_PASSWORD`、`XUDIAN_KEY_ALIAS`、`XUDIAN_KEY_PASSWORD` 环境变量；普通本机开发构建继续使用开发签名。已有开发签名安装不会自动转换为固定签名。
+
+正式发布步骤（示例）：将 `client/pubspec.yaml` 的语义版本改为 `0.2.0`，提交并合入主分支，确认 Environment 的签名 secrets 和指纹已配置，再创建和推送 `v0.2.0` tag。tag 触发流程后，安装 `0.1.x` 的用户即可查到正式更新；能否覆盖仍取决于原安装签名。测试版则先将版本改为如 `0.2.0-beta.1`，提交后推送同名 `v0.2.0-beta.1` 标签；只有签名验证和发布任务成功并附带安装包，才算完成发布。
 
 GitHub Release 接口约定见 [GitHub 官方文档](https://docs.github.com/en/rest/releases/releases)。安装版本通过 [package_info_plus](https://pub.dev/packages/package_info_plus) 读取。

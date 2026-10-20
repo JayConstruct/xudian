@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-20",
+  "version": "0.2.0-beta.7",
+  "tag": "v0.2.0-beta.7",
+  "status": "local-acceptance-passed-awaiting-publication",
+  "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+  "checks": {
+    "pythonTests": 220,
+    "moduleCatalogTests": 36,
+    "flutterUpdateTests": 21,
+    "flutterAnalyze": "passed",
+    "architecture": "passed (145 Dart files)",
+    "actionlint": "passed",
+    "repositoryBoundaries": "passed"
+  },
+  "emulator": {
+    "buildNumber": 157,
+    "installedVersionCode": 4157,
+    "apkSha256": "2aa221d14e5861fdff28f33bed701fc5516ddfe62c8ec42e7eb913c70d2e2d9c",
+    "installedApkSha256": "2aa221d14e5861fdff28f33bed701fc5516ddfe62c8ec42e7eb913c70d2e2d9c",
+    "completed": true
+  },
+  "pages": {
+    "aboutPageOpened": true,
+    "updatePageOpened": true,
+    "version": "0.2.0-beta.7",
+    "installedVersionCode": 4157,
+    "testingChannelVisible": true,
+    "channelPreferenceChanged": false,
+    "appAndModuleDataRetained": true,
+    "installedApkSha256": "2aa221d14e5861fdff28f33bed701fc5516ddfe62c8ec42e7eb913c70d2e2d9c",
+    "usedExistingEmulatorSigning": true
+  },
+  "moduleSourceChanged": false,
+  "emulatorUsesOriginalLocalSigning": true,
+  "githubEnvironment": {
+    "name": "android-release",
+    "onlyTags": "v*",
+    "fourSecretsPresent": true,
+    "publicFingerprintMatched": true
+  },
+  "publicApksVerified": false,
+  "releasePublished": false,
+  "ciVerified": false,
+  "detailsDirectory": "dist/verification/release-20261020-beta7",
+  "limitations": [
+    "ARM physical device and Windows runtime are not verified.",
+    "First fixed certificate release may require reinstalling historical temporary-signature builds."
+  ]
+}
