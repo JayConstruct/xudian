@@ -317,7 +317,11 @@ class _ModuleDownloadDialogState extends State<ModuleDownloadDialog> {
     } catch (error) {
       if (mounted && !token.isCancelled) {
         setState(() {
-          failure = '$error';
+          failure =
+              error is SocketException &&
+                  error.message.contains('Failed host lookup')
+              ? '无法解析下载服务器地址，请检查网络或 DNS 后重试。\n$error'
+              : '$error';
           running = false;
         });
       }
@@ -329,6 +333,7 @@ class _ModuleDownloadDialogState extends State<ModuleDownloadDialog> {
   String get stageLabel => switch (stage) {
     ModuleDownloadStage.preparing => '准备下载',
     ModuleDownloadStage.downloading => '下载中',
+    ModuleDownloadStage.retrying => '网络连接失败，正在等待自动重试…',
     ModuleDownloadStage.verifying => '校验中',
     ModuleDownloadStage.saving => '保存已验证模块',
     ModuleDownloadStage.ready => '准备安装',

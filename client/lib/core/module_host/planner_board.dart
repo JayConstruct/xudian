@@ -1421,8 +1421,6 @@ class _PlannerBoardState extends State<PlannerBoard> {
                         color: scheme.primary,
                         width: scheduled ? 2 : 1.5,
                       )
-                    : item['_resident'] != true
-                    ? Border(left: BorderSide(color: accent, width: 2))
                     : null,
               ),
               padding: EdgeInsets.symmetric(
@@ -1564,9 +1562,6 @@ class _PlannerBoardState extends State<PlannerBoard> {
                             decoration: BoxDecoration(
                               color: accent.withValues(alpha: .085),
                               borderRadius: BorderRadius.circular(9),
-                              border: Border(
-                                left: BorderSide(color: accent, width: 2),
-                              ),
                             ),
                             child: target.height < scaler.scale(12) * 1.4 + 8
                                 ? const SizedBox.expand()
@@ -2114,12 +2109,6 @@ class _PlannerBoardState extends State<PlannerBoard> {
                                     decoration: BoxDecoration(
                                       color: _surface(segment.item),
                                       borderRadius: BorderRadius.circular(4),
-                                      border: Border(
-                                        left: BorderSide(
-                                          color: _accent(segment.item),
-                                          width: 2,
-                                        ),
-                                      ),
                                     ),
                                     alignment: Alignment.centerLeft,
                                     child: Text(
@@ -2216,12 +2205,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                         ? null
                         : outline
                         ? Border.all(color: scheme.tertiary, width: 2)
-                        : Border(
-                            left: BorderSide(
-                              color: preview ? scheme.tertiary : _accent(item),
-                              width: math.min(laneWidth, preview ? 3 : 2),
-                            ),
-                          ),
+                        : null,
                   ),
                   child: item['readOnly'] == true && !preview
                       ? ClipRRect(
@@ -4246,7 +4230,6 @@ class _DenseOccupancy extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final width = shortBands ? size.width : size.width / group.lanes;
     final fill = Paint()..color = color.withValues(alpha: .13);
-    final edge = Paint()..color = color;
     for (final segment in group.segments) {
       if (segment.top > visibleBottom) break;
       if (segment.bottom < visibleTop) continue;
@@ -4256,10 +4239,9 @@ class _DenseOccupancy extends CustomPainter {
         width,
         segment.bottom - segment.top,
       );
-      canvas.drawRect(rect, fill);
-      canvas.drawRect(
-        Rect.fromLTWH(rect.left, rect.top, math.min(2, width), rect.height),
-        edge,
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(8)),
+        fill,
       );
     }
   }

@@ -419,17 +419,16 @@ void main() {
     expect(await store.query(schedule, 'timetables', {}), isEmpty);
     final tid = await saveImporterInput(state['input']);
     expect(reviews, 1);
+    expect(dialogs.last['title'], '导入完成');
     expect(
       object(await store.get(schedule, 'timetables', tid))['timezone'],
       'America/New_York',
     );
     systemZone = 'Asia/Tokyo';
+    dialogs.clear();
     mockDialogs(target: tid);
     final existing = await configureImport(sourceZone: 'Europe/Paris');
-    expect(
-      dialogs.skip(1).map((dialog) => dialog['title']),
-      ['选择导入目标', '确认学期配置'],
-    );
+    expect(dialogs.map((dialog) => dialog['title']), ['选择导入目标', '确认学期配置']);
     final input = object(existing['input']);
     expect(input['mode'], 'merge');
     expect(

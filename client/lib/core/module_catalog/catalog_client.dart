@@ -14,7 +14,14 @@ class DownloadCancelled implements Exception {
   String toString() => '下载已取消';
 }
 
-enum ModuleDownloadStage { preparing, downloading, verifying, saving, ready }
+enum ModuleDownloadStage {
+  preparing,
+  downloading,
+  retrying,
+  verifying,
+  saving,
+  ready,
+}
 
 class DownloadCancellation {
   bool _cancelled = false;
@@ -89,7 +96,7 @@ class ModuleCatalogClient {
     this.publishers,
     Map<String, String> preinstalledDigests = const {},
     Set<String> excludedModuleIds = const {},
-    this.networkRetries = 1,
+    this.networkRetries = 2,
   }) : repository = normalizeRepository(repository),
        preinstalledDigests = Map.unmodifiable(preinstalledDigests),
        excludedModuleIds = Set.unmodifiable(excludedModuleIds),
@@ -243,11 +250,39 @@ class ModuleCatalogClient {
 
   bool _networkError(Object error) =>
       error is IOException || error is TimeoutException;
+
+  Future<void> _waitToRetry(
+    int attempt,
+    DownloadCancellation? cancellation,
+  ) async {
+    cancellation?.check();
+    // Give DNS and transient connections time to recover. Immediate retries
+    // tend to repeat the same failed lookup; cap custom retry budgets at 8s.
+    final pending = Completer<void>();
+    final timer = Timer(
+      Duration(seconds: 1 << (attempt > 3 ? 3 : attempt)),
+      pending.complete,
+    );
+    final remove = cancellation?.listen(() {
+      if (!pending.isCompleted) {
+        pending.completeError(const DownloadCancelled());
+      }
+    });
+    try {
+      await pending.future;
+      cancellation?.check();
+    } finally {
+      timer.cancel();
+      remove?.call();
+    }
+  }
+
   Future<List<int>> _retry(
     Uri url, {
     DownloadCancellation? cancellation,
     void Function(int, int)? onProgress,
     void Function()? onAttempt,
+    void Function()? onRetry,
     required int maximumBytes,
   }) async {
     for (var attempt = 0; ; attempt++) {
@@ -263,6 +298,8 @@ class ModuleCatalogClient {
       } catch (error) {
         cancellation?.check();
         if (!_networkError(error) || attempt >= networkRetries) rethrow;
+        onRetry?.call();
+        await _waitToRetry(attempt, cancellation);
       }
     }
   }
@@ -380,6 +417,7 @@ class ModuleCatalogClient {
         onStage?.call(ModuleDownloadStage.downloading);
         onProgress?.call(0, release.size);
       },
+      onRetry: () => onStage?.call(ModuleDownloadStage.retrying),
       maximumBytes: release.size,
     );
     cancellation?.check();

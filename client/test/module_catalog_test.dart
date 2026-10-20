@@ -490,6 +490,120 @@ void main() {
     },
   );
 
+  test('temporary DNS failures recover after spaced retries', () async {
+    await fixture.add(await makePackage('test.dns.retry'));
+    final release = await fixture.release('test.dns.retry');
+    final attempts = <Duration>[];
+    final elapsed = Stopwatch()..start();
+    final stages = <ModuleDownloadStage>[];
+    final client = ModuleCatalogClient(
+      cacheDirectory: directory,
+      transport:
+          (url, {cancellation, onProgress, required maximumBytes}) async {
+            attempts.add(elapsed.elapsed);
+            if (attempts.length <= 2) {
+              throw const SocketException(
+                "Failed host lookup: 'github.com'",
+                osError: OSError('No address associated with hostname', 7),
+              );
+            }
+            return fixture.fetch(
+              url,
+              cancellation: cancellation,
+              onProgress: onProgress,
+              maximumBytes: maximumBytes,
+            );
+          },
+    );
+    addTearDown(client.dispose);
+    final package = await client.download(release, onStage: stages.add);
+    expect(package.packageDigest, release.sha256);
+    expect(attempts, hasLength(3));
+    expect(
+      attempts[1] - attempts[0],
+      greaterThanOrEqualTo(const Duration(seconds: 1)),
+    );
+    expect(
+      attempts[2] - attempts[1],
+      greaterThanOrEqualTo(const Duration(seconds: 2)),
+    );
+    expect(
+      stages.where((s) => s == ModuleDownloadStage.retrying),
+      hasLength(2),
+    );
+    expect(stages.last, ModuleDownloadStage.ready);
+    expect(
+      (await client.download(release, offline: true)).packageDigest,
+      release.sha256,
+    );
+  });
+
+  test(
+    'cancelling retry wait stops promptly without another request',
+    () async {
+      await fixture.add(await makePackage('test.cancel.retry'));
+      final release = await fixture.release('test.cancel.retry');
+      final token = DownloadCancellation();
+      final waiting = Completer<void>();
+      var attempts = 0;
+      final client = ModuleCatalogClient(
+        cacheDirectory: directory,
+        transport:
+            (url, {cancellation, onProgress, required maximumBytes}) async {
+              attempts++;
+              throw const SocketException('proxy unavailable');
+            },
+      );
+      addTearDown(client.dispose);
+      final download = client.download(
+        release,
+        cancellation: token,
+        onStage: (stage) {
+          if (stage == ModuleDownloadStage.retrying) waiting.complete();
+        },
+      );
+      final check = expectLater(download, throwsA(isA<DownloadCancelled>()));
+      await waiting.future;
+      token.cancel();
+      await check.timeout(const Duration(milliseconds: 500));
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      expect(attempts, 1);
+      await expectLater(
+        client.download(release, offline: true),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'persistent network failure exhausts retry budget without caching',
+    () async {
+      await fixture.add(await makePackage('test.retry.limit'));
+      final release = await fixture.release('test.retry.limit');
+      var attempts = 0;
+      final client = ModuleCatalogClient(
+        cacheDirectory: directory,
+        transport:
+            (url, {cancellation, onProgress, required maximumBytes}) async {
+              attempts++;
+              throw const SocketException('proxy unavailable');
+            },
+      );
+      addTearDown(client.dispose);
+      final stages = <ModuleDownloadStage>[];
+      await expectLater(
+        client.download(release, onStage: stages.add),
+        throwsA(isA<SocketException>()),
+      );
+      expect(attempts, 3);
+      expect(stages, isNot(contains(ModuleDownloadStage.ready)));
+      await expectLater(
+        client.download(release, offline: true),
+        throwsStateError,
+      );
+    },
+  );
+
   test('network package reports stages in verification order', () async {
     await fixture.add(await makePackage('test.stages'));
     final release = await fixture.release('test.stages');
@@ -585,6 +699,7 @@ void main() {
     expect(stages, [
       ModuleDownloadStage.preparing,
       ModuleDownloadStage.downloading,
+      ModuleDownloadStage.retrying,
       ModuleDownloadStage.downloading,
       ModuleDownloadStage.verifying,
       ModuleDownloadStage.saving,

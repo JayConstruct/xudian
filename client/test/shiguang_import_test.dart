@@ -100,11 +100,27 @@ void main() {
       {'search': search, 'page': page},
     ),
   );
-  Future<Object?> providerSave(ChangePlan plan) async {
+  Future<Object?> providerSave(
+    ChangePlan plan, {
+    bool openSchedule = false,
+  }) async {
+    final interactions = <String>[];
+    Map<String, Object?>? destination;
     host.interaction = (actor, method, args) async {
       expect(actor, same(schedule));
-      expect(method, 'ui.review');
-      return true;
+      interactions.add(method);
+      if (method == 'ui.review') return true;
+      if (method == 'ui.dialog') {
+        expect(args['title'], '导入完成');
+        expect(args['submitLabel'], '打开课表');
+        expect(args['fields'], isEmpty);
+        return openSchedule ? <String, Object?>{} : null;
+      }
+      if (method == 'ui.navigate') {
+        destination = args;
+        return true;
+      }
+      throw StateError(method);
     };
     final result = object(
       await host.invokePage('app.schedule', 'render', {
@@ -113,6 +129,18 @@ void main() {
     );
     final state = object(result['state']);
     expect(state['adapterPlan'], isNotNull);
+    final tree = object(result['tree']);
+    expect(object(tree['planReview']), {
+      'planId': object(state['adapterPlan'])['planId'],
+      'eventType': 'confirmAdapter',
+    });
+    expect(nodes(tree['children']).where((n) => n['text'] == '确认导入'), isEmpty);
+    expect(
+      nodes(tree['footer'])
+          .where((n) => n['type'] == 'button')
+          .map((n) => n['text']),
+      ['取消导入', '确认导入'],
+    );
     final saved = object(
       await host.invokePage('app.schedule', 'render', {
         'context': {'pageId': 'app.schedule.imports', 'importPlanId': plan.id},
@@ -120,8 +148,94 @@ void main() {
         'event': {'type': 'confirmAdapter'},
       }),
     );
-    return object(saved['state'])['timetableId'];
+    final timetableId = object(saved['state'])['timetableId'];
+    expect(object(saved['state'])['importError'], isNull);
+    expect(object(saved['state'])['adapterPlan'], isNull);
+    expect(object(saved['tree'])['footer'], isNull);
+    expect(interactions, [
+      'ui.review',
+      'ui.dialog',
+      if (openSchedule) 'ui.navigate',
+    ]);
+    expect(
+      destination,
+      openSchedule
+          ? {
+              'page': 'app.schedule.home',
+              'context': {'timetableId': timetableId},
+            }
+          : isNull,
+    );
+    return timetableId;
   }
+
+  test(
+    'completed import offers to close the flow and open the selected timetable',
+    () async {
+      final draft = await convert(payload());
+      final plan = await host.prepare(adapter, importRef, {
+        'draft': draft,
+        'mode': 'new',
+      });
+      final timetableId = await providerSave(plan, openSchedule: true);
+      expect(
+        await store.get(schedule, 'timetables', timetableId as String),
+        isNotNull,
+      );
+    },
+  );
+
+  test(
+    'backup preview keeps cancel and confirm in its fixed footer until saved',
+    () async {
+      final draft = await convert(payload());
+      final dialogs = <String>[];
+      host.interaction = (_, method, args) async {
+        if (method == 'ui.review') return true;
+        if (method == 'ui.dialog') {
+          dialogs.add(args['title'] as String);
+          return args['title'] == '导入方式' ? {'mode': 'new'} : null;
+        }
+        throw StateError(method);
+      };
+      const context = {'pageId': 'app.schedule.imports'};
+      final preview = object(
+        await host.invokePage(schedule.moduleId, 'render', {
+          'context': context,
+          'state': {'importDraft': draft},
+          'event': {'type': 'previewImport'},
+        }),
+      );
+      final tree = object(preview['tree']);
+      expect(object(tree['planReview']), {
+        'planId': object(object(preview['state'])['importPlan'])['planId'],
+        'eventType': 'confirmImport',
+      });
+      expect(
+        nodes(tree['children']).where((n) => n['text'] == '确认保存导入'),
+        isEmpty,
+      );
+      expect(
+        nodes(tree['footer'])
+            .where((n) => n['type'] == 'button')
+            .map((n) => n['text']),
+        ['取消导入', '确认保存导入'],
+      );
+      expect(await store.query(schedule, 'courses', {}), isEmpty);
+      final saved = object(
+        await host.invokePage(schedule.moduleId, 'render', {
+          'context': context,
+          'state': preview['state'],
+          'event': {'type': 'confirmImport'},
+        }),
+      );
+      expect(object(saved['state'])['importError'], isNull);
+      expect(object(saved['state'])['importPlan'], isNull);
+      expect(object(saved['tree'])['footer'], isNull);
+      expect(await store.query(schedule, 'courses', {}), hasLength(1));
+      expect(dialogs, ['导入方式', '导入完成']);
+    },
+  );
 
   test('independent package mounts in settings and the importer slot', () {
     final registry = ModuleRegistry([

@@ -113,6 +113,7 @@ export async function render({event,context,state={}}) {
   if(event?.type==='panel')await ui.panel('test.navigation.importer',{}, {adaptive:true,wide:'center'});
   if(event?.type==='importer')await ui.navigate('test.navigation.importer');
   if(event?.type==='handoff')await ui.navigate('test.navigation.schedule',{source:'importer',importPlanId:'review-plan'});
+  if(event?.type==='openImported')await ui.navigate('test.navigation.tool',{timetableId:'imported-table'});
   if(event?.type==='invalid')await ui.navigate('test.navigation.missing');
   if(context.pageId.endsWith('.schedule')&&context.importPlanId&&!state.routed) {
     state.routed=true;await ui.navigate('test.navigation.preview',{importPlanId:context.importPlanId});
@@ -132,7 +133,11 @@ export async function render({event,context,state={}}) {
       {type:'button',text:'交接预览',event:{type:'handoff'}},
       {type:'button',text:'无效目标',event:{type:'invalid'}}
     ]:[]),
-    ...(context.pageId.endsWith('.preview')?[{type:'text',text:'确认预览 '+context.importPlanId}]:[]),
+    ...(context.pageId.endsWith('.preview')?[
+      {type:'text',text:'确认预览 '+context.importPlanId},
+      {type:'button',text:'打开已导入课表',event:{type:'openImported'}}
+    ]:[]),
+    ...(context.timetableId?[{type:'text',text:'目标课表 '+context.timetableId}]:[]),
     ...(context.source?[{type:'text',text:'来自 '+context.source}]:[])
   ]}};
 }
@@ -388,10 +393,16 @@ export async function render({event,context,state={}}) {
           dock.destinations[dock.selectedIndex].id,
           'test.navigation.schedule',
         );
-        await tester.tap(find.byTooltip('返回'));
+        await tester.tap(find.text('打开已导入课表'));
         await settle(tester);
-        expect(find.text('来自 importer').hitTestable(), findsOneWidget);
+        expect(find.text('目标课表 imported-table').hitTestable(), findsOneWidget);
+        expect(
+          find.text('正文 test.navigation.tool').hitTestable(),
+          findsOneWidget,
+        );
         expect(find.byType(ModuleDetailPage), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(find.text('确认预览 review-plan'), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );

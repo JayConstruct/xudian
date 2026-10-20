@@ -507,8 +507,10 @@ void main() {
     final original = await store.get(actor, 'timetables', 'table');
     var page = await render('periods');
     expect(
-      _nodes(page['tree']).where((node) => node['text'] == '保存作息设置'),
-      isEmpty,
+      object(
+        object(page['replaceForms'])['periods.table.table'],
+      )['saveDisabled'],
+      true,
     );
     page = await render(
       'periods',
@@ -529,10 +531,10 @@ void main() {
     // Returning to the page with its retained session restores the unsaved draft.
     page = await render('periods', state: page['state']);
     expect(
-      _nodes(page['tree']).any(
-        (node) => node['key'] == 'periods.1.start' && node['value'] == '08:00',
-      ),
-      isTrue,
+      objects(
+        object(object(page['replaceForms'])['periods.table.table'])['rows'],
+      ).first['start'],
+      '08:00',
     );
     expect(await store.get(actor, 'timetables', 'table'), original);
     final invalid = await render(
@@ -577,9 +579,10 @@ void main() {
       '08:00',
     );
     expect(
-      _nodes(object(saved['tree'])['footer'])
-          .where((node) => node['text'] == '保存作息设置'),
-      isEmpty,
+      object(
+        object(saved['replaceForms'])['periods.table.table'],
+      )['saveDisabled'],
+      true,
     );
     expect(
       interactions.where((value) => value['method'] == 'ui.review'),
@@ -636,6 +639,189 @@ void main() {
     );
   });
 
+  test('period table hydrates one local form, persists manual ends and avoids reference queries while editing', () async {
+    await command('schedule.timetable.save', {
+      'timetable': _table(
+        periods: [
+          {'number': 1, 'start': '08:00', 'end': '08:45'},
+          {'number': 2, 'start': '10:00', 'end': '10:50'},
+        ],
+      ),
+    });
+    mockDialogs();
+    var page = await render('periods');
+    final table = _nodes(page['tree'])
+        .singleWhere((node) => node['type'] == 'timeRangeTable');
+    expect(
+      _nodes(page['tree']).where((node) => node['type'] == 'timeInput'),
+      isEmpty,
+    );
+    final value = object(table['value']);
+    final rows = objects(value['rows']);
+    expect(value['durationMinutes'], '45');
+    expect(
+      rows[1]['manualEnd'],
+      true,
+      reason: 'Existing custom durations must be protected.',
+    );
+    rows[0] = {...rows[0], 'start': '08:10', 'end': '09:10'};
+    final reads = <String>{};
+    page = object(
+      await host.invokePage('app.schedule', 'render', {
+        'context': {'pageId': 'app.schedule.periods'},
+        'state': page['state'],
+        'formValues': {
+          'periods.table.table': {
+            ...value,
+            'durationMinutes': '60',
+            'rows': rows,
+          },
+        },
+      }, onReads: reads.addAll),
+    );
+    expect(
+      reads.any(
+        (key) => ['courses', 'meetings', 'occurrenceChanges'].any(key.contains),
+      ),
+      false,
+    );
+    expect(object(page['state'])['periodsDraft'], isNotNull);
+    final hydrated = object(
+      object(page['replaceForms'])['periods.table.table'],
+    );
+    expect(hydrated['dirty'], true);
+    expect(objects(hydrated['rows']).first['end'], '09:10');
+    expect(objects(hydrated['rows'])[1]['end'], '10:50');
+    await render(
+      'periods',
+      state: page['state'],
+      forms: {'periods.table.table': hydrated},
+      event: {'type': 'savePeriods'},
+    );
+    final saved = object(await store.get(actor, 'timetables', 'table'));
+    expect(saved['periodDurationMinutes'], 60);
+    expect(saved['periodManualEnds'], [2]);
+    page = await render('periods');
+    final reopened = object(
+      object(page['replaceForms'])['periods.table.table'],
+    );
+    expect(reopened['durationMinutes'], '60');
+    expect(reopened['dirty'], false);
+    expect(objects(reopened['rows'])[1]['manualEnd'], true);
+    await render(
+      'periods',
+      state: page['state'],
+      event: {
+        'type': 'periodTime',
+        'number': 2,
+        'part': 'start',
+        'value': '10:10',
+      },
+    );
+    page = await render('periods');
+    expect(
+      objects(
+        object(object(page['replaceForms'])['periods.table.table'])['rows'],
+      )[1]['end'],
+      '10:50',
+    );
+  });
+
+  test('period metadata is validated by the save service', () async {
+    await command('schedule.timetable.save', {'timetable': _table()});
+    final original = await store.get(actor, 'timetables', 'table');
+    for (final metadata in <Map<String, Object?>>[
+      {'periodDurationMinutes': 0},
+      {'periodDurationMinutes': 1.5},
+      {'periodDurationMinutes': 1441},
+      {
+        'periodManualEnds': [3],
+      },
+      {
+        'periodManualEnds': [1, 1],
+      },
+      {
+        'periodManualEnds': ['1'],
+      },
+    ]) {
+      await expectLater(
+        command('schedule.timetable.save', {
+          'timetable': {..._table(), ...metadata},
+        }),
+        throwsStateError,
+      );
+      expect(await store.get(actor, 'timetables', 'table'), original);
+    }
+  });
+
+  test('local period form keeps its original basis when persisted configuration changes', () async {
+    await command('schedule.timetable.save', {'timetable': _table()});
+    mockDialogs();
+    final opened = await render('periods');
+    final value = object(object(opened['replaceForms'])['periods.table.table']);
+    final changed = {...value, 'durationMinutes': '50'};
+    await command('schedule.timetable.save', {
+      'timetable': {
+        ..._table(),
+        'name': '外部修改',
+        'periodDurationMinutes': 60,
+        'periodManualEnds': <int>[],
+      },
+    });
+    final current = await store.get(actor, 'timetables', 'table');
+    final page = await render(
+      'periods',
+      forms: {'periods.table.table': changed},
+      event: {'type': 'savePeriods'},
+    );
+    expect(await store.get(actor, 'timetables', 'table'), current);
+    expect(
+      object(object(page['state'])['periodsDraft'])['durationMinutes'],
+      '50',
+    );
+    expect(
+      _nodes(page['tree']).map((node) => node['text']).join(' '),
+      contains('其他页面修改'),
+    );
+    expect(
+      interactions.where((value) => value['method'] == 'ui.review'),
+      isEmpty,
+    );
+  });
+
+  test('twelve period template clears manual metadata of removed unreferenced rows', () async {
+    String stamp(int minutes) =>
+        '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+    await command('schedule.timetable.save', {
+      'timetable': {
+        ..._table(
+          periods: [
+            for (var i = 0; i < 30; i++)
+              {
+                'number': i + 1,
+                'start': stamp(i * 10),
+                'end': stamp(i * 10 + 5),
+              },
+          ],
+        ),
+        'periodDurationMinutes': 5,
+        'periodManualEnds': [30],
+      },
+    });
+    mockDialogs();
+    final page = await render('periods', event: {'type': 'templatePeriods'});
+    final saved = object(await store.get(actor, 'timetables', 'table'));
+    expect(saved['periods'], hasLength(12));
+    expect(saved['periodManualEnds'], isEmpty);
+    expect(saved['periodDurationMinutes'], 45);
+    expect(
+      object(
+        object(page['replaceForms'])['periods.table.table'],
+      )['saveDisabled'],
+      true,
+    );
+  });
+
   test('template replacement requires approval and cancellation preserves custom times', () async {
     await command('schedule.timetable.save', {'timetable': _table()});
     final original = await store.get(actor, 'timetables', 'table');
@@ -663,9 +849,10 @@ void main() {
     expect(periods.first['start'], '08:00');
     expect(periods.last['end'], '20:55');
     expect(
-      _nodes(object(page['tree'])['footer'])
-          .where((node) => node['text'] == '保存作息设置'),
-      isEmpty,
+      object(
+        object(page['replaceForms'])['periods.table.table'],
+      )['saveDisabled'],
+      true,
     );
   });
 
@@ -1107,7 +1294,14 @@ void main() {
           await tester.ensureVisible(find.text('作息设置'));
           await tester.tap(find.text('作息设置'));
           await _settle(tester);
-          expect(find.text('保存作息设置'), findsNothing);
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, '保存作息设置'),
+                )
+                .onPressed,
+            isNull,
+          );
           await tester.tap(find.text('07:50'));
           await tester.pumpAndSettle();
           final wheels = find.byType(CupertinoPicker);

@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.import.shiguang",
     "name": "拾光教务导入兼容",
-    "version": "1.7.0",
-    "hostApi": "^1.22.0",
+    "version": "1.7.2",
+    "hostApi": "^1.33.0",
     "dataVersion": 1,
     "permissions": [
       "ui",

@@ -47,6 +47,7 @@ import 'mobile_bottom_dock.dart';
 import 'frosted_toolbar_surface.dart';
 import 'workspace_popup_menu.dart';
 import 'workspace_page_transition.dart';
+import 'workspace_toolbar_transition.dart';
 import '../core/performance/startup_readiness.dart';
 import 'more_workspace_page.dart';
 import 'workspace_date_title.dart';
@@ -265,7 +266,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         if (page == null) throw StateError('Page unavailable');
         final values = object(args['context'] ?? {});
         if (method == 'ui.navigate') {
-          final workspaceEntries = visibleWorkspaceEntries.where(
+          final workspaceEntries = widget.registry.ui.entries.where(
             (entry) =>
                 entry.pageId == pageId &&
                 entry.opening == UiOpening.workspace &&
@@ -620,56 +621,84 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  Widget _chromeWorkspace({required Widget child, required bool collapsed}) =>
-      Listener(
-        onPointerSignal: workspaceChrome.handlePointerSignal,
-        child: NotificationListener<ScrollNotification>(
-          onNotification: workspaceChrome.handleScroll,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              child,
-              if (collapsed)
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (MediaQuery.sizeOf(context).width < 820)
-                          _chromeRevealButton()
-                        else
-                          UiPackScope(
-                            defaultOnly: true,
-                            child: NativeUi(
-                              child: IconButton(
-                                tooltip: '展开工具栏',
-                                onPressed: workspaceChrome.reveal,
-                                icon: const UiIcon(Icons.unfold_more),
+  Widget _chromeWorkspace({
+    required Widget child,
+    required bool toolbarHidden,
+    required double toolbarPresence,
+  }) => WorkspaceChromeScrollScope(
+    controller: workspaceChrome,
+    child: Listener(
+      onPointerSignal: workspaceChrome.handlePointerSignal,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: workspaceChrome.handleScroll,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            child,
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Offstage(
+                offstage: toolbarPresence == 1,
+                child: IgnorePointer(
+                  ignoring: !toolbarHidden || toolbarPresence > .1,
+                  child: ExcludeFocus(
+                    excluding: !toolbarHidden || toolbarPresence > .1,
+                    child: ExcludeSemantics(
+                      excluding: !toolbarHidden || toolbarPresence > .1,
+                      child: Opacity(
+                        opacity: 1 - toolbarPresence,
+                        child: FractionalTranslation(
+                          translation: Offset(0, toolbarPresence * .35),
+                          child: Transform.scale(
+                            scale: 1 - toolbarPresence * .08,
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (MediaQuery.sizeOf(context).width < 820)
+                                    _chromeRevealButton()
+                                  else
+                                    UiPackScope(
+                                      defaultOnly: true,
+                                      child: NativeUi(
+                                        child: IconButton(
+                                          tooltip: '展开工具栏',
+                                          onPressed: workspaceChrome.reveal,
+                                          icon: const UiIcon(Icons.unfold_more),
+                                        ),
+                                      ),
+                                    ),
+                                  UiPackScope(
+                                    defaultOnly: true,
+                                    child: NativeUi(
+                                      child: IconButton(
+                                        tooltip: '界面风格与恢复',
+                                        onPressed: _openUiRecovery,
+                                        icon: const UiIcon(
+                                          Icons.palette_outlined,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        UiPackScope(
-                          defaultOnly: true,
-                          child: NativeUi(
-                            child: IconButton(
-                              tooltip: '界面风格与恢复',
-                              onPressed: _openUiRecovery,
-                              icon: const UiIcon(Icons.palette_outlined),
-                            ),
-                          ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
   Widget _chromeRevealButton() => Tooltip(
     message: '展开顶栏和导航',
@@ -1236,8 +1265,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           workspaceHeader.content?.spec['autoHideChrome'] == true &&
           MediaQuery.viewInsetsOf(context).bottom == 0,
     );
-    final chromeCollapsed = workspaceChrome.collapsed;
-    final chromeProgress = workspaceChrome.progress;
+    final toolbarHidden = !workspaceChrome.expanded;
     final interactionLease = workspaceInteraction.activate(
       '${activeEntry.id}:${activeEntry.pageId}:${(workspaceContexts[activeEntry.id] ?? profile.mountFor(activeEntry).context).identity}:${instance?.actor.generation}',
       () =>
@@ -1329,8 +1357,6 @@ class _AppShellState extends ConsumerState<AppShell> {
     final collapsedInset = !desktop && showDock
         ? 60.0 + (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, 100)
         : dockInset;
-    final contentInset =
-        dockInset + (collapsedInset - dockInset) * chromeProgress;
     final workspaceRevision = canonicalJson({
       'modules': [
         for (final module in widget.registry.modules)
@@ -1358,184 +1384,214 @@ class _AppShellState extends ConsumerState<AppShell> {
         ]),
       if (profile.morePageEnabled) _moreEntry.id: workspaceRevision,
     };
-    return _workspaceScaffold(
-      backgroundColor: AppDesign.canvas(context),
-      body: SafeArea(
-        child: Row(
-          children: [
-            if (desktop)
-              _sidebar(destinations, navigationEntries, const [], false),
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  WorkspacePageTransition(
-                    key: const ValueKey('workspace-page-transition'),
-                    destinationId: activeEntry.id,
-                    order: activeOrder,
-                    backgroundColor: AppDesign.canvas(context),
-                    maxRetainedPages: 4,
-                    retentionKeys: retentionKeys,
-                    deferUntilReady: true,
-                    onDestinationReady: () =>
-                        ref.read(startupReadinessProvider).workspaceReady(),
-                    child: Column(
-                      children: [
-                        WorkspaceChromeHeader(
-                          key: const ValueKey('workspace-header-region'),
-                          controller: workspaceChrome,
-                          child: _workspaceHeader(
-                            current.label,
-                            header,
-                            onAssistant: desktop && assistant != null
-                                ? openAssistant
-                                : null,
-                          ),
-                        ),
-                        if (layout?.warning != null)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: Text(layout!.warning!),
-                          ),
-                        if (ref.watch(uiLayoutProvider).hasError)
-                          NativeUi(
-                            child: TextButton(
-                              onPressed: () => ref.invalidate(uiLayoutProvider),
-                              child: const Text('布局读取失败，暂用默认布局，点击重试'),
+    return WorkspaceToolbarTransition(
+      visible: !toolbarHidden,
+      builder: (context, toolbarPresence) {
+        final contentInset =
+            collapsedInset + (dockInset - collapsedInset) * toolbarPresence;
+        return _workspaceScaffold(
+          backgroundColor: AppDesign.canvas(context),
+          body: SafeArea(
+            child: Row(
+              children: [
+                if (desktop)
+                  _sidebar(destinations, navigationEntries, const [], false),
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      WorkspacePageTransition(
+                        key: const ValueKey('workspace-page-transition'),
+                        destinationId: activeEntry.id,
+                        order: activeOrder,
+                        backgroundColor: AppDesign.canvas(context),
+                        maxRetainedPages: 4,
+                        retentionKeys: retentionKeys,
+                        deferUntilReady: true,
+                        onDestinationReady: () =>
+                            ref.read(startupReadinessProvider).workspaceReady(),
+                        child: Column(
+                          children: [
+                            WorkspaceChromeHeader(
+                              key: const ValueKey('workspace-header-region'),
+                              controller: workspaceChrome,
+                              child: _workspaceHeader(
+                                current.label,
+                                header,
+                                onAssistant: desktop && assistant != null
+                                    ? openAssistant
+                                    : null,
+                              ),
                             ),
-                          ),
-                        if (restoreFailures.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '${restoreFailures.length} 个扩展模块恢复失败，已停用，数据保留',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall,
-                                  ),
+                            if (layout?.warning != null)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
                                 ),
-                                NativeUi(
-                                  child: TextButton(
-                                    onPressed: _showRestoreFailures,
-                                    child: const Text('查看详情'),
-                                  ),
+                                child: Text(layout!.warning!),
+                              ),
+                            if (ref.watch(uiLayoutProvider).hasError)
+                              NativeUi(
+                                child: TextButton(
+                                  onPressed: () =>
+                                      ref.invalidate(uiLayoutProvider),
+                                  child: const Text('布局读取失败，暂用默认布局，点击重试'),
                                 ),
-                                NativeUi(
-                                  child: IconButton(
-                                    tooltip: '关闭恢复提示',
-                                    onPressed: () => setState(
-                                      () => restoreFailures = const {},
-                                    ),
-                                    icon: const UiIcon(Icons.close, size: 18),
-                                  ),
+                              ),
+                            if (restoreFailures.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
                                 ),
-                              ],
-                            ),
-                          ),
-                        Expanded(
-                          child: _chromeWorkspace(
-                            collapsed: chromeCollapsed,
-                            child: desktop
-                                ? Align(
-                                    alignment: Alignment.topCenter,
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 1040,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${restoreFailures.length} 个扩展模块恢复失败，已停用，数据保留',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
                                       ),
-                                      child: workspaceContent(),
                                     ),
-                                  )
-                                : RepaintBoundary(
-                                    child: WorkspaceContentInsets(
-                                      bottom: contentInset,
-                                      child: workspaceContent(),
+                                    NativeUi(
+                                      child: TextButton(
+                                        onPressed: _showRestoreFailures,
+                                        child: const Text('查看详情'),
+                                      ),
+                                    ),
+                                    NativeUi(
+                                      child: IconButton(
+                                        tooltip: '关闭恢复提示',
+                                        onPressed: () => setState(
+                                          () => restoreFailures = const {},
+                                        ),
+                                        icon: const UiIcon(
+                                          Icons.close,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Expanded(
+                              child: _chromeWorkspace(
+                                toolbarHidden: toolbarHidden,
+                                toolbarPresence: toolbarPresence,
+                                child: desktop
+                                    ? Align(
+                                        alignment: Alignment.topCenter,
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxWidth: 1040,
+                                          ),
+                                          child: workspaceContent(),
+                                        ),
+                                      )
+                                    : RepaintBoundary(
+                                        child: WorkspaceContentInsets(
+                                          bottom: contentInset,
+                                          child: workspaceContent(),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            if (desktop && current.quickAdd)
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  desktop ? 20 : 12,
+                                  4,
+                                  desktop ? 20 : 12,
+                                  desktop ? 18 : 8,
+                                ),
+                                child: FloatingSurface(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    6,
+                                    8,
+                                    6,
+                                  ),
+                                  child: _quickInputContent(current),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (!desktop && showDock)
+                        Positioned(
+                          left: 12,
+                          right: 12,
+                          bottom: 12,
+                          child: WorkspaceInteractionDock(
+                            controller: workspaceInteraction,
+                            child: IgnorePointer(
+                              ignoring: toolbarHidden,
+                              child: ExcludeFocus(
+                                excluding: toolbarHidden,
+                                child: ExcludeSemantics(
+                                  excluding: toolbarHidden,
+                                  child: FractionalTranslation(
+                                    translation: Offset(
+                                      0,
+                                      (1 - toolbarPresence) * 1.5,
+                                    ),
+                                    child: Opacity(
+                                      opacity: toolbarPresence,
+                                      child: MobileBottomDock(
+                                        onSizeChanged: _dockSizeChanged,
+                                        destinations: destinations,
+                                        selectedIndex: index,
+                                        visibleCount: destinations.length,
+                                        hasMore: false,
+                                        moreSelected: false,
+                                        onAssistant: assistant == null
+                                            ? null
+                                            : openAssistant,
+                                        annotate: true,
+                                        entryModuleIds: {
+                                          for (final entry in navigationEntries)
+                                            entry.id: entry.moduleId,
+                                        },
+                                        showNavigation: showNavigation,
+                                        onSelected: (value) {
+                                          if (value >= 0 &&
+                                              value <
+                                                  navigationEntries.length) {
+                                            _openEntry(
+                                              navigationEntries[value],
+                                            );
+                                          }
+                                        },
+                                        input: current.quickAdd
+                                            ? _quickInputContent(current)
+                                            : null,
+                                      ),
                                     ),
                                   ),
-                          ),
-                        ),
-                        if (desktop && current.quickAdd)
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              desktop ? 20 : 12,
-                              4,
-                              desktop ? 20 : 12,
-                              desktop ? 18 : 8,
-                            ),
-                            child: FloatingSurface(
-                              padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
-                              child: _quickInputContent(current),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  if (!desktop && showDock)
-                    Positioned(
-                      left: 12,
-                      right: 12,
-                      bottom: 12,
-                      child: WorkspaceInteractionDock(
-                        controller: workspaceInteraction,
-                        child: IgnorePointer(
-                          ignoring: chromeCollapsed,
-                          child: ExcludeSemantics(
-                            excluding: chromeCollapsed,
-                            child: FractionalTranslation(
-                              translation: Offset(0, chromeProgress * 1.5),
-                              child: Opacity(
-                                opacity: 1 - chromeProgress,
-                                child: MobileBottomDock(
-                                  onSizeChanged: _dockSizeChanged,
-                                  destinations: destinations,
-                                  selectedIndex: index,
-                                  visibleCount: destinations.length,
-                                  hasMore: false,
-                                  moreSelected: false,
-                                  onAssistant: assistant == null
-                                      ? null
-                                      : openAssistant,
-                                  annotate: true,
-                                  entryModuleIds: {
-                                    for (final entry in navigationEntries)
-                                      entry.id: entry.moduleId,
-                                  },
-                                  showNavigation: showNavigation,
-                                  onSelected: (value) {
-                                    if (value >= 0 &&
-                                        value < navigationEntries.length) {
-                                      _openEntry(navigationEntries[value]);
-                                    }
-                                  },
-                                  input: current.quickAdd
-                                      ? _quickInputContent(current)
-                                      : null,
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (showPanel)
-              SizedBox(
-                width: 370,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 12, 16, 16),
-                  child: FloatingSurface(
-                    padding: EdgeInsets.zero,
-                    child: _page(panelEntry!, pageContext: panelContext),
+                    ],
                   ),
                 ),
-              ),
-          ],
-        ),
-      ),
+                if (showPanel)
+                  SizedBox(
+                    width: 370,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 12, 16, 16),
+                      child: FloatingSurface(
+                        padding: EdgeInsets.zero,
+                        child: _page(panelEntry!, pageContext: panelContext),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1630,7 +1686,33 @@ class _AppShellState extends ConsumerState<AppShell> {
               ),
             ),
             Expanded(child: navigation),
-            if (workspaceChrome.collapsed) _chromeRevealButton(),
+            WorkspaceToolbarTransition(
+              visible: !workspaceChrome.expanded,
+              builder: (context, presence) => Offstage(
+                offstage: presence == 0,
+                child: ClipRect(
+                  child: Align(
+                    heightFactor: presence,
+                    child: IgnorePointer(
+                      ignoring: workspaceChrome.expanded,
+                      child: ExcludeFocus(
+                        excluding: workspaceChrome.expanded,
+                        child: ExcludeSemantics(
+                          excluding: workspaceChrome.expanded,
+                          child: Opacity(
+                            opacity: presence,
+                            child: Transform.scale(
+                              scale: .92 + .08 * presence,
+                              child: _chromeRevealButton(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             settings,
           ],
         ),

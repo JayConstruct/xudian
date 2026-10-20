@@ -7,7 +7,7 @@ export {createDemo} from './demo.js';
 let selectedTimetableId=null,selectionRevision=0,displayRequest=0;
 function selectTimetable(id) { if(selectedTimetableId!==id) { selectedTimetableId=id; selectionRevision++; } }
 const ref=id=>({moduleId:'app.schedule',serviceId:id,majorVersion:1});
-import {defaultPeriods,periodDraft,semesterDraft,resetPeriodDraft,resetSemesterDraft,displayDraft,resetDisplayDraft,scheduleRowHeight,scheduleShowWeekends,displayDirty,periodError,appendPeriods,timeMinutes,timeString,listTile,group,importSummary} from './view_helpers.js';
+import {defaultPeriods,periodDraft,semesterDraft,resetPeriodDraft,resetSemesterDraft,displayDraft,resetDisplayDraft,scheduleRowHeight,scheduleShowWeekends,displayDirty,periodError,periodDraftDirty,periodBaselineMatches,periodTableValue,periodTableBaseline,hydratePeriodDraft,periodDraftTimetable,periodDraftError,appendPeriods,timeMinutes,timeString,listTile,group,importSummary} from './view_helpers.js';
 async function snapshot(timetableId,timetable) {
   const t=timetable??await data.get('timetables',timetableId); if(!t) throw new Error('课表不存在');
   const filter={field:'timetableId',op:'eq',value:timetableId};
@@ -165,6 +165,12 @@ async function command(id,input) {
   if(await ui.review(plan.planId)) return {result:await services.commit(plan.planId)};
   return null;
 }
+async function offerImportedSchedule(result,state) {
+  try {
+    const answer=await ui.dialog({title:'导入完成',description:'课程已保存，是否打开课表？',submitLabel:'打开课表',fields:[]});
+    if(answer) await ui.navigate('app.schedule.home',{timetableId:result.timetableId});
+  } catch(error) {state.notice='导入已保存，暂时无法打开课表：'+error.message;}
+}
 const button=(text,event)=>({type:'button',text,event});
 const text=value=>({type:'text',text:value});
 const field=(key,label,value='',type='text',options)=>({key,label,value,type,...(options?{options}: {})});
@@ -271,16 +277,26 @@ export async function render({state={},context={},event,formValues={}}) {
   }
   if(t && page==='app.schedule.periods') {
     const draft=periodDraft(t);
+    if(event?.type!=='resetPeriods'&&event?.type!=='chooseTimetable') {
+      try {hydratePeriodDraft(draft,formValues[`periods.table.${t.id}`]);}catch(error){draft.error=error.message;}
+    }
     if(event?.type==='periodTime') {
       const row=draft.periods.find(p=>p.number===event.number);
-      if(row && ['start','end'].includes(event.part)) row[event.part]=String(event.value);
+      if(row && ['start','end'].includes(event.part)) {
+        row[event.part]=String(event.value);
+        if(event.part==='end'&&!draft.manualEnds.includes(row.number))draft.manualEnds.push(row.number);
+        if(event.part==='start'&&!draft.manualEnds.includes(row.number)) {
+          try {const end=timeMinutes(row.start)+Number(draft.durationMinutes);row.end=end<1440?timeString(end):'';}catch(_){}
+        }
+      }
       draft.error=null;delete state.notice;
     }
     if(event?.type==='addPeriod') {
       try {
         if(draft.periods.length>=30)throw new Error('最多配置30个节次');
         const start=draft.periods.length?timeMinutes(draft.periods.at(-1).end)+5:8*60;
-        draft.periods.push({number:draft.periods.length+1,start:timeString(start),end:timeString(start+45)});draft.error=null;
+        const duration=Number(draft.durationMinutes);if(!/^\d+$/.test(draft.durationMinutes)||duration<1||duration>1440)throw new Error('每节时长需为1–1440分钟的整数');
+        draft.periods.push({number:draft.periods.length+1,start:timeString(start),end:timeString(start+duration)});draft.error=null;
       } catch(error) {draft.error=error.message;}
     }
     if(event?.type==='removePeriod') {
@@ -288,14 +304,14 @@ export async function render({state={},context={},event,formValues={}}) {
       if(event.number!==draft.periods.length)draft.error='只能删除最后一个节次，请先删除末尾未使用的节次';
       else if(meetings.some(m=>m.endPeriod>=event.number)||changes.some(c=>c.kind!=='cancel'&&c.endPeriod>=event.number)) draft.error=`第 ${event.number} 节或其后的节次已被课程安排或调课引用，请先调整课程。`;
       else if(draft.periods.length<=1) draft.error='至少保留一个节次';
-      else {draft.periods=draft.periods.filter(p=>p.number!==event.number).map((p,i)=>({...p,number:i+1}));draft.error=null;}
+      else {draft.periods=draft.periods.filter(p=>p.number!==event.number).map((p,i)=>({...p,number:i+1}));draft.manualEnds=draft.manualEnds.filter(number=>number!==event.number);draft.error=null;}
     }
     if(event?.type==='resetPeriods') {resetPeriodDraft(t);delete state.notice;}
     if(event?.type==='savePeriods') {
       try {
-        if(draft.baseline!==JSON.stringify(t.periods))throw new Error('作息已在其他页面修改。草稿已保留，请重新载入后编辑。');
-        const error=await periodError(t,draft.periods);if(error)throw new Error(error);
-        const saved=await command('schedule.timetable.save',{timetable:{...t,periods:draft.periods},expectedTimetable:t});
+        if(!periodBaselineMatches(t,draft))throw new Error('作息已在其他页面修改。草稿已保留，请重新载入后编辑。');
+        const value=periodDraftTimetable(t,draft),error=await periodError(value,draft.periods);if(error)throw new Error(error);
+        const saved=await command('schedule.timetable.save',{timetable:value,expectedTimetable:t});
         if(saved) {resetPeriodDraft(await data.get('timetables',t.id));state.notice='作息设置已保存';}
       } catch(error) {draft.error=error.message;}
     }
@@ -304,8 +320,9 @@ export async function render({state={},context={},event,formValues={}}) {
         const periods=event.type==='templatePeriods'?defaultPeriods.map(p=>({...p})):appendPeriods(t.periods);
         if(JSON.stringify(periods)===JSON.stringify(t.periods)) {state.notice='当前作息已包含12个或更多节次';}
         else {
-          const error=await periodError(t,periods);if(error)throw new Error(error);
-          const saved=await command('schedule.timetable.save',{timetable:{...t,periods},expectedTimetable:t});
+          const value=periodDraftTimetable(t,{...draft,periods,...(event.type==='templatePeriods'?{manualEnds:[],durationMinutes:'45'}:{})});
+          const error=await periodError(value,periods);if(error)throw new Error(error);
+          const saved=await command('schedule.timetable.save',{timetable:value,expectedTimetable:t});
           if(saved) {resetPeriodDraft(await data.get('timetables',t.id));state.notice=event.type==='templatePeriods'?'已应用12节作息模板':'已保留现有作息并补足至12节';}
         }
       } catch(error) {draft.error=error.message;}
@@ -358,10 +375,13 @@ export async function render({state={},context={},event,formValues={}}) {
   }
   if(event?.type==='cancelAdapter') {delete state.adapterPlan;state.notice='已取消导入，课表未修改';}
   if(event?.type==='confirmAdapter' && state.adapterPlan && !state.adapterPlan.result.blocked) {
-    if(await ui.review(state.adapterPlan.planId)) {
-      const result=await services.commit(state.adapterPlan.planId);
-      state.timetableId=result.timetableId; selectTimetable(result.timetableId); delete state.adapterPlan;state.notice='导入已保存';
-    }
+    try {
+      if(await ui.review(state.adapterPlan.planId)) {
+        const result=await services.commit(state.adapterPlan.planId);
+        state.timetableId=result.timetableId; selectTimetable(result.timetableId); delete state.adapterPlan;state.notice='导入已保存';
+        await offerImportedSchedule(result,state);
+      }
+    } catch(error) {state.importError='导入预览已失效或无法保存，请重新预览：'+error.message;delete state.adapterPlan;}
   }
   if(page!=='app.schedule.home' && context.draft&&!state.importDraft&&!state.importFinished) state.importDraft=context.draft;
   if(event?.type==='cancelImport') { delete state.importDraft;delete state.importPlan;delete state.importSummary;delete state.importInput;delete state.importError;state.importFinished=true; }
@@ -385,6 +405,7 @@ export async function render({state={},context={},event,formValues={}}) {
     try {
       if(await ui.review(state.importPlan.planId)) {
         const result=await services.commit(state.importPlan.planId);state.timetableId=result.timetableId;selectTimetable(result.timetableId);state.importFinished=true;state.notice='导入已保存';delete state.importDraft;delete state.importPlan;delete state.importSummary;delete state.importInput;
+        await offerImportedSchedule(result,state);
       }
     } catch(error) {state.importError='导入预览已失效或无法保存，请重新预览：'+error.message;delete state.importPlan;}
   }
@@ -408,6 +429,7 @@ export async function render({state={},context={},event,formValues={}}) {
     return {state,tree:{type:'column',children}};
   }
   if(page==='app.schedule.imports') {
+    let footer,planReview;
     children.push(group('数据来源',[
       listTile(t?.name||'新建课表',t?'当前导入目标；导入时可以选择新建课表':'导入 JSON 备份后创建新课表','calendar',t?{type:'chooseTimetable'}:null),
       listTile('JSON 导入','选择课表备份，预览后确认保存','importExport',{type:'import'}),
@@ -416,7 +438,9 @@ export async function render({state={},context={},event,formValues={}}) {
     if(state.importError)children.push(text(state.importError));
     if(state.adapterPlan) {
       const summary=await importSummary(state.adapterPlan,null);
-      children.push(group('教务适配器导入预览',[text(`新增 ${summary.added} 项 · 修改 ${summary.updated} 项 · 删除 ${summary.deleted} 项`),text(`冲突 ${summary.conflicts?.length||0} 项 · 警告 ${summary.warnings?.length||0} 项`),...((summary.warnings||[]).map(text)),text('以下是本次导入将实际写入的变更，确认后保存。'),...summary.details,...(!state.adapterPlan.result.blocked?[button('确认导入',{type:'confirmAdapter'})]:[]),button('取消导入',{type:'cancelAdapter'})]));
+      children.push(group('教务适配器导入预览',[text(`新增 ${summary.added} 项 · 修改 ${summary.updated} 项 · 删除 ${summary.deleted} 项`),text(`冲突 ${summary.conflicts?.length||0} 项 · 警告 ${summary.warnings?.length||0} 项`),...((summary.warnings||[]).map(text)),text('以下是本次导入将实际写入的变更，确认后保存。'),...summary.details]));
+      footer={type:'row',children:[button('取消导入',{type:'cancelAdapter'}),...(!state.adapterPlan.result.blocked?[button('确认导入',{type:'confirmAdapter'})]:[])]};
+      if(!state.adapterPlan.result.blocked)planReview={planId:state.adapterPlan.planId,eventType:'confirmAdapter'};
     }
     if(state.importDraft) {
       const summary=state.importSummary||await importSummary(null,state.importDraft);
@@ -430,11 +454,11 @@ export async function render({state={},context={},event,formValues={}}) {
         ...(state.importPlan?summary.details:[{type:'source',text:JSON.stringify(state.importDraft,null,2)}]),
         button(state.importPlan?'重新选择方式并预览':'选择方式并预览实际变更',{type:'saveImport'}),
         ...(state.importPlan?.result.conflicts?.length?[button('处理导入冲突',{type:'resolveImport'})]:[]),
-        ...(state.importPlan&&!state.importPlan.result.blocked?[button('确认保存导入',{type:'confirmImport'})]:[]),
-        button('取消导入',{type:'cancelImport'})
       ]));
+      footer={type:'row',children:[button('取消导入',{type:'cancelImport'}),...(state.importPlan&&!state.importPlan.result.blocked?[button('确认保存导入',{type:'confirmImport'})]:[])]};
+      if(state.importPlan&&!state.importPlan.result.blocked)planReview={planId:state.importPlan.planId,eventType:'confirmImport'};
     }
-    return {state,tree:{type:'column',children}};
+    return {state,tree:{type:'column',children,...(footer?{footer}:{}),...(planReview?{planReview}:{})}};
   }
   if(page==='app.schedule.timetables') {
     children.push({type:'sectionHeader',title:'我的课表',count:timetables.length,action:{label:'新建课表',icon:'add',event:{type:'newTimetable'}}});
@@ -460,28 +484,19 @@ export async function render({state={},context={},event,formValues={}}) {
     return {state,replaceForms,tree:{type:'column',children,...(dirty?{footer:{type:'row',children:[button('重新载入',{type:'resetSemester'}),button('保存学期设置',{type:'saveSemester'})]}}:{})}};
   }
   if(page==='app.schedule.periods') {
-    const draft=periodDraft(t),dirty=JSON.stringify(draft.periods)!==draft.baseline,validation=await periodError(t,draft.periods);
+    const draft=periodDraft(t),dirty=periodDraftDirty(draft),validation=periodDraftError(t,draft),key=`periods.table.${t.id}`;
     state.periodsDraft={...draft,dirty,error:draft.error||validation};
-    const sessions=[['上午',[]],['下午',[]],['晚间',[]]];
-    for(const row of draft.periods) {
-      let hour=Number(row.start?.slice(0,2));if(!Number.isFinite(hour))hour=row.number<=5?8:row.number<=9?14:19;
-      const target=hour<12?0:hour<18?1:2;
-      sessions[target][1].push({type:'column',children:[
-        text(`第 ${row.number} 节`),
-        {type:'row',children:[{type:'timeInput',key:`periods.${row.number}.start`,text:'开始时间',value:row.start,event:{type:'periodTime',number:row.number,part:'start'}},{type:'timeInput',key:`periods.${row.number}.end`,text:'结束时间',value:row.end,event:{type:'periodTime',number:row.number,part:'end'}}]},
-        ...(row.number===draft.periods.length?[listTile('删除末尾节次',null,'history',{type:'removePeriod',number:row.number})]:[])
-      ]});
-    }
+    const value={...periodTableValue(draft),dirty,saveDisabled:!dirty||!!validation,resetDisabled:!dirty,error:validation};
     children.push(text(`${t.name} · ${draft.periods.length} 个节次`));
-    for(const [label,rows] of sessions)if(rows.length)children.push(group(label,rows));
-    if(dirty)children.push(text('尚未保存。离开页面后草稿会保留，保存前会审核实际变更。'));
-    if(draft.error||validation)children.push(text(draft.error||validation));
+    children.push({type:'timeRangeTable',key,value,baseline:periodTableBaseline(draft)});
+    if(draft.error)children.push(text(draft.error));
     children.push(group('节次与模板',[
-      listTile('添加节次','在末尾增加一个45分钟节次','schedule',{type:'addPeriod'}),
+      listTile('添加节次','按每节时长在末尾增加节次','schedule',{type:'addPeriod'}),
+      listTile('删除末尾节次',null,'history',{type:'removePeriod',number:draft.periods.length}),
       listTile('使用12节作息模板','替换当前起止时间，经过实际变更审核后保存','schedule',{type:'templatePeriods'}),
       ...(t.periods.length<12?[listTile('补足至12节','保留现有起止时间，仅在末尾追加节次','schedule',{type:'appendPeriods'})]:[])
     ]));
-    return {state,tree:{type:'column',children,...(dirty?{footer:{type:'row',children:[button('放弃草稿',{type:'resetPeriods'}),{...button('保存作息设置',{type:'savePeriods'}),disabled:!!validation}]}}:{})}};
+    return {state,replaceForms:{[key]:value},tree:{type:'column',children,footer:{type:'row',children:[{...button('放弃草稿',{type:'resetPeriods'}),disabled:{bind:['formValues',key,'resetDisabled']}},{...button('保存作息设置',{type:'savePeriods'}),disabled:{bind:['formValues',key,'saveDisabled']}}]}}};
   }
   if(page==='app.schedule.occurrence') {
     const current=await currentOccurrence(t,context);

@@ -4,7 +4,179 @@ import 'package:task_app/core/ui/script_transition.dart';
 import 'package:task_app/core/ui/ui_component.dart';
 
 void main() {
-  for (final effect in ['fade', 'scale', 'slide']) {
+  testWidgets('page navigation pushes the destination and pops the source', (
+    tester,
+  ) async {
+    final page = ValueNotifier((
+      name: 'home',
+      direction: 'forward',
+      revision: 0,
+    ));
+    addTearDown(page.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ValueListenableBuilder(
+            valueListenable: page,
+            builder: (_, value, _) => ScriptTransition(
+              effect: 'page',
+              navigationDirection: value.direction,
+              replayKey: value.name,
+              child: SizedBox(
+                height: 200,
+                child: Text('${value.name} ${value.revision}'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    page.value = (name: 'detail', direction: 'forward', revision: 0);
+    await tester.pump();
+    Finder fadeFor(String text) => find
+        .ancestor(of: find.text(text), matching: find.byType(FadeTransition))
+        .first;
+    expect(tester.widget<FadeTransition>(fadeFor('detail 0')).opacity.value, 0);
+    expect(find.text('home 0'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('home 0'), findsNothing);
+    page.value = (name: 'home', direction: 'back', revision: 0);
+    await tester.pump();
+    expect(find.text('home 0'), findsOneWidget);
+    final outgoing = fadeFor('detail 0');
+    expect(tester.widget<FadeTransition>(outgoing).opacity.value, 1);
+    expect(
+      find
+          .descendant(
+            of: find.byType(ScriptTransition),
+            matching: find.byType(FadeTransition),
+          )
+          .evaluate()
+          .where(
+            (element) => find
+                .descendant(
+                  of: find.byWidget(element.widget),
+                  matching: find.text('home 0'),
+                )
+                .evaluate()
+                .isNotEmpty,
+          ),
+      isEmpty,
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(
+      tester.widget<FadeTransition>(outgoing).opacity.value,
+      inExclusiveRange(0, 1),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('detail 0'), findsNothing);
+    page.value = (name: 'home', direction: 'back', revision: 1);
+    await tester.pump();
+    expect(find.text('home 1'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ScriptTransition),
+        matching: find.byType(FadeTransition),
+      ),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'rapid page direction changes keep one outgoing view and exclude its interaction',
+    (tester) async {
+      final page = ValueNotifier((name: 'home', direction: 'forward'));
+      addTearDown(page.dispose);
+      var taps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder(
+              valueListenable: page,
+              builder: (_, value, _) => ScriptTransition(
+                effect: 'page',
+                navigationDirection: value.direction,
+                replayKey: value.name,
+                child: SizedBox(
+                  height: 200,
+                  child: TextButton(
+                    onPressed: () => taps++,
+                    child: Text(value.name),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      page.value = (name: 'detail', direction: 'forward');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      page.value = (name: 'about', direction: 'forward');
+      await tester.pump();
+      expect(find.text('home'), findsNothing);
+      expect(find.text('detail'), findsOneWidget);
+      expect(find.text('about'), findsOneWidget);
+      final hidden = tester.widget<IgnorePointer>(
+        find
+            .ancestor(
+              of: find.text('detail'),
+              matching: find.byType(IgnorePointer),
+            )
+            .first,
+      );
+      expect(hidden.ignoring, isTrue);
+      page.value = (name: 'detail', direction: 'back');
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(find.text('about'), findsNothing);
+      await tester.tap(find.text('detail'));
+      expect(taps, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'reduced page navigation swaps immediately without retaining the source',
+    (tester) async {
+      final page = ValueNotifier((name: 'home', direction: 'forward'));
+      addTearDown(page.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder(
+              valueListenable: page,
+              builder: (context, value, _) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(disableAnimations: true),
+                child: ScriptTransition(
+                  effect: 'page',
+                  navigationDirection: value.direction,
+                  replayKey: value.name,
+                  child: Text(value.name),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      for (final direction in ['forward', 'back']) {
+        page.value = (name: direction, direction: direction);
+        await tester.pump();
+        expect(find.text(direction), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(ScriptTransition),
+            matching: find.byType(FadeTransition),
+          ),
+          findsNothing,
+        );
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final effect in ['fade', 'scale', 'slide', 'page']) {
     testWidgets('$effect transition animates, replays and hides interaction', (
       tester,
     ) async {
@@ -72,6 +244,66 @@ void main() {
     });
   }
 
+  testWidgets('page entrance matches app motion and replay preserves input', (
+    tester,
+  ) async {
+    final replay = ValueNotifier(0);
+    addTearDown(replay.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ValueListenableBuilder(
+            valueListenable: replay,
+            builder: (_, value, _) => ScriptTransition(
+              effect: 'page',
+              replayKey: value,
+              child: const TextField(),
+            ),
+          ),
+        ),
+      ),
+    );
+    final transition = find.byType(ScriptTransition);
+    final fade = find.descendant(
+      of: transition,
+      matching: find.byType(FadeTransition),
+    );
+    final slide = find.descendant(
+      of: transition,
+      matching: find.byType(SlideTransition),
+    );
+    double opacity() => tester.widget<FadeTransition>(fade).opacity.value;
+    Offset position() => tester.widget<SlideTransition>(slide).position.value;
+    expect(
+      tester.widget<ScriptTransition>(transition).duration,
+      const Duration(milliseconds: 300),
+    );
+    expect(opacity(), 0);
+    expect(position(), const Offset(.04, 0));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(opacity(), closeTo(Curves.easeOutCubic.transform(.5), .0001));
+    expect(position().dx, greaterThan(0));
+    expect(position().dx, lessThan(.04));
+    expect(position().dy, 0);
+    await tester.pump(const Duration(milliseconds: 149));
+    expect(opacity(), lessThan(1));
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(opacity(), 1);
+    expect(position(), Offset.zero);
+
+    await tester.enterText(find.byType(TextField), '保留页面草稿');
+    final original = tester.state(find.byType(TextField));
+    replay.value++;
+    await tester.pump();
+    expect(opacity(), 0);
+    expect(position(), const Offset(.04, 0));
+    expect(tester.state(find.byType(TextField)), same(original));
+    expect(find.text('保留页面草稿'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('changing effect replays while preserving child input state', (
     tester,
   ) async {
@@ -108,41 +340,43 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('reduce motion skips animation and replay preserves input', (
-    tester,
-  ) async {
-    final replay = ValueNotifier(0);
-    addTearDown(replay.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(disableAnimations: true),
-          child: child!,
-        ),
-        home: Scaffold(
-          body: ValueListenableBuilder(
-            valueListenable: replay,
-            builder: (_, value, _) => ScriptTransition(
-              effect: 'scale',
-              replayKey: value,
-              child: const TextField(key: ValueKey('draft')),
+  for (final effect in ['fade', 'scale', 'slide', 'page']) {
+    testWidgets('$effect reduced motion skips animation and preserves input', (
+      tester,
+    ) async {
+      final replay = ValueNotifier(0);
+      addTearDown(replay.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: ValueListenableBuilder(
+              valueListenable: replay,
+              builder: (_, value, _) => ScriptTransition(
+                effect: effect,
+                replayKey: value,
+                child: const TextField(key: ValueKey('draft')),
+              ),
             ),
           ),
         ),
-      ),
-    );
-    final fade = find.descendant(
-      of: find.byType(ScriptTransition),
-      matching: find.byType(FadeTransition),
-    );
-    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
-    await tester.enterText(find.byType(TextField), '保留草稿');
-    replay.value++;
-    await tester.pump();
-    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
-    expect(find.text('保留草稿'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      final fade = find.descendant(
+        of: find.byType(ScriptTransition),
+        matching: find.byType(FadeTransition),
+      );
+      expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+      await tester.enterText(find.byType(TextField), '保留草稿');
+      replay.value++;
+      await tester.pump();
+      expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+      expect(find.text('保留草稿'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets(
     'collapse keeps draft and element, clears hidden focus and reverses in place',

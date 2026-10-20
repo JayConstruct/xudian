@@ -145,7 +145,7 @@ void main() {
   }
 
   testWidgets(
-    'partial chrome tracks finger distance and ignores release inertia and jumps',
+    'partial chrome consumes finger distance before rows and ignores release inertia and jumps',
     (tester) async {
       await pumpApp(tester);
       final full = tester.getSize(header()).height;
@@ -159,6 +159,14 @@ void main() {
       final firstOffset = position.pixels;
       expect(firstHeight, greaterThan(0));
       expect(firstHeight, lessThan(full));
+      expect(firstOffset, 0);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(tester.getSize(header()).height, closeTo(firstHeight, .1));
+      expect(dockVisible(tester), isFalse);
+      expect(
+        find.byKey(const ValueKey('workspace-chrome-reveal')).hitTestable(),
+        findsOneWidget,
+      );
       for (var i = 0; i < 2; i++) {
         final previousHeight = tester.getSize(header()).height;
         final previousOffset = position.pixels;
@@ -168,16 +176,17 @@ void main() {
           tester.getSize(header()).height,
           closeTo(previousHeight - 8, .1),
         );
-        expect(position.pixels, closeTo(previousOffset + 8, .1));
+        expect(position.pixels, closeTo(previousOffset, .1));
       }
-      expect(position.pixels, greaterThan(firstOffset));
+      expect(position.pixels, firstOffset);
       final released = tester.getSize(header()).height;
       await gesture.up();
       await tester.pumpAndSettle();
       expect(tester.getSize(header()).height, closeTo(released, .1));
+      expect(position.pixels, 0);
       expect(
         find.byKey(const ValueKey('workspace-chrome-reveal')),
-        findsNothing,
+        findsOneWidget,
       );
       position.jumpTo(180);
       await tester.pumpAndSettle();
@@ -212,18 +221,15 @@ void main() {
       await frame(tester);
       expect(position.pixels, lessThan(0));
       expect(tester.getSize(header()).height, closeTo(full, .1));
-      for (var i = 0; i < 20 && position.pixels <= 0; i++) {
+      for (var i = 0; i < 20 && tester.getSize(header()).height == full; i++) {
         await gesture.moveBy(const Offset(0, -10));
         await frame(tester);
-        if (position.pixels <= 0) {
+        if (position.pixels < 0) {
           expect(tester.getSize(header()).height, closeTo(full, .1));
         }
       }
-      expect(position.pixels, greaterThan(0));
-      expect(
-        tester.getSize(header()).height,
-        closeTo(full - position.pixels, .1),
-      );
+      expect(position.pixels, closeTo(0, .1));
+      expect(tester.getSize(header()).height, lessThan(full));
       final released = tester.getSize(header()).height;
       await gesture.up();
       await tester.pumpAndSettle();
@@ -474,7 +480,7 @@ export async function render(){
       expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);
       expect(
-        find.byKey(const ValueKey('workspace-chrome-reveal')),
+        find.byKey(const ValueKey('workspace-chrome-reveal')).hitTestable(),
         findsNothing,
       );
       expect(find.textContaining('安全故障测试'), findsOneWidget);

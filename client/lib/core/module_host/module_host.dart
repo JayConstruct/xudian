@@ -65,6 +65,13 @@ typedef PagePlanReview = bool Function(
   PlanConfirmation? confirmation,
 );
 
+/// Native approval for an exact frozen plan already displayed by the page.
+/// Unlike service-specific gestures this also supports adopted provider plans.
+typedef InlinePagePlanReview = bool Function(
+  ChangePlan plan,
+  PlanConfirmation? confirmation,
+);
+
 class ScriptInstance {
   ScriptInstance(this.package, this.actor);
   final ScriptPackage package;
@@ -92,6 +99,7 @@ class ScriptInstance {
   bool pagePreparation = false;
   _PageReplayability? _pageReplayability;
   PagePlanReview? _pagePlanReview;
+  InlinePagePlanReview? _inlinePagePlanReview;
   void Function(ChangePlan plan)? _pagePlanCommitted;
   final subscriptions = <String, StreamSubscription>{};
   Future<void> tail = Future.value();
@@ -1619,6 +1627,7 @@ class ModuleHost {
     bool readOnly = false,
     bool Function()? shouldRun,
     PagePlanReview? onReview,
+    InlinePagePlanReview? onInlineReview,
     void Function(ChangePlan plan)? onCommit,
   }) {
     if (readOnly && input is Map && input['event'] != null) {
@@ -1644,6 +1653,7 @@ class ModuleHost {
             instance.pageReads = reads;
             instance.pagePreparation = readOnly;
             instance._pagePlanReview = readOnly ? null : onReview;
+            instance._inlinePagePlanReview = readOnly ? null : onInlineReview;
             instance._pagePlanCommitted = readOnly ? null : onCommit;
             final replayability = _PageReplayability(
               input is Map && input['event'] == null,
@@ -1664,6 +1674,7 @@ class ModuleHost {
             instance.pagePreparation = false;
             instance._pageReplayability = null;
             instance._pagePlanReview = null;
+            instance._inlinePagePlanReview = null;
             instance._pagePlanCommitted = null;
           }
         }, speculative: readOnly)
@@ -2186,6 +2197,9 @@ class ModuleHost {
                 true;
         final accepted =
             quickAccepted ||
+            workflow &&
+                instance._inlinePagePlanReview?.call(plan, confirmation) ==
+                    true ||
             (await interaction?.call(actor, 'ui.review', {
                   'planId': plan.id,
                   'writes': plan.writes,

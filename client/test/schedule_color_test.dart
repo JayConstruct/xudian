@@ -80,6 +80,10 @@ void main() {
   Future<Map<String, Object?>> providerSave(ChangePlan plan) async {
     host.interaction = (reviewActor, method, args) async {
       expect(reviewActor, same(actor));
+      if (method == 'ui.dialog') {
+        expect(args['title'], '导入完成');
+        return null;
+      }
       expect(method, 'ui.review');
       return true;
     };

@@ -149,6 +149,85 @@ void main() {
   );
 
   testWidgets(
+    'coordinated scrolling consumes header travel before rows and ignores its notifications',
+    (tester) async {
+      final scroll = WorkspaceChromeScrollController()..chrome = controller;
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WorkspaceChromeScrollScope(
+            controller: controller,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: controller.handleScroll,
+              child: Column(
+                children: [
+                  WorkspaceChromeHeader(
+                    controller: controller,
+                    child: const SizedBox(height: 100),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scroll,
+                      child: const SizedBox(height: 2000),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final position = scroll.position as ScrollPositionWithSingleContext;
+      late Drag gesture;
+      void beginDrag() => gesture = position.drag(
+        DragStartDetails(globalPosition: Offset.zero),
+        () {},
+      );
+      void drag(double offset) => gesture.update(
+        DragUpdateDetails(
+          globalPosition: Offset.zero,
+          delta: Offset(0, offset),
+          primaryDelta: offset,
+        ),
+      );
+      beginDrag();
+      drag(-40);
+      await tester.pump();
+      expect(controller.hiddenExtent, 40);
+      expect(position.pixels, 0);
+      position.goBallistic(1000);
+      await tester.pumpAndSettle();
+      expect(position.pixels, 0);
+      expect(controller.hiddenExtent, 40);
+
+      beginDrag();
+      drag(-90);
+      await tester.pump();
+      expect(controller.collapsed, isTrue);
+      expect(position.pixels, 30);
+      drag(20);
+      await tester.pump();
+      expect(controller.hiddenExtent, 80);
+      expect(position.pixels, 30);
+      drag(100);
+      await tester.pump();
+      expect(controller.expanded, isTrue);
+      expect(position.pixels, 10);
+      position.pointerScroll(120);
+      await tester.pumpAndSettle();
+      expect(controller.collapsed, isTrue);
+      expect(position.pixels, 30);
+      position.jumpTo(200);
+      await tester.pumpAndSettle();
+      expect(controller.collapsed, isTrue);
+      expect(position.pixels, 200);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'header clips exactly physical travel and retains state through resize and hiding',
     (tester) async {
       final height = ValueNotifier(96.0);

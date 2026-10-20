@@ -8,6 +8,9 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
   const AppPageTransitionsBuilder();
 
   @override
+  Duration get transitionDuration => AppMotion.pageTransition;
+
+  @override
   Widget buildTransitions<T>(
     PageRoute<T> route,
     BuildContext context,
@@ -30,7 +33,7 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
       opacity: incoming,
       child: SlideTransition(
         position: incoming.drive(
-          Tween(begin: const Offset(.04, 0), end: Offset.zero),
+          Tween(begin: AppMotion.pageOffset, end: Offset.zero),
         ),
         child: child,
       ),

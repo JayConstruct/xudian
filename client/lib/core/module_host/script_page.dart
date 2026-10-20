@@ -18,6 +18,7 @@ import '../ui/ui_component.dart';
 import '../ui/ui_pack.dart';
 import '../ui/temporal_input.dart';
 import '../ui/script_transition.dart';
+import '../ui/time_range_table.dart';
 import '../ui/conversation_widgets.dart';
 import '../ui/native_ui.dart';
 import '../ui/script_keyed_list.dart';
@@ -37,6 +38,9 @@ import 'module_package.dart';
 import 'time_grid.dart';
 import 'planner_board.dart';
 import 'planner_quick_adjust.dart';
+import 'collection_store.dart';
+import 'data_change_review.dart';
+import 'inline_plan_review.dart';
 
 class ScriptPage extends StatefulWidget {
   const ScriptPage({
@@ -115,6 +119,161 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _plannerUndoNotice;
   final _plannerApprovals = Expando<PlannerQuickAdjustment>(
     'native planner gesture',
+  );
+  final _inlineApprovals = Expando<InlinePlanApproval>(
+    'native plan confirmation',
+  );
+  _InlinePlanPreview? _inlinePlanPreview;
+
+  _InlinePlanPreview? _readInlinePlanPreview() {
+    final declaration = tree?['planReview'];
+    final footer = tree?['footer'];
+    if (widget.embedded ||
+        declaration is! Map ||
+        footer is! Map ||
+        declaration.length != 2 ||
+        declaration['planId'] is! String ||
+        declaration['eventType'] is! String ||
+        (declaration['eventType'] as String).trim().isEmpty ||
+        footer['type'] != 'row' ||
+        footer['children'] is! List) {
+      return null;
+    }
+    final buttons = <Map<String, Object?>>[];
+    for (final raw in footer['children'] as List) {
+      if (raw is! Map ||
+          raw['type'] != 'button' ||
+          raw['text'] is! String ||
+          raw['event'] is! Map ||
+          raw['interrupt'] != null) {
+        return null;
+      }
+      buttons.add(object(raw));
+    }
+    final eventType = declaration['eventType'] as String;
+    bool confirms(Map<String, Object?> button) =>
+        canonicalJson(button['event']) == canonicalJson({'type': eventType});
+    if (buttons.where(confirms).length != 1 || buttons.length > 3) return null;
+    try {
+      final instance = widget.host.instances[widget.moduleId];
+      if (instance == null) return null;
+      final plan = widget.host.store.plan(
+        declaration['planId'] as String,
+        instance.actor,
+      );
+      final summary = DataChangeSummary.tryParse({
+        'planId': plan.id,
+        'writes': plan.writes,
+        'result': plan.result,
+      });
+      return summary == null
+          ? null
+          : _InlinePlanPreview(plan, summary, eventType, buttons);
+    } on Object {
+      // Unknown, stale or foreign plans keep the ordinary review flow.
+      return null;
+    }
+  }
+
+  Widget _inlineReviewFooter(_InlinePlanPreview preview) => UiPackScope(
+    defaultOnly: true,
+    child: NativeUi(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '实际变更：新增 ${preview.summary.count(DataChangeKind.add)} · 修改 ${preview.summary.count(DataChangeKind.update)} · 删除 ${preview.summary.count(DataChangeKind.delete)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              IconButton(
+                tooltip: '查看实际变更详情',
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  showDragHandle: true,
+                  builder: (context) => UiPackScope(
+                    defaultOnly: true,
+                    child: NativeUi(
+                      child: SafeArea(
+                        child: SizedBox(
+                          height: MediaQuery.sizeOf(context).height * .65,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(20),
+                            child: DataChangeReview(summary: preview.summary),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.info_outline),
+              ),
+            ],
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (final button in preview.buttons)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child:
+                        button['event'] is Map &&
+                            canonicalJson(button['event']) ==
+                                canonicalJson({'type': preview.eventType})
+                        ? FilledButton(
+                            onPressed: busy || bind(button['disabled']) == true
+                                ? null
+                                : () {
+                                    if (!mounted ||
+                                        busy ||
+                                        staleTree ||
+                                        !routeActive ||
+                                        !workspaceActive ||
+                                        !identical(
+                                          preview,
+                                          _inlinePlanPreview,
+                                        ) ||
+                                        !identical(
+                                          renderedInstance,
+                                          widget.host.instances[widget
+                                              .moduleId],
+                                        )) {
+                                      return;
+                                    }
+                                    final event = <String, Object?>{
+                                      'type': preview.eventType,
+                                    };
+                                    _inlineApprovals[event] =
+                                        InlinePlanApproval(preview.plan);
+                                    unawaited(_render(event));
+                                  },
+                            child: Text(
+                              button['text'] as String,
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : TextButton(
+                            onPressed: busy || bind(button['disabled']) == true
+                                ? null
+                                : () => _render(button['event']),
+                            child: Text(
+                              button['text'] as String,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    ),
   );
   BoardItem? _quickAdjustmentConfig(BoardItem spec) {
     final config = spec['quickAdjustment'];
@@ -584,6 +743,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final sentForms = Map<String, Object?>.of(formValues);
     final sentRevisions = Map<String, int>.of(formRevisions);
     final adjustment = event is Map ? _plannerApprovals[event] : null;
+    final inlineApproval = event is Map ? _inlineApprovals[event] : null;
     String? approvedPlanId;
     try {
       final input = freezeJson(<String, Object?>{
@@ -620,6 +780,26 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               input,
               onReads: (reads) => resultReads = reads,
               onReplayable: (value) => replayable = value,
+              onInlineReview: inlineApproval == null
+                  ? null
+                  : (plan, confirmation) {
+                      if (!mounted ||
+                          current != epoch ||
+                          !routeActive ||
+                          !workspaceActive ||
+                          canonicalJson(requestContext) !=
+                              canonicalJson(pageContext) ||
+                          runtimeRevision !=
+                              PageRuntimeContextScope.read(context)
+                                  ?.currentRevision() ||
+                          !identical(
+                            instance,
+                            widget.host.instances[widget.moduleId],
+                          )) {
+                        return false;
+                      }
+                      return inlineApproval.allows(plan, confirmation);
+                    },
               onReview: adjustment != null
                   ? (reference, preparedInput, plan, confirmation) {
                       if (reference.major != 1 ||
@@ -728,6 +908,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         if (state['moveIntent'] == null) _retryPlannerMove = null;
         _pendingPlannerAdjustment = null;
         tree = object(result['tree']);
+        _inlinePlanPreview = _readInlinePlanPreview();
         treeContextIdentity = canonicalJson({...requestContext, ...patch});
         renderedInstance = instance;
         renderedHeader = result['header'] is Map
@@ -1561,12 +1742,17 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         final effect = bind(spec['effect']) ?? 'fade';
         final visible = spec['visible'] == null ? true : bind(spec['visible']);
         final duration =
-            bind(spec['duration']) ?? AppMotion.scriptTransition.inMilliseconds;
+            bind(spec['duration']) ??
+            (effect == 'page'
+                    ? AppMotion.pageTransition
+                    : AppMotion.scriptTransition)
+                .inMilliseconds;
         final collapse = spec['collapse'] == null
             ? false
             : bind(spec['collapse']);
         final replayKey = bind(spec['replayKey']);
-        if (!const ['fade', 'scale', 'slide'].contains(effect) ||
+        final direction = bind(spec['direction']);
+        if (!const ['fade', 'scale', 'slide', 'page'].contains(effect) ||
             visible is! bool ||
             collapse is! bool ||
             duration is! num ||
@@ -1576,6 +1762,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             duration > 2000 ||
             replayKey != null && replayKey is! String && replayKey is! num ||
             replayKey is num && !replayKey.isFinite ||
+            direction != null &&
+                (effect != 'page' ||
+                    visible != true ||
+                    collapse != false ||
+                    !const ['forward', 'back'].contains(direction)) ||
             spec['child'] is! Map) {
           throw const FormatException('Invalid transition node');
         }
@@ -1585,6 +1776,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           visible: visible,
           collapse: collapse,
           replayKey: replayKey,
+          navigationDirection: direction as String?,
           duration: Duration(milliseconds: duration.toInt()),
           child: node(object(spec['child']), depth + 1),
         );
@@ -2075,6 +2267,19 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               ? null
               : (v) => _render({...object(event), 'value': v}),
         );
+      case 'timeRangeTable':
+        final key = string(spec['key'], 'time range table key');
+        final value = _selectionValue(key, spec);
+        if (value is! Map || spec['baseline'] is! Map) {
+          throw const FormatException('Invalid time range table');
+        }
+        return TimeRangeTable(
+          key: ValueKey(key),
+          value: object(value),
+          baseline: object(spec['baseline']),
+          enabled: !busy && bind(spec['disabled']) != true,
+          onChanged: (value) => _changeForm(key, value, null),
+        );
       case 'dateInput':
       case 'dateTimeInput':
       case 'dateRangeInput':
@@ -2428,9 +2633,13 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                     16,
                     12 + WorkspaceContentInsets.bottomOf(context),
                   ),
-                  child:
-                      tree!['footer'] is Map &&
-                          object(tree!['footer'])['type'] == 'messageComposer'
+                  child: _inlinePlanPreview != null
+                      ? FloatingSurface(
+                          padding: const EdgeInsets.all(12),
+                          child: _inlineReviewFooter(_inlinePlanPreview!),
+                        )
+                      : tree!['footer'] is Map &&
+                            object(tree!['footer'])['type'] == 'messageComposer'
                       ? safeNode(object(tree!['footer']))
                       : FloatingSurface(
                           padding: const EdgeInsets.all(12),
@@ -2453,4 +2662,17 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       },
     ),
   );
+}
+
+class _InlinePlanPreview {
+  const _InlinePlanPreview(
+    this.plan,
+    this.summary,
+    this.eventType,
+    this.buttons,
+  );
+  final ChangePlan plan;
+  final DataChangeSummary summary;
+  final String eventType;
+  final List<Map<String, Object?>> buttons;
 }

@@ -15,6 +15,7 @@ class WorkspaceChromeController extends ChangeNotifier {
   double get hiddenExtent => _hiddenExtent;
   double get progress => (_hiddenExtent / _headerExtent).clamp(0, 1);
   bool get collapsed => progress >= 1;
+  bool get expanded => _hiddenExtent == 0;
 
   void configure(String identity, {required bool enabled}) {
     if (_identity != identity || _enabled != enabled) {
@@ -55,6 +56,16 @@ class WorkspaceChromeController extends ChangeNotifier {
         notification.depth != 0 ||
         notification.metrics.axis != Axis.vertical) {
       return false;
+    }
+    // Coordinated scroll positions already allocate this physical movement
+    // before scrolling the content. Their notifications must not apply it twice.
+    final notificationContext = notification.context;
+    if (notificationContext != null) {
+      final position = Scrollable.maybeOf(notificationContext)?.position;
+      if (position is _WorkspaceChromeScrollPosition &&
+          identical(position.chrome, this)) {
+        return false;
+      }
     }
     double? delta;
     double previous = notification.metrics.pixels;
@@ -97,6 +108,25 @@ class WorkspaceChromeController extends ChangeNotifier {
     return false;
   }
 
+  double _consumeScrollDelta(ScrollMetrics metrics, double delta) {
+    if (!_enabled || delta == 0) return delta;
+    // Let bouncing scroll physics close the real pull-down gap first. Only
+    // travel remaining beyond that edge can start collapsing the header.
+    final gap = delta > 0 && metrics.pixels < metrics.minScrollExtent
+        ? (metrics.minScrollExtent - metrics.pixels).clamp(0.0, delta)
+        : 0.0;
+    final available = delta - gap;
+    final next = (_hiddenExtent + available)
+        .clamp(0.0, _headerExtent)
+        .toDouble();
+    final consumed = next - _hiddenExtent;
+    if (consumed != 0) {
+      _hiddenExtent = next;
+      _notifyLater();
+    }
+    return delta - consumed;
+  }
+
   void reveal() {
     if (_hiddenExtent == 0) return;
     _hiddenExtent = 0;
@@ -117,6 +147,94 @@ class WorkspaceChromeController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     super.dispose();
+  }
+}
+
+/// Supplies the workspace header to scrollables that consume header movement
+/// before moving their own content, rather than reacting after both have moved.
+class WorkspaceChromeScrollScope extends InheritedWidget {
+  const WorkspaceChromeScrollScope({
+    super.key,
+    required this.controller,
+    required super.child,
+  });
+
+  final WorkspaceChromeController controller;
+
+  static WorkspaceChromeController? maybeOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<WorkspaceChromeScrollScope>()
+      ?.controller;
+
+  @override
+  bool updateShouldNotify(WorkspaceChromeScrollScope oldWidget) =>
+      !identical(controller, oldWidget.controller);
+}
+
+/// Coordinates physical drags and wheel movement only. Ballistic scrolling,
+/// restored offsets and programmatic jumps retain their normal behavior.
+class WorkspaceChromeScrollController extends ScrollController {
+  WorkspaceChromeController? _chrome;
+
+  set chrome(WorkspaceChromeController? value) {
+    _chrome = value;
+    for (final position in positions) {
+      (position as _WorkspaceChromeScrollPosition).chrome = value;
+    }
+  }
+
+  @override
+  ScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) => _WorkspaceChromeScrollPosition(
+    chrome: _chrome,
+    physics: physics,
+    context: context,
+    oldPosition: oldPosition,
+  );
+}
+
+class _WorkspaceChromeScrollPosition extends ScrollPositionWithSingleContext {
+  _WorkspaceChromeScrollPosition({
+    required this.chrome,
+    required super.physics,
+    required super.context,
+    super.oldPosition,
+  });
+
+  WorkspaceChromeController? chrome;
+
+  @override
+  void applyUserOffset(double delta) {
+    if (delta == 0) return;
+    updateUserScrollDirection(
+      delta > 0 ? ScrollDirection.forward : ScrollDirection.reverse,
+    );
+    final scrollDelta = -physics.applyPhysicsToUserOffset(this, delta);
+    final remaining =
+        chrome?._consumeScrollDelta(this, scrollDelta) ?? scrollDelta;
+    if (remaining != 0) setPixels(pixels + remaining);
+  }
+
+  @override
+  void pointerScroll(double delta) {
+    final remaining = chrome?._consumeScrollDelta(this, delta) ?? delta;
+    super.pointerScroll(remaining);
+  }
+
+  @override
+  void goBallistic(double velocity) {
+    final controller = chrome;
+    if (controller != null &&
+        controller._enabled &&
+        ((velocity > 0 && !controller.collapsed) ||
+            (velocity < 0 && !controller.expanded))) {
+      // A fling cannot skip the unfinished first stage and start scrolling
+      // rows under a partially moved header. Keep bounce correction available.
+      velocity = 0;
+    }
+    super.goBallistic(velocity);
   }
 }
 

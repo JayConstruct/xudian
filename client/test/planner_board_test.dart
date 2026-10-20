@@ -988,6 +988,15 @@ void main() {
       final normalMaterial = tester.widget<Material>(
         find.descendant(of: block, matching: find.byType(Material)).first,
       );
+      final normalDecoration = tester
+          .widgetList<Container>(
+            find.descendant(of: block, matching: find.byType(Container)),
+          )
+          .map((container) => container.decoration)
+          .whereType<BoxDecoration>()
+          .single;
+      expect(normalDecoration.border, isNull);
+      expect(normalDecoration.borderRadius, normalMaterial.borderRadius);
       expect(
         find.byKey(const ValueKey('resize:选中样式:2026-10-15')),
         findsNothing,
@@ -999,6 +1008,16 @@ void main() {
       );
       expect(selected.color, isNot(normalMaterial.color));
       expect(selected.elevation, greaterThan(normalMaterial.elevation));
+      expect(selected.borderRadius, normalMaterial.borderRadius);
+      final selectedDecoration = tester
+          .widgetList<Container>(
+            find.descendant(of: block, matching: find.byType(Container)),
+          )
+          .map((container) => container.decoration)
+          .whereType<BoxDecoration>()
+          .single;
+      expect(selectedDecoration.border!.isUniform, isTrue);
+      expect(selectedDecoration.borderRadius, normalDecoration.borderRadius);
       expect(tester.getRect(band), geometry);
       expect(
         find.byKey(const ValueKey('resize:选中样式:2026-10-15')),
@@ -1431,6 +1450,19 @@ void main() {
       expect(tester.getSize(feedback).height, lessThan(90));
       await tester.pump(const Duration(milliseconds: 160));
       expect(tester.getSize(feedback).height, closeTo(90, .1));
+      final feedbackDecorations = tester
+          .widgetList<DecoratedBox>(
+            find.descendant(of: feedback, matching: find.byType(DecoratedBox)),
+          )
+          .map((box) => box.decoration)
+          .whereType<BoxDecoration>();
+      expect(feedbackDecorations, isNotEmpty);
+      for (final decoration in feedbackDecorations) {
+        expect(
+          decoration.border == null || decoration.border!.isUniform,
+          isTrue,
+        );
+      }
       expect(
         find.byKey(const ValueKey('local:paper:2026-10-16')),
         findsNothing,

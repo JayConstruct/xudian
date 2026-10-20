@@ -16,6 +16,8 @@ abstract final class AppMotion {
   /// Reserved rhythm; current quick-add transitions declare 220ms in JS.
   static const disclosure = Duration(milliseconds: 220);
   static const scriptTransition = Duration(milliseconds: 350);
+  static const pageTransition = Duration(milliseconds: 300);
+  static const pageOffset = Offset(.04, 0);
   static const workspaceTransition = Duration(milliseconds: 360);
   static const enter = Curves.easeOutCubic;
   static const leave = Curves.easeInCubic;

@@ -59,6 +59,52 @@ Future<void> openDownloadDialog(
 }
 
 void main() {
+  testWidgets('automatic retry shows waiting state and remains cancellable', (
+    tester,
+  ) async {
+    late Directory directory;
+    late Fixture fixture;
+    late ModuleCatalogClient client;
+    late List<ResolvedCatalogModule> modules;
+    var attempts = 0;
+    await tester.runAsync(() async {
+      directory = await Directory.systemTemp.createTemp('download-dns-retry-');
+      fixture = Fixture(directory);
+      await fixture.add(await makePackage('test.dns'));
+      modules = (await ModuleDependencyResolver(
+        fixture.client,
+      ).resolve(requests: {'test.dns': 'any'}, installed: {})).ordered;
+      client = ModuleCatalogClient(
+        cacheDirectory: directory,
+        transport:
+            (url, {cancellation, onProgress, required maximumBytes}) async {
+              attempts++;
+              throw const SocketException("Failed host lookup: 'github.com'");
+            },
+      );
+    });
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      client.dispose();
+      fixture.client.dispose();
+      await tester.runAsync(() => directory.delete(recursive: true));
+    });
+    final result = Completer<List<ScriptPackage>?>();
+    await openDownloadDialog(
+      tester,
+      client: client,
+      modules: modules,
+      result: result,
+    );
+    await waitForDownloadUi(tester, find.text('网络连接失败，正在等待自动重试…'));
+    expect(find.text('重试'), findsNothing);
+    await tester.tap(find.text('取消下载'));
+    await tester.pumpAndSettle();
+    expect(await result.future, isNull);
+    expect(attempts, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'download progress stays visible above collapsed details on narrow large text',
     (tester) async {
@@ -227,10 +273,16 @@ void main() {
         find.text('整体下载进度 ${(completeProgress * 100).floor()}%'),
         findsOneWidget,
       );
-      failedTransfer.completeError(const SocketException('连接中断'));
+      failedTransfer.completeError(
+        const SocketException("Failed host lookup: 'github.com'"),
+      );
       await waitForDownloadUi(tester, find.text('重试').hitTestable());
       expect(find.textContaining('已完成 1/2'), findsOneWidget);
-      expect(find.textContaining('连接中断'), findsOneWidget);
+      expect(find.textContaining('无法解析下载服务器地址'), findsOneWidget);
+      expect(
+        find.textContaining("Failed host lookup: 'github.com'"),
+        findsOneWidget,
+      );
       await tester.tap(find.text('重试'));
       await tester.pump();
       await waitForDownloadUi(tester, find.text('下载中'));

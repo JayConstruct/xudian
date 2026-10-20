@@ -10,8 +10,43 @@ export function resetDisplayDraft(t) {const draft={rowHeight:scheduleRowHeight(t
 const copy=value=>JSON.parse(JSON.stringify(value));
 export const timeMinutes=value=>{if(typeof value!=='string'||!/^\d{2}:\d{2}$/.test(value)) throw new Error('时间格式需为 HH:mm');const [h,m]=value.split(':').map(Number);if(h>23||m>59)throw new Error('时间需在00:00–23:59之间');return h*60+m;};
 export const timeString=value=>{if(value<0||value>=1440)throw new Error('追加节次将跨午夜，请先调整作息');return String(Math.floor(value/60)).padStart(2,'0')+':'+String(value%60).padStart(2,'0');};
-export function periodDraft(t) {let draft=periodDrafts.get(t.id);if(!draft){draft={periods:copy(t.periods),baseline:JSON.stringify(t.periods),error:null};periodDrafts.set(t.id,draft);}else if(JSON.stringify(draft.periods)===draft.baseline&&draft.baseline!==JSON.stringify(t.periods)){draft=resetPeriodDraft(t);}return draft;}
-export function resetPeriodDraft(t) {const draft={periods:copy(t.periods),baseline:JSON.stringify(t.periods),error:null};periodDrafts.set(t.id,draft);return draft;}
+function periodDefaults(t) {
+  const counts=new Map();
+  for(const row of t.periods) {const length=timeMinutes(row.end)-timeMinutes(row.start);counts.set(length,(counts.get(length)||0)+1);}
+  const inferred=[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0]||45;
+  const duration=t.periodDurationMinutes??inferred;
+  const manual=t.periodManualEnds??t.periods.filter(row=>timeMinutes(row.end)-timeMinutes(row.start)!==duration).map(row=>row.number);
+  return {durationMinutes:String(duration),manualEnds:[...manual].sort((a,b)=>a-b)};
+}
+export const periodDraftDirty=draft=>JSON.stringify(draft.periods)!==draft.baseline||JSON.stringify({durationMinutes:draft.durationMinutes,manualEnds:draft.manualEnds})!==draft.baselineSettings;
+export const periodBaselineMatches=(t,draft)=>draft.baseline===JSON.stringify(t.periods)&&draft.baselineSettings===JSON.stringify(periodDefaults(t));
+export function periodDraft(t) {let draft=periodDrafts.get(t.id);if(!draft)draft=resetPeriodDraft(t);else if(!periodDraftDirty(draft)&&(draft.baseline!==JSON.stringify(t.periods)||draft.baselineSettings!==JSON.stringify(periodDefaults(t))))draft=resetPeriodDraft(t);return draft;}
+export function resetPeriodDraft(t) {const settings=periodDefaults(t),draft={periods:copy(t.periods),...settings,baseline:JSON.stringify(t.periods),baselineSettings:JSON.stringify(settings),error:null};periodDrafts.set(t.id,draft);return draft;}
+export function periodTableValue(draft) {
+  return {durationMinutes:draft.durationMinutes,rows:draft.periods.map(row=>({id:String(row.number),label:`第 ${row.number} 节`,start:row.start,end:row.end,manualEnd:draft.manualEnds.includes(row.number)})),...(draft.baseline?{baselineToken:JSON.stringify([draft.baseline,draft.baselineSettings])}:{})};
+}
+export function periodTableBaseline(draft) {const settings=JSON.parse(draft.baselineSettings);return periodTableValue({periods:JSON.parse(draft.baseline),...settings});}
+export function hydratePeriodDraft(draft,value) {
+  if(value===undefined)return;
+  let baseline=draft.baseline,settings=draft.baselineSettings;
+  // Local native edits can outlive the JS draft and an external data update.
+  // Carry their original basis so reopening never silently rebases old edits.
+  if(value?.baselineToken!==undefined) {
+    const token=JSON.parse(value.baselineToken);
+    if(!Array.isArray(token)||token.length!==2||token.some(item=>typeof item!=='string')||!Array.isArray(JSON.parse(token[0]))||typeof JSON.parse(token[1]).durationMinutes!=='string'||!Array.isArray(JSON.parse(token[1]).manualEnds))throw new Error('作息草稿依据无效，请重新载入');
+    [baseline,settings]=token;
+  }
+  if(!value||typeof value!=='object'||!Array.isArray(value.rows)||value.rows.length<1||value.rows.length>30||value.rows.some((row,i)=>!row||row.id!==String(i+1)||typeof row.start!=='string'||typeof row.end!=='string'||typeof row.manualEnd!=='boolean'))throw new Error('作息草稿格式无效，请重新载入');
+  draft.baseline=baseline;draft.baselineSettings=settings;
+  draft.periods=value.rows.map((row,i)=>({number:i+1,start:row.start,end:row.end}));
+  draft.durationMinutes=String(value.durationMinutes??'');
+  draft.manualEnds=value.rows.filter(row=>row.manualEnd).map(row=>Number(row.id));
+}
+export function periodDraftTimetable(t,draft) {
+  if(!/^\d+$/.test(draft.durationMinutes))throw new Error('每节时长需为1–1440分钟的整数');
+  return {...t,periods:draft.periods,periodDurationMinutes:Number(draft.durationMinutes),periodManualEnds:[...draft.manualEnds]};
+}
+export function periodDraftError(t,draft) {try {validateTimetable(periodDraftTimetable(t,draft));return null;}catch(error){return error.message;}}
 const semesterValues=t=>({name:t.name,firstMonday:t.firstMonday,totalWeeks:String(t.totalWeeks),timezone:t.timezone,displayWeekStart:String(t.displayWeekStart)});
 export function semesterDraft(t) {let draft=semesterDrafts.get(t.id);if(!draft){draft={values:semesterValues(t),baseline:JSON.stringify(semesterValues(t)),error:null};semesterDrafts.set(t.id,draft);}else if(JSON.stringify(draft.values)===draft.baseline&&draft.baseline!==JSON.stringify(semesterValues(t))){draft=resetSemesterDraft(t);}return draft;}
 export function resetSemesterDraft(t) {const draft={values:semesterValues(t),baseline:JSON.stringify(semesterValues(t)),error:null};semesterDrafts.set(t.id,draft);return draft;}

@@ -16,6 +16,8 @@ import 'package:task_app/core/security/capability_registry.dart';
 import 'package:task_app/core/ui/module_detail_page.dart';
 import 'package:task_app/core/ui/daily_widgets.dart';
 import 'package:task_app/core/ui/ui_page_host.dart';
+import 'package:task_app/core/ui/script_transition.dart';
+import 'package:task_app/core/ui/ui_motion.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
@@ -187,6 +189,11 @@ void main() {
         }
 
         void expectTitle(String title) {
+          final transition = tester.widget<ScriptTransition>(
+            find.byKey(const ValueKey('importNavigation')),
+          );
+          expect(transition.effect, 'page');
+          expect(transition.duration, AppMotion.pageTransition);
           expect(
             find.descendant(
               of: find.byType(AppBar),
@@ -216,6 +223,13 @@ void main() {
             await tester.tap(find.byType(BackButton));
           }
           await _settleNative(tester);
+          final navigation = find.byKey(const ValueKey('importNavigation'));
+          if (navigation.evaluate().isNotEmpty) {
+            expect(
+              tester.widget<ScriptTransition>(navigation).navigationDirection,
+              'back',
+            );
+          }
           expect(tester.takeException(), isNull);
         }
 
@@ -232,10 +246,26 @@ void main() {
         }
         await tap('按学校导入');
         expectTitle('选择学校');
+        expect(
+          tester
+              .widget<ScriptTransition>(
+                find.byKey(const ValueKey('importNavigation')),
+              )
+              .navigationDirection,
+          'forward',
+        );
         final search = field('搜索学校名称或缩写');
+        final navigationState = tester.state(
+          find.byKey(const ValueKey('importNavigation')),
+        );
         await tester.ensureVisible(search);
         await tester.enterText(search, 'AUFE WebVPN');
         await _settleNative(tester);
+        expect(
+          tester.state(find.byKey(const ValueKey('importNavigation'))),
+          same(navigationState),
+          reason: 'Typing a search keeps the current page animation state',
+        );
         final resultHeader = find.byWidgetPredicate(
           (widget) => widget is DailySectionHeader && widget.title == '搜索结果',
         );

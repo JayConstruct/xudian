@@ -47,6 +47,8 @@ export function validateTimetable(t) {
   if(!Array.isArray(t.periods)||!t.periods.length||t.periods.length>30) throw new Error('配置1–30个节次');
   if(t.rowHeight!==undefined && (!Number.isFinite(t.rowHeight)||t.rowHeight<48||t.rowHeight>160)) throw new Error('课表每节显示高度需在48–160之间');
   if(t.showWeekends!==undefined && typeof t.showWeekends!=='boolean') throw new Error('周末显示设置需为开关值');
+  if(t.periodDurationMinutes!==undefined && (!Number.isInteger(t.periodDurationMinutes)||t.periodDurationMinutes<1||t.periodDurationMinutes>1440))throw new Error('每节时长需为1–1440分钟的整数');
+  if(t.periodManualEnds!==undefined && (!Array.isArray(t.periodManualEnds)||new Set(t.periodManualEnds).size!==t.periodManualEnds.length||t.periodManualEnds.some(number=>!Number.isInteger(number)||number<1||number>t.periods.length)))throw new Error('手动结束时间需对应有效且不重复的节次');
   let end=-1;
   t.periods.forEach((p,i)=> {
     if(p.number!==i+1 || minutes(p.start)<end || minutes(p.end)<=minutes(p.start)) throw new Error('节次必须连续，时间不重叠、不跨午夜');

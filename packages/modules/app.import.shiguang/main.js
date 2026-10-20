@@ -65,13 +65,14 @@ function initializeNavigation(state) {
 function enterView(state,view) {
   if (currentView(state)===view) return;
   state.history.push({view:currentView(state),schoolSearch:state.schoolSearch||'',schoolPage:state.schoolPage||0});
-  state.view=view;state.choosingSchool=view==='schools';
+  state.view=view;state.choosingSchool=view==='schools';state.navigationDirection='forward';
 }
 function back(state) {
   const previous=state.history.pop();
   state.view=previous&&views.has(previous.view)?previous.view:'home';
   if (previous) {state.schoolSearch=previous.schoolSearch||'';state.schoolPage=previous.schoolPage||0;}
   state.choosingSchool=state.view==='schools';
+  state.navigationDirection='back';
 }
 function detailTitle(state) {
   const chosen=selectedAdapter(state);
@@ -80,7 +81,7 @@ function detailTitle(state) {
 function response(state,replaceForms={}) {
   const view=currentView(state);
   const title=view==='schools'?'选择学校':view==='general'?'通用系统导入':view==='about'?'关于与致谢':view==='detail'?detailTitle(state):'拾光教务导入';
-  return {state,replaceForms,header:{title,...(view==='home'?{}:{backEvent:{type:'back'}})},tree:{type:'transition',key:'importNavigation',effect:'slide',duration:280,replayKey:view,child:tree(state)}};
+  return {state,replaceForms,header:{title,...(view==='home'?{}:{backEvent:{type:'back'}})},tree:{type:'transition',key:'importNavigation',effect:'page',direction:state.navigationDirection||'forward',replayKey:view,child:tree(state)}};
 }
 async function configure(payload,previous={},state={}) {
   const identity=sourceIdentity(state);
@@ -138,7 +139,7 @@ export async function render({state={},event,formValues={},context={}}) {
       if (formValues.url!==undefined) state.url=String(formValues.url).trim();
       replaceForms.schoolSearch=state.schoolSearch||'';
     }
-    if (event?.type==='goHome') {state.view='home';state.choosingSchool=false;state.history=[];}
+    if (event?.type==='goHome') {state.view='home';state.choosingSchool=false;state.history=[];state.navigationDirection='back';}
     if (event?.type==='chooseGeneral') enterView(state,'general');
     if (event?.type==='openAbout') enterView(state,'about');
     if (event?.type==='continueImport') enterView(state,'detail');

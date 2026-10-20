@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/design_system.dart';
 import '../ui/content_colors.dart';
+import '../ui/workspace_chrome.dart';
 import 'module_package.dart';
 
 /// Half-open row intervals; every overlapping block remains selectable.
@@ -26,6 +27,7 @@ class TimeGrid extends StatefulWidget {
 
 class _TimeGridState extends State<TimeGrid> {
   final horizontal = ScrollController(), header = ScrollController();
+  final vertical = WorkspaceChromeScrollController();
   Object? _handledScrollRequest;
   Object? _extentGeometry;
   double _chromeMaxExtent = 0;
@@ -89,9 +91,16 @@ class _TimeGridState extends State<TimeGrid> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    vertical.chrome = WorkspaceChromeScrollScope.maybeOf(context);
+  }
+
+  @override
   void dispose() {
     horizontal.dispose();
     header.dispose();
+    vertical.dispose();
     super.dispose();
   }
 
@@ -302,6 +311,7 @@ class _TimeGridState extends State<TimeGrid> {
         );
         final body = SingleChildScrollView(
           key: const PageStorageKey('time-grid-vertical'),
+          controller: vertical,
           physics: const _EndAnchoredScrollPhysics(),
           padding: EdgeInsets.only(bottom: trailingPadding),
           child: Row(
