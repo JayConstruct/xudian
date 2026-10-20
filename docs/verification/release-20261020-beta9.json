@@ -1,0 +1,198 @@
+{
+  "date": "2026-10-20",
+  "sourceCommit": "448ff92439ea7e61298b8675b9a80988a1013f46",
+  "appTag": "v0.2.0-beta.9",
+  "moduleTag": "modules-20261020-planner-timeline",
+  "hostApi": "1.35.0",
+  "status": "published-and-verified",
+  "checks": {
+    "pythonTests": 220,
+    "moduleCatalogTests": 36,
+    "releaseRelatedFlutterTests": 74,
+    "fullFlutterCI": {
+      "passed": 1528,
+      "failed": 0,
+      "sourceRunId": 39407250667
+    },
+    "flutterAnalyze": "passed",
+    "architecture": "passed (148 Dart files)",
+    "repositoryBoundaries": "passed",
+    "moduleIndexes": "online validation passed (9 entries)"
+  },
+  "emulator": {
+    "buildNumber": 170,
+    "installedVersionCode": 4170,
+    "apkSha256": "1ab107c3cbcbf3507b6e016dc893a0ab3f03058419372e01da6753ac3d58fd38",
+    "installedApkSha256": "1ab107c3cbcbf3507b6e016dc893a0ab3f03058419372e01da6753ac3d58fd38",
+    "completed": true
+  },
+  "functionalPages": {
+    "plannerCompactHeaderAndPendingRail": true,
+    "pendingPopupAndNativeQuickAdjustment": true,
+    "continuousPastAndFutureDates": true,
+    "beyondPreloadWindowReached": "2026-11-10",
+    "viewportRetainedAcrossWorkspaceSwitchAndRestart": true,
+    "returnTodayPreservesHeaderGeometry": true,
+    "schedulePullOrder": "scroll content, reveal header, then overscroll gap",
+    "scheduleTemporaryViewport": "1080x1700",
+    "scheduleViewportRestored": "1080x2400",
+    "appAndModuleDataRetained": true
+  },
+  "publishedUpdatePage": {
+    "aboutPageOpened": true,
+    "updatePageOpened": true,
+    "installedVersion": "0.2.0-beta.9",
+    "installedVersionCode": 4170,
+    "installedApkSha256": "1ab107c3cbcbf3507b6e016dc893a0ab3f03058419372e01da6753ac3d58fd38",
+    "publishedReleaseNotesVisible": true,
+    "channelPreferenceChanged": false,
+    "existingAppAndModuleDataRetained": true,
+    "usedExistingEmulatorSigning": true
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.9",
+    "sourceCommit": "448ff92439ea7e61298b8675b9a80988a1013f46",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.9",
+    "publishedAt": "2026-10-20T10:35:18Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 133,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "file": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "versionName": "0.2.0-beta.9",
+        "versionCode": 2133,
+        "sha256": "10312630a87079d8dfb641dfc1a40f81c37ee31701065eedba6e98a35003729b",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6
+      },
+      {
+        "file": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "versionName": "0.2.0-beta.9",
+        "versionCode": 1133,
+        "sha256": "29e5ce2b5be542c34bc0c5b0856b8b2f9f80974d17ecbf6de421982db41a2368",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6
+      },
+      {
+        "file": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "versionName": "0.2.0-beta.9",
+        "versionCode": 4133,
+        "sha256": "4b2feed2fcfd51d09f4b0641df73dd96932e81bac94d4a04ae4573b219c28aee",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false
+  },
+  "moduleRelease": {
+    "tag": "modules-20261020-planner-timeline",
+    "sourceCommit": "448ff92439ea7e61298b8675b9a80988a1013f46",
+    "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261020-planner-timeline",
+    "sha256": {
+      "app.planner-1.6.0.xmodule": "6c11ba68f02e7ee9fb6a845c9bb0a554dcd8b9bca85217717029f740880dff07"
+    },
+    "anonymousDownloadsVerified": true,
+    "moduleId": "app.planner",
+    "version": "1.6.0",
+    "installedSha256": "6c11ba68f02e7ee9fb6a845c9bb0a554dcd8b9bca85217717029f740880dff07"
+  },
+  "publicIndexes": {
+    "sourceCommit": "448ff92439ea7e61298b8675b9a80988a1013f46",
+    "modules": {
+      "app.planner": {
+        "version": "1.6.0",
+        "sha256": "6c11ba68f02e7ee9fb6a845c9bb0a554dcd8b9bca85217717029f740880dff07",
+        "size": 37797,
+        "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261020-planner-timeline/app.planner-1.6.0.xmodule"
+      }
+    },
+    "authorBranch": "module-catalog",
+    "defaultCatalogVerified": true
+  },
+  "ci": [
+    {
+      "branch": "main",
+      "runId": 39407250206,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39407250206",
+      "headSha": "448ff92439ea7e61298b8675b9a80988a1013f46",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "sign",
+          "status": "completed",
+          "conclusion": "skipped",
+          "currentSteps": []
+        },
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "skipped",
+          "currentSteps": []
+        }
+      ]
+    },
+    {
+      "branch": "v0.2.0-beta.9",
+      "runId": 39407250667,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39407250667",
+      "headSha": "448ff92439ea7e61298b8675b9a80988a1013f46",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "sign",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        }
+      ]
+    },
+    {
+      "branch": "modules-20261020-planner-timeline",
+      "runId": 39407250675,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39407250675",
+      "headSha": "448ff92439ea7e61298b8675b9a80988a1013f46",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        }
+      ]
+    }
+  ],
+  "detailsDirectory": "dist/verification/release-20261020-beta9",
+  "limitations": [
+    "ARM physical device and Windows runtime are not verified.",
+    "Emulator retains its existing local signing identity; public fixed-signature APKs were downloaded and verified without replacing that installation.",
+    "At full 1080x2400 height the existing timetable fits without content scrolling. Three-stage pull order was verified at a temporary 1080x1700 viewport, then the original display setting was restored."
+  ]
+}
