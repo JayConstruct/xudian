@@ -65,6 +65,13 @@ const displayDefaults = {mode: 'auto', start: '08:00', end: '22:00'};
 const zoomKey = 'board.zoom';
 const viewportKey = 'board.viewport';
 const visibleDayCounts = [1, 3, 5, 7];
+function timelineRange(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('时间轴加载范围无效');
+  const startDate = day(value.startDate);
+  if (!Number.isInteger(value.days) || value.days < 1 || value.days > 28) throw Error('时间轴加载天数需在1至28之间');
+  day(add(startDate, value.days - 1));
+  return {startDate, days: value.days};
+}
 function viewportPreference(value) {
   try {
     day(value.startDate);
@@ -132,6 +139,8 @@ function displayHours(preference, blocks, startDate, days) {
 
 export async function renderPlanner({state = {}, event, context = {}, formValues = {}} = {}) {
   state = {...state};
+  const loadRange = context.timelineRange === undefined ? null : timelineRange(context.timelineRange);
+  if (loadRange && event != null) throw Error('时间轴范围加载不接受事件');
   const a = await query('availability.get');
   const today = await clock.today(a.timezone);
   if (context.pageId === 'app.planner.quickAdd') return quickAdd(state, event, formValues, a);
@@ -235,9 +244,9 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   } catch (e) { state.error = String(e); }
   // Summary pages do not need current board positions or candidate projection.
   // Undo and apply still validate current tasks in their command services.
-  if (state.history) return plannerPage(state, await historyContent(state));
-  if (state.autoPreview) return plannerPage(state, previewContent(state));
-  const boardInput = () => ({startDate: add(state.startDate, -7), days: 21, candidateOffset: state.candidateOffset, candidateLimit, onlyDeadline: !!state.onlyDeadline});
+  if (!loadRange && state.history) return plannerPage(state, await historyContent(state));
+  if (!loadRange && state.autoPreview) return plannerPage(state, previewContent(state));
+  const boardInput = () => ({...(loadRange || {startDate: add(state.startDate, -7), days: 21}), candidateOffset: state.candidateOffset, candidateLimit, onlyDeadline: !!state.onlyDeadline});
   let data = await query('board.get', boardInput());
   if (state.candidateOffset > 0 && state.candidateOffset >= data.candidateTotal) {
     state.candidateOffset = Math.max(0, Math.floor((data.candidateTotal - 1) / candidateLimit) * candidateLimit);
@@ -281,9 +290,9 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   if (event?.type === 'source') await ui.notify({message: `${event.title} · ${event.source}，请到来源修改`});
   const notices = [...data.warnings, ...data.conflicts];
   const selectedText = state.selected.length ? `已选 ${state.selected.length} 项${state.selected.some(id => !pending.some(c => c.id === id)) ? '（含其他页或筛选外任务）' : ''}` : '';
-  const visibleHours = displayHours(state.displayHours, blocks, state.startDate, state.days);
+  const visibleHours = displayHours(state.displayHours, blocks, loadRange?.startDate || state.startDate, loadRange?.days || state.days);
   let content;
-  if (state.chooseAuto) {
+  if (!loadRange && state.chooseAuto) {
     content = keyedList('planner:chooseAuto', [
       text('选择参与自动安排的任务；无截止任务仅在明确选中后参与。'),
       ...(state.error ? [text(state.error)] : []),
@@ -304,9 +313,10 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     days: Array.from({length: data.range.days}, (_, index) => { const date = add(data.range.startDate, index); return {date, label: date.slice(5).replace('-', '/')}; }),
     options: {
       continuousDates: true, visibleDays: state.days, initialDate: state.startDate, scrollRequest: state.scrollRequest,
+      timeline: {rangeContextKey: 'timelineRange', preferenceKey: viewportKey, stateKeys: {startDate: 'startDate', visibleDays: 'days'}},
       viewportEvent: {type: 'timelineViewport'}, selectedDate: state.selectedDate, now: stamp(localNow.date, localNow.time),
       dashboard: true, minColumnWidth: 112, pixelsPerMinute: zoomLevels[state.zoom].pixelsPerMinute, candidateLabel: '待安排', candidateCount: data.candidateTotal,
-      ...visibleHours, displayHoursEvent: {type: 'displayHours'},
+      ...visibleHours, displayHours: state.displayHours, displayHoursEvent: {type: 'displayHours'},
       rangeLabel: rangeLabel(state.startDate, add(state.startDate, state.days - 1)), today,
       onlyDeadline: !!state.onlyDeadline, filterEvent: {type: 'onlyDeadline'},
       rangeEvent: {type: 'period'}, todayEvent: {type: 'today'},

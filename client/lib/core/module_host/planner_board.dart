@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../ui/content_colors.dart';
+import 'planner_timeline_window.dart';
 
 typedef BoardItem = Map<String, Object?>;
 
@@ -27,6 +29,8 @@ class PlannerBoard extends StatefulWidget {
     this.selectedIds = const [],
     this.selectEvent,
     this.onPreview,
+    this.onViewportChanged,
+    this.onLoadRange,
     this.enabled = true,
     this.bottomInset = 0,
     this.onDragActiveChanged,
@@ -49,6 +53,8 @@ class PlannerBoard extends StatefulWidget {
   /// previewLabel, conflicts and valid; the drop event must still be validated
   /// by its service. Only the newest proposal in the current gesture is shown.
   final Future<BoardItem> Function(BoardItem proposal)? onPreview;
+  final ValueChanged<BoardItem>? onViewportChanged;
+  final Future<BoardItem?> Function(String startDate, int days)? onLoadRange;
   final bool enabled;
   final double bottomInset;
   final ValueChanged<bool>? onDragActiveChanged;
@@ -115,8 +121,8 @@ class _BoardGeometry {
 }
 
 class _PlannerBoardState extends State<PlannerBoard> {
-  final _horizontal = ScrollController();
-  final _header = ScrollController();
+  final _horizontal = _PlannerLinkedScrollController();
+  final _header = _PlannerLinkedScrollController();
   final _candidatesScroll = ScrollController();
   bool _candidatesExpanded = true;
   final _candidateLink = LayerLink();
@@ -125,6 +131,12 @@ class _PlannerBoardState extends State<PlannerBoard> {
   bool _synchronizingTimeline = false;
   bool _closeCandidatesAfterDrag = false;
   DateTime? _reportedTimelineDate;
+  PlannerTimelineWindow? _timelineWindow;
+  bool _rangeLoadScheduled = false, _rangeLoading = false;
+  int _rangeGeneration = 0;
+  DateTime? _rangeFailure;
+  Timer? _rangeRetryTimer;
+  double? _timelineDragOrigin;
   double _timelineColumnWidth = 0;
   DateTime? _timelineRestoreDate;
   double _timelineRestoreFraction = 0;
@@ -202,6 +214,10 @@ class _PlannerBoardState extends State<PlannerBoard> {
       _dashboard &&
       _focusDays == null &&
       widget.options['continuousDates'] == true;
+  bool get _dynamicTimeline =>
+      widget.options['continuousDates'] == true &&
+      widget.options['timeline'] is Map &&
+      widget.onLoadRange != null;
   int get _visibleDayCount => _number('visibleDays', 3, 1, 7).round();
   DateTime? get _timelineNow =>
       _date(widget.options['now'])?.add(_clockElapsed.elapsed);
@@ -216,7 +232,10 @@ class _PlannerBoardState extends State<PlannerBoard> {
   void _positionTimeline(DateTime date, {double fraction = 0}) {
     _timelineRepositioning = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_timeline || !_horizontal.hasClients) return;
+      if (!mounted || !_timeline || !_horizontal.hasClients) {
+        _timelineRepositioning = false;
+        return;
+      }
       final index = _days.indexWhere(
         (day) => _midnight(_date(day['date'])!) == _midnight(date),
       );
@@ -232,6 +251,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
         _refreshWindow();
       }
       _timelineRepositioning = false;
+      _scheduleRangeLoad();
     });
   }
 
@@ -239,19 +259,179 @@ class _PlannerBoardState extends State<PlannerBoard> {
     if (!_timeline ||
         _timelineRepositioning ||
         _synchronizingTimeline ||
-        _dragActive.value ||
-        !widget.enabled) {
+        _dragActive.value) {
       return;
     }
     final date = _leftDate;
+    if (_dynamicTimeline && date != null) {
+      _scheduleRangeLoad();
+      if (date != _reportedTimelineDate) {
+        _reportedTimelineDate = date;
+        widget.onViewportChanged?.call({
+          'startDate': _stamp(date).substring(0, 10),
+          'visibleDays': _visibleDayCount,
+        });
+      }
+      _recenterTimeline(date);
+      return;
+    }
     final event = widget.options['viewportEvent'];
-    if (date == null || date == _reportedTimelineDate || event is! Map) return;
+    if (!widget.enabled ||
+        date == null ||
+        date == _reportedTimelineDate ||
+        event is! Map) {
+      return;
+    }
     _reportedTimelineDate = date;
     widget.onEvent({
       ...Map<String, Object?>.from(event),
       'startDate': _stamp(date).substring(0, 10),
       'visibleDays': _visibleDayCount,
     });
+  }
+
+  void _resetTimelineWindow({DateTime? visibleDate}) {
+    _rangeGeneration++;
+    _rangeFailure = null;
+    _rangeRetryTimer?.cancel();
+    _rangeLoading = false;
+    if (!_dynamicTimeline) {
+      _timelineWindow = null;
+      return;
+    }
+    final date =
+        visibleDate ??
+        _date(widget.options['initialDate']) ??
+        _date(widget.options['today']) ??
+        _midnight(DateTime.now());
+    _timelineWindow = PlannerTimelineWindow(date)
+      ..seed(widget.days, widget.blocks, date);
+    _daySource = _validatedDays = null;
+    _geometrySource = null;
+    _geometry = null;
+    _dailyOccupancy.clear();
+  }
+
+  void _recenterTimeline(DateTime date) {
+    final window = _timelineWindow;
+    if (!_timeline ||
+        window == null ||
+        _dragActive.value ||
+        _horizontal.position.isScrollingNotifier.value ||
+        _header.hasClients && _header.position.isScrollingNotifier.value) {
+      return;
+    }
+    final fraction = (_horizontal.offset / _columnWidth) % 1;
+    if (!window.recenter(date, _visibleDayCount)) return;
+    _timelineRepositioning = true;
+    setState(() {
+      _geometrySource = null;
+      _geometry = null;
+      _dailyOccupancy.clear();
+    });
+    _horizontal.jumpTo(
+      ((date.difference(window.origin).inDays + fraction) * _columnWidth).clamp(
+        0,
+        _horizontal.position.maxScrollExtent,
+      ),
+    );
+    _reportedTimelineDate = date;
+    _refreshWindow();
+    _timelineRepositioning = false;
+    _scheduleRangeLoad();
+  }
+
+  void _scheduleRangeLoad() {
+    if (!_timeline ||
+        _timelineWindow == null ||
+        !_timelinePositioned ||
+        _timelineRepositioning ||
+        _rangeLoadScheduled ||
+        _rangeLoading ||
+        !widget.enabled) {
+      return;
+    }
+    final date = _leftDate;
+    if (date == null) return;
+    final request = _timelineWindow!.requestStart(date, _visibleDayCount);
+    if (request == null || request == _rangeFailure) return;
+    _rangeLoadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _rangeLoadScheduled = false;
+      if (mounted) unawaited(_loadTimelineRange());
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _loadTimelineRange() async {
+    final window = _timelineWindow;
+    final left = _leftDate;
+    if (!_timeline ||
+        window == null ||
+        _timelineRepositioning ||
+        left == null ||
+        _rangeLoading ||
+        !widget.enabled) {
+      return;
+    }
+    final start = window.requestStart(left, _visibleDayCount);
+    if (start == null || start == _rangeFailure) return;
+    final generation = _rangeGeneration;
+    setState(() => _rangeLoading = true);
+    var retry = false;
+    try {
+      final result = await widget.onLoadRange!(
+        PlannerTimelineWindow.stamp(start),
+        PlannerTimelineWindow.requestDays,
+      );
+      if (!mounted || generation != _rangeGeneration) return;
+      if (result == null) {
+        retry = true;
+        return;
+      }
+      final days = (result['days'] as List?)
+          ?.whereType<Map>()
+          .map((entry) => Map<String, Object?>.from(entry))
+          .toList();
+      final blocks = (result['blocks'] as List?)
+          ?.whereType<Map>()
+          .map((entry) => Map<String, Object?>.from(entry))
+          .toList();
+      if (days == null ||
+          blocks == null ||
+          days.length != PlannerTimelineWindow.requestDays ||
+          List.generate(
+            days.length,
+            (index) =>
+                _date(days[index]['date']) != start.add(Duration(days: index)),
+          ).any((invalid) => invalid)) {
+        throw const FormatException('Invalid timeline range');
+      }
+      setState(() {
+        window.seed(days, blocks, _leftDate ?? left);
+        _rangeFailure = null;
+        _geometrySource = null;
+        _geometry = null;
+        _dailyOccupancy.clear();
+      });
+    } catch (_) {
+      if (mounted && generation == _rangeGeneration) {
+        setState(() => _rangeFailure = start);
+      }
+    } finally {
+      if (mounted && generation == _rangeGeneration) {
+        setState(() => _rangeLoading = false);
+        if (retry) {
+          _rangeRetryTimer?.cancel();
+          _rangeRetryTimer = Timer(
+            const Duration(milliseconds: 350),
+            _scheduleRangeLoad,
+          );
+        } else {
+          _scheduleRangeLoad();
+        }
+      }
+    }
   }
 
   void _optionEvent(String name) {
@@ -334,15 +514,16 @@ class _PlannerBoardState extends State<PlannerBoard> {
   // Reuse immutable display snapshots across scroll/chrome rebuilds. A pending
   // placement never edits a task, creates a plan, or writes to the supplied maps.
   void _refreshPresentation() {
-    if (identical(_presentationBlockSource, widget.blocks) &&
+    final sourceBlocks = _timelineWindow?.blocks ?? widget.blocks;
+    if (identical(_presentationBlockSource, sourceBlocks) &&
         identical(_presentationCandidateSource, widget.candidates) &&
         identical(_presentationPendingSource, widget.pendingAdjustment)) {
       return;
     }
-    _presentationBlockSource = widget.blocks;
+    _presentationBlockSource = sourceBlocks;
     _presentationCandidateSource = widget.candidates;
     _presentationPendingSource = widget.pendingAdjustment;
-    _presentationBlocks = widget.blocks;
+    _presentationBlocks = sourceBlocks;
     _presentationCandidates = widget.candidates;
     _pendingCandidateRemoved = false;
     final pending = widget.pendingAdjustment;
@@ -350,7 +531,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
     final start = _date(pending['start']), end = _date(pending['end']);
     if (start == null || end == null || !end.isAfter(start)) return;
     BoardItem? source;
-    for (final block in widget.blocks) {
+    for (final block in sourceBlocks) {
       if (block['id'] == pending['id']) {
         source = block;
         break;
@@ -365,7 +546,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
     if (source == null) return;
     final display = <String, Object?>{...source, ...pending, '_saving': true};
     _presentationBlocks = List.unmodifiable([
-      for (final block in widget.blocks)
+      for (final block in sourceBlocks)
         if (block['id'] != pending['id']) block,
       display,
     ]);
@@ -434,6 +615,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
       DateTime.utc(date.year, date.month, date.day);
   List<BoardItem> get _days {
     if (_focusDays != null) return _focusDays!;
+    if (_timelineWindow != null) return _timelineWindow!.days;
     if (identical(_daySource, widget.days) && _validatedDays != null) {
       return _validatedDays!;
     }
@@ -484,6 +666,9 @@ class _PlannerBoardState extends State<PlannerBoard> {
   @override
   void initState() {
     super.initState();
+    _horizontal.peer = _header;
+    _header.peer = _horizontal;
+    _resetTimelineWindow();
     _clockElapsed.start();
     _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted && _timeline) setState(() {});
@@ -518,6 +703,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
       size.width + 192,
       size.height + 320,
     );
+    _scheduleRangeLoad();
   }
 
   void _syncHeader() {
@@ -533,7 +719,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
     if ((_header.offset - target).abs() < .01) return;
     _synchronizingTimeline = true;
     try {
-      _header.jumpTo(target.toDouble());
+      _header.follow(target.toDouble());
     } finally {
       _synchronizingTimeline = false;
     }
@@ -553,7 +739,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
     if ((_horizontal.offset - target).abs() < .01) return;
     _synchronizingTimeline = true;
     try {
-      _horizontal.jumpTo(target.toDouble());
+      _horizontal.follow(target.toDouble());
     } finally {
       _synchronizingTimeline = false;
     }
@@ -565,7 +751,9 @@ class _PlannerBoardState extends State<PlannerBoard> {
     if (widget.options['now'] != oldWidget.options['now']) {
       _clockElapsed.reset();
     }
-    final retainedDate = _timeline && oldWidget.days.isNotEmpty
+    final retainedDate = _timelineWindow != null && _timeline
+        ? _leftDate
+        : _timeline && oldWidget.days.isNotEmpty
         ? _date(oldWidget.days.first['date'])?.add(
             Duration(
               days: _horizontal.hasClients
@@ -577,6 +765,24 @@ class _PlannerBoardState extends State<PlannerBoard> {
     final retainedFraction = _horizontal.hasClients
         ? (_horizontal.offset / _columnWidth) % 1
         : 0.0;
+    final timelineReset =
+        _dynamicTimeline &&
+        (!identical(widget.blocks, oldWidget.blocks) ||
+            !identical(widget.days, oldWidget.days) ||
+            widget.options['scrollRequest'] !=
+                oldWidget.options['scrollRequest'] ||
+            _timelineWindow == null);
+    if (timelineReset) {
+      _resetTimelineWindow(
+        visibleDate:
+            widget.options['scrollRequest'] !=
+                oldWidget.options['scrollRequest']
+            ? _date(widget.options['initialDate'])
+            : retainedDate,
+      );
+    } else if (!_dynamicTimeline && _timelineWindow != null) {
+      _resetTimelineWindow();
+    }
     // Script trees are immutable snapshots. Chrome changes reuse their inputs;
     // only a new task snapshot invalidates parsed geometry and daily occupancy.
     if (!identical(widget.blocks, oldWidget.blocks) ||
@@ -598,7 +804,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
     if (_timeline) {
       final requested =
           widget.options['scrollRequest'] != oldWidget.options['scrollRequest'];
-      if (requested || daysChanged) {
+      if (requested || daysChanged || timelineReset) {
         final target = requested
             ? _date(widget.options['initialDate'])
             : retainedDate;
@@ -673,6 +879,8 @@ class _PlannerBoardState extends State<PlannerBoard> {
 
   @override
   void dispose() {
+    _rangeGeneration++;
+    _rangeRetryTimer?.cancel();
     _clockTimer?.cancel();
     _clockElapsed.stop();
     _fineTimer?.cancel();
@@ -1033,6 +1241,11 @@ class _PlannerBoardState extends State<PlannerBoard> {
     final dashboardTime = _dashboard ? _dashboardTime(global, index) : null;
     if (_dashboard) index = _gestureDay!;
     final day = _midnight(_date(days[index]['date'])!);
+    if (_timelineWindow != null && !_timelineWindow!.isLoaded(day)) {
+      _proposal.value = null;
+      _scheduleRangeLoad();
+      return;
+    }
     final raw = _startMinute + point.dy / _scale;
     final minute = _fine && _fineStart != null
         ? _fineStart!.hour * 60 + _fineStart!.minute + _fineDelta(global)
@@ -3545,6 +3758,112 @@ class _PlannerBoardState extends State<PlannerBoard> {
     );
   }
 
+  bool _timelineScrollNotification(
+    ScrollNotification notification,
+    ScrollController controller,
+  ) {
+    if (notification.depth != 0 ||
+        notification.metrics.axis != Axis.horizontal ||
+        _synchronizingTimeline) {
+      return false;
+    }
+    if (notification is ScrollStartNotification) {
+      _timelineDragOrigin = notification.dragDetails == null
+          ? null
+          : controller.offset;
+    }
+    if (notification is ScrollEndNotification) _reportTimelineViewport();
+    return false;
+  }
+
+  Widget _timelineHeader(double height) => SizedBox(
+    height: height,
+    child: NotificationListener<ScrollNotification>(
+      onNotification: (notification) =>
+          _timelineScrollNotification(notification, _header),
+      child: ListView.builder(
+        key: const ValueKey('planner-date-header'),
+        controller: _header,
+        scrollDirection: Axis.horizontal,
+        dragStartBehavior: DragStartBehavior.down,
+        itemExtent: _columnWidth,
+        scrollCacheExtent: ScrollCacheExtent.pixels(_columnWidth),
+        physics: _PlannerDayScrollPhysics(
+          _columnWidth,
+          dragOrigin: () => _timelineDragOrigin,
+        ),
+        itemCount: _days.length,
+        itemBuilder: (context, index) =>
+            _timelineDayHeader(_days[index], height),
+      ),
+    ),
+  );
+
+  List<Widget> _timelinePlaceholders(double gridHeight) {
+    final cache = _timelineWindow;
+    if (!_timeline || cache == null) return const [];
+    final scheme = Theme.of(context).colorScheme;
+    final start = math.max(0, (_window.value.left / _columnWidth).floor());
+    final last = math.min(
+      _days.length,
+      (_window.value.right / _columnWidth).ceil(),
+    );
+    final top = _vertical.hasClients ? _vertical.offset + 18 : 18.0;
+    return [
+      for (var index = start; index < last; index++)
+        if (!cache.isLoaded(_date(_days[index]['date'])!))
+          Positioned(
+            key: ValueKey('planner-unloaded:${_days[index]['date']}'),
+            left: index * _columnWidth,
+            top: 0,
+            width: _columnWidth,
+            height: gridHeight,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ColoredBox(
+                      color: scheme.surfaceContainerHighest.withValues(
+                        alpha: .18,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: top,
+                  left: 0,
+                  right: 0,
+                  child: _rangeFailure == null
+                      ? IgnorePointer(
+                          child: Center(
+                            child: Semantics(
+                              label: '${_days[index]['date']} 正在加载',
+                              child: Text(
+                                '加载中…',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: TextButton(
+                            onPressed: () {
+                              setState(() => _rangeFailure = null);
+                              _scheduleRangeLoad();
+                            },
+                            child: const Text('重试加载'),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+    ];
+  }
+
   List<Widget> _currentTimeLine() {
     final now = _timelineNow;
     if (!_timeline || now == null) return const [];
@@ -4102,113 +4421,119 @@ class _PlannerBoardState extends State<PlannerBoard> {
                       : null,
                 ),
                 Expanded(
-                  child: NotificationListener<ScrollEndNotification>(
-                    onNotification: (notification) {
-                      if (notification.depth == 0 &&
-                          notification.metrics.axis == Axis.horizontal) {
-                        _reportTimelineViewport();
-                      }
-                      return false;
-                    },
-                    child: SingleChildScrollView(
-                      key: const ValueKey('planner-date-header'),
-                      controller: _header,
-                      scrollDirection: Axis.horizontal,
-                      physics: _timeline
-                          ? _PlannerDayScrollPhysics(_columnWidth)
-                          : const NeverScrollableScrollPhysics(),
-                      child: Row(
-                        children: [
-                          for (final day in days)
-                            if (_timeline)
-                              _timelineDayHeader(day, dayHeaderHeight)
-                            else
-                              SizedBox(
-                                width: _columnWidth,
-                                height: _dashboard
-                                    ? math.max(
-                                        54,
-                                        scaler.scale(11) * 1.5 +
-                                            scaler.scale(14) * 1.5 +
-                                            8,
-                                      )
-                                    : 38,
-                                child: _dashboard && _focusDays != null
-                                    ? Center(
-                                        child: Text(
-                                          '${_date(day['date'])!.month}月${_date(day['date'])!.day}日 ${_weekday(_date(day['date'])!)}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w600,
+                  child: _timeline
+                      ? _timelineHeader(dayHeaderHeight)
+                      : NotificationListener<ScrollEndNotification>(
+                          onNotification: (notification) {
+                            if (notification.depth == 0 &&
+                                notification.metrics.axis == Axis.horizontal) {
+                              _reportTimelineViewport();
+                            }
+                            return false;
+                          },
+                          child: SingleChildScrollView(
+                            key: const ValueKey('planner-date-header'),
+                            controller: _header,
+                            scrollDirection: Axis.horizontal,
+                            physics: _timeline
+                                ? _PlannerDayScrollPhysics(_columnWidth)
+                                : const NeverScrollableScrollPhysics(),
+                            child: Row(
+                              children: [
+                                for (final day in days)
+                                  if (_timeline)
+                                    _timelineDayHeader(day, dayHeaderHeight)
+                                  else
+                                    SizedBox(
+                                      width: _columnWidth,
+                                      height: _dashboard
+                                          ? math.max(
+                                              54,
+                                              scaler.scale(11) * 1.5 +
+                                                  scaler.scale(14) * 1.5 +
+                                                  8,
+                                            )
+                                          : 38,
+                                      child: _dashboard && _focusDays != null
+                                          ? Center(
+                                              child: Text(
+                                                '${_date(day['date'])!.month}月${_date(day['date'])!.day}日 ${_weekday(_date(day['date'])!)}',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                               ),
-                                        ),
-                                      )
-                                    : _dashboard
-                                    ? Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            [
-                                              '周一',
-                                              '周二',
-                                              '周三',
-                                              '周四',
-                                              '周五',
-                                              '周六',
-                                              '周日',
-                                            ][_date(day['date'])!.weekday - 1],
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .labelSmall
-                                                ?.copyWith(
-                                                  color:
-                                                      scheme.onSurfaceVariant,
+                                            )
+                                          : _dashboard
+                                          ? Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Text(
+                                                  [
+                                                    '周一',
+                                                    '周二',
+                                                    '周三',
+                                                    '周四',
+                                                    '周五',
+                                                    '周六',
+                                                    '周日',
+                                                  ][_date(day['date'])!
+                                                          .weekday -
+                                                      1],
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        color: scheme
+                                                            .onSurfaceVariant,
+                                                      ),
                                                 ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 9,
-                                              vertical: 2,
-                                            ),
-                                            decoration: _today(day)
-                                                ? BoxDecoration(
-                                                    color: scheme.primary,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          16,
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 9,
+                                                        vertical: 2,
+                                                      ),
+                                                  decoration: _today(day)
+                                                      ? BoxDecoration(
+                                                          color: scheme.primary,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                16,
+                                                              ),
+                                                        )
+                                                      : null,
+                                                  child: Text(
+                                                    '${_date(day['date'])!.day}',
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .titleSmall
+                                                        ?.copyWith(
+                                                          color: _today(day)
+                                                              ? scheme.onPrimary
+                                                              : scheme
+                                                                    .onSurfaceVariant,
                                                         ),
-                                                  )
-                                                : null,
-                                            child: Text(
-                                              '${_date(day['date'])!.day}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleSmall
-                                                  ?.copyWith(
-                                                    color: _today(day)
-                                                        ? scheme.onPrimary
-                                                        : scheme
-                                                              .onSurfaceVariant,
                                                   ),
+                                                ),
+                                              ],
+                                            )
+                                          : Center(
+                                              child: Text(
+                                                '${day['label'] ?? day['date']}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      )
-                                    : Center(
-                                        child: Text(
-                                          '${day['label'] ?? day['date']}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                              ),
-                        ],
-                      ),
-                    ),
-                  ),
+                                    ),
+                              ],
+                            ),
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -4286,22 +4611,23 @@ class _PlannerBoardState extends State<PlannerBoard> {
                           ),
                         ),
                         Expanded(
-                          child: NotificationListener<ScrollEndNotification>(
-                            onNotification: (notification) {
-                              if (notification.depth == 0 &&
-                                  notification.metrics.axis ==
-                                      Axis.horizontal) {
-                                _reportTimelineViewport();
-                              }
-                              return false;
-                            },
+                          child: NotificationListener<ScrollNotification>(
+                            onNotification: (notification) =>
+                                _timelineScrollNotification(
+                                  notification,
+                                  _horizontal,
+                                ),
                             child: SingleChildScrollView(
                               key: const ValueKey('planner-horizontal'),
                               controller: _horizontal,
                               physics: _timeline
-                                  ? _PlannerDayScrollPhysics(_columnWidth)
+                                  ? _PlannerDayScrollPhysics(
+                                      _columnWidth,
+                                      dragOrigin: () => _timelineDragOrigin,
+                                    )
                                   : null,
                               scrollDirection: Axis.horizontal,
+                              dragStartBehavior: DragStartBehavior.down,
                               child: DragTarget<BoardItem>(
                                 onWillAcceptWithDetails: (details) =>
                                     _movable(details.data),
@@ -4355,6 +4681,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                                                 ),
                                               ),
                                           Positioned.fill(child: lines!),
+                                          ..._timelinePlaceholders(gridHeight),
                                           ..._segments(_blocks, cardHeight),
                                           if (_selectedItem != null)
                                             ..._gapLabels(_selectedItem!),
@@ -4566,13 +4893,79 @@ class _PlannerBoardState extends State<PlannerBoard> {
   }
 }
 
+class _PlannerLinkedScrollController extends ScrollController {
+  _PlannerLinkedScrollController? peer;
+
+  @override
+  ScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) => _PlannerLinkedScrollPosition(
+    physics: physics,
+    context: context,
+    initialPixels: initialScrollOffset,
+    keepScrollOffset: keepScrollOffset,
+    oldPosition: oldPosition,
+    stopPeer: () => peer?.stop(),
+  );
+
+  void follow(double value) =>
+      (position as _PlannerLinkedScrollPosition).follow(value);
+
+  void stop() {
+    if (hasClients && position.isScrollingNotifier.value) {
+      (position as _PlannerLinkedScrollPosition).goIdle();
+    }
+  }
+}
+
+class _PlannerLinkedScrollPosition extends ScrollPositionWithSingleContext {
+  _PlannerLinkedScrollPosition({
+    required super.physics,
+    required super.context,
+    required super.initialPixels,
+    required super.keepScrollOffset,
+    super.oldPosition,
+    required this.stopPeer,
+  });
+
+  final VoidCallback stopPeer;
+
+  void follow(double value) {
+    goIdle();
+    if (pixels == value) return;
+    final previous = pixels;
+    forcePixels(value);
+    didUpdateScrollPositionBy(value - previous);
+  }
+
+  @override
+  ScrollHoldController hold(VoidCallback holdCancelCallback) {
+    stopPeer();
+    return super.hold(holdCancelCallback);
+  }
+}
+
 class _PlannerDayScrollPhysics extends ScrollPhysics {
-  const _PlannerDayScrollPhysics(this.columnWidth, {super.parent});
+  const _PlannerDayScrollPhysics(
+    this.columnWidth, {
+    this.dragOrigin,
+    super.parent,
+  });
   final double columnWidth;
+  final double? Function()? dragOrigin;
+
+  @override
+  double get minFlingDistance => 12;
 
   @override
   _PlannerDayScrollPhysics applyTo(ScrollPhysics? ancestor) =>
-      _PlannerDayScrollPhysics(columnWidth, parent: buildParent(ancestor));
+      _PlannerDayScrollPhysics(
+        columnWidth,
+        dragOrigin: dragOrigin,
+        parent: buildParent(ancestor),
+      );
 
   @override
   Simulation? createBallisticSimulation(
@@ -4583,8 +4976,22 @@ class _PlannerDayScrollPhysics extends ScrollPhysics {
       return super.createBallisticSimulation(position, velocity);
     }
     final tolerance = toleranceFor(position);
-    final projected = position.pixels + velocity * .12;
-    final target = ((projected / columnWidth).round() * columnWidth).clamp(
+    final projected = position.pixels + velocity * .18;
+    var column = (projected / columnWidth).round();
+    if (velocity.abs() >= minFlingVelocity) {
+      column = velocity > 0
+          ? math.max(column, (position.pixels / columnWidth).ceil())
+          : math.min(column, (position.pixels / columnWidth).floor());
+    } else {
+      final origin = dragOrigin?.call();
+      if (origin != null &&
+          (position.pixels - origin).abs() >= columnWidth * .25) {
+        column = position.pixels > origin
+            ? math.max(column, (origin / columnWidth).floor() + 1)
+            : math.min(column, (origin / columnWidth).ceil() - 1);
+      }
+    }
+    final target = (column * columnWidth).clamp(
       position.minScrollExtent,
       position.maxScrollExtent,
     );

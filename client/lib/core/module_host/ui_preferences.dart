@@ -53,7 +53,12 @@ class ModuleUiPreferences {
     return rows.isEmpty ? null : jsonDecode(rows.single['value'] as String);
   }
 
-  Future<Object?> set(ModuleActor actor, String key, Object? value) async {
+  Future<Object?> set(
+    ModuleActor actor,
+    String key,
+    Object? value, {
+    bool notify = true,
+  }) async {
     _key(key);
     _value(value, 0, [0]);
     final encoded = jsonEncode(value);
@@ -108,7 +113,7 @@ class ModuleUiPreferences {
     store.requireActive(actor);
     // Preference invalidation refreshes only UI readers. It is not a business
     // mutation: do not publish a module-data change or an automation event.
-    if (changed) store.changes.add({dependency});
+    if (changed && notify) store.changes.add({dependency});
     return value;
   }
 }

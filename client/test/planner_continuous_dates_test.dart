@@ -39,12 +39,14 @@ void main() {
   Future<Map<String, Object?>> page({
     Map<String, Object?> state = const {},
     Map<String, Object?>? event,
+    Map<String, Object?> context = const {},
+    bool readOnly = false,
   }) async => object(
     await host.invokePage('app.planner', 'render', {
-      'context': {'pageId': 'app.planner.home'},
+      'context': {'pageId': 'app.planner.home', ...context},
       'state': state,
       'event': event,
-    }),
+    }, readOnly: readOnly),
   );
 
   Map<String, Object?> board(Map<String, Object?> rendered) =>
@@ -83,6 +85,16 @@ void main() {
     expect(configuration['initialDate'], state['startDate']);
     expect(configuration['scrollRequest'], 0);
     expect(configuration['viewportEvent'], {'type': 'timelineViewport'});
+    expect(configuration['timeline'], {
+      'rangeContextKey': 'timelineRange',
+      'preferenceKey': 'board.viewport',
+      'stateKeys': {'startDate': 'startDate', 'visibleDays': 'days'},
+    });
+    expect(configuration['displayHours'], {
+      'mode': 'auto',
+      'start': '08:00',
+      'end': '22:00',
+    });
     expect(configuration['now'], '2026-10-13T08:00:00');
     expect(configuration['today'], '2026-10-13');
     expect(configuration['selectedDate'], '2026-10-13');
@@ -112,6 +124,291 @@ void main() {
     expect(create['variant'], isNot('filled'));
     expect(create['event'], {'type': 'add'});
   });
+
+  test(
+    'background ranges load exact days without moving or persisting viewport',
+    () async {
+      final preferences = ModuleUiPreferences(store);
+      final actor = host.instances['app.planner']!.actor;
+      const savedViewport = {
+        'startDate': '2026-11-01',
+        'days': 7,
+        'selectedDate': '2026-11-04',
+      };
+      await preferences.set(actor, 'board.viewport', savedViewport);
+      final foreground = await page(
+        state: {
+          'startDate': '2026-10-12',
+          'days': 3,
+          'selectedDate': '2026-10-13',
+          'scrollRequest': 9,
+          'selected': ['keep-selection'],
+        },
+      );
+      final state = object(foreground['state']);
+      for (final range in [
+        {'startDate': '2026-12-24', 'days': 21},
+        {'startDate': '2028-02-15', 'days': 28},
+        {'startDate': '2026-09-01', 'days': 1},
+      ]) {
+        final rendered = await page(
+          state: state,
+          context: {'timelineRange': range},
+          readOnly: true,
+        );
+        final loadedState = object(rendered['state']);
+        expect(loadedState['error'], isNull);
+        for (final key in [
+          'startDate',
+          'days',
+          'selectedDate',
+          'scrollRequest',
+          'selected',
+        ]) {
+          expect(loadedState[key], state[key]);
+        }
+        expect(options(rendered)['initialDate'], '2026-10-12');
+        expect(options(rendered)['visibleDays'], 3);
+        expect(options(rendered)['selectedDate'], '2026-10-13');
+        expect(options(rendered)['scrollRequest'], 9);
+        expect(dates(rendered), hasLength(range['days'] as int));
+        expect(dates(rendered).first, range['startDate']);
+        final first = DateTime.parse(range['startDate'] as String);
+        expect(
+          dates(rendered),
+          List.generate(
+            range['days'] as int,
+            (index) => first
+                .add(Duration(days: index))
+                .toIso8601String()
+                .substring(0, 10),
+          ),
+        );
+        expect(await preferences.get(actor, 'board.viewport'), savedViewport);
+      }
+      final foregroundAgain = await page(state: state);
+      expect(dates(foregroundAgain), dates(foreground));
+      expect(options(await page())['initialDate'], '2026-11-01');
+    },
+  );
+
+  test(
+    'background ranges reject malformed dates and unbounded day counts',
+    () async {
+      final first = await page();
+      for (final range in <Object?>[
+        null,
+        [],
+        '2026-12-24',
+        {},
+        {'startDate': '2026-02-30', 'days': 21},
+        {'startDate': '2026-2-01', 'days': 21},
+        {'startDate': '0000-01-01', 'days': 21},
+        {'startDate': '9999-12-31', 'days': 2},
+        {'startDate': '2026-12-24'},
+        {'startDate': '2026-12-24', 'days': 0},
+        {'startDate': '2026-12-24', 'days': -1},
+        {'startDate': '2026-12-24', 'days': 29},
+        {'startDate': '2026-12-24', 'days': 1.5},
+        {'startDate': '2026-12-24', 'days': '21'},
+        {'startDate': '2026-12-24', 'days': true},
+      ]) {
+        await expectLater(
+          page(
+            state: object(first['state']),
+            context: {'timelineRange': range},
+            readOnly: true,
+          ),
+          throwsA(isA<StateError>()),
+          reason: '$range',
+        );
+      }
+      expect(
+        await ModuleUiPreferences(store)
+            .get(host.instances['app.planner']!.actor, 'board.viewport'),
+        isNull,
+      );
+    },
+  );
+
+  test('background range calls cannot dispatch navigation events', () async {
+    await expectLater(
+      page(
+        event: {'type': 'today'},
+        context: {
+          'timelineRange': {'startDate': '2026-12-24', 'days': 21},
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(
+      await ModuleUiPreferences(store)
+          .get(host.instances['app.planner']!.actor, 'board.viewport'),
+      isNull,
+    );
+  });
+
+  test(
+    'background loading returns a board even from alternate page state',
+    () async {
+      for (final alternate in [
+        {'history': true},
+        {'chooseAuto': true},
+        {'autoPreview': <String, Object?>{}},
+      ]) {
+        final rendered = await page(
+          state: {
+            'startDate': '2026-10-12',
+            'days': 3,
+            'scrollRequest': 4,
+            ...alternate,
+          },
+          context: {
+            'timelineRange': {'startDate': '2026-12-24', 'days': 21},
+          },
+          readOnly: true,
+        );
+        expect(dates(rendered).first, '2026-12-24');
+        expect(options(rendered)['initialDate'], '2026-10-12');
+        expect(options(rendered)['scrollRequest'], 4);
+        expect(
+          object(rendered['state'])[alternate.keys.single],
+          alternate.values.single,
+        );
+      }
+    },
+  );
+
+  test(
+    'background occupancy and display data preserve business records',
+    () async {
+      await command('planner.availability.save', {
+        'availability': {
+          'timezone': 'Asia/Shanghai',
+          'busy': [
+            {
+              'date': '2026-12-25',
+              'start': '05:00',
+              'end': '06:00',
+              'title': '后台忙碌时段',
+            },
+          ],
+        },
+      });
+      final tasks = <Map<String, Object?>>[];
+      for (final date in [
+        '2026-12-23',
+        '2026-12-24',
+        '2027-01-13',
+        '2027-01-14',
+      ]) {
+        tasks.add(
+          await command('task.create', {
+            'title': date,
+            'plannedStartAt': '${date}T15:00:00Z',
+            'plannedEndAt': '${date}T15:30:00Z',
+            'plannedTimezone': 'Asia/Shanghai',
+            'dueDate': date,
+          }, module: 'app.tasks'),
+        );
+      }
+      final pending = await command('task.create', {
+        'title': '后台仍显示待安排业务数据',
+        'dueDate': '2027-01-01',
+      }, module: 'app.tasks');
+      final rendered = await page(
+        state: {'startDate': '2026-10-12', 'days': 3},
+        context: {
+          'timelineRange': {'startDate': '2026-12-24', 'days': 21},
+        },
+        readOnly: true,
+      );
+      final blocks = objects(board(rendered)['blocks']);
+      expect(
+        blocks.map((block) => block['title']),
+        unorderedEquals(['2026-12-24', '2027-01-13', '后台忙碌时段']),
+      );
+      final scheduled = blocks.singleWhere(
+        (block) => block['title'] == '2026-12-24',
+      );
+      expect(scheduled['start'], '2026-12-24T23:00:00');
+      expect(scheduled['end'], '2026-12-24T23:30:00');
+      expect(scheduled['durationMinutes'], 30);
+      expect(scheduled['readOnly'], false);
+      expect(object(scheduled['moveEvent'])['taskId'], tasks[1]['id']);
+      final busy = blocks.singleWhere((block) => block['title'] == '后台忙碌时段');
+      expect(busy['readOnly'], true);
+      expect(busy['fixed'], true);
+      expect(busy['moveEvent'], isNull);
+      expect(
+        objects(board(rendered)['candidates'])
+            .map((candidate) => candidate['id']),
+        contains(pending['id']),
+      );
+      expect(options(rendered)['startMinute'], 240);
+      expect(options(rendered)['endMinute'], 1440);
+      expect(object(options(rendered)['displayHours'])['mode'], 'auto');
+      expect(options(await page())['startMinute'], 480);
+      expect(options(await page())['endMinute'], 1320);
+      for (final original in [...tasks, pending]) {
+        expect(
+          await host.query(
+            host.instances['app.tasks']!.actor,
+            const ServiceRef('app.tasks', 'task.get', 1),
+            {'id': original['id']},
+          ),
+          original,
+        );
+      }
+      expect(
+        await host.query(
+          host.instances['app.planner']!.actor,
+          const ServiceRef('app.planner', 'planner.operation.list', 1),
+          {},
+        ),
+        isEmpty,
+      );
+      expect(
+        await ModuleUiPreferences(store)
+            .get(host.instances['app.planner']!.actor, 'board.viewport'),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'background display data includes manual and full-day preferences',
+    () async {
+      final actor = host.instances['app.planner']!.actor;
+      for (final preference in [
+        {'mode': 'manual', 'start': '06:30', 'end': '23:00'},
+        {'mode': 'full', 'start': '08:00', 'end': '22:00'},
+      ]) {
+        await ModuleUiPreferences(store)
+            .set(actor, 'board.displayHours', preference);
+        final rendered = await page(
+          state: {'startDate': '2026-10-12', 'days': 3},
+          context: {
+            'timelineRange': {'startDate': '2026-12-24', 'days': 21},
+          },
+          readOnly: true,
+        );
+        expect(options(rendered)['displayHours'], preference);
+        expect(
+          options(rendered)['startMinute'],
+          preference['mode'] == 'full' ? 0 : 390,
+        );
+        expect(
+          options(rendered)['endMinute'],
+          preference['mode'] == 'full' ? 1440 : 1380,
+        );
+        expect(
+          await ModuleUiPreferences(store).get(actor, 'board.displayHours'),
+          preference,
+        );
+      }
+    },
+  );
 
   for (final scenario in <String, List<String>>{
     '2026-05-31': ['2026-05-30', '2026-05-31', '2026-06-01'],
@@ -377,14 +674,22 @@ void main() {
           'planDays': 5,
         },
       ]) {
-        rendered = await page(
-          state: object(rendered['state']),
-          event: {'type': 'timelineViewport', ...viewport},
+        final visibleState = {
+          ...object(rendered['state']),
+          'startDate': viewport['startDate'],
+          'days': viewport['visibleDays'],
+        };
+        final background = await page(
+          state: visibleState,
+          context: {
+            'timelineRange': {'startDate': '2026-12-24', 'days': 28},
+          },
+          readOnly: true,
         );
-        rendered = await page(
-          state: object(rendered['state']),
-          event: {'type': 'auto'},
-        );
+        expect(dates(background), hasLength(28));
+        expect(object(background['state'])['startDate'], viewport['startDate']);
+        expect(object(background['state'])['days'], viewport['visibleDays']);
+        rendered = await page(state: visibleState, event: {'type': 'auto'});
         final preview = object(object(rendered['state'])['autoPreview']);
         expect(
           object(preview['input'])['startDate'],

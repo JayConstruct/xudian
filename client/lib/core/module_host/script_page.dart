@@ -42,6 +42,7 @@ import 'planner_quick_adjust.dart';
 import 'collection_store.dart';
 import 'data_change_review.dart';
 import 'inline_plan_review.dart';
+import 'ui_preferences.dart';
 
 class ScriptPage extends StatefulWidget {
   const ScriptPage({
@@ -126,6 +127,214 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     'native plan confirmation',
   );
   _InlinePlanPreview? _inlinePlanPreview;
+  final _timelineViewports = <String, BoardItem>{};
+  final _timelinePreferenceSaves =
+      <String, Future<void> Function(Object? selectedDate)>{};
+  Timer? _timelinePreferenceTimer;
+  Future<void>? _timelinePreferenceTail;
+  int _timelineChangeRevision = 0;
+
+  _PlannerTimeline? _timelineConfig(BoardItem spec) {
+    final key = spec['key'];
+    final timeline = object(spec['options'] ?? {})['timeline'];
+    if (key is! String || key.isEmpty || timeline is! Map) return null;
+    final keys = timeline['stateKeys'];
+    if (keys is! Map) return null;
+    final values = [
+      timeline['rangeContextKey'],
+      timeline['preferenceKey'],
+      keys['startDate'],
+      keys['visibleDays'],
+    ];
+    if (values.any((value) => value is! String || value.isEmpty)) return null;
+    return _PlannerTimeline(
+      key,
+      values[0] as String,
+      values[1] as String,
+      values[2] as String,
+      values[3] as String,
+    );
+  }
+
+  BoardItem? _findPlannerBoard(Object? node, String key) {
+    if (node is Map) {
+      if (node['type'] == 'plannerBoard' && node['key'] == key) {
+        return object(node);
+      }
+      for (final child in node.values) {
+        final found = _findPlannerBoard(child, key);
+        if (found != null) return found;
+      }
+    } else if (node is List) {
+      for (final child in node) {
+        final found = _findPlannerBoard(child, key);
+        if (found != null) return found;
+      }
+    }
+    return null;
+  }
+
+  bool _timelineCurrent(BoardItem? sourceTree, ScriptInstance? instance) =>
+      mounted &&
+      routeActive &&
+      workspaceActive &&
+      !staleTree &&
+      instance != null &&
+      widget.host.store.active(instance.actor) &&
+      identical(instance, renderedInstance) &&
+      identical(instance, widget.host.instances[widget.moduleId]) &&
+      identical(tree, sourceTree);
+
+  String _timelineDataIdentity() => canonicalJson({
+    for (final entry in widget.host.store.moduleDataRevisions.entries)
+      if (entry.key != uiPreferencesReadDependency(widget.moduleId))
+        entry.key: entry.value,
+  });
+
+  void _plannerViewportChanged(
+    BoardItem? sourceTree,
+    _PlannerTimeline timeline,
+    ScriptInstance? instance,
+    BoardItem viewport,
+  ) {
+    if (!_timelineCurrent(sourceTree, instance)) return;
+    final startDate = viewport['startDate'];
+    final days = viewport['visibleDays'] ?? viewport['days'];
+    if (startDate is! String ||
+        parseInputDate(startDate) == null ||
+        days is! int ||
+        days < 1 ||
+        days > 7) {
+      return;
+    }
+    state = {
+      ...state,
+      timeline.startDateKey: startDate,
+      timeline.daysKey: days,
+    };
+    _timelineViewports[timeline.key] = {'startDate': startDate, 'days': days};
+    final host = widget.host;
+    final actor = instance!.actor;
+    _timelinePreferenceSaves[timeline.key] = (selectedDate) async {
+      if (!actor.permissions.contains('ui')) {
+        throw StateError('UI preferences require a UI page workflow');
+      }
+      await ModuleUiPreferences(host.store).set(actor, timeline.preferenceKey, {
+        'startDate': startDate,
+        'days': days,
+        'selectedDate': selectedDate,
+      }, notify: false);
+    };
+    _timelinePreferenceTimer?.cancel();
+    _timelinePreferenceTimer = Timer(
+      const Duration(milliseconds: 300),
+      () => unawaited(_flushTimelinePreferences()),
+    );
+  }
+
+  Future<void> _flushTimelinePreferences() {
+    _timelinePreferenceTimer?.cancel();
+    final saves = _timelinePreferenceSaves.values.toList();
+    _timelinePreferenceSaves.clear();
+    final selectedDate = state['selectedDate'];
+    final previous = _timelinePreferenceTail ?? Future<void>.value();
+    if (saves.isEmpty) return previous;
+    return _timelinePreferenceTail = previous.then((_) async {
+      for (final save in saves) {
+        try {
+          await save(selectedDate);
+        } catch (error) {
+          debugPrint('Unable to save planner viewport: $error');
+        }
+      }
+    });
+  }
+
+  Future<BoardItem?> _loadPlannerRange(
+    BoardItem? sourceTree,
+    _PlannerTimeline timeline,
+    ScriptInstance? instance,
+    String startDate,
+    int days,
+  ) async {
+    final current = epoch;
+    final changeRevision = _timelineChangeRevision;
+    final requestContext = Map<String, Object?>.of(pageContext);
+    final runtimeScope = PageRuntimeContextScope.read(context);
+    final runtimeRevision = runtimeScope?.currentRevision();
+    final dataIdentity = _timelineDataIdentity();
+    final registry = _businessRegistry();
+    bool isCurrent() =>
+        _timelineCurrent(sourceTree, instance) &&
+        current == epoch &&
+        changeRevision == _timelineChangeRevision &&
+        !busy &&
+        dataIdentity == _timelineDataIdentity() &&
+        registry == _businessRegistry() &&
+        runtimeRevision == runtimeScope?.currentRevision() &&
+        canonicalJson(requestContext) == canonicalJson(pageContext);
+    if (!isCurrent()) return null;
+    final result = await widget.host.invokePage(
+      widget.moduleId,
+      widget.handler,
+      freezeJson({
+        'state': state,
+        'formValues': formValues,
+        'event': null,
+        'context': {
+          ...requestContext,
+          timeline.rangeContextKey: {'startDate': startDate, 'days': days},
+        },
+      }),
+      readOnly: true,
+      shouldRun: isCurrent,
+    );
+    if (!isCurrent()) return null;
+    final board = _findPlannerBoard(object(result)['tree'], timeline.key);
+    if (board == null ||
+        board['days'] is! List ||
+        board['blocks'] is! List ||
+        board['options'] is! Map) {
+      throw const FormatException(
+        'Planner range response is missing its board',
+      );
+    }
+    return {
+      'days': board['days'],
+      'blocks': board['blocks'],
+      'options': board['options'],
+    };
+  }
+
+  void _retainPlannerViewport(
+    BoardItem nextState,
+    BoardItem nextTree,
+    Object? event,
+    Map<String, BoardItem> requestedViewports,
+  ) {
+    for (final key in _timelineViewports.keys.toList()) {
+      final previous = _findPlannerBoard(tree, key);
+      final next = _findPlannerBoard(nextTree, key);
+      final timeline = next == null ? null : _timelineConfig(next);
+      if (previous == null ||
+          timeline == null ||
+          canonicalJson(object(previous['options'])['timeline']) !=
+              canonicalJson(object(next!['options'])['timeline']) ||
+          canonicalJson(object(previous['options'])['scrollRequest']) !=
+              canonicalJson(object(next['options'])['scrollRequest'])) {
+        _timelineViewports.remove(key);
+        _timelinePreferenceSaves.remove(key);
+        continue;
+      }
+      final viewport = _timelineViewports[key]!;
+      if (event != null && identical(viewport, requestedViewports[key])) {
+        _timelineViewports.remove(key);
+        continue;
+      }
+      nextState[timeline.startDateKey] = viewport['startDate'];
+      nextState[timeline.daysKey] = viewport['days'];
+    }
+  }
 
   _InlinePlanPreview? _readInlinePlanPreview() {
     final declaration = tree?['planReview'];
@@ -426,6 +635,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   void _subscribe() {
     subscription = widget.host.store.changes.stream.listen((modules) {
+      _timelineChangeRevision++;
       dateCache.invalidateModules(modules);
       if (readModules != null && !modules.any(readModules!.contains)) return;
       refreshTimer?.cancel();
@@ -477,6 +687,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         old.handler != widget.handler ||
         canonicalJson(withoutRuntimePageContext(old.pageContext)) !=
             canonicalJson(withoutRuntimePageContext(widget.pageContext))) {
+      unawaited(_flushTimelinePreferences());
+      _timelineViewports.clear();
       epoch++;
       dateCache.clear();
       cacheDataRevision = -1;
@@ -526,6 +738,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       unawaited(_render());
     } else if (canonicalJson(old.pageContext) !=
         canonicalJson(widget.pageContext)) {
+      unawaited(_flushTimelinePreferences());
       unawaited(_render());
     }
   }
@@ -537,6 +750,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final active = ModalRoute.isCurrentOf(context) != false && workspaceActive;
     if (active == routeActive) return;
     routeActive = active;
+    if (!active) unawaited(_flushTimelinePreferences());
     if (!active) _closePlannerUndo();
     if (!workspaceActive) headerController?.clear(this);
     progressTimer?.cancel();
@@ -650,6 +864,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState value) {
+    if (value != AppLifecycleState.resumed) {
+      unawaited(_flushTimelinePreferences());
+    }
     if (value == AppLifecycleState.resumed) {
       dateCache.clear();
       unawaited(_render());
@@ -797,6 +1014,22 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final inlineApproval = event is Map ? _inlineApprovals[event] : null;
     String? approvedPlanId;
     try {
+      if (event != null && _timelineViewports.isNotEmpty ||
+          _timelinePreferenceTail != null) {
+        do {
+          await _flushTimelinePreferences();
+        } while (mounted &&
+            current == epoch &&
+            _timelinePreferenceSaves.isNotEmpty);
+        if (!mounted ||
+            current != epoch ||
+            event != null && (!routeActive || !workspaceActive || staleTree) ||
+            !identical(instance, widget.host.instances[widget.moduleId]) ||
+            canonicalJson(requestContext) != canonicalJson(pageContext) ||
+            runtimeRevision != runtimeScope?.currentRevision()) {
+          return;
+        }
+      }
       final input = freezeJson(<String, Object?>{
         'state': state,
         'context': requestContext,
@@ -805,6 +1038,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       }) as Map<String, Object?>;
       _checkDateCacheRevision();
       final requestedDataRevision = widget.host.store.dataRevision;
+      final requestedTimelineData = _timelineDataIdentity();
+      final requestedViewports = Map<String, BoardItem>.of(_timelineViewports);
       final requestedRegistry = businessRegistry;
       final requestedExamples = examplesRegistry;
       final startedAt = clock.now();
@@ -906,7 +1141,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       if (canonicalJson(requestContext) != canonicalJson(pageContext) ||
           requestedDateIntent != dateIntentRevision ||
           event == null &&
-              requestedDataRevision != widget.host.store.dataRevision ||
+              (_timelineViewports.isEmpty
+                  ? requestedDataRevision != widget.host.store.dataRevision
+                  : requestedTimelineData != _timelineDataIdentity()) ||
           requestedRegistry != _businessRegistry() ||
           resultReads?.contains(uiExamplesReadDependency) == true &&
               requestedExamples != _examplesRegistry() ||
@@ -955,10 +1192,15 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             inputTimers.remove(entry.key)?.cancel();
           }
         }
-        state = object(result['state'] ?? state);
+        final nextState = _timelineViewports.isEmpty
+            ? object(result['state'] ?? state)
+            : Map<String, Object?>.of(object(result['state'] ?? state));
+        final nextTree = object(result['tree']);
+        _retainPlannerViewport(nextState, nextTree, event, requestedViewports);
+        state = nextState;
         if (state['moveIntent'] == null) _retryPlannerMove = null;
         _pendingPlannerAdjustment = null;
-        tree = object(result['tree']);
+        tree = nextTree;
         _inlinePlanPreview = _readInlinePlanPreview();
         treeContextIdentity = canonicalJson({...requestContext, ...patch});
         renderedInstance = instance;
@@ -1114,6 +1356,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    unawaited(_flushTimelinePreferences());
     _closePlannerUndo();
     compositionReadiness?.complete(this);
     firstFrameReadiness?.complete(this);
@@ -2421,6 +2664,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         );
       case 'plannerBoard':
         final quickConfig = _quickAdjustmentConfig(spec);
+        final timeline = _timelineConfig(spec);
+        final instance = widget.host.instances[widget.moduleId];
+        final timelineTree = tree;
         return WorkspaceDragRegion(
           builder: (context, onDragActiveChanged) => PlannerBoard(
             bottomInset: WorkspaceContentInsets.bottomOf(uiContext),
@@ -2432,6 +2678,23 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                 ? _pendingPlannerAdjustment
                 : null,
             onQuickAdjustChanged: quickConfig != null ? _setQuickAdjust : null,
+            onViewportChanged: timeline == null
+                ? null
+                : (viewport) => _plannerViewportChanged(
+                    timelineTree,
+                    timeline,
+                    instance,
+                    viewport,
+                  ),
+            onLoadRange: timeline == null
+                ? null
+                : (startDate, days) => _loadPlannerRange(
+                    timelineTree,
+                    timeline,
+                    instance,
+                    startDate,
+                    days,
+                  ),
             onPreview: spec['previewQuery'] is Map
                 ? (proposal) =>
                       _previewQuery(object(spec['previewQuery']), proposal)
@@ -2734,6 +2997,17 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       },
     ),
   );
+}
+
+class _PlannerTimeline {
+  const _PlannerTimeline(
+    this.key,
+    this.rangeContextKey,
+    this.preferenceKey,
+    this.startDateKey,
+    this.daysKey,
+  );
+  final String key, rangeContextKey, preferenceKey, startDateKey, daysKey;
 }
 
 class _InlinePlanPreview {

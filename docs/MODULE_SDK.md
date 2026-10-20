@@ -1,6 +1,6 @@
 # JavaScript 模块 SDK v1
 
-当前宿主 API 为 `1.35.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
+当前宿主 API 为 `1.36.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
 
 新增模块使用 `formatVersion: 3`、`packageFormat: 2`，按所用能力声明最低 `hostApi`。组件/服务的 `@1` 主版本与宿主 API 版本分别管理，下方完整契约保留兼容规则。
 
@@ -518,6 +518,16 @@ await clock.toUtc({date: '2026-11-01', time: '01:30', zone: 'America/New_York'})
 该模式将日期选择、待安排任务条及单行星期日期头组合为紧凑界面；日期栏的 `rangeEvent` 打开日期选择，今天不在视口时显示 `todayEvent` 的返回入口。待安排默认横向一行，展开为覆盖表格的浮层，不改变网格原点，拖动时隐藏并于手势结束后收起。现有 `moveEvent`、预览、确认、快速调整及撤销协议不变。
 
 页面顶栏可声明 `{compact:true,layout:'plannerTimeline'}` 请求20字号的紧凑标题和44逻辑像素操作区域。存在合法 `quickAdjustment` 节点时，宿主贡献“调整”开关；开关状态只属于当前页面宿主，不经脚本命令设置，也不扩大快速调整的授权写集。没有活动顶栏的独立页面保留原生操作入口；菜单及失活租约保护不变。其他顶栏布局不受影响。
+
+### API 1.36 动态日期窗口
+
+`plannerBoard.options.timeline` 可声明 `{rangeContextKey:'timelineRange',preferenceKey:'board.viewport',stateKeys:{startDate:'startDate',visibleDays:'days'}}`。模块需声明 `hostApi:'^1.36.0'`。启用后，视口移动由宿主直接更新模块页面状态中的指定字段，并延迟合并保存 `{startDate,days,selectedDate}` 界面偏好；不会派发旧的 `viewportEvent`、重新生成整页或修改业务记录。离开页面及业务操作前保存最新位置。
+
+原生表格循环复用63天的物理日期范围，仅构建附近的日期表头及任务块，最多缓存84天数据。普通浏览命中缓存不调用模块页面；接近缓存边缘时，以同一模块身份只读调用当前页面处理器，输入 `event:null`，在 `context[rangeContextKey]` 中提供 `{startDate:'YYYY-MM-DD',days:21}`。模块应返回该范围的正常 `plannerBoard` 节点（相同 `key`），不得移动视口、递增 `scrollRequest`、写偏好或执行业务命令。加载日期范围与当前可见日期、自动安排范围相互独立。
+
+后台回复只合并日期与任务块，不替换页面状态、顶栏或滚动控制器；模块实例、页面上下文或业务数据变化后丢弃过期回复。没有缓存的日期列显示局部加载或重试入口，不禁用其他日期的浏览。循环窗口在滚动停止后按绝对日期和列内偏移重定位，纵向阅读位置不变。缓存不作为拖放授权，实际提交仍使用原有权限、版本校验、审核与撤销协议。
+
+未声明 `timeline` 的旧模块保留 API 1.35 的事件式加载路径。
 
 ### API 1.24 规划交互原型
 
