@@ -2,7 +2,7 @@
   "date": "2026-10-20",
   "version": "0.2.0-beta.7",
   "tag": "v0.2.0-beta.7",
-  "status": "local-acceptance-passed-awaiting-publication",
+  "status": "published-and-verified",
   "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
   "checks": {
     "pythonTests": 220,
@@ -39,12 +39,146 @@
     "fourSecretsPresent": true,
     "publicFingerprintMatched": true
   },
-  "publicApksVerified": false,
-  "releasePublished": false,
-  "ciVerified": false,
+  "publicApksVerified": true,
+  "releasePublished": true,
+  "ciVerified": true,
   "detailsDirectory": "dist/verification/release-20261020-beta7",
   "limitations": [
     "ARM physical device and Windows runtime are not verified.",
     "First fixed certificate release may require reinstalling historical temporary-signature builds."
-  ]
+  ],
+  "sourceCommit": "8cf0cb2b8bc1c33ea079cacf50e7a573e467f061",
+  "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.7",
+  "publishedAt": "2026-10-20T03:11:45Z",
+  "ci": [
+    {
+      "branch": "main",
+      "runId": 39361719620,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39361719620",
+      "headSha": "8cf0cb2b8bc1c33ea079cacf50e7a573e467f061",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "sign",
+          "status": "completed",
+          "conclusion": "skipped",
+          "currentSteps": []
+        },
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "skipped",
+          "currentSteps": []
+        }
+      ]
+    },
+    {
+      "branch": "v0.2.0-beta.7",
+      "runId": 39361719873,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39361719873",
+      "headSha": "8cf0cb2b8bc1c33ea079cacf50e7a573e467f061",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "sign",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        }
+      ]
+    }
+  ],
+  "ciTestCounts": {
+    "flutterTests": 1450,
+    "pythonTestGroups": [
+      220,
+      36
+    ],
+    "sourceJob": "android",
+    "releaseRunId": 39361719873,
+    "allPassed": true
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.7",
+    "sourceCommit": "8cf0cb2b8bc1c33ea079cacf50e7a573e467f061",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.7",
+    "publishedAt": "2026-10-20T03:11:45Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 128,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "name": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "version": "0.2.0-beta.7",
+        "versionCode": 1128,
+        "sha256": "769117d5ac0db0c39f746cc0df9bc9cd712db72bcf52ec1567165a3751abbb38",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "version": "0.2.0-beta.7",
+        "versionCode": 2128,
+        "sha256": "e645eaf5e5d14887e521246ffed1165750ca8c0cb35647e8dceab7a10d57aa28",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "version": "0.2.0-beta.7",
+        "versionCode": 4128,
+        "sha256": "c0cea2c016102d36a5a1537ae472c2dc0f3e073797126b77c1e5f7b0d9d82c08",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false
+  },
+  "publishedUpdatePage": {
+    "publishedReleaseNotesVisible": true,
+    "releaseVersion": "0.2.0-beta.7",
+    "fixedSigningNotesVisible": true,
+    "status": "current-is-latest",
+    "channelPreferenceChanged": false,
+    "existingAppDataRetained": true,
+    "installedApkSha256": "2aa221d14e5861fdff28f33bed701fc5516ddfe62c8ec42e7eb913c70d2e2d9c"
+  },
+  "validationScope": {
+    "localEmulatorUsesOriginalSigning": true,
+    "publicApksVerifiedSeparately": true,
+    "publicSigningApkInstalledOnEmulator": false,
+    "noUninstallOrDataClear": true,
+    "runtimeSourceUnchangedAfterEmulatorBuild": true
+  }
 }

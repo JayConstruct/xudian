@@ -56,6 +56,8 @@ gh variable set ANDROID_SIGNING_CERT_SHA256 --repo OWNER/REPO --env android-rele
 cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd
 ```
 
+此证书从 [`v0.2.0-beta.7`](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.7) 起用于公开 App 发布。该版本的独立签名任务已成功运行，三个 ABI 的公开 APK 已匿名下载并核对证书指纹。
+
 随机生成的 keystore 密码、密钥密码和 alias 暂存于仓库外 `~/.config/xudian-signing/credentials.json`；它和 keystore 的权限均为 `600`，所在专用目录为 `700`。该密码文件不应发送到聊天或提交到仓库。它用于本机安全导入，不替代密码管理器或离线备份：完成导入后，将密码迁入可信密码管理器，并备份 keystore；确认可恢复后再删除本机临时密码副本。
 
 初始化时没有可用的 GitHub CLI 授权。此后已安装官方 GitHub CLI，用户自行完成登录，并通过 CLI 创建和回读核对 `android-release` Environment：仅允许 tag `v*`，四个签名 secrets 与公开指纹变量已配置。Environment 的限制不替代仓库 tag ruleset；后者尚未配置。私钥和密码仅通过标准输入导入，未输出到日志。

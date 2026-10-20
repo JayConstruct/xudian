@@ -4,11 +4,15 @@
 
 ## 2026-10-20 beta.7 固定签名发布验收
 
-客户端递增到 `0.2.0-beta.7`，测试版与正式版共用固定证书的工作流准备合入；本次不修改独立模块。发布说明明确首次切换签名与历史临时签名安装的兼容性，完整备份和迁移需在重新安装前完成。
+已合入源码提交 `8cf0cb2` 并发布 [`v0.2.0-beta.7`](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.7)，测试版与正式版共用固定证书的工作流已实际运行成功；本次不修改独立模块。发布说明明确首次切换签名与历史临时签名安装的兼容性，完整备份和迁移需在重新安装前完成。
 
 220 项 Python 工具、36 项模块目录、21 项更新相关 Flutter 回归、完整静态分析、145 文件架构、actionlint 和仓库边界检查通过。统一脚本强制编译当前 beta.7 源码，沿用原本机签名保留数据覆盖安装 build157／Android versionCode4157；本机和已安装 APK SHA-256 一致，实际关于页与更新页正确显示 beta.7／构建4157，测试通道设置未改变。线上 `android-release` 环境仅允许 `v*` tag，四个签名 secrets 名称及公开指纹已再次回读确认。
 
-[结构化记录](verification/release-20261020-beta7.json)。本段为发布前验收，CI、公开 APK 和发布结果将在完成后更新；详细记录与截图位于本机 `dist/verification/release-20261020-beta7/`。ARM 真机与 Windows 原生运行未验证，模拟器保留原本机签名，与公开固定签名产物分别核验。
+同一源码的 [main CI](https://github.com/JayConstruct/xudian/actions/runs/39361719620) 与 [发布标签 CI](https://github.com/JayConstruct/xudian/actions/runs/39361719873) 均成功，发布任务实际完成 `android → sign → publish`。标签 CI 的完整 Flutter **1450 项**、Python 工具 **220 项**、模块目录 **36 项**通过，静态分析、架构、工作流、目录和三 ABI 构建检查通过。
+
+公开三个 APK、`SHA256SUMS`、`SOURCE_COMMIT` 已匿名下载核对；SOURCE_COMMIT 与发布源码一致，每个 APK 的摘要、包名、beta.7 版本、ABI 与六个内置模块内容均正确。三个 APK 均通过签名验证，证书 SHA-256 为 `cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd`，与固定指纹一致；公开构建128，ARMv7／ARM64／x86_64 versionCode 分别为1128／2128／4128。发布后在模拟器重新打开检查更新页，实际读取到公开 beta.7 固定签名说明，状态为已是最新版本，通道设置和数据保留。
+
+[结构化记录](verification/release-20261020-beta7.json)；详细记录、构建任务日志和截图位于本机 `dist/verification/release-20261020-beta7/`。ARM 真机与 Windows 原生运行未验证，模拟器保留原本机签名，与公开固定签名产物分别核验；没有将公开固定签名 APK 安装到已有模拟器或清除数据。
 
 ## 2026-10-20 测试版固定签名准备
 
