@@ -11,6 +11,8 @@ import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/planner_board.dart';
 import 'package:task_app/core/module_host/script_page.dart';
 import 'package:task_app/core/module_host/ui_preferences.dart';
+import 'package:task_app/core/ui/workspace_header.dart';
+import 'package:task_app/core/ui/workspace_header_action.dart';
 import 'package:task_app/data/app_database.dart';
 
 class _CommitBarrier {
@@ -42,6 +44,84 @@ class _DelayedCommitStore extends CollectionStore {
     }
     return super.commit(id, caller, authorize: authorize, audit: audit);
   }
+}
+
+class _PlannerHeaderHarness extends StatefulWidget {
+  const _PlannerHeaderHarness({required this.host});
+  final ModuleHost host;
+
+  @override
+  State<_PlannerHeaderHarness> createState() => _PlannerHeaderHarnessState();
+}
+
+class _PlannerHeaderHarnessState extends State<_PlannerHeaderHarness> {
+  final header = WorkspaceHeaderController();
+
+  @override
+  void initState() {
+    super.initState();
+    header.activate(
+      identity: 'planner-integration',
+      moduleId: 'app.planner',
+      pageId: 'app.planner.home',
+      enabled: true,
+      isActive: () => mounted,
+    );
+  }
+
+  @override
+  void dispose() {
+    header.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => WorkspaceHeaderScope(
+    controller: header,
+    lease: header.lease,
+    child: Column(
+      children: [
+        AnimatedBuilder(
+          animation: header,
+          builder: (context, _) {
+            final content = header.content;
+            final actions = (content?.spec['actions'] as List? ?? const [])
+                .map(object)
+                .where((action) => action['presentation'] == 'inline');
+            return ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${content?.spec['title'] ?? ''}',
+                      maxLines: 1,
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                  ),
+                  for (final action in actions)
+                    WorkspaceHeaderAction(
+                      action: action,
+                      compact: true,
+                      onPressed: () =>
+                          unawaited(content!.dispatch(action['event'])),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+        Expanded(
+          child: ScriptPage(
+            host: widget.host,
+            moduleId: 'app.planner',
+            handler: 'render',
+            pageContext: const {'pageId': 'app.planner.home'},
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 void main() {
@@ -225,21 +305,26 @@ void main() {
     }
   }
 
-  Future<void> showPlanner(WidgetTester tester) async {
+  Future<void> showPlanner(
+    WidgetTester tester, {
+    bool withHeader = true,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ScriptPage(
-            host: host,
-            moduleId: 'app.planner',
-            handler: 'render',
-            pageContext: const {'pageId': 'app.planner.home'},
-          ),
+          body: withHeader
+              ? _PlannerHeaderHarness(host: host)
+              : ScriptPage(
+                  host: host,
+                  moduleId: 'app.planner',
+                  handler: 'render',
+                  pageContext: const {'pageId': 'app.planner.home'},
+                ),
         ),
       ),
     );
     await settle(tester);
-    await tester.tap(find.byKey(const ValueKey('planner-quick-adjust')));
+    await tester.tap(find.byTooltip('快速调整'));
     await settle(tester);
   }
 
@@ -249,6 +334,43 @@ void main() {
       )
       .map((text) => text.data ?? '')
       .join(' ');
+
+  testWidgets(
+    'standalone planner keeps a native adjustment entry without writes',
+    (tester) async {
+      late Map<String, Object?> original;
+      await tester.runAsync(() async {
+        original = await createTask('独立页面开关');
+      });
+      var reviews = 0;
+      host.interaction = (_, method, args) async {
+        if (method == 'ui.review') reviews++;
+        return false;
+      };
+      await showPlanner(tester, withHeader: false);
+      expect(
+        find.byKey(const ValueKey('planner-standalone-quick-adjust')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('planner-quick-adjust')), findsNothing);
+      expect(
+        tester.widget<PlannerBoard>(find.byType(PlannerBoard)).quickAdjust,
+        true,
+      );
+      await tester.tap(find.byTooltip('快速调整'));
+      await settle(tester);
+      expect(
+        tester.widget<PlannerBoard>(find.byType(PlannerBoard)).quickAdjust,
+        false,
+      );
+      expect(reviews, 0);
+      await tester.runAsync(() async {
+        expect(await raw(original['id']), original);
+      });
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'a real delayed commit keeps one pending landing card and leaves the timeline scrollable',
@@ -455,18 +577,13 @@ void main() {
         scaffoldMessengerKey: messenger,
         home: Scaffold(
           body: planner
-              ? ScriptPage(
-                  host: host,
-                  moduleId: 'app.planner',
-                  handler: 'render',
-                  pageContext: const {'pageId': 'app.planner.home'},
-                )
+              ? _PlannerHeaderHarness(host: host)
               : const Center(child: Text('其他页面')),
         ),
       );
       await tester.pumpWidget(screen(true));
       await settle(tester);
-      await tester.tap(find.byKey(const ValueKey('planner-quick-adjust')));
+      await tester.tap(find.byTooltip('快速调整'));
       await settle(tester);
       tester
           .widget<PlannerBoard>(find.byType(PlannerBoard))
@@ -503,14 +620,7 @@ void main() {
       };
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: ScriptPage(
-              host: host,
-              moduleId: 'app.planner',
-              handler: 'render',
-              pageContext: const {'pageId': 'app.planner.home'},
-            ),
-          ),
+          home: Scaffold(body: _PlannerHeaderHarness(host: host)),
         ),
       );
       await settle(tester);
@@ -518,7 +628,7 @@ void main() {
         tester.widget<PlannerBoard>(find.byType(PlannerBoard)).quickAdjust,
         false,
       );
-      await tester.tap(find.byKey(const ValueKey('planner-quick-adjust')));
+      await tester.tap(find.byTooltip('快速调整'));
       await settle(tester);
       final board = tester.widget<PlannerBoard>(find.byType(PlannerBoard));
       expect(board.quickAdjust, true);
@@ -541,7 +651,7 @@ void main() {
         expect(restored['plannedStartAt'], original['plannedStartAt']);
         expect(restored['plannedEndAt'], original['plannedEndAt']);
       });
-      await tester.tap(find.byKey(const ValueKey('planner-quick-adjust')));
+      await tester.tap(find.byTooltip('快速调整'));
       await settle(tester);
       final normal = tester.widget<PlannerBoard>(find.byType(PlannerBoard));
       expect(normal.quickAdjust, false);
@@ -593,18 +703,11 @@ void main() {
         };
         await tester.pumpWidget(
           MaterialApp(
-            home: Scaffold(
-              body: ScriptPage(
-                host: host,
-                moduleId: 'app.planner',
-                handler: 'render',
-                pageContext: const {'pageId': 'app.planner.home'},
-              ),
-            ),
+            home: Scaffold(body: _PlannerHeaderHarness(host: host)),
           ),
         );
         await settle(tester);
-        await tester.tap(find.byKey(const ValueKey('planner-quick-adjust')));
+        await tester.tap(find.byTooltip('快速调整'));
         await settle(tester);
         final event = intent == 'resize'
             ? {

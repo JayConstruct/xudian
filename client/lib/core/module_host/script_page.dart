@@ -13,6 +13,7 @@ import 'dart:async';
 import '../contracts/json_values.dart';
 import '../performance/ui_load_trace.dart';
 import '../ui/workspace_header.dart';
+import '../ui/workspace_header_action.dart';
 import '../ui/workspace_typography.dart';
 import '../ui/ui_component.dart';
 import '../ui/ui_pack.dart';
@@ -113,6 +114,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   // not allocate a new board snapshot and invalidate all its geometry caches.
   final _plannerLists = Expando<List<BoardItem>>('planner snapshot lists');
   bool _quickAdjust = false;
+  static const _quickAdjustHeaderEvent = 'host.planner.quickAdjust';
   BoardItem? _pendingPlannerAdjustment;
   BoardItem? _retryPlannerMove;
   ScaffoldMessengerState? _plannerNoticeMessenger;
@@ -561,13 +563,62 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       return;
     }
     headerController = scope!.controller;
-    scope.controller.publish(lease!, this, renderedHeader, _renderHeaderEvent);
+    scope.controller.publish(lease!, this, _hostHeader, _renderHeaderEvent);
+  }
+
+  bool get _hasQuickAdjustHeader =>
+      renderedHeader?['compact'] == true &&
+      renderedHeader?['layout'] == 'plannerTimeline' &&
+      _hasQuickAdjustBoard(tree);
+
+  bool _hasQuickAdjustBoard(Object? node) {
+    if (node is Map) {
+      if (node['type'] == 'plannerBoard' &&
+          _quickAdjustmentConfig(object(node)) != null) {
+        return true;
+      }
+      return node.values.any(_hasQuickAdjustBoard);
+    }
+    return node is List && node.any(_hasQuickAdjustBoard);
+  }
+
+  Map<String, Object?> get _quickAdjustHeaderAction => {
+    'label': '调整',
+    'tooltip': '快速调整',
+    'icon': 'tune',
+    'presentation': 'inline',
+    'variant': 'text',
+    'overflowOnly': true,
+    'selected': _quickAdjust,
+    'event': {'type': _quickAdjustHeaderEvent},
+  };
+
+  Map<String, Object?>? get _hostHeader => !_hasQuickAdjustHeader
+      ? renderedHeader
+      : {
+          ...renderedHeader!,
+          'actions': [
+            _quickAdjustHeaderAction,
+            ...?renderedHeader!['actions'] as List?,
+          ],
+        };
+
+  void _setQuickAdjust(bool value) {
+    if (!mounted || !workspaceActive || staleTree || _quickAdjust == value) {
+      return;
+    }
+    setState(() => _quickAdjust = value);
+    _restoreHeader();
   }
 
   // Open-menu controls may be pressed while a preference invalidation is
   // refreshing the page. Preserve each accepted action instead of feeding it
   // through the ordinary latest-intent slot used by date navigation.
   Future<void> _renderHeaderEvent(Object? event) async {
+    if (event is Map && event['type'] == _quickAdjustHeaderEvent) {
+      if (_hasQuickAdjustHeader) _setQuickAdjust(!_quickAdjust);
+      return;
+    }
     final instance = widget.host.instances[widget.moduleId];
     final identity = canonicalJson(pageContext);
     final controller = headerController;
@@ -940,11 +991,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       if (ownsHeader &&
           (routeActive ||
               headerScope!.controller.isMenuOpenFor(headerLease, this))) {
-        final raw = result['header'];
         headerScope!.controller.publish(
           headerLease!,
           this,
-          raw is Map ? object(raw) : null,
+          _hostHeader,
           _renderHeaderEvent,
         );
       }
@@ -2381,9 +2431,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             pendingAdjustment: quickConfig != null
                 ? _pendingPlannerAdjustment
                 : null,
-            onQuickAdjustChanged: quickConfig != null
-                ? (value) => setState(() => _quickAdjust = value)
-                : null,
+            onQuickAdjustChanged: quickConfig != null ? _setQuickAdjust : null,
             onPreview: spec['previewQuery'] is Map
                 ? (proposal) =>
                       _previewQuery(object(spec['previewQuery']), proposal)
@@ -2566,6 +2614,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             (treeContextIdentity == canonicalJson(pageContext) ||
                 contextController ||
                 retainDateNavigation);
+        final headerLease = WorkspaceHeaderScope.read(context)?.lease;
+        final hasNativeHeader =
+            headerLease?.mode == 'contributed' &&
+            headerLease?.moduleId == widget.moduleId &&
+            headerLease?.pageId == widget.pageContext['pageId'];
         final content = Column(
           mainAxisSize: widget.embedded ? MainAxisSize.min : MainAxisSize.max,
           children: [
@@ -2585,6 +2638,25 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               ),
             if (!widget.embedded && currentTree && tree?['header'] is Map)
               safeNode(object(tree!['header'])),
+            if (!widget.embedded &&
+                currentTree &&
+                _hasQuickAdjustHeader &&
+                !hasNativeHeader)
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: WorkspaceHeaderAction(
+                      key: const ValueKey('planner-standalone-quick-adjust'),
+                      action: _quickAdjustHeaderAction,
+                      compact: true,
+                      onPressed: () => _setQuickAdjust(!_quickAdjust),
+                    ),
+                  ),
+                ),
+              ),
             if (widget.embedded)
               Padding(
                 padding: const EdgeInsets.symmetric(

@@ -119,6 +119,18 @@ class _PlannerBoardState extends State<PlannerBoard> {
   final _header = ScrollController();
   final _candidatesScroll = ScrollController();
   bool _candidatesExpanded = true;
+  final _candidateLink = LayerLink();
+  final _candidateTapGroup = Object();
+  bool _timelinePositioned = false, _timelineRepositioning = false;
+  bool _synchronizingTimeline = false;
+  bool _closeCandidatesAfterDrag = false;
+  DateTime? _reportedTimelineDate;
+  double _timelineColumnWidth = 0;
+  DateTime? _timelineRestoreDate;
+  double _timelineRestoreFraction = 0;
+  double? _timelineRestoreMinute;
+  final _clockElapsed = Stopwatch();
+  Timer? _clockTimer;
   double _candidateScrollOffset = 0;
   final _vertical = ScrollController();
   final _gridKey = GlobalKey();
@@ -186,6 +198,62 @@ class _PlannerBoardState extends State<PlannerBoard> {
       _date(day['date']) ==
       _midnight(_date(widget.options['today']) ?? DateTime.now());
   bool get _dashboard => widget.options['dashboard'] == true;
+  bool get _timeline =>
+      _dashboard &&
+      _focusDays == null &&
+      widget.options['continuousDates'] == true;
+  int get _visibleDayCount => _number('visibleDays', 3, 1, 7).round();
+  DateTime? get _timelineNow =>
+      _date(widget.options['now'])?.add(_clockElapsed.elapsed);
+
+  DateTime? get _leftDate {
+    if (_days.isEmpty) return null;
+    final first = _date(_days.first['date']);
+    final offset = _horizontal.hasClients ? _horizontal.offset : 0.0;
+    return first?.add(Duration(days: (offset / _columnWidth + .001).floor()));
+  }
+
+  void _positionTimeline(DateTime date, {double fraction = 0}) {
+    _timelineRepositioning = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_timeline || !_horizontal.hasClients) return;
+      final index = _days.indexWhere(
+        (day) => _midnight(_date(day['date'])!) == _midnight(date),
+      );
+      if (index >= 0) {
+        _horizontal.jumpTo(
+          ((index + fraction) * _columnWidth).clamp(
+            0,
+            _horizontal.position.maxScrollExtent,
+          ),
+        );
+        _reportedTimelineDate = _leftDate;
+        _syncHeader();
+        _refreshWindow();
+      }
+      _timelineRepositioning = false;
+    });
+  }
+
+  void _reportTimelineViewport() {
+    if (!_timeline ||
+        _timelineRepositioning ||
+        _synchronizingTimeline ||
+        _dragActive.value ||
+        !widget.enabled) {
+      return;
+    }
+    final date = _leftDate;
+    final event = widget.options['viewportEvent'];
+    if (date == null || date == _reportedTimelineDate || event is! Map) return;
+    _reportedTimelineDate = date;
+    widget.onEvent({
+      ...Map<String, Object?>.from(event),
+      'startDate': _stamp(date).substring(0, 10),
+      'visibleDays': _visibleDayCount,
+    });
+  }
+
   void _optionEvent(String name) {
     final event = widget.options[name];
     if (widget.enabled && event is Map) {
@@ -416,7 +484,13 @@ class _PlannerBoardState extends State<PlannerBoard> {
   @override
   void initState() {
     super.initState();
+    _clockElapsed.start();
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted && _timeline) setState(() {});
+    });
+    if (_timeline) _candidatesExpanded = false;
     _horizontal.addListener(_syncHeader);
+    _header.addListener(_syncTimelineBody);
     _horizontal.addListener(_refreshWindow);
     _vertical.addListener(_refreshWindow);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -447,16 +521,62 @@ class _PlannerBoardState extends State<PlannerBoard> {
   }
 
   void _syncHeader() {
-    if (_header.hasClients && _horizontal.hasClients) {
-      _header.jumpTo(
-        _horizontal.offset.clamp(0, _header.position.maxScrollExtent),
-      );
+    if (_synchronizingTimeline ||
+        !_header.hasClients ||
+        !_horizontal.hasClients) {
+      return;
+    }
+    final target = _horizontal.offset.clamp(
+      0,
+      _header.position.maxScrollExtent,
+    );
+    if ((_header.offset - target).abs() < .01) return;
+    _synchronizingTimeline = true;
+    try {
+      _header.jumpTo(target.toDouble());
+    } finally {
+      _synchronizingTimeline = false;
+    }
+  }
+
+  void _syncTimelineBody() {
+    if (!_timeline ||
+        _synchronizingTimeline ||
+        !_header.hasClients ||
+        !_horizontal.hasClients) {
+      return;
+    }
+    final target = _header.offset.clamp(
+      0,
+      _horizontal.position.maxScrollExtent,
+    );
+    if ((_horizontal.offset - target).abs() < .01) return;
+    _synchronizingTimeline = true;
+    try {
+      _horizontal.jumpTo(target.toDouble());
+    } finally {
+      _synchronizingTimeline = false;
     }
   }
 
   @override
   void didUpdateWidget(covariant PlannerBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.options['now'] != oldWidget.options['now']) {
+      _clockElapsed.reset();
+    }
+    final retainedDate = _timeline && oldWidget.days.isNotEmpty
+        ? _date(oldWidget.days.first['date'])?.add(
+            Duration(
+              days: _horizontal.hasClients
+                  ? (_horizontal.offset / _columnWidth + .001).floor()
+                  : 0,
+            ),
+          )
+        : null;
+    final retainedFraction = _horizontal.hasClients
+        ? (_horizontal.offset / _columnWidth) % 1
+        : 0.0;
     // Script trees are immutable snapshots. Chrome changes reuse their inputs;
     // only a new task snapshot invalidates parsed geometry and daily occupancy.
     if (!identical(widget.blocks, oldWidget.blocks) ||
@@ -475,15 +595,38 @@ class _PlannerBoardState extends State<PlannerBoard> {
     } else if (identical(oldWidget.days, _daySource)) {
       _daySource = widget.days;
     }
+    if (_timeline) {
+      final requested =
+          widget.options['scrollRequest'] != oldWidget.options['scrollRequest'];
+      if (requested || daysChanged) {
+        final target = requested
+            ? _date(widget.options['initialDate'])
+            : retainedDate;
+        if (target != null) {
+          _positionTimeline(target, fraction: requested ? 0 : retainedFraction);
+        }
+      }
+    }
     if (widget.options['startMinute'] != oldWidget.options['startMinute'] ||
         widget.options['endMinute'] != oldWidget.options['endMinute']) {
+      final preserveMinute =
+          _timeline &&
+          '${widget.options['displayHoursLabel']}'.startsWith('自动') &&
+          '${oldWidget.options['displayHoursLabel']}'.startsWith('自动');
+      final oldScale = (oldWidget.options['pixelsPerMinute'] as num? ?? 1)
+          .toDouble()
+          .clamp(.5, 3.0);
+      final minute = preserveMinute
+          ? (oldWidget.options['startMinute'] as num? ?? 480) +
+                (_vertical.hasClients ? _vertical.offset : 0) / oldScale
+          : _number('initialMinute', _startMinute.toDouble(), 0, 1440);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _vertical.hasClients) {
           _vertical.jumpTo(
-            ((_number('initialMinute', _startMinute.toDouble(), 0, 1440) -
-                        _startMinute) *
-                    _scale)
-                .clamp(0, _vertical.position.maxScrollExtent),
+            ((minute - _startMinute) * _scale).clamp(
+              0,
+              _vertical.position.maxScrollExtent,
+            ),
           );
           _refreshWindow();
         }
@@ -530,6 +673,8 @@ class _PlannerBoardState extends State<PlannerBoard> {
 
   @override
   void dispose() {
+    _clockTimer?.cancel();
+    _clockElapsed.stop();
     _fineTimer?.cancel();
     _intentTimer?.cancel();
     _scrollTimer?.cancel();
@@ -555,6 +700,12 @@ class _PlannerBoardState extends State<PlannerBoard> {
       if (!mounted || _dragActive.value == active) return;
       _dragActive.value = active;
       widget.onDragActiveChanged?.call(active);
+      if (!active && _closeCandidatesAfterDrag) {
+        _closeCandidatesAfterDrag = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _candidatesExpanded = false);
+        });
+      }
     }
 
     if (SchedulerBinding.instance.schedulerPhase ==
@@ -1319,6 +1470,8 @@ class _PlannerBoardState extends State<PlannerBoard> {
     final deadline = item['deadlineSummary'] as String?;
     final start = _date(item['start']), end = _date(item['end']);
     final scheduled = start != null && end != null;
+    final compactCandidate =
+        _timeline && !scheduled && item['_candidateList'] != true;
     final subtitle = _summary(item);
     final accent = _accent(item);
     final textTheme = Theme.of(context).textTheme;
@@ -1370,7 +1523,11 @@ class _PlannerBoardState extends State<PlannerBoard> {
             overflow: TextOverflow.ellipsis,
             style: textTheme.labelMedium?.copyWith(
               fontWeight: FontWeight.w600,
-              fontSize: titleLines > 1 ? 11 : null,
+              fontSize: titleLines > 1
+                  ? 11
+                  : !scheduled && _timeline
+                  ? 13
+                  : null,
               height: titleLines > 1 ? 1.15 : null,
               color: ContentColors.foreground(
                 accent,
@@ -1394,7 +1551,9 @@ class _PlannerBoardState extends State<PlannerBoard> {
             ? 1
             : 0,
         shadowColor: scheme.primary.withValues(alpha: .2),
-        color: item['_resident'] == true
+        color: item['_candidateList'] == true
+            ? scheme.surface
+            : item['_resident'] == true
             ? Colors.transparent
             : _selectedItem?['id'] == item['id']
             ? Color.lerp(_surface(item), scheme.surface, .2)
@@ -1410,7 +1569,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
             borderRadius: BorderRadius.circular(9),
             onTap: () => _activate(item),
             child: Container(
-              height: height,
+              height: compactCandidate ? height - 10 : height,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(9),
                 border:
@@ -1420,6 +1579,10 @@ class _PlannerBoardState extends State<PlannerBoard> {
                     ? Border.all(
                         color: scheme.primary,
                         width: scheduled ? 2 : 1.5,
+                      )
+                    : item['_candidateList'] == true
+                    ? Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: .6),
                       )
                     : null,
               ),
@@ -1473,6 +1636,53 @@ class _PlannerBoardState extends State<PlannerBoard> {
                                 ),
                             ],
                           )
+                  : _timeline
+                  ? Row(
+                      children: [
+                        if (item['_candidateList'] == true) ...[
+                          Icon(
+                            Icons.drag_indicator,
+                            size: 16,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 7),
+                          Container(
+                            width: 12,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: .35),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(child: title),
+                        if (item['overdue'] == true &&
+                            item['_candidateList'] != true) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: scheme.error,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ] else ...[
+                          const SizedBox(width: 7),
+                          Text(
+                            '${item['_candidateList'] == true ? '' : '· '}${subtitle.replaceFirst('耗时', '')}',
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: item['overdue'] == true
+                                  ? scheme.error
+                                  : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    )
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1495,6 +1705,16 @@ class _PlannerBoardState extends State<PlannerBoard> {
         ),
       ),
     );
+    if (compactCandidate) {
+      card = SizedBox(
+        height: height,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _activate(item),
+          child: Center(child: card),
+        ),
+      );
+    }
     if (draggable && _movable(item)) {
       var sourceSize = Size(112, height);
       var sourceGrab = Offset.zero;
@@ -1513,6 +1733,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
         onDragStarted: () {
           _clearDrag();
           _activeItem = item;
+          if (_timeline && !scheduled) _closeCandidatesAfterDrag = true;
           if (_dashboard && scheduled) {
             _moveOrigin = start;
             _movePointerOrigin = _pointerInstant(_feedbackPointer.value);
@@ -2427,6 +2648,14 @@ class _PlannerBoardState extends State<PlannerBoard> {
         items.map((item) => _date(item['end'])).whereType<DateTime>().toList()
           ..sort();
     if (starts.isEmpty || ends.isEmpty) return;
+    if (_timeline) {
+      _timelineRestoreDate = _leftDate;
+      _timelineRestoreFraction = _horizontal.hasClients
+          ? (_horizontal.offset / _columnWidth) % 1
+          : 0;
+      _timelineRestoreMinute =
+          _startMinute + (_vertical.hasClients ? _vertical.offset : 0) / _scale;
+    }
     _clearDrag();
     final day = _midnight(starts.first);
     final first = starts.first.difference(day).inMinutes;
@@ -2456,17 +2685,23 @@ class _PlannerBoardState extends State<PlannerBoard> {
 
   void _leaveZoom() {
     _clearDrag();
+    final minute = _timelineRestoreMinute;
+    _timelineRestoreMinute = null;
     setState(() {
       _focusDays = null;
       _focusStart = null;
       _focusEnd = null;
       _focusScale = null;
       _geometrySource = null;
+      if (widget.options['continuousDates'] == true) {
+        _timelinePositioned = false;
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_vertical.hasClients) {
         _vertical.jumpTo(
-          ((_number('initialMinute', 480, 0, 1440) - _startMinute) * _scale)
+          (((minute ?? _number('initialMinute', 480, 0, 1440)) - _startMinute) *
+                  _scale)
               .clamp(0, _vertical.position.maxScrollExtent),
         );
       }
@@ -2926,6 +3161,475 @@ class _PlannerBoardState extends State<PlannerBoard> {
     );
   }
 
+  String _visibleRangeLabel(DateTime start, DateTime end) {
+    if (start.year != end.year) {
+      return '${start.year}/${start.month}/${start.day}–${end.year}/${end.month}/${end.day}';
+    }
+    if (start.month != end.month) {
+      return '${start.month}月${start.day}日–${end.month}月${end.day}日';
+    }
+    return '${start.month}月${start.day}${start == end ? '' : '–${end.day}'}日';
+  }
+
+  Widget _timelineDateToolbar() {
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: _horizontal,
+      builder: (context, _) {
+        final start = _leftDate ?? _date(widget.options['initialDate']);
+        final end = start?.add(Duration(days: _visibleDayCount - 1));
+        final today = _date(widget.options['today']);
+        final outside = start == null || end == null
+            ? <BoardItem>[]
+            : _outsideItems.where((item) {
+                final from = _date(item['start']);
+                final to = _date(item['end']);
+                return from != null &&
+                    to != null &&
+                    from.isBefore(end.add(const Duration(days: 1))) &&
+                    to.isAfter(start);
+              }).toList();
+        final showToday =
+            start != null &&
+            end != null &&
+            today != null &&
+            (today.isBefore(start) || today.isAfter(end));
+        return Container(
+          key: const ValueKey('planner-date-toolbar'),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: .4),
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton(
+                    key: const ValueKey('planner-date-picker'),
+                    onPressed: widget.enabled
+                        ? () => _optionEvent('rangeEvent')
+                        : null,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(44, 44),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      foregroundColor: scheme.onSurface,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            start != null && end != null
+                                ? _visibleRangeLabel(start, end)
+                                : '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        const Icon(Icons.expand_more, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (outside.isNotEmpty)
+                IconButton(
+                  key: const ValueKey('planner-outside-indicator'),
+                  onPressed: () => _showOutside(outside),
+                  tooltip: '显示时段外的安排（${outside.length}）',
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(44),
+                    fixedSize: const Size.square(44),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: Badge(
+                    label: Text('${outside.length}'),
+                    child: const Icon(Icons.info_outline, size: 19),
+                  ),
+                ),
+              if (showToday)
+                TextButton(
+                  key: const ValueKey('planner-return-today'),
+                  onPressed: widget.enabled
+                      ? () => _optionEvent('todayEvent')
+                      : null,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(44, 44),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('回到今天', style: TextStyle(fontSize: 12)),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  double _candidateWidth(BoardItem item) {
+    final subtitle = item['overdue'] == true
+        ? ''
+        : _summary(item).replaceFirst('耗时', '');
+    final painter = TextPainter(
+      text: TextSpan(
+        text: '${item['title'] ?? ''}${subtitle.isEmpty ? '' : ' · $subtitle'}',
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final width = (painter.width + (item['overdue'] == true ? 38 : 24)).clamp(
+      88.0,
+      300.0,
+    );
+    painter.dispose();
+    return width;
+  }
+
+  Widget _timelineCandidateRail(double height) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      key: const ValueKey('planner-candidate-region'),
+      height: height,
+      child: TapRegion(
+        groupId: _candidateTapGroup,
+        child: Row(
+          children: [
+            CompositedTransformTarget(
+              link: _candidateLink,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(start: 8, end: 6),
+                child: Semantics(
+                  expanded: _candidatesExpanded,
+                  child: TextButton(
+                    key: const ValueKey('planner-toggle-candidates'),
+                    onPressed: widget.enabled ? _toggleCandidates : null,
+                    style: TextButton.styleFrom(
+                      foregroundColor: scheme.onSurface,
+                      minimumSize: const Size(44, 44),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(horizontal: 9),
+                      backgroundColor: scheme.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          '待安排 ',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Container(
+                          key: const ValueKey('planner-candidate-count'),
+                          child: Text(
+                            '$_candidateCount',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(
+                          _candidatesExpanded
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: _candidates.isEmpty
+                  ? Text(
+                      '暂无待安排任务',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    )
+                  : ListView.separated(
+                      key: const ValueKey('planner-candidates'),
+                      controller: _candidatesScroll,
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsetsDirectional.only(end: 8),
+                      itemCount: _candidates.length,
+                      separatorBuilder: (_, index) => const SizedBox(width: 6),
+                      itemBuilder: (context, index) {
+                        final item = _candidates[index];
+                        return SizedBox(
+                          width: _candidateWidth(item),
+                          child: Center(child: _card(item, height)),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _timelineCandidatePopup(double width, double height) {
+    final scheme = Theme.of(context).colorScheme;
+    return CompositedTransformFollower(
+      link: _candidateLink,
+      showWhenUnlinked: false,
+      targetAnchor: Alignment.bottomLeft,
+      followerAnchor: Alignment.topLeft,
+      child: TapRegion(
+        groupId: _candidateTapGroup,
+        onTapOutside: (_) {
+          if (_candidatesExpanded && !_dragActive.value) {
+            setState(() => _candidatesExpanded = false);
+          }
+        },
+        child: Material(
+          key: const ValueKey('planner-candidates-popup'),
+          elevation: 5,
+          shadowColor: scheme.shadow.withValues(alpha: .16),
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: height),
+            child: SizedBox(
+              width: width,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          '待安排 $_candidateCount',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _toggleCandidates,
+                        icon: const Icon(Icons.expand_less, size: 20),
+                        tooltip: '收起待安排',
+                      ),
+                    ],
+                  ),
+                  Flexible(
+                    child: _candidates.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('暂无待安排任务'),
+                          )
+                        : ListView.separated(
+                            key: const ValueKey('planner-candidates-expanded'),
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            itemCount: _candidates.length,
+                            separatorBuilder: (_, index) =>
+                                const SizedBox(height: 4),
+                            itemBuilder: (context, index) {
+                              final item = _candidates[index];
+                              return SizedBox(
+                                height: math.max(
+                                  44,
+                                  MediaQuery.textScalerOf(context).scale(14) *
+                                          1.4 +
+                                      12,
+                                ),
+                                child: _card(
+                                  {...item, '_candidateList': true},
+                                  math.max(
+                                    44,
+                                    MediaQuery.textScalerOf(context).scale(14) *
+                                            1.4 +
+                                        12,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Text('长按拖入时间表', style: TextStyle(fontSize: 11)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _timelineDayHeader(BoardItem day, double height) {
+    final date = _date(day['date'])!;
+    final today = _today(day);
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      label:
+          '${date.year}年${date.month}月${date.day}日 ${today ? '今天' : _weekday(date)}',
+      child: ExcludeSemantics(
+        child: Container(
+          key: ValueKey('planner-day:${day['date']}'),
+          width: _columnWidth,
+          height: height,
+          decoration: BoxDecoration(
+            color: today ? scheme.primary.withValues(alpha: .04) : null,
+            border: Border(
+              left: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: .4),
+              ),
+              bottom: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: .4),
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  today ? '今天' : _weekday(date),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: today ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: today
+                    ? BoxDecoration(
+                        color: scheme.primary,
+                        borderRadius: BorderRadius.circular(12),
+                      )
+                    : null,
+                child: Text(
+                  '${date.day}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: today ? FontWeight.w600 : FontWeight.w500,
+                    color: today ? scheme.onPrimary : scheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _currentTimeLine() {
+    final now = _timelineNow;
+    if (!_timeline || now == null) return const [];
+    final index = _days.indexWhere(
+      (day) => _date(day['date']) == _midnight(now),
+    );
+    final minute = now.hour * 60 + now.minute;
+    if (index < 0 || minute < _startMinute || minute >= _endMinute) {
+      return const [];
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      Positioned(
+        key: const ValueKey('planner-now-line'),
+        left: index * _columnWidth,
+        top: (minute - _startMinute) * _scale,
+        width: _columnWidth,
+        height: 1,
+        child: IgnorePointer(child: ColoredBox(color: scheme.primary)),
+      ),
+      Positioned(
+        left: index * _columnWidth,
+        top: (minute - _startMinute) * _scale - 2,
+        width: 5,
+        height: 5,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _currentTimeLabel() {
+    return AnimatedBuilder(
+      animation: _horizontal,
+      builder: (context, _) {
+        final now = _timelineNow;
+        final left = _leftDate;
+        if (!_timeline ||
+            now == null ||
+            left == null ||
+            _midnight(now).isBefore(left) ||
+            !_midnight(now)
+                .isBefore(left.add(Duration(days: _visibleDayCount)))) {
+          return const SizedBox.shrink();
+        }
+        final minute = now.hour * 60 + now.minute;
+        if (minute < _startMinute || minute >= _endMinute) {
+          return const SizedBox.shrink();
+        }
+        final scheme = Theme.of(context).colorScheme;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              key: const ValueKey('planner-now-label'),
+              top: (minute - _startMinute) * _scale - 9,
+              left: 2,
+              right: 2,
+              child: IgnorePointer(
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    _time(now),
+                    style: TextStyle(fontSize: 10, color: scheme.onPrimary),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -2943,10 +3647,36 @@ class _PlannerBoardState extends State<PlannerBoard> {
     return LayoutBuilder(
       builder: (context, constraints) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _refreshWindow());
-        _columnWidth = math.max(
-          _number('minColumnWidth', 112, 96, 320),
-          (constraints.maxWidth - 48) / math.max(1, days.length),
-        );
+        final retainedDate = _leftDate;
+        final retainedFraction = _horizontal.hasClients
+            ? (_horizontal.offset / _columnWidth) % 1
+            : 0.0;
+        _columnWidth = _timeline
+            ? math.max(1, (constraints.maxWidth - 48) / _visibleDayCount)
+            : math.max(
+                _number('minColumnWidth', 112, 96, 320),
+                (constraints.maxWidth - 48) / math.max(1, days.length),
+              );
+        if (_timeline &&
+            (!_timelinePositioned || _timelineColumnWidth != _columnWidth)) {
+          final target = !_timelinePositioned
+              ? _timelineRestoreDate ?? _date(widget.options['initialDate'])
+              : retainedDate;
+          if (target != null) {
+            _positionTimeline(
+              target,
+              fraction: !_timelinePositioned
+                  ? _timelineRestoreFraction
+                  : retainedFraction,
+            );
+          }
+          _timelinePositioned = true;
+          _timelineColumnWidth = _columnWidth;
+          _timelineRestoreDate = null;
+          _timelineRestoreFraction = 0;
+        }
+        final railHeight = math.max(44.0, scaler.scale(13) * 1.5 + 20);
+        final dayHeaderHeight = math.max(32.0, scaler.scale(13) * 1.4 + 8);
         final gridWidth = _columnWidth * days.length;
         final gridHeight = (_endMinute - _startMinute) * _scale;
         final outsideSettings = (days, _startMinute, _endMinute);
@@ -2989,7 +3719,11 @@ class _PlannerBoardState extends State<PlannerBoard> {
         final board = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_focusDays == null)
+            if (_timeline) ...[
+              _timelineDateToolbar(),
+              _timelineCandidateRail(railHeight),
+            ],
+            if (_focusDays == null && !_timeline)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
                 child: LayoutBuilder(
@@ -3147,7 +3881,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                       ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
-            if (_focusDays == null)
+            if (_focusDays == null && !_timeline)
               AnimatedSize(
                 key: const ValueKey('planner-candidate-region'),
                 duration: const Duration(milliseconds: 220),
@@ -3250,7 +3984,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                               ),
                       ),
               ),
-            if (_dashboard && _focusDays == null)
+            if (_dashboard && _focusDays == null && !_timeline)
               _dateToolbar(math.max(0, constraints.maxWidth - 48)),
             if (_focusDays != null)
               Padding(
@@ -3261,7 +3995,9 @@ class _PlannerBoardState extends State<PlannerBoard> {
                       onPressed: _leaveZoom,
                       icon: const Icon(Icons.chevron_left),
                       label: Text(
-                        '返回${widget.options['periodLabel'] ?? '5天'}视图',
+                        widget.options['continuousDates'] == true
+                            ? '返回时间表'
+                            : '返回${widget.options['periodLabel'] ?? '5天'}视图',
                       ),
                     ),
                     const Spacer(),
@@ -3324,7 +4060,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                   style: TextStyle(color: scheme.tertiary),
                 ),
               ),
-            if (outside.isNotEmpty)
+            if (outside.isNotEmpty && !_timeline)
               if (_focusDays != null)
                 Align(
                   alignment: Alignment.centerLeft,
@@ -3350,93 +4086,127 @@ class _PlannerBoardState extends State<PlannerBoard> {
                 ),
             Row(
               children: [
-                const SizedBox(width: 48, height: 38, child: SizedBox.shrink()),
+                SizedBox(
+                  width: 48,
+                  height: _timeline ? dayHeaderHeight : 38,
+                  child: _timeline
+                      ? Center(
+                          child: Text(
+                            '时间',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
                 Expanded(
-                  child: SingleChildScrollView(
-                    controller: _header,
-                    scrollDirection: Axis.horizontal,
-                    physics: const NeverScrollableScrollPhysics(),
-                    child: Row(
-                      children: [
-                        for (final day in days)
-                          SizedBox(
-                            width: _columnWidth,
-                            height: _dashboard
-                                ? math.max(
-                                    54,
-                                    scaler.scale(11) * 1.5 +
-                                        scaler.scale(14) * 1.5 +
-                                        8,
-                                  )
-                                : 38,
-                            child: _dashboard && _focusDays != null
-                                ? Center(
-                                    child: Text(
-                                      '${_date(day['date'])!.month}月${_date(day['date'])!.day}日 ${_weekday(_date(day['date'])!)}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  )
-                                : _dashboard
-                                ? Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        [
-                                          '周一',
-                                          '周二',
-                                          '周三',
-                                          '周四',
-                                          '周五',
-                                          '周六',
-                                          '周日',
-                                        ][_date(day['date'])!.weekday - 1],
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: scheme.onSurfaceVariant,
-                                            ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 9,
-                                          vertical: 2,
-                                        ),
-                                        decoration: _today(day)
-                                            ? BoxDecoration(
-                                                color: scheme.primary,
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                              )
-                                            : null,
+                  child: NotificationListener<ScrollEndNotification>(
+                    onNotification: (notification) {
+                      if (notification.depth == 0 &&
+                          notification.metrics.axis == Axis.horizontal) {
+                        _reportTimelineViewport();
+                      }
+                      return false;
+                    },
+                    child: SingleChildScrollView(
+                      key: const ValueKey('planner-date-header'),
+                      controller: _header,
+                      scrollDirection: Axis.horizontal,
+                      physics: _timeline
+                          ? _PlannerDayScrollPhysics(_columnWidth)
+                          : const NeverScrollableScrollPhysics(),
+                      child: Row(
+                        children: [
+                          for (final day in days)
+                            if (_timeline)
+                              _timelineDayHeader(day, dayHeaderHeight)
+                            else
+                              SizedBox(
+                                width: _columnWidth,
+                                height: _dashboard
+                                    ? math.max(
+                                        54,
+                                        scaler.scale(11) * 1.5 +
+                                            scaler.scale(14) * 1.5 +
+                                            8,
+                                      )
+                                    : 38,
+                                child: _dashboard && _focusDays != null
+                                    ? Center(
                                         child: Text(
-                                          '${_date(day['date'])!.day}',
+                                          '${_date(day['date'])!.month}月${_date(day['date'])!.day}日 ${_weekday(_date(day['date'])!)}',
                                           style: Theme.of(context)
                                               .textTheme
-                                              .titleSmall
+                                              .titleMedium
                                               ?.copyWith(
-                                                color: _today(day)
-                                                    ? scheme.onPrimary
-                                                    : scheme.onSurfaceVariant,
+                                                fontWeight: FontWeight.w600,
                                               ),
                                         ),
+                                      )
+                                    : _dashboard
+                                    ? Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            [
+                                              '周一',
+                                              '周二',
+                                              '周三',
+                                              '周四',
+                                              '周五',
+                                              '周六',
+                                              '周日',
+                                            ][_date(day['date'])!.weekday - 1],
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall
+                                                ?.copyWith(
+                                                  color:
+                                                      scheme.onSurfaceVariant,
+                                                ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 2,
+                                            ),
+                                            decoration: _today(day)
+                                                ? BoxDecoration(
+                                                    color: scheme.primary,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          16,
+                                                        ),
+                                                  )
+                                                : null,
+                                            child: Text(
+                                              '${_date(day['date'])!.day}',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleSmall
+                                                  ?.copyWith(
+                                                    color: _today(day)
+                                                        ? scheme.onPrimary
+                                                        : scheme
+                                                              .onSurfaceVariant,
+                                                  ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : Center(
+                                        child: Text(
+                                          '${day['label'] ?? day['date']}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ],
-                                  )
-                                : Center(
-                                    child: Text(
-                                      '${day['label'] ?? day['date']}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                          ),
-                      ],
+                              ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -3510,115 +4280,133 @@ class _PlannerBoardState extends State<PlannerBoard> {
                                   ),
                                 ),
                               ),
+                              if (_timeline)
+                                Positioned.fill(child: _currentTimeLabel()),
                             ],
                           ),
                         ),
                         Expanded(
-                          child: SingleChildScrollView(
-                            key: const ValueKey('planner-horizontal'),
-                            controller: _horizontal,
-                            scrollDirection: Axis.horizontal,
-                            child: DragTarget<BoardItem>(
-                              onWillAcceptWithDetails: (details) =>
-                                  _movable(details.data),
-                              onMove: (details) =>
-                                  _hover(details.data, details.offset),
-                              onLeave: (_) => _clearDrag(endGesture: false),
-                              onAcceptWithDetails: (details) =>
-                                  _drop(details.data, details.offset),
-                              builder: (context, _, _) => SizedBox(
-                                key: _gridKey,
-                                width: gridWidth,
-                                height: gridHeight,
-                                child: AnimatedBuilder(
-                                  animation: Listenable.merge([
-                                    _proposal,
-                                    _validation,
-                                    _window,
-                                  ]),
+                          child: NotificationListener<ScrollEndNotification>(
+                            onNotification: (notification) {
+                              if (notification.depth == 0 &&
+                                  notification.metrics.axis ==
+                                      Axis.horizontal) {
+                                _reportTimelineViewport();
+                              }
+                              return false;
+                            },
+                            child: SingleChildScrollView(
+                              key: const ValueKey('planner-horizontal'),
+                              controller: _horizontal,
+                              physics: _timeline
+                                  ? _PlannerDayScrollPhysics(_columnWidth)
+                                  : null,
+                              scrollDirection: Axis.horizontal,
+                              child: DragTarget<BoardItem>(
+                                onWillAcceptWithDetails: (details) =>
+                                    _movable(details.data),
+                                onMove: (details) =>
+                                    _hover(details.data, details.offset),
+                                onLeave: (_) => _clearDrag(endGesture: false),
+                                onAcceptWithDetails: (details) =>
+                                    _drop(details.data, details.offset),
+                                builder: (context, _, _) => SizedBox(
+                                  key: _gridKey,
+                                  width: gridWidth,
+                                  height: gridHeight,
                                   child: AnimatedBuilder(
-                                    animation: _window,
-                                    child: RepaintBoundary(
-                                      child: CustomPaint(
-                                        painter: _BoardLines(
-                                          _columnWidth,
-                                          _scale,
-                                          _startMinute,
-                                          scheme.outlineVariant,
-                                          interval: _focusDays == null ? 30 : 5,
+                                    animation: Listenable.merge([
+                                      _proposal,
+                                      _validation,
+                                      _window,
+                                    ]),
+                                    child: AnimatedBuilder(
+                                      animation: _window,
+                                      child: RepaintBoundary(
+                                        child: CustomPaint(
+                                          painter: _BoardLines(
+                                            _columnWidth,
+                                            _scale,
+                                            _startMinute,
+                                            scheme.outlineVariant,
+                                            interval: _focusDays == null
+                                                ? 30
+                                                : 5,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    builder: (context, lines) => Stack(
-                                      children: [
-                                        for (
-                                          var dayIndex = 0;
-                                          dayIndex < days.length;
-                                          dayIndex++
-                                        )
-                                          if (_dashboard &&
-                                              _today(days[dayIndex]))
-                                            Positioned(
-                                              left: dayIndex * _columnWidth,
-                                              top: 0,
-                                              bottom: 0,
-                                              width: _columnWidth,
-                                              child: ColoredBox(
-                                                color: scheme.primary
-                                                    .withValues(alpha: .025),
+                                      builder: (context, lines) => Stack(
+                                        children: [
+                                          for (
+                                            var dayIndex = 0;
+                                            dayIndex < days.length;
+                                            dayIndex++
+                                          )
+                                            if (_dashboard &&
+                                                _today(days[dayIndex]))
+                                              Positioned(
+                                                left: dayIndex * _columnWidth,
+                                                top: 0,
+                                                bottom: 0,
+                                                width: _columnWidth,
+                                                child: ColoredBox(
+                                                  color: scheme.primary
+                                                      .withValues(alpha: .025),
+                                                ),
                                               ),
+                                          Positioned.fill(child: lines!),
+                                          ..._segments(_blocks, cardHeight),
+                                          if (_selectedItem != null)
+                                            ..._gapLabels(_selectedItem!),
+                                          ..._segments(
+                                            widget.previewBlocks,
+                                            cardHeight,
+                                            preview: true,
+                                          ),
+                                          ..._currentTimeLine(),
+                                        ],
+                                      ),
+                                    ),
+                                    builder: (context, base) => Stack(
+                                      clipBehavior: Clip.hardEdge,
+                                      children: [
+                                        Positioned.fill(child: base!),
+                                        if (_proposal.value != null)
+                                          ..._segments(
+                                            _localPreview(_proposal.value!),
+                                            cardHeight,
+                                            preview: true,
+                                            prefix: 'local',
+                                          ),
+                                        if (_proposal.value?.targetId != null)
+                                          ..._segments(
+                                            [
+                                              ?_index(
+                                                _blocks,
+                                                cardHeight,
+                                              ).byId[_proposal.value!.targetId],
+                                            ],
+                                            cardHeight,
+                                            preview: true,
+                                            prefix: 'target',
+                                            outline: true,
+                                          ),
+                                        if (_proposal.value != null)
+                                          ..._gapLabels({
+                                            ..._proposal.value!.item,
+                                            'start': _stamp(
+                                              _proposal.value!.start,
                                             ),
-                                        Positioned.fill(child: lines!),
-                                        ..._segments(_blocks, cardHeight),
-                                        if (_selectedItem != null)
-                                          ..._gapLabels(_selectedItem!),
+                                            'end': _stamp(_proposal.value!.end),
+                                          }, replacements: _servicePreview()),
                                         ..._segments(
-                                          widget.previewBlocks,
+                                          _servicePreview(),
                                           cardHeight,
                                           preview: true,
+                                          prefix: 'service',
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  builder: (context, base) => Stack(
-                                    clipBehavior: Clip.hardEdge,
-                                    children: [
-                                      Positioned.fill(child: base!),
-                                      if (_proposal.value != null)
-                                        ..._segments(
-                                          _localPreview(_proposal.value!),
-                                          cardHeight,
-                                          preview: true,
-                                          prefix: 'local',
-                                        ),
-                                      if (_proposal.value?.targetId != null)
-                                        ..._segments(
-                                          [
-                                            ?_index(
-                                              _blocks,
-                                              cardHeight,
-                                            ).byId[_proposal.value!.targetId],
-                                          ],
-                                          cardHeight,
-                                          preview: true,
-                                          prefix: 'target',
-                                          outline: true,
-                                        ),
-                                      if (_proposal.value != null)
-                                        ..._gapLabels({
-                                          ..._proposal.value!.item,
-                                          'start': _stamp(
-                                            _proposal.value!.start,
-                                          ),
-                                          'end': _stamp(_proposal.value!.end),
-                                        }, replacements: _servicePreview()),
-                                      ..._segments(
-                                        _servicePreview(),
-                                        cardHeight,
-                                        preview: true,
-                                        prefix: 'service',
-                                      ),
-                                    ],
                                   ),
                                 ),
                               ),
@@ -3683,6 +4471,26 @@ class _PlannerBoardState extends State<PlannerBoard> {
         final content = Stack(
           children: [
             Positioned.fill(child: board),
+            if (_timeline && _candidatesExpanded)
+              Positioned(
+                top: 0,
+                left: 0,
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _dragActive,
+                  builder: (context, dragging, child) =>
+                      Offstage(offstage: dragging, child: child),
+                  child: _timelineCandidatePopup(
+                    math.min(340, constraints.maxWidth - 16),
+                    math.min(
+                      320,
+                      math.max(
+                        100,
+                        constraints.maxHeight - widget.bottomInset - 105,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             if (_selectedItem != null && _dashboard)
               Positioned(
                 left: 0,
@@ -3754,6 +4562,42 @@ class _PlannerBoardState extends State<PlannerBoard> {
             ? content
             : SizedBox(height: 640, child: content);
       },
+    );
+  }
+}
+
+class _PlannerDayScrollPhysics extends ScrollPhysics {
+  const _PlannerDayScrollPhysics(this.columnWidth, {super.parent});
+  final double columnWidth;
+
+  @override
+  _PlannerDayScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      _PlannerDayScrollPhysics(columnWidth, parent: buildParent(ancestor));
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    if (position.outOfRange) {
+      return super.createBallisticSimulation(position, velocity);
+    }
+    final tolerance = toleranceFor(position);
+    final projected = position.pixels + velocity * .12;
+    final target = ((projected / columnWidth).round() * columnWidth).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if ((target - position.pixels).abs() < tolerance.distance &&
+        velocity.abs() < tolerance.velocity) {
+      return null;
+    }
+    return ScrollSpringSimulation(
+      spring,
+      position.pixels,
+      target,
+      velocity,
+      tolerance: tolerance,
     );
   }
 }

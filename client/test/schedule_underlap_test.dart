@@ -11,6 +11,7 @@ import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/time_grid.dart';
+import 'package:task_app/core/ui/workspace_chrome.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
@@ -161,6 +162,61 @@ void main() {
             (state) => state.widget.axisDirection == AxisDirection.down,
           )
           .position;
+
+  testWidgets(
+    'pulling down scrolls lessons first, then reveals the header, then opens a gap',
+    (tester) async {
+      await pumpApp(tester);
+      final chrome = tester
+          .widget<WorkspaceChromeHeader>(find.byType(WorkspaceChromeHeader))
+          .controller;
+      final position = verticalPosition();
+      final gesture = await tester.startGesture(
+        tester.getCenter(verticalGrid()),
+      );
+      await gesture.moveBy(Offset(0, -chrome.headerExtent - 160));
+      await tester.pump();
+      await tester.pump();
+      expect(chrome.collapsed, isTrue);
+      expect(position.pixels, greaterThan(80));
+      final collapsedGridTop = tester.getTopLeft(find.byType(TimeGrid)).dy;
+      final before = position.pixels;
+      await gesture.moveBy(const Offset(0, 40));
+      await tester.pump();
+      await tester.pump();
+      expect(position.pixels, closeTo(before - 40, .01));
+      expect(chrome.collapsed, isTrue);
+      expect(
+        tester.getTopLeft(find.byType(TimeGrid)).dy,
+        closeTo(collapsedGridTop, .01),
+      );
+      await gesture.moveBy(
+        Offset(0, position.pixels + chrome.headerExtent / 2),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(position.pixels, closeTo(0, .01));
+      expect(chrome.progress, closeTo(.5, .01));
+      expect(
+        tester.getTopLeft(find.byType(TimeGrid)).dy,
+        closeTo(collapsedGridTop + chrome.headerExtent / 2, .01),
+      );
+      await gesture.moveBy(Offset(0, chrome.hiddenExtent));
+      await tester.pump();
+      await tester.pump();
+      expect(chrome.expanded, isTrue);
+      expect(position.pixels, closeTo(0, .01));
+      await gesture.moveBy(const Offset(0, 40));
+      await tester.pump();
+      expect(chrome.expanded, isTrue);
+      expect(position.pixels, lessThan(0));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(position.pixels, closeTo(0, .01));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'grid continues behind floating navigation and its last lesson can scroll fully above it',

@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:task_app/app/app_scroll_behavior.dart';
 import 'package:task_app/core/ui/workspace_chrome.dart';
 
 FixedScrollMetrics metrics(
@@ -208,12 +209,12 @@ void main() {
       expect(position.pixels, 30);
       drag(20);
       await tester.pump();
-      expect(controller.hiddenExtent, 80);
-      expect(position.pixels, 30);
+      expect(controller.hiddenExtent, 100);
+      expect(position.pixels, 10);
       drag(100);
       await tester.pump();
-      expect(controller.expanded, isTrue);
-      expect(position.pixels, 10);
+      expect(controller.hiddenExtent, 10);
+      expect(position.pixels, 0);
       position.pointerScroll(120);
       await tester.pumpAndSettle();
       expect(controller.collapsed, isTrue);
@@ -222,6 +223,139 @@ void main() {
       await tester.pumpAndSettle();
       expect(controller.collapsed, isTrue);
       expect(position.pixels, 200);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final wheel in [false, true]) {
+    testWidgets(
+      '${wheel ? 'wheel' : 'drag'} returns rows to the top before revealing chrome and opening a gap',
+      (tester) async {
+        final scroll = WorkspaceChromeScrollController()..chrome = controller;
+        addTearDown(scroll.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            scrollBehavior: const AppScrollBehavior(),
+            home: Column(
+              children: [
+                WorkspaceChromeHeader(
+                  controller: controller,
+                  child: const SizedBox(height: 100),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    controller: scroll,
+                    child: const SizedBox(height: 2000),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pump();
+        final position = scroll.position as ScrollPositionWithSingleContext;
+        final gesture = wheel
+            ? null
+            : position.drag(
+                DragStartDetails(globalPosition: Offset.zero),
+                () {},
+              );
+        Future<void> travel(double delta) async {
+          if (wheel) {
+            position.pointerScroll(delta);
+          } else {
+            gesture!.update(
+              DragUpdateDetails(
+                globalPosition: Offset.zero,
+                delta: Offset(0, -delta),
+                primaryDelta: -delta,
+              ),
+            );
+          }
+          await tester.pump();
+          await tester.pump();
+        }
+
+        await travel(300);
+        expect(controller.collapsed, isTrue);
+        expect(position.pixels, 200);
+        await travel(-80);
+        expect(controller.collapsed, isTrue);
+        expect(position.pixels, 120);
+        await travel(-150);
+        expect(controller.hiddenExtent, 70);
+        expect(position.pixels, 0);
+        await travel(-40);
+        expect(controller.hiddenExtent, 30);
+        expect(position.pixels, 0);
+        await travel(-30);
+        expect(controller.expanded, isTrue);
+        expect(position.pixels, 0);
+        await travel(-40);
+        expect(controller.expanded, isTrue);
+        expect(position.pixels, wheel ? 0 : -40);
+        if (!wheel) {
+          final recovery = -position.physics.applyPhysicsToUserOffset(
+            position,
+            -100,
+          );
+          await travel(100);
+          expect(position.pixels, 0);
+          expect(controller.hiddenExtent, closeTo(recovery - 40, .01));
+          await travel(300);
+          final contentOffset = position.pixels;
+          expect(controller.collapsed, isTrue);
+          final distance = contentOffset + controller.headerExtent + 20;
+          gesture!.update(
+            DragUpdateDetails(
+              globalPosition: Offset.zero,
+              delta: Offset(0, distance),
+              primaryDelta: distance,
+            ),
+          );
+          expect(controller.expanded, isTrue);
+          expect(position.pixels, closeTo(-20, .01));
+          await tester.pump();
+          await tester.pump();
+          expect(position.pixels, closeTo(-20, .01));
+        }
+        gesture?.end(DragEndDetails(primaryVelocity: 0));
+        await tester.pumpAndSettle();
+        expect(controller.expanded, isTrue);
+        expect(position.pixels, closeTo(0, .01));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets(
+    'downward inertia scrolls rows but cannot skip hidden chrome into a gap',
+    (tester) async {
+      final scroll = WorkspaceChromeScrollController()..chrome = controller;
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          scrollBehavior: const AppScrollBehavior(),
+          home: SingleChildScrollView(
+            controller: scroll,
+            child: const SizedBox(height: 2000),
+          ),
+        ),
+      );
+      await tester.pump();
+      final position = scroll.position as ScrollPositionWithSingleContext;
+      position.pointerScroll(300);
+      expect(controller.collapsed, isTrue);
+      expect(position.pixels, 200);
+      position.goBallistic(-2000);
+      await tester.pump(const Duration(milliseconds: 32));
+      expect(position.pixels, lessThan(200));
+      expect(position.pixels, greaterThanOrEqualTo(0));
+      await tester.pumpAndSettle();
+      expect(controller.collapsed, isTrue);
+      expect(position.pixels, 0);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

@@ -63,6 +63,25 @@ function draft(state, forms, event) {
 const displayKey = 'board.displayHours';
 const displayDefaults = {mode: 'auto', start: '08:00', end: '22:00'};
 const zoomKey = 'board.zoom';
+const viewportKey = 'board.viewport';
+const visibleDayCounts = [1, 3, 5, 7];
+function viewportPreference(value) {
+  try {
+    day(value.startDate);
+    if (!visibleDayCounts.includes(value.days)) return {};
+    if (value.selectedDate) day(value.selectedDate);
+    return value;
+  } catch (_) { return {}; }
+}
+const saveViewport = state => ui.preferences.set(viewportKey, {startDate: state.startDate, days: state.days, selectedDate: state.selectedDate});
+async function jumpDate(state, date) {
+  day(date);
+  state.startDate = add(date, -Math.floor(state.days / 2));
+  state.selectedDate = date;
+  state.scrollRequest++;
+  state.candidateOffset = 0;
+  await saveViewport(state);
+}
 const zoomLevels = [
   {pixelsPerMinute: .75, label: '紧凑'},
   {pixelsPerMinute: 1.1, label: '标准'},
@@ -119,8 +138,11 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   if (context.pageId === 'app.planner.taskDetail') return detail(state, event, context, formValues, a);
   state.displayHours = displayPreference(await ui.preferences.get(displayKey));
   state.zoom = zoomIndex(await ui.preferences.get(zoomKey));
-  state.startDate ||= today;
-  state.days ||= 5;
+  const viewport = viewportPreference(await ui.preferences.get(viewportKey));
+  state.days = visibleDayCounts.includes(state.days) ? state.days : viewport.days || 3;
+  state.startDate ||= viewport.startDate || add(today, -Math.floor(state.days / 2));
+  state.selectedDate ||= viewport.selectedDate || today;
+  state.scrollRequest = Number.isSafeInteger(state.scrollRequest) && state.scrollRequest >= 0 ? state.scrollRequest : 0;
   state.selected ||= [];
   state.candidateOffset = Number.isSafeInteger(state.candidateOffset) && state.candidateOffset >= 0 ? state.candidateOffset : 0;
   const candidateLimit = 100;
@@ -151,7 +173,13 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     if (event?.type === 'detail') await panel('taskDetail', {taskId: event.id});
     if (event?.type === 'editTime') await panel('taskDetail', {taskId: event.id, step: 'time'});
     if (event?.type === 'tools') await panel('tools', {screen: event.screen || 'rules'});
-    if (event?.type === 'today') { state.startDate = today; state.candidateOffset = 0; }
+    if (event?.type === 'today') await jumpDate(state, today);
+    if (event?.type === 'timelineViewport') {
+      day(event.startDate);
+      if (!visibleDayCounts.includes(event.visibleDays)) throw Error('请选择1、3、5或7列');
+      state.startDate = event.startDate; state.days = event.visibleDays;
+      await saveViewport(state);
+    }
     if (event?.type === 'board') { state.history = false; state.chooseAuto = false; delete state.autoPreview; }
     if (event?.type === 'chooseAuto') { state.chooseAuto = true; delete state.autoPreview; }
     if (event?.type === 'occurrence') await panel('editor', {candidate: event.candidate});
@@ -171,26 +199,23 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       if (Number.isSafeInteger(offset) && offset >= 0) state.candidateOffset = offset;
     }
     if (event?.type === 'period') {
-      const v = await ui.dialog({title: '图形显示范围', fields: [
-        {key: 'startDate', label: '开始日期', type: 'date', value: state.startDate},
-        {key: 'days', label: '天数（1–28）', type: 'number', value: state.days},
+      const v = await ui.dialog({title: '跳转日期', fields: [
+        {key: 'startDate', label: '日期', type: 'date', value: state.selectedDate},
       ]});
-      if (v) {
-        if (!Number.isInteger(Number(v.days)) || Number(v.days) < 1 || Number(v.days) > 28) throw Error('请选择1至28天');
-        day(v.startDate);
-        state.startDate = v.startDate; state.days = Number(v.days); state.candidateOffset = 0;
-      }
+      if (v) await jumpDate(state, v.startDate);
     }
     if (event?.type === 'periodShortcut') {
-      if (!Number.isInteger(event.days) || event.days < 1 || event.days > 28) throw Error('请选择1至28天');
+      if (!visibleDayCounts.includes(event.days)) throw Error('请选择1、3、5或7列');
       state.days = event.days; state.candidateOffset = 0;
+      await saveViewport(state);
     }
-    if (event?.type === 'browse') { state.startDate = add(state.startDate, event.offset * state.days); state.candidateOffset = 0; }
     if (event?.type === 'history') state.history = !state.history;
     if (event?.type === 'undo') await execute('batch.undo', {id: event.id});
     if (event?.type === 'auto') {
+      const elapsedDays = Math.max(0, Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(state.startDate + 'T00:00:00Z')) / 86400000));
+      if (elapsedDays >= state.days) throw Error('当前可见日期均已过去，请回到今天后自动安排');
       state.chooseAuto = false;
-      state.autoPreview = await query('plan.preview', {startDate: state.startDate, days: state.days, ...(state.selected.length ? {selectedIds: state.selected} : {})});
+      state.autoPreview = await query('plan.preview', {startDate: add(state.startDate, elapsedDays), days: state.days - elapsedDays, ...(state.selected.length ? {selectedIds: state.selected} : {})});
       state.autoKey = await ids.new();
     }
     if (event?.type === 'confirmAuto' && state.autoPreview) {
@@ -212,13 +237,14 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   // Undo and apply still validate current tasks in their command services.
   if (state.history) return plannerPage(state, await historyContent(state));
   if (state.autoPreview) return plannerPage(state, previewContent(state));
-  const boardInput = () => ({startDate: state.startDate, days: state.days, candidateOffset: state.candidateOffset, candidateLimit, onlyDeadline: !!state.onlyDeadline});
+  const boardInput = () => ({startDate: add(state.startDate, -7), days: 21, candidateOffset: state.candidateOffset, candidateLimit, onlyDeadline: !!state.onlyDeadline});
   let data = await query('board.get', boardInput());
   if (state.candidateOffset > 0 && state.candidateOffset >= data.candidateTotal) {
     state.candidateOffset = Math.max(0, Math.floor((data.candidateTotal - 1) / candidateLimit) * candidateLimit);
     data = await query('board.get', boardInput());
   }
   const now = await clock.now(), daysByZone = {[a.timezone]: today};
+  const localNow = await clock.toLocal({utc: now, zone: a.timezone});
   for (const t of data.tasks) if (t.dueDate && !t.dueAt && t.dueTimezone && !daysByZone[t.dueTimezone]) daysByZone[t.dueTimezone] = await clock.today(t.dueTimezone);
   const overdue = t => !!t?.dueDate && (t.dueAt ? Date.parse(t.dueAt) < Date.parse(now) : t.dueDate < daysByZone[t.dueTimezone || a.timezone]);
   const labelDeadline = await localDeadlineLabels([...data.candidates.map(c => c.task), ...data.scheduled], a.timezone);
@@ -275,14 +301,15 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     quickAdjustment: {taskModuleId: 'app.tasks', applyServiceId: 'planner.operation.apply', undoServiceId: 'planner.batch.undo'},
     previewQuery: {ref: ref('operation.inspect'), input: {timezone: a.timezone, expectedTasks}},
     previewIdentity: JSON.stringify([a.timezone, state.startDate, state.days, state.candidateOffset, state.onlyDeadline, expectedTasks, data.busy]),
-    days: Array.from({length: state.days}, (_, i) => { const date = add(state.startDate, i); return {date, label: date.slice(5).replace('-', '/')}; }),
+    days: Array.from({length: data.range.days}, (_, index) => { const date = add(data.range.startDate, index); return {date, label: date.slice(5).replace('-', '/')}; }),
     options: {
+      continuousDates: true, visibleDays: state.days, initialDate: state.startDate, scrollRequest: state.scrollRequest,
+      viewportEvent: {type: 'timelineViewport'}, selectedDate: state.selectedDate, now: stamp(localNow.date, localNow.time),
       dashboard: true, minColumnWidth: 112, pixelsPerMinute: zoomLevels[state.zoom].pixelsPerMinute, candidateLabel: '待安排', candidateCount: data.candidateTotal,
       ...visibleHours, displayHoursEvent: {type: 'displayHours'},
-      rangeLabel: rangeLabel(state.startDate, add(state.startDate, state.days - 1)), periodLabel: `${state.days}天`, today,
+      rangeLabel: rangeLabel(state.startDate, add(state.startDate, state.days - 1)), today,
       onlyDeadline: !!state.onlyDeadline, filterEvent: {type: 'onlyDeadline'},
-      rangeEvent: {type: 'period'}, periodEvent: {type: 'period'}, todayEvent: {type: 'today'},
-      previousEvent: {type: 'browse', offset: -1}, nextEvent: {type: 'browse', offset: 1},
+      rangeEvent: {type: 'period'}, todayEvent: {type: 'today'},
       editTimeEvent: {type: 'editTime'},
       ...(state.error ? {errorText: state.error} : {}),
       ...([...notices, selectedText].filter(Boolean).length ? {noticeText: [...notices, selectedText].filter(Boolean).join('；')} : {}),
@@ -300,13 +327,14 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
 function plannerPage(state, content, displayHoursLabel = '') {
   const alternate = state.history || state.autoPreview || state.chooseAuto;
   return {state, header: {compact: true, title: state.history ? '操作历史' : state.autoPreview ? '安排预览' : state.chooseAuto ? '自动安排' : '任务规划',
+    ...(!alternate ? {layout: 'plannerTimeline'} : {}),
     ...(alternate ? {backEvent: {type: 'board'}} : {}), actions: alternate ? [] : [
-    {label: '新建', icon: 'add', variant: 'filled', presentation: 'inline', iconOnly: true, overflowOnly: true, event: {type: 'add'}},
+    {label: '新建', icon: 'add', presentation: 'inline', iconOnly: true, overflowOnly: true, event: {type: 'add'}},
     {label: '自动安排', icon: 'sparkles', presentation: 'menu', event: {type: 'chooseAuto'}},
     {label: '操作历史', icon: 'history', presentation: 'menu', event: {type: 'history'}},
     {label: '视图与显示', icon: 'calendar', presentation: 'menu', separatorBefore: true, children: [
-      {kind: 'choiceGrid', label: '显示天数', children: [1, 3, 5, 7].map(days => ({label: `${days}天`, selected: state.days === days, event: {type: 'periodShortcut', days}}))},
-      {label: '自定义范围…', icon: 'dateRange', subtitle: `当前 ${state.days}天`, event: {type: 'period'}},
+      {kind: 'choiceGrid', label: '显示列数', children: visibleDayCounts.map(days => ({label: `${days}列`, selected: state.days === days, event: {type: 'periodShortcut', days}}))},
+      {label: '跳转日期…', icon: 'dateRange', event: {type: 'period'}},
       {label: '每日显示时段', icon: 'schedule', subtitle: displayHoursLabel, separatorBefore: true, event: {type: 'displayHours'}},
       {kind: 'stepper', label: '时间轴缩放', valueLabel: zoomLevels[state.zoom].label,
         decreaseEvent: {type: 'zoom', delta: -1}, increaseEvent: {type: 'zoom', delta: 1},

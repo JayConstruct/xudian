@@ -240,13 +240,14 @@ void main() {
   );
 
   testWidgets(
-    'vertical reading hides both phone bars and reveal or upward scrolling restores them',
+    'vertical reading hides both phone bars and returning rows to the top restores them',
     (tester) async {
       await pumpApp(tester, largeText: true);
       final semantics = tester.ensureSemantics();
       expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);
       final viewport = tester.getSize(find.byType(TimeGrid));
+      final headerHeight = tester.getSize(header()).height;
       await scrollDown(tester);
       expect(find.byTooltip('页面菜单'), findsNothing);
       expect(dockVisible(tester), isFalse);
@@ -275,7 +276,21 @@ void main() {
       expect(dockVisible(tester), isTrue);
       await scrollDown(tester);
       expect(dockVisible(tester), isFalse);
-      await tester.drag(verticalGrid(), const Offset(0, 120));
+      final position = verticalPosition();
+      final before = position.pixels;
+      expect(before, greaterThan(0));
+      final gesture = await tester.startGesture(
+        tester.getCenter(verticalGrid()),
+      );
+      await gesture.moveBy(Offset(0, before / 2 + 20));
+      await frame(tester);
+      expect(position.pixels, greaterThan(0));
+      expect(position.pixels, lessThan(before));
+      expect(find.byTooltip('页面菜单'), findsNothing);
+      expect(dockVisible(tester), isFalse);
+      await gesture.moveBy(Offset(0, position.pixels + headerHeight + 40));
+      await frame(tester);
+      await gesture.up();
       await tester.pumpAndSettle();
       expect(find.byTooltip('页面菜单'), findsOneWidget);
       expect(dockVisible(tester), isTrue);

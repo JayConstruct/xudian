@@ -1,6 +1,6 @@
 # JavaScript 模块 SDK v1
 
-当前宿主 API 为 `1.34.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
+当前宿主 API 为 `1.35.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
 
 新增模块使用 `formatVersion: 3`、`packageFormat: 2`，按所用能力声明最低 `hostApi`。组件/服务的 `@1` 主版本与宿主 API 版本分别管理，下方完整契约保留兼容规则。
 
@@ -508,6 +508,16 @@ await clock.toUtc({date: '2026-11-01', time: '01:30', zone: 'America/New_York'})
 
 `services.directory()` 记录当前服务目录与实例代数作为 prepare 的读取基线，包含可选提供者尚未安装或启用的状态；目录变化后提交拒绝并要求重新准备。只读页面准备也记录声明的可选提供者 ID，即使提供者当前缺失，安装或启停后页面可重新查询。
 
+
+### API 1.35 连续日期与紧凑规划界面
+
+使用以下能力的模块声明 `hostApi: '^1.35.0'`。`plannerBoard.options.continuousDates: true` 启用连续日期布局：`days` 是附近日期的数据窗口，`visibleDays` 是同时显示的列数（1／3／5／7），两者不是业务排程范围。`initialDate` 指定视口最左日期，主动跳转时递增 `scrollRequest`；普通数据刷新保留当前绝对日期、列内偏移及纵向浏览时刻。
+
+`viewportEvent` 提供页面事件模板。横向滚动结束后，宿主追加 `{startDate:'YYYY-MM-DD',visibleDays:3}`；模块可读取新的附近窗口，并保存界面偏好。窗口改变不能被当作用户主动跳转。日期与几何仍使用同一规划时区；`today` 是该时区的自然日，`now` 是由 `clock.toLocal` 转换的无偏移本地 ISO 时刻，用于今天列的当前时刻线。
+
+该模式将日期选择、待安排任务条及单行星期日期头组合为紧凑界面；日期栏的 `rangeEvent` 打开日期选择，今天不在视口时显示 `todayEvent` 的返回入口。待安排默认横向一行，展开为覆盖表格的浮层，不改变网格原点，拖动时隐藏并于手势结束后收起。现有 `moveEvent`、预览、确认、快速调整及撤销协议不变。
+
+页面顶栏可声明 `{compact:true,layout:'plannerTimeline'}` 请求20字号的紧凑标题和44逻辑像素操作区域。存在合法 `quickAdjustment` 节点时，宿主贡献“调整”开关；开关状态只属于当前页面宿主，不经脚本命令设置，也不扩大快速调整的授权写集。没有活动顶栏的独立页面保留原生操作入口；菜单及失活租约保护不变。其他顶栏布局不受影响。
 
 ### API 1.24 规划交互原型
 

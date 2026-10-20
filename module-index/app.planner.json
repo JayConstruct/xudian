@@ -5051,6 +5051,1409 @@
       "size": 37440,
       "sha256": "ec9e7b9961e382782c39acb54ff07bb28beb764c4c0fd7930215aefe1a685d42",
       "signature": null
+    },
+    {
+      "version": "1.6.0",
+      "manifest": {
+        "id": "app.planner",
+        "name": "任务规划",
+        "version": "1.6.0",
+        "hostApi": "^1.35.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.query:app.tasks/task.list@1",
+          "services.query:app.tasks/task.get@1",
+          "services.query:app.tasks/task.range@1",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/task.updateFields@1",
+          "services.command:app.tasks/task.restore@1",
+          "services.command:app.tasks/task.setCompleted@1",
+          "services.query:app.schedule/schedule.query.busy@1"
+        ],
+        "dependencies": [
+          {
+            "moduleId": "app.tasks",
+            "version": "^1.5.1"
+          }
+        ],
+        "optionalServices": [
+          {
+            "moduleId": "app.schedule",
+            "serviceId": "schedule.query.busy",
+            "majorVersion": 1,
+            "kind": "query"
+          }
+        ],
+        "description": "快速添加任务、查看图形时间表并预览和撤销整体安排。",
+        "author": "JayConstruct"
+      },
+      "services": [
+        {
+          "id": "planner.rules.list",
+          "major": 1,
+          "handler": "rulesList",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "array"
+          },
+          "tool": {
+            "name": "planner_rules_list",
+            "description": "任务规划：rules.list",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.rules.save",
+          "major": 1,
+          "handler": "rulesSave",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "rules": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 200,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "startDate": {
+                      "type": "string"
+                    },
+                    "endDate": {
+                      "type": "string"
+                    },
+                    "times": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string"
+                          },
+                          "end": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20
+                    },
+                    "estimatedMinutes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1439
+                    },
+                    "priority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "once",
+                        "daily",
+                        "weekly",
+                        "interval"
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    },
+                    "weekdays": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 7
+                      },
+                      "minItems": 1,
+                      "maxItems": 7
+                    },
+                    "perWeek": {
+                      "type": "integer"
+                    },
+                    "maxGapDays": {
+                      "type": "integer"
+                    },
+                    "earlyDays": {
+                      "type": "integer"
+                    },
+                    "lastCompletedOn": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "firstDeadline": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "paused",
+                        "ended"
+                      ]
+                    },
+                    "effectiveOn": {
+                      "type": "string"
+                    },
+                    "expectedVersion": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "kind",
+                    "startDate",
+                    "timezone"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "rules"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_rules_save",
+            "description": "任务规划：rules.save",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "rules": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 200,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "startDate": {
+                        "type": "string"
+                      },
+                      "endDate": {
+                        "type": "string"
+                      },
+                      "times": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "string"
+                            },
+                            "end": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 20
+                      },
+                      "estimatedMinutes": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1439
+                      },
+                      "priority": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "once",
+                          "daily",
+                          "weekly",
+                          "interval"
+                        ]
+                      },
+                      "timezone": {
+                        "type": "string"
+                      },
+                      "optional": {
+                        "type": "boolean"
+                      },
+                      "weekdays": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 7
+                        },
+                        "minItems": 1,
+                        "maxItems": 7
+                      },
+                      "perWeek": {
+                        "type": "integer"
+                      },
+                      "maxGapDays": {
+                        "type": "integer"
+                      },
+                      "earlyDays": {
+                        "type": "integer"
+                      },
+                      "lastCompletedOn": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "firstDeadline": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "active",
+                          "paused",
+                          "ended"
+                        ]
+                      },
+                      "effectiveOn": {
+                        "type": "string"
+                      },
+                      "expectedVersion": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "kind",
+                      "startDate",
+                      "timezone"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "rules"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.availability.get",
+          "major": 1,
+          "handler": "availabilityGet",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_availability_get",
+            "description": "任务规划：availability.get",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.availability.save",
+          "major": 1,
+          "handler": "availabilitySave",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "availability": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "availability"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_availability_save",
+            "description": "任务规划：availability.save",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "availability": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "availability"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.candidates.list",
+          "major": 1,
+          "handler": "candidatesList",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "startDate": {
+                "type": "string"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 28
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_candidates_list",
+            "description": "任务规划：candidates.list",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "startDate": {
+                  "type": "string"
+                },
+                "days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 28
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.plan.preview",
+          "major": 1,
+          "handler": "planPreview",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "startDate": {
+                "type": "string"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 28
+              },
+              "selectedIds": {
+                "type": "array",
+                "maxItems": 200,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "overrides": {
+                "type": "object"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_plan_preview",
+            "description": "任务规划：plan.preview",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "startDate": {
+                  "type": "string"
+                },
+                "days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 28
+                },
+                "selectedIds": {
+                  "type": "array",
+                  "maxItems": 200,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "overrides": {
+                  "type": "object"
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.batch.apply",
+          "major": 1,
+          "handler": "batchApply",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "batchKey": {
+                "type": "string"
+              },
+              "preview": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "batchKey",
+              "preview"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_batch_apply",
+            "description": "任务规划：batch.apply",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "batchKey": {
+                  "type": "string"
+                },
+                "preview": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "batchKey",
+                "preview"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.batch.list",
+          "major": 1,
+          "handler": "batchList",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "array"
+          },
+          "tool": {
+            "name": "planner_batch_list",
+            "description": "任务规划：batch.list",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.batch.undo",
+          "major": 1,
+          "handler": "batchUndo",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_batch_undo",
+            "description": "任务规划：batch.undo",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.occurrence.update",
+          "major": 1,
+          "handler": "occurrenceUpdate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "candidate": {
+                "type": "object"
+              },
+              "changes": {
+                "type": "object",
+                "properties": {
+                  "startDate": {
+                    "type": "string"
+                  },
+                  "endDate": {
+                    "type": "string"
+                  },
+                  "times": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "string"
+                        },
+                        "end": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 20
+                  },
+                  "estimatedMinutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1439
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "locked": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "window": {
+                "type": "object",
+                "properties": {
+                  "startDate": {
+                    "type": "string"
+                  },
+                  "endDate": {
+                    "type": "string"
+                  },
+                  "times": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "string"
+                        },
+                        "end": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 20
+                  },
+                  "estimatedMinutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1439
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_occurrence_update",
+            "description": "任务规划：occurrence.update",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "candidate": {
+                  "type": "object"
+                },
+                "changes": {
+                  "type": "object",
+                  "properties": {
+                    "startDate": {
+                      "type": "string"
+                    },
+                    "endDate": {
+                      "type": "string"
+                    },
+                    "times": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string"
+                          },
+                          "end": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20
+                    },
+                    "estimatedMinutes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1439
+                    },
+                    "priority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "taskId": {
+                  "type": "string"
+                },
+                "window": {
+                  "type": "object",
+                  "properties": {
+                    "startDate": {
+                      "type": "string"
+                    },
+                    "endDate": {
+                      "type": "string"
+                    },
+                    "times": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "string"
+                          },
+                          "end": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 20
+                    },
+                    "estimatedMinutes": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1439
+                    },
+                    "priority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.task.create",
+          "major": 1,
+          "handler": "taskCreate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "dueDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dueAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dueTimezone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "estimatedMinutes": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "locked": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_task_create",
+            "description": "任务规划：task.create",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
+                "notes": {
+                  "type": "string",
+                  "maxLength": 20000
+                },
+                "dueDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "dueAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "dueTimezone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "estimatedMinutes": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "priority": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "locked": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "title"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.task.update",
+          "major": 1,
+          "handler": "taskUpdate",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  "dueDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "dueAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "dueTimezone": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "estimatedMinutes": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "locked": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "expectedUpdatedAt": {
+                "type": "string"
+              },
+              "expectedValues": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "changes"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_task_update",
+            "description": "任务规划：task.update",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "changes": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    },
+                    "notes": {
+                      "type": "string",
+                      "maxLength": 20000
+                    },
+                    "dueDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "dueAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "dueTimezone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "estimatedMinutes": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "priority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "expectedUpdatedAt": {
+                  "type": "string"
+                },
+                "expectedValues": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "id",
+                "changes"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.board.get",
+          "major": 1,
+          "handler": "boardGet",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "startDate": {
+                "type": "string"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 28
+              },
+              "candidateOffset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "candidateLimit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200
+              },
+              "onlyDeadline": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_board_get",
+            "description": "任务规划：board.get",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "startDate": {
+                  "type": "string"
+                },
+                "days": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 28
+                },
+                "candidateOffset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "candidateLimit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 200
+                },
+                "onlyDeadline": {
+                  "type": "boolean"
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.operation.preview",
+          "major": 1,
+          "handler": "operationPreview",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "move",
+                  "swap",
+                  "resize"
+                ]
+              },
+              "taskId": {
+                "type": "string"
+              },
+              "targetTaskId": {
+                "type": "string"
+              },
+              "plannedStartAt": {
+                "type": "string"
+              },
+              "plannedEndAt": {
+                "type": "string"
+              },
+              "plannedTimezone": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              },
+              "start": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              },
+              "endDate": {
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "expectedTasks": {
+                "type": "object"
+              },
+              "preserveDuration": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "taskId"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_operation_preview",
+            "description": "任务规划：operation.preview",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "move",
+                    "swap",
+                    "resize"
+                  ]
+                },
+                "taskId": {
+                  "type": "string"
+                },
+                "targetTaskId": {
+                  "type": "string"
+                },
+                "plannedStartAt": {
+                  "type": "string"
+                },
+                "plannedEndAt": {
+                  "type": "string"
+                },
+                "plannedTimezone": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "string"
+                },
+                "end": {
+                  "type": "string"
+                },
+                "endDate": {
+                  "type": "string"
+                },
+                "timezone": {
+                  "type": "string"
+                },
+                "expectedTasks": {
+                  "type": "object"
+                },
+                "preserveDuration": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "taskId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.operation.apply",
+          "major": 1,
+          "handler": "operationApply",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "operationKey": {
+                "type": "string"
+              },
+              "preview": {
+                "type": "object"
+              },
+              "allowOverdue": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "operationKey",
+              "preview"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_operation_apply",
+            "description": "任务规划：operation.apply",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "operationKey": {
+                  "type": "string"
+                },
+                "preview": {
+                  "type": "object"
+                },
+                "allowOverdue": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "operationKey",
+                "preview"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.operation.list",
+          "major": 1,
+          "handler": "operationList",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "array"
+          },
+          "tool": {
+            "name": "planner_operation_list",
+            "description": "任务规划：最近50次操作摘要，不加载任务快照",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": false
+            }
+          }
+        },
+        {
+          "id": "planner.operation.inspect",
+          "major": 1,
+          "handler": "operationInspect",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "proposal": {
+                "type": "object"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "expectedTasks": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "proposal"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          },
+          "tool": {
+            "name": "planner_operation_inspect",
+            "description": "只读验证图形拖动并返回轻量预览",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "proposal": {
+                  "type": "object"
+                },
+                "timezone": {
+                  "type": "string"
+                },
+                "expectedTasks": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "proposal"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261020-planner-timeline/app.planner-1.6.0.xmodule",
+      "size": 37797,
+      "sha256": "6c11ba68f02e7ee9fb6a845c9bb0a554dcd8b9bca85217717029f740880dff07",
+      "signature": null
     }
   ]
 }

@@ -726,11 +726,20 @@ class _AppShellState extends ConsumerState<AppShell> {
   }) {
     final textTheme = Theme.of(context).textTheme;
     final dateTitle = workspaceHeader.lease?.mode == 'date';
-    final titleStyle = WorkspaceTypography.titleStyle(textTheme);
+    final moduleOwnsHeader = workspaceHeader.lease?.isActive() == true;
+    final contribution = moduleOwnsHeader ? workspaceHeader.content : null;
+    final spec = contribution?.spec;
+    final plannerTimeline =
+        spec?['compact'] == true && spec?['layout'] == 'plannerTimeline';
+    final titleStyle = WorkspaceTypography.titleStyle(textTheme)
+        .copyWith(fontSize: plannerTimeline ? 20 : null);
+    final titleMaxLines = plannerTimeline
+        ? 1
+        : WorkspaceTypography.titleMaxLines;
     var controlHeight = kMinInteractiveDimension;
     for (final (style, padding) in [
-      (titleStyle, 16.0),
-      (textTheme.labelLarge!, 16.0),
+      (titleStyle, plannerTimeline ? 8.0 : 16.0),
+      (textTheme.labelLarge!, plannerTimeline ? 8.0 : 16.0),
     ]) {
       final painter = TextPainter(
         text: TextSpan(text: '课表 Ag', style: style),
@@ -741,9 +750,6 @@ class _AppShellState extends ConsumerState<AppShell> {
       if (height > controlHeight) controlHeight = height;
       painter.dispose();
     }
-    final moduleOwnsHeader = workspaceHeader.lease?.isActive() == true;
-    final contribution = moduleOwnsHeader ? workspaceHeader.content : null;
-    final spec = contribution?.spec;
     final title = spec?['title'] is String
         ? spec!['title'] as String
         : moduleOwnsHeader
@@ -779,7 +785,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final titleContent = spec?['titleEvent'] == null
         ? Text(
             title,
-            maxLines: WorkspaceTypography.titleMaxLines,
+            maxLines: titleMaxLines,
             overflow: TextOverflow.ellipsis,
             style: titleStyle,
           )
@@ -792,7 +798,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   Flexible(
                     child: Text(
                       title,
-                      maxLines: WorkspaceTypography.titleMaxLines,
+                      maxLines: titleMaxLines,
                       overflow: TextOverflow.ellipsis,
                       style: titleStyle,
                     ),
@@ -808,11 +814,11 @@ class _AppShellState extends ConsumerState<AppShell> {
             constraints.maxWidth - (spec?['titleEvent'] == null ? 0 : 52);
         final painter = TextPainter(
           text: TextSpan(text: title, style: titleStyle),
-          maxLines: WorkspaceTypography.titleMaxLines,
+          maxLines: titleMaxLines,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
         )..layout(maxWidth: available.clamp(1, double.infinity).toDouble());
-        final measured = painter.height + 16;
+        final measured = painter.height + (plannerTimeline ? 8 : 16);
         painter.dispose();
         return SizedBox(
           height: measured > minimumHeight ? measured : minimumHeight,
@@ -955,22 +961,30 @@ class _AppShellState extends ConsumerState<AppShell> {
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
         )..layout();
-        final reservedTitle = (painter.width + 12).clamp(100.0, 220.0);
+        final reservedTitle = (painter.width + 12).clamp(
+          plannerTimeline ? 80.0 : 100.0,
+          plannerTimeline ? 120.0 : 220.0,
+        );
         painter.dispose();
         final inline = fittingHeaderActions(
           context,
           actions,
           constraints.maxWidth -
               40 -
-              controlHeight -
+              (plannerTimeline ? 48 : controlHeight) -
               reservedTitle -
               (spec?['backEvent'] == null ? 0 : 48) -
               (onAssistant == null ? 0 : 48),
+          compact: plannerTimeline,
         );
         return Padding(
           padding: EdgeInsets.symmetric(
             horizontal: 20,
-            vertical: spec?['compact'] == true ? 4 : 8,
+            vertical: plannerTimeline
+                ? 0
+                : spec?['compact'] == true
+                ? 4
+                : 8,
           ),
           child: Row(
             children: [
@@ -996,6 +1010,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   child: WorkspaceHeaderAction(
                     key: ValueKey(('workspace-inline-action', action['label'])),
                     action: action,
+                    compact: plannerTimeline,
                     onPressed: () =>
                         unawaited(contribution!.dispatch(action['event'])),
                   ),

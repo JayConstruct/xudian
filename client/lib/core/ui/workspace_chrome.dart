@@ -115,7 +115,10 @@ class WorkspaceChromeController extends ChangeNotifier {
     final gap = delta > 0 && metrics.pixels < metrics.minScrollExtent
         ? (metrics.minScrollExtent - metrics.pixels).clamp(0.0, delta)
         : 0.0;
-    final available = delta - gap;
+    final content = delta < 0 && metrics.pixels > metrics.minScrollExtent
+        ? (metrics.pixels - metrics.minScrollExtent).clamp(0.0, -delta)
+        : 0.0;
+    final available = delta - gap + content;
     final next = (_hiddenExtent + available)
         .clamp(0.0, _headerExtent)
         .toDouble();
@@ -150,8 +153,8 @@ class WorkspaceChromeController extends ChangeNotifier {
   }
 }
 
-/// Supplies the workspace header to scrollables that consume header movement
-/// before moving their own content, rather than reacting after both have moved.
+/// Supplies the workspace header to scrollables that allocate header and content
+/// travel in sequence, rather than reacting after both have moved.
 class WorkspaceChromeScrollScope extends InheritedWidget {
   const WorkspaceChromeScrollScope({
     super.key,
@@ -224,12 +227,41 @@ class _WorkspaceChromeScrollPosition extends ScrollPositionWithSingleContext {
   }
 
   @override
+  void correctBy(double correction) {
+    final controller = chrome;
+    if (controller != null &&
+        controller._enabled &&
+        controller.expanded &&
+        activity is DragScrollActivity &&
+        pixels < minScrollExtent &&
+        correction == minScrollExtent - pixels) {
+      return;
+    }
+    super.correctBy(correction);
+  }
+
+  @override
+  double applyBoundaryConditions(double value) {
+    final controller = chrome;
+    if (controller != null &&
+        controller._enabled &&
+        !controller.expanded &&
+        pixels >= minScrollExtent &&
+        value < minScrollExtent) {
+      return value - minScrollExtent;
+    }
+    return super.applyBoundaryConditions(value);
+  }
+
+  @override
   void goBallistic(double velocity) {
     final controller = chrome;
     if (controller != null &&
         controller._enabled &&
         ((velocity > 0 && !controller.collapsed) ||
-            (velocity < 0 && !controller.expanded))) {
+            (velocity < 0 &&
+                pixels <= minScrollExtent &&
+                !controller.expanded))) {
       // A fling cannot skip the unfinished first stage and start scrolling
       // rows under a partially moved header. Keep bounce correction available.
       velocity = 0;

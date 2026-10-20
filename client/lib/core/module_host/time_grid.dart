@@ -423,26 +423,23 @@ class _TimeGridState extends State<TimeGrid> {
                                         customBorder: courseShape,
                                         onTap: () => widget.onEvent(b['event']),
                                         child: Padding(
-                                          padding: const EdgeInsets.all(6),
+                                          padding: const EdgeInsets.all(2),
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
                                               ConstrainedBox(
-                                                // Compact rows and large fonts
-                                                // can leave room for fewer than
-                                                // the usual three title lines.
                                                 constraints: BoxConstraints(
                                                   maxHeight:
                                                       ((b['end'] as int) -
                                                               (b['start']
                                                                   as int)) *
                                                           rowHeight -
-                                                      16,
+                                                      8,
                                                 ),
                                                 child: Text(
                                                   '${b['title']}',
-                                                  maxLines: 3,
+                                                  maxLines: 4,
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                   style: TextStyle(

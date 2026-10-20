@@ -135,6 +135,7 @@ class WorkspaceHeaderController extends ChangeNotifier {
           (spec['title'] as String).length > 256 ||
           (spec['autoHideChrome'] != null && spec['autoHideChrome'] is! bool) ||
           (spec['compact'] != null && spec['compact'] is! bool) ||
+          (spec['layout'] != null && spec['layout'] != 'plannerTimeline') ||
           (spec['leading'] != null &&
               (spec['leading'] is! Map ||
                   (spec['leading'] as Map)['label'] is! String)) ||

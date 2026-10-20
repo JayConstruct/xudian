@@ -436,10 +436,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('视图与显示'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('3天'));
+      await tester.tap(find.text('3列'));
       await settlePlanner(tester);
       final board = tester.widget<PlannerBoard>(find.byType(PlannerBoard));
-      expect(board.days, hasLength(3));
+      expect(board.days, hasLength(21));
+      expect(board.options['visibleDays'], 3);
       final view = (headers.content!.spec['actions'] as List)
           .map(object)
           .singleWhere((action) => action['label'] == '视图与显示');
@@ -447,7 +448,7 @@ void main() {
       expect(
         (grid['children'] as List)
             .map(object)
-            .singleWhere((choice) => choice['label'] == '3天')['selected'],
+            .singleWhere((choice) => choice['label'] == '3列')['selected'],
         isTrue,
       );
       for (var i = 0; i < 3; i++) {
@@ -472,7 +473,7 @@ void main() {
         3,
       );
       expect(find.text('最大'), findsOneWidget);
-      expect(find.text('显示天数'), findsOneWidget);
+      expect(find.text('显示列数'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -658,8 +659,9 @@ void main() {
       final board = all.singleWhere((n) => n['type'] == 'plannerBoard');
       final options = object(board['options']);
       expect(options['dashboard'], true);
-      expect(options['rangeLabel'], '10月13日—17日');
-      expect(options['periodLabel'], '5天');
+      expect(options['rangeLabel'], '10月12日—14日');
+      expect(options['periodLabel'], isNull);
+      expect(options['visibleDays'], 3);
       expect(object(options['todayEvent'])['type'], 'today');
       expect(object(options['filterEvent'])['type'], 'onlyDeadline');
       final actions = (object(rendered['header'])['actions'] as List)
@@ -682,16 +684,16 @@ void main() {
       final view = actions.singleWhere((a) => a['label'] == '视图与显示');
       final choices = nodes(view).singleWhere((n) => n['kind'] == 'choiceGrid');
       expect((choices['children'] as List).map(object).map((c) => c['label']), [
-        '1天',
-        '3天',
-        '5天',
-        '7天',
+        '1列',
+        '3列',
+        '5列',
+        '7列',
       ]);
       expect(
         (choices['children'] as List)
             .map(object)
             .singleWhere((c) => c['selected'] == true)['label'],
-        '5天',
+        '3列',
       );
       expect(
         nodes(view).singleWhere((n) => n['label'] == '每日显示时段')['subtitle'],
@@ -713,24 +715,25 @@ void main() {
           'selected': ['preserved-selection'],
         },
       );
-      for (final days in [1, 3, 5, 7, 28]) {
+      for (final days in [1, 3, 5, 7]) {
         rendered = await page(
           state: object(rendered['state']),
           event: {'type': 'periodShortcut', 'days': days},
         );
         final board = nodes(rendered['tree'])
             .singleWhere((n) => n['type'] == 'plannerBoard');
-        expect(board['days'], hasLength(days));
+        expect(board['days'], hasLength(21));
+        expect(object(board['options'])['visibleDays'], days);
         expect(object(rendered['state'])['startDate'], '2026-10-18');
         expect(object(rendered['state'])['selected'], ['preserved-selection']);
       }
-      for (final days in [0, 29, 1.5, '5']) {
+      for (final days in [0, 2, 28, 29, 1.5, '5']) {
         rendered = await page(
           state: object(rendered['state']),
           event: {'type': 'periodShortcut', 'days': days},
         );
-        expect(object(rendered['state'])['error'], contains('1至28天'));
-        expect(object(rendered['state'])['days'], 28);
+        expect(object(rendered['state'])['error'], contains('1、3、5或7列'));
+        expect(object(rendered['state'])['days'], 7);
       }
     },
   );
@@ -845,7 +848,7 @@ void main() {
         state: {...object(filtered['state']), 'startDate': '2026-10-20'},
         event: {'type': 'today'},
       );
-      expect(object(reset['state'])['startDate'], '2026-10-13');
+      expect(object(reset['state'])['startDate'], '2026-10-12');
     },
   );
 
@@ -1060,7 +1063,8 @@ void main() {
       final p = await page(event: {'type': 'onlyDeadline', 'value': true});
       final board = nodes(p['tree'])
           .singleWhere((n) => n['type'] == 'plannerBoard');
-      expect(board['days'], hasLength(5));
+      expect(board['days'], hasLength(21));
+      expect(object(board['options'])['visibleDays'], 3);
       expect((board['candidates'] as List).map(object).map((n) => n['title']), [
         '有截止候选',
       ]);

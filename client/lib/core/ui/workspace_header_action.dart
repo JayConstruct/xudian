@@ -9,8 +9,9 @@ import 'ui_icons.dart';
 List<Map<String, Object?>> fittingHeaderActions(
   BuildContext context,
   List<Map<String, Object?>> actions,
-  double availableWidth,
-) {
+  double availableWidth, {
+  bool compact = false,
+}) {
   final candidates = actions
       .where((action) => action['presentation'] == 'inline')
       .take(2)
@@ -23,9 +24,11 @@ List<Map<String, Object?>> fittingHeaderActions(
       ),
     );
   for (final action in prioritized) {
-    var width = 48.0;
+    var width = compact ? 44.0 : 48.0;
     if (action['iconOnly'] != true &&
-        (action['variant'] == 'filled' || action['variant'] == 'tonal')) {
+        (compact ||
+            action['variant'] == 'filled' ||
+            action['variant'] == 'tonal')) {
       final painter = TextPainter(
         text: TextSpan(
           text: '${action['label']}',
@@ -34,7 +37,14 @@ List<Map<String, Object?>> fittingHeaderActions(
         textScaler: MediaQuery.textScalerOf(context),
         textDirection: Directionality.of(context),
       )..layout();
-      width = painter.width + 28 + (action['icon'] == null ? 0 : 24);
+      width =
+          painter.width +
+          (compact ? 16 : 28) +
+          (action['icon'] == null
+              ? 0
+              : compact
+              ? 22
+              : 24);
       painter.dispose();
     }
     if (availableWidth >= width + 4) {
@@ -50,16 +60,75 @@ class WorkspaceHeaderAction extends StatelessWidget {
     super.key,
     required this.action,
     required this.onPressed,
+    this.compact = false,
   });
 
   final Map<String, Object?> action;
   final VoidCallback onPressed;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final label = '${action['label']}';
     final icon = appIconData(action['icon']);
     final variant = action['variant'];
+    if (compact) {
+      final tooltip = action['tooltip'] is String
+          ? action['tooltip'] as String
+          : label;
+      if (action['iconOnly'] == true) {
+        return NativeUi(
+          child: IconButton(
+            tooltip: tooltip,
+            style: IconButton.styleFrom(
+              minimumSize: const Size.square(44),
+              fixedSize: const Size.square(44),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: UiIcon(icon ?? Icons.more_horiz, size: 22),
+            onPressed: onPressed,
+          ),
+        );
+      }
+      return Tooltip(
+        message: tooltip,
+        excludeFromSemantics: true,
+        child: Semantics(
+          label: tooltip,
+          toggled: action['selected'] as bool?,
+          button: true,
+          onTap: onPressed,
+          excludeSemantics: true,
+          child: NativeUi(
+            props: {'selected': action['selected'] == true},
+            child: TextButton(
+              onPressed: onPressed,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(44, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.standard,
+                textStyle: Theme.of(context).textTheme.labelLarge,
+                foregroundColor: action['selected'] == true
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    UiIcon(icon, size: 18),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(label, maxLines: 1),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (action['iconOnly'] == true) {
       final style = IconButton.styleFrom(
         minimumSize: const Size.square(kMinInteractiveDimension),
