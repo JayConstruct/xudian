@@ -1,0 +1,216 @@
+{
+  "date": "2026-10-20",
+  "sourceCommit": "2405c56c9396387f8fb2a6867e3c91cc63f4fe39",
+  "appTag": "v0.2.0-beta.10",
+  "moduleTag": "modules-20261020-planner-dynamic",
+  "hostApi": "1.36.0",
+  "status": "published-and-verified",
+  "checks": {
+    "pythonTests": 220,
+    "moduleCatalogTests": 36,
+    "releaseRelatedFlutterTests": 247,
+    "fullFlutterCI": {
+      "passed": 1562,
+      "failed": 0,
+      "sourceRunId": 39420085888
+    },
+    "flutterAnalyze": "passed",
+    "architecture": "passed (149 Dart files)",
+    "repositoryBoundaries": "passed",
+    "moduleIndexes": "online validation passed (9 entries)"
+  },
+  "emulator": {
+    "buildNumber": 173,
+    "installedVersionCode": 4173,
+    "apkSha256": "b5fd521ac4464f5f3daa6badf04d1f2afcdca179a67ee3546ea9b790d8c16cb1",
+    "installedApkSha256": "b5fd521ac4464f5f3daa6badf04d1f2afcdca179a67ee3546ea9b790d8c16cb1",
+    "completed": true
+  },
+  "functionalPages": {
+    "plannerLayoutRetained": true,
+    "cachedBrowsingAndBoundedRecyclingRegression": "passed",
+    "pendingPopupAndNativeQuickAdjustment": true,
+    "continuousPastAndFutureDates": true,
+    "beyondPreloadWindowDates": [
+      "2026-11-12",
+      "2026-11-13",
+      "2026-11-14"
+    ],
+    "viewportRetainedAcrossWorkspaceSwitchAndRestart": true,
+    "returnTodayPreservesHeaderGeometry": true,
+    "appAndModuleDataRetained": true
+  },
+  "heldPointerAcceptance": {
+    "passed": true,
+    "checkpoints": 8,
+    "stationaryFingerDriftPhysicalPixels": 0,
+    "pointerHeaderAndCourseTravelMatch": true,
+    "surfaces": [
+      "body",
+      "header"
+    ],
+    "forwardAndReverseWithoutRelease": true,
+    "dataChanged": false,
+    "frameRateMeasured": false
+  },
+  "publishedUpdatePage": {
+    "aboutPageOpened": true,
+    "updatePageOpened": true,
+    "installedVersion": "0.2.0-beta.10",
+    "installedVersionCode": 4173,
+    "installedApkSha256": "b5fd521ac4464f5f3daa6badf04d1f2afcdca179a67ee3546ea9b790d8c16cb1",
+    "publishedReleaseNotesVisible": true,
+    "channelPreferenceChanged": false,
+    "existingAppAndModuleDataRetained": true,
+    "usedExistingEmulatorSigning": true
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.10",
+    "sourceCommit": "2405c56c9396387f8fb2a6867e3c91cc63f4fe39",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.10",
+    "publishedAt": "2026-10-20T12:23:56Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 134,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "file": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "versionName": "0.2.0-beta.10",
+        "versionCode": 2134,
+        "sha256": "acc8f35ee3150e8fa857cda32d91cf711832334433e7bf483b3d6c8b01373a08",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6
+      },
+      {
+        "file": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "versionName": "0.2.0-beta.10",
+        "versionCode": 1134,
+        "sha256": "ec9dbdbbb5f6b67b4b225640e0042e99f0fabc54e2b69e22ded03a6cbb6d048b",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6
+      },
+      {
+        "file": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "versionName": "0.2.0-beta.10",
+        "versionCode": 4134,
+        "sha256": "4f83649c21a9ce8cfb1a880a551bf7cdae020e67e2381350eeb4b821f0b55802",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false
+  },
+  "moduleRelease": {
+    "tag": "modules-20261020-planner-dynamic",
+    "sourceCommit": "2405c56c9396387f8fb2a6867e3c91cc63f4fe39",
+    "releaseUrl": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261020-planner-dynamic",
+    "sha256": {
+      "app.planner-1.6.1.xmodule": "78467633a38b5ccb930c92a5076bed953ea0610b06e76d54f33bb80077004cfe"
+    },
+    "anonymousDownloadsVerified": true,
+    "publishedAt": "2026-10-20T12:09:12Z",
+    "moduleId": "app.planner",
+    "version": "1.6.1",
+    "installedSha256": "78467633a38b5ccb930c92a5076bed953ea0610b06e76d54f33bb80077004cfe",
+    "addedPermissions": []
+  },
+  "publicIndexes": {
+    "sourceCommit": "2405c56c9396387f8fb2a6867e3c91cc63f4fe39",
+    "modules": {
+      "app.planner": {
+        "version": "1.6.1",
+        "sha256": "78467633a38b5ccb930c92a5076bed953ea0610b06e76d54f33bb80077004cfe",
+        "size": 38112,
+        "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261020-planner-dynamic/app.planner-1.6.1.xmodule"
+      }
+    },
+    "authorBranch": "module-catalog",
+    "defaultCatalogVerified": true,
+    "onlineDirectoryEntriesValidated": 9
+  },
+  "ci": [
+    {
+      "branch": "main",
+      "runId": 39420085885,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39420085885",
+      "headSha": "2405c56c9396387f8fb2a6867e3c91cc63f4fe39",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "sign",
+          "status": "completed",
+          "conclusion": "skipped",
+          "currentSteps": []
+        },
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "skipped",
+          "currentSteps": []
+        }
+      ]
+    },
+    {
+      "branch": "v0.2.0-beta.10",
+      "runId": 39420085888,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39420085888",
+      "headSha": "2405c56c9396387f8fb2a6867e3c91cc63f4fe39",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "sign",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        },
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        }
+      ]
+    },
+    {
+      "branch": "modules-20261020-planner-dynamic",
+      "runId": 39420086284,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39420086284",
+      "headSha": "2405c56c9396387f8fb2a6867e3c91cc63f4fe39",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "publish",
+          "status": "completed",
+          "conclusion": "success",
+          "currentSteps": []
+        }
+      ]
+    }
+  ],
+  "detailsDirectory": "dist/verification/release-20261020-beta10",
+  "limitations": [
+    "ARM physical device and Windows runtime are not verified.",
+    "Emulator retains its existing local signing identity; public fixed-signature APKs were downloaded and verified without replacing that installation.",
+    "Held-pointer position tracking is verified; real-device frame rate is not measured."
+  ]
+}
