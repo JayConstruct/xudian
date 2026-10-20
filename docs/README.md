@@ -24,6 +24,8 @@
 | 文档 | 内容 |
 | --- | --- |
 | [开发指南](../DEVELOPMENT.md) | 日常命令、检查、构建、数据库生成 |
+| [目录与提交清单](REPOSITORY_LAYOUT.md) | 源码、本机缓存、设计草稿与清理保留规则 |
+| [Android 签名保管](ANDROID_SIGNING.md) | 固定签名、GitHub Secrets、指纹及密钥备份 |
 | [客户端入口](../client/README.md) | 生产代码路径与数据流 |
 | [UI 加载性能](UI_LOADING_PERFORMANCE.md) | 启动、缓存、批量读取、计时与真机验收 |
 | [冷启动采样与验收](STARTUP_PERFORMANCE.md) | 启动代理指标、首页就绪、采样脚本与比较口径 |

@@ -1,6 +1,6 @@
 # 任务规划第四版界面实施验收
 
-日期：2026-10-16。设计依据：[任务规划重设计](../design/PLANNER_UX_REDESIGN.md)，视觉参考：`output/imagegen/planner-ux-redesign-v4.png`。
+日期：2026-10-16。设计依据：[任务规划重设计](../design/PLANNER_UX_REDESIGN.md)，视觉参考：[第四版视觉稿](../design/planner-ux-redesign-v4.png)。原始草稿与提示词现归档于本机 `dist/design/imagegen/`。
 
 ## 实施范围
 

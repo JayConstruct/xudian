@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-20",
+  "scope": "Local artifacts, repository submission rules and documentation; runtime source and released packages unchanged",
+  "netBytesFreed": 18111004672,
+  "netGiBFreed": 16.87,
+  "measuredDirectoriesBeforeBytes": 31642869760,
+  "measuredDirectoriesAfterRebuildBytes": 13531865088,
+  "cleanupCounts": {
+    "installed-sdk-download": 1,
+    "unreferenced-cache-apk": 68,
+    "old-flutter-compile-cache": 163,
+    "rebuildable-client-output": 1
+  },
+  "cacheApksRetained": 4,
+  "designFilesArchived": 24,
+  "designArchive": "dist/design/imagegen",
+  "curatedReference": "docs/design/planner-ux-redesign-v4.png",
+  "designArchiveDigestsVerified": true,
+  "preserved": {
+    "allIndexedModulePackages": 46,
+    "bundledModules": 6,
+    "SDKAndDependencyCaches": true,
+    "developerConfigAndSigning": true,
+    "historicalVerificationEvidence": true,
+    "currentAndRollbackApks": true,
+    "appAndModuleData": true
+  },
+  "submissionRules": {
+    "rootOutputIgnored": true,
+    "forceTrackedOutputRejected": true,
+    "curatedDocumentationImageAllowed": true,
+    "rawDraftsAndCleanupPlanRemainLocal": true
+  },
+  "checks": {
+    "pythonTests": 220,
+    "flutterRelatedTests": 21,
+    "flutterAnalyze": "passed",
+    "architectureDartFiles": 145,
+    "repositoryBoundaries": "passed",
+    "updatedDocumentationLinks": 7
+  },
+  "emulator": {
+    "buildNumber": 158,
+    "installedVersionCode": 4158,
+    "apkSha256": "3600e89009caa780375e5282cd58bb3073dd23d8db770c24263ce0cd26e05816",
+    "installedApkSha256": "3600e89009caa780375e5282cd58bb3073dd23d8db770c24263ce0cd26e05816",
+    "completed": true
+  },
+  "pages": {
+    "aboutPageOpened": true,
+    "updatePageOpened": true,
+    "version": "0.2.0-beta.7",
+    "installedVersionCode": 4158,
+    "testingChannelVisible": true,
+    "channelPreferenceChanged": false,
+    "appAndModuleDataRetained": true,
+    "installedApkSha256": "3600e89009caa780375e5282cd58bb3073dd23d8db770c24263ce0cd26e05816",
+    "usedExistingEmulatorSigning": true
+  },
+  "newAppOrModuleRelease": false,
+  "detailsDirectory": "dist/verification/repository-organization-20261020"
+}

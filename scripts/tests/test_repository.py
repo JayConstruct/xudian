@@ -43,7 +43,9 @@ class RepositoryTest(unittest.TestCase):
 
     def test_force_tracked_local_artifacts_are_rejected(self):
         for name in ['client/build/app.apk', 'delivery.apk', '.env.production',
-                     'client/android/local.properties', 'dist/report.json', 'user.sqlite']:
+                     'client/android/local.properties', 'dist/report.json', 'user.sqlite',
+                     'output/imagegen/draft.png', 'output/imagegen/draft.prompt.txt',
+                     'output/imagegen/draft.proposal.md']:
             with self.subTest(name=name):
                 errors = repository.check_repository(self.root, self.tracked + [name])
                 self.assertTrue(any('Local-only file' in error for error in errors))

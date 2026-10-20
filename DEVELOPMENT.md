@@ -20,7 +20,7 @@ cd ..
 
 提交源码、测试与固定夹具、依赖锁文件、平台资源、构建脚本、工作流及可复验文档。QuickJS vendor 和拾光 warehouse 是固定版本的运行源码；`app_database.g.dart`、默认模块资源及图标也由当前构建直接读取，不能只因可生成就排除。
 
-`.gitignore` 排除工具链、缓存、APK/AAB、构建输出、截图与完整本机验收产物、凭据及本机配置；`dist/` 整体忽略。索引对应的版本化不可变包保存在 `releases/modules/`，供干净检出的目录校验和发布工作流使用，保留规则见 [发布目录](releases/README.md)。没有当前索引引用的旧包不纳入该目录。
+`.gitignore` 排除工具链、缓存、APK/AAB、构建输出、截图与完整本机验收产物、凭据及本机配置；`dist/` 与生成工具的 `output/` 整体忽略。设计草稿、提示词和中间稿归档到 `dist/design/`，用于文档的精选参考图单独放入 `docs/design/` 并提交。仓库边界检查会拒绝强制跟踪的 `output/` 文件。目录清单和清理保留规则见 [目录与提交清单](docs/REPOSITORY_LAYOUT.md)。索引对应的版本化不可变包保存在 `releases/modules/`，供干净检出的目录校验和发布工作流使用，保留规则见 [发布目录](releases/README.md)。没有当前索引引用的旧包不纳入该目录。
 
 验收文档保留日期、版本、摘要、步骤、失败原因和 CI 链接，机器绝对路径改为项目相对路径或示例路径；不提交用户业务数据、账号和密钥。提交前运行 `python3 scripts/check_repository.py`、`git status --short` 和 `git diff --check`；仓库检查拒绝本机产物、没有索引引用的发布包及未被预装清单引用的客户端包，同时校验预装包身份与内外摘要。新增忽略规则不会自动移除已经跟踪的文件。APK 通过 Actions 产物分发，公开模块通过 GitHub Releases 分发。
 

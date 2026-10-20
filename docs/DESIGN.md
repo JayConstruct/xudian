@@ -1,6 +1,6 @@
 # 当前架构
 
-核对日期：2026-10-12。生产使用 v3 模块定义、格式 2 的 ZIP 包、宿主 API 1.20.0 和 Drift schema 2。使用能力见 [项目首页](../README.md)，具体协议分别由 [宿主](MODULE_HOST.md)、[SDK](MODULE_SDK.md) 和 Schema 定义。
+核对日期：2026-10-20。生产使用 v3 模块定义、格式 2 的 ZIP 包、宿主 API 1.31.0 和 Drift schema 2。使用能力见 [项目首页](../README.md)，具体协议分别由 [宿主](MODULE_HOST.md)、[SDK](MODULE_SDK.md) 和 Schema 定义。
 
 ## 宿主与业务
 
@@ -39,6 +39,8 @@ schema 1 升级前创建 SQLite 备份；旧表、原始来源和版本留作迁
 
 Android / Windows 共享 Flutter 宿主和脚本契约，浏览器采集目前仅实现 Android。AI 由设备直连模型接口，连接配置属于 AI 模块，密钥保持在系统安全存储；工具计划经过实际权限与用户审核。模块目录、作者索引和 GitHub Releases 已提供用户发起的安装/更新，签名审核市场服务端尚未建立。
 
+Android App 从 v0.2.0-beta.7 起，测试版与正式版共用固定证书。CI 在独立任务中签名并核对证书指纹；长期密钥由受限本机目录和 GitHub Environment Secrets 保管，签名时仅临时使用，不进入源码或安装包。App 签名与模块发布者信任是两个独立机制，保管与发布流程见 [Android 签名保管](ANDROID_SIGNING.md)。
+
 ## 后续设计
 
-账号、端到端加密同步、自有云服务、恢复码、冲突合并和正式签名为待实施方向。原始技术候选、密钥分层、同步规则及验收目标保留在 [初始设计](archive/INITIAL_DESIGN.md)；后续实现前需按当前模块边界重新审阅，阶段待办见 [项目交接](../PROJECT_HANDOFF.md)。
+账号、端到端加密同步、自有云服务、恢复码、冲突合并和模块签名审核服务为待实施方向。原始技术候选、密钥分层、同步规则及验收目标保留在 [初始设计](archive/INITIAL_DESIGN.md)；后续实现前需按当前模块边界重新审阅，阶段待办见 [项目交接](../PROJECT_HANDOFF.md)。

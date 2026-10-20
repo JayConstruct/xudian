@@ -42,6 +42,7 @@ build/
 /coverage/
 /tmp/
 /dist/
+/output/
 
 # Only catalog-pinned client bundles and immutable release snapshots are tracked.
 *.xmodule
