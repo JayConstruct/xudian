@@ -1,0 +1,109 @@
+{
+  "date": "2026-10-21",
+  "sourceCommit": "07bbbd1167569883d114030039c29a59bca2e511",
+  "appTag": "v0.2.0-beta.12",
+  "moduleTag": "modules-20261021-task-creation",
+  "status": "published-and-verified",
+  "checks": {
+    "pythonTests": 220,
+    "moduleCatalogTests": 36,
+    "releaseRelatedFlutterTests": 237,
+    "fullFlutterCI": {
+      "passed": 1677,
+      "failed": 0,
+      "runId": 39549277218,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39549277218"
+    },
+    "mainCI": {
+      "runId": 39549277169,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39549277169"
+    },
+    "moduleCI": {
+      "runId": 39549277599,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39549277599"
+    },
+    "flutterAnalyze": "passed",
+    "architecture": "passed (150 Dart files)",
+    "nodeResultParityAndBridgeCounts": "passed",
+    "onlineModuleCatalog": "passed (9 entries and all author packages)",
+    "localFullFlutter": "Prior implementation run: 1675 passed and 1 loopback HTTP environment timeout; final cloud full-suite outcome is recorded above"
+  },
+  "emulator": {
+    "buildNumber": 181,
+    "installedVersionCode": 4181,
+    "apkSha256": "03d380656737c2dddf997a073c894bc029455dc6161265a5229ca424a01869f2",
+    "installedApkSha256": "03d380656737c2dddf997a073c894bc029455dc6161265a5229ca424a01869f2",
+    "sourceFingerprint": "eae1799485cc9d2eab3926fea705bd8204f3fda02c9643712bf20849352afbcb",
+    "completed": true
+  },
+  "pages": {
+    "plannerSelectionAndOutsideDeselection": true,
+    "singleAndBatchTaskCreation": true,
+    "textOnlyTemplateChildPage": true,
+    "ruleSelectionAndRetainedDraft": true,
+    "rolling30DaySettings": true,
+    "courseAwarePreviewAndNativeConfirmation": true,
+    "manualTimePickerAdjustmentAndSixTaskCreation": true,
+    "generatedTaskOnlyAndFollowingScope": true,
+    "ownSampleBatchUndoneAndAbsentAfterRestart": true,
+    "aboutAndUpdateVersion": "0.2.0-beta.12 (4181)",
+    "publicUpdateNotesVisible": true,
+    "channelPreferenceChanged": false,
+    "appAndModuleDataRetained": true,
+    "existingSigningPreserved": true
+  },
+  "publicRelease": {
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.12",
+    "publishedAt": "2026-10-21T05:39:01Z",
+    "prerelease": true,
+    "anonymousDownloadsVerified": true,
+    "sourceCommit": "07bbbd1167569883d114030039c29a59bca2e511",
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "file": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "versionName": "0.2.0-beta.12",
+        "versionCode": 2140,
+        "size": 26324157,
+        "sha256": "2cff2fe93f523e3bcbe24b2fe20af7a13426ca70da6cb25f60a63f83423f62e3"
+      },
+      {
+        "file": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "versionName": "0.2.0-beta.12",
+        "versionCode": 1140,
+        "size": 24214727,
+        "sha256": "1f801378f952f5162f6b5421257146c7ead407f4b220cb9e3180019a08176263"
+      },
+      {
+        "file": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "versionName": "0.2.0-beta.12",
+        "versionCode": 4140,
+        "size": 27995310,
+        "sha256": "75b504a63b89ee29b32aaf5a17406d7173e16f4ed762509735d10667026f0939"
+      }
+    ],
+    "allSixBundledModulesMatchTaggedSource": true,
+    "buildNumber": 140
+  },
+  "modules": {
+    "app.planner": {
+      "version": "1.7.1",
+      "sha256": "5766d18490841c579056307ff899b9a620d94c9e44ec5c1fd9a8645bfde18af4",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261021-task-creation/app.planner-1.7.1.xmodule"
+    }
+  },
+  "modulePublicPackageAndInstalledDigestMatch": true,
+  "publicAuthorIndexMatchesTaggedSource": true,
+  "catalogBranch": "module-catalog",
+  "limitations": [
+    "Public fixed-signature APKs verified separately; emulator retains the existing development signature and data",
+    "Foreground/resume/start rolling replenishment; no operating-system background daemon promised",
+    "ARM device FPS and Windows native runtime not measured"
+  ],
+  "localEvidence": "dist/verification/release-20261021-beta12/"
+}
