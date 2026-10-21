@@ -101,6 +101,19 @@ API 1.22 增加 `await clock.systemTimezone()`，无参数，返回 `{zone,sourc
 
 ## 页面
 
+宿主 API `^1.37.0` 提供 `segmented {items:[{label,event}],selectedIndex}`、
+`formSection {title,action?:{text,event},children}`、`notice {text,tone}`、
+`choiceCard {title,subtitle,selected,event}`。`card.tone` 支持 `soft`／`selected`，
+`listTile` 支持 `selected` 与 `trailingAccent`；搜索输入可声明 `showSearchIcon:false`。
+根节点 `scrollKey` 为子页面分别保留滚动位置，详情／面板顶栏支持标准 `header.actions`。
+草稿跨子页面同步使用 `replaceForms`；`clearForms` 用于真正清空，而非重新填入草稿。
+完整任务新建流程见 [任务新建与持续规划](design/TASK_CREATION.md)。
+
+同一 API 版本支持可信 `app.host / host.clock.tick` 自动化事件：在宿主启动、恢复及前台每分钟检查时发出。
+只有具有 `automation.execute` 且规则明确声明发布者 `app.host` 的模块参与；查询不能触发写入，
+脚本伪造同名事件不执行自动规则。宿主暂停或关闭时停止定时检查，恢复后再次检查；不保证系统后台常驻。
+处理程序须自行保证幂等，返回无写集且 `result.skipped:true` 时不产生提交／自动化历史。
+
 API 1.6 增加 `ui.component(ref, options)` 纯构造函数，返回 `{type:'component',ref,...options}` 节点。options 支持稳定 key、props、slots 和 events；events 把公共事件端口映射到原业务事件，例如 `events:{press:{type:'save'}}`。`await ui.catalog()` 返回当前可用公共契约目录，包含 ref、propsSchema、requiredSlots 和 events。仅展示目录不授予跨模块权限。未知独有组件应声明提供者依赖；系统公共组件不依赖特定风格包。
 
 页面也可使用 `ui.page.list@1`、form、settings、detail、timeGrid 模板，传入契约要求的内容槽位。宿主兼容旧节点，输入控制器、焦点、业务事件和滚动由宿主保持。Flutter 页面使用 `UiPackScope(moduleId: ...)` 与 `UiComponent`；预览传入显式 previewPacks／previewSelection，默认恢复与审核使用 defaultOnly。详见公共 UI 文档。

@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.planner",
     "name": "任务规划",
-    "version": "1.6.2",
-    "hostApi": "^1.36.0",
+    "version": "1.7.1",
+    "hostApi": "^1.37.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -16,7 +16,8 @@
       "services.command:app.tasks/task.updateFields@1",
       "services.command:app.tasks/task.restore@1",
       "services.command:app.tasks/task.setCompleted@1",
-      "services.query:app.schedule/schedule.query.busy@1"
+      "services.query:app.schedule/schedule.query.busy@1",
+      "automation.execute"
     ],
     "dependencies": [
       {
@@ -153,6 +154,21 @@
     },
     {
       "id": "receipts",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "id": "series",
       "schema": {
         "type": "object",
         "properties": {
@@ -1334,6 +1350,13 @@
           },
           "preserveDuration": {
             "type": "boolean"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "only",
+              "following"
+            ]
           }
         },
         "required": [
@@ -1393,6 +1416,13 @@
             },
             "preserveDuration": {
               "type": "boolean"
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "only",
+                "following"
+              ]
             }
           },
           "required": [
@@ -1526,6 +1556,310 @@
           "additionalProperties": false
         }
       }
+    },
+    {
+      "id": "planner.creation.preview",
+      "major": 1,
+      "handler": "creationPreview",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "estimatedMinutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1439
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "firstDate": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              30
+            ]
+          },
+          "autoExtend": {
+            "type": "boolean"
+          },
+          "rules": {
+            "type": "object"
+          },
+          "adjustments": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "planner_creation_preview",
+        "description": "任务规划：creation.preview",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "estimatedMinutes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1439
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "timezone": {
+              "type": "string"
+            },
+            "firstDate": {
+              "type": "string"
+            },
+            "days": {
+              "type": "integer",
+              "enum": [
+                30
+              ]
+            },
+            "autoExtend": {
+              "type": "boolean"
+            },
+            "rules": {
+              "type": "object"
+            },
+            "adjustments": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "object"
+              }
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "planner.creation.apply",
+      "major": 1,
+      "handler": "creationApply",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "creationKey": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "creationKey",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "planner_creation_apply",
+        "description": "任务规划：creation.apply",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "creationKey": {
+              "type": "string"
+            },
+            "preview": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "creationKey",
+            "preview"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "planner.rolling.preview",
+      "major": 1,
+      "handler": "rollingPreview",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "planner_rolling_preview",
+        "description": "任务规划：rolling.preview",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "planner.rolling.apply",
+      "major": 1,
+      "handler": "rollingApply",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "operationKey": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "operationKey",
+          "preview"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "planner_rolling_apply",
+        "description": "任务规划：rolling.apply",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "operationKey": {
+              "type": "string"
+            },
+            "preview": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "operationKey",
+            "preview"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "planner.series.replenish",
+      "major": 1,
+      "handler": "seriesReplenish",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string"
+          },
+          "event": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "ruleId",
+          "event"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "planner_series_replenish",
+        "description": "任务规划：series.replenish",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "ruleId": {
+              "type": "string"
+            },
+            "event": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "ruleId",
+            "event"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "planner.series.taskContext",
+      "major": 1,
+      "handler": "seriesTaskContext",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "rolling-series",
+      "event": "host.clock.tick",
+      "publishers": [
+        "app.host"
+      ],
+      "serviceId": "planner.series.replenish"
     }
   ]
 }

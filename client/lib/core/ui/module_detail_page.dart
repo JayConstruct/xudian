@@ -10,6 +10,8 @@ import 'ui_page_host.dart';
 import 'workspace_header.dart';
 import 'ui_icon.dart';
 import 'native_ui.dart';
+import 'workspace_header_action.dart';
+import 'workspace_header_menu.dart';
 
 /// A module detail route owns its header independently of the workspace below.
 class ModuleDetailPage extends StatefulWidget {
@@ -75,6 +77,73 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
     if (event != null) unawaited(content!.dispatch(event));
   }
 
+  void _openHeaderMenu(WorkspaceHeaderLease? lease, Object? owner) {
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 340,
+              maxHeight: MediaQuery.sizeOf(context).height * .7,
+            ),
+            child: SingleChildScrollView(
+              child: WorkspaceHeaderMenu(
+                controller: header,
+                owner: owner,
+                lease: lease,
+                hostItems: const [],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _actions(
+    BuildContext context,
+    WorkspaceHeaderLease? lease,
+    Map<String, Object?>? spec,
+  ) {
+    final actions = (spec?['actions'] as List? ?? [])
+        .whereType<Map>()
+        .map((action) => Map<String, Object?>.from(action))
+        .toList();
+    if (actions.isEmpty) return const [];
+    final content = header.content;
+    final inline = fittingHeaderActions(
+      context,
+      actions,
+      (MediaQuery.sizeOf(context).width * .32).clamp(60, 180),
+      compact: true,
+    );
+    return [
+      for (final action in inline)
+        WorkspaceHeaderAction(
+          action: action,
+          compact: true,
+          onPressed: () {
+            if (lease != null &&
+                identical(header.lease, lease) &&
+                lease.isActive() &&
+                identical(header.content?.owner, content?.owner)) {
+              unawaited(header.content!.dispatch(action['event']));
+            }
+          },
+        ),
+      if (actions.any((action) => !inline.contains(action)))
+        NativeUi(
+          child: IconButton(
+            tooltip: '页面菜单',
+            onPressed: () => _openHeaderMenu(lease, content?.owner),
+            icon: const UiIcon(Icons.more_horiz),
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final page = widget.registry.ui.page(widget.pageId);
@@ -134,6 +203,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
+                                ..._actions(context, lease, spec),
                                 NativeUi(
                                   child: IconButton(
                                     tooltip: '关闭面板',
@@ -168,6 +238,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                   leading: hasInternalBack
                       ? BackButton(onPressed: _back)
                       : null,
+                  actions: _actions(context, lease, spec),
                   child:
                       widget.child ??
                       UiPageHost(

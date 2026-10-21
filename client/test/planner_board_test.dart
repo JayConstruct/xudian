@@ -992,7 +992,7 @@ void main() {
           .widgetList<Container>(
             find.descendant(of: block, matching: find.byType(Container)),
           )
-          .map((container) => container.decoration)
+          .map((container) => container.foregroundDecoration)
           .whereType<BoxDecoration>()
           .single;
       expect(normalDecoration.border, isNull);
@@ -1013,7 +1013,7 @@ void main() {
           .widgetList<Container>(
             find.descendant(of: block, matching: find.byType(Container)),
           )
-          .map((container) => container.decoration)
+          .map((container) => container.foregroundDecoration)
           .whereType<BoxDecoration>()
           .single;
       expect(selectedDecoration.border!.isUniform, isTrue);
@@ -1029,7 +1029,7 @@ void main() {
               find.byKey(const ValueKey('planner-selection-panel')),
             )
             .dy,
-        600 - 84,
+        600 - 84 - 8,
       );
       await tester.tap(find.byTooltip('关闭选中任务'));
       await tester.pump();

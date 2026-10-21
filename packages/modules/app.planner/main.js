@@ -1,5 +1,5 @@
 import {data,services,clock,ids} from '@xudian/sdk';
-import {canonical,day,add,weekday,minute,integer,slots,rule,range,expand,availability,arrange,taskCandidate,intervalsOverlap} from './engine.js';
+import {canonical,day,add,weekday,minute,integer,slots,rule,range,expand,availability,arrange,taskCandidate,intervalsOverlap,creationDraft,arrangeCreation} from './engine.js';
 import {captureUndoOccupancy,validateUndoOccupancy} from './undo.js';
 export {render} from './ui.js';
 const taskRef=id=>({moduleId:'app.tasks',serviceId:id,majorVersion:1});
@@ -21,7 +21,13 @@ export async function occurrenceUpdate(input){const old=input.id?await data.get(
  else{if(!old){if(!input.candidate)throw Error('实例不存在');const r=range({startDate:input.candidate.startDate,days:28},await clock.today());const current=(await state(r)).candidates.find(c=>c.id===input.id);if(!current)throw Error('候选已变化，请刷新');value={...current};delete value.task;}else value={...old};const changes=input.changes||{};if(value.taskId&&value.status==='confirmed'&&Object.keys(changes).some(k=>!['locked','status'].includes(k)))throw Error('已确认安排请在建议预览中调整并再次确认');for(const k of Object.keys(changes))if(!['locked','status','startDate','endDate','times','estimatedMinutes','priority'].includes(k))throw Error('不支持的实例修改');if(changes.status&&!['pending','skipped','cancelled'].includes(changes.status))throw Error('状态无效');if(value.taskId&&changes.status&&changes.status!=='pending'){const current=await task('task.get',{id:value.taskId});if(current?.completedAt)throw Error('请先撤销完成记录');if(current?.locked)throw Error('固定时间任务需先解除固定');if(current){if(value.createdByPlanner)await prepare('task.restore',{id:current.id,expected:current,value:null});else await prepare('task.updateFields',{id:current.id,expectedUpdatedAt:current.updatedAt,changes:{plannedDate:null}});}value.previousTaskId=value.taskId;value.taskId=null;delete value.task;}if(value.taskId&&changes.locked!==undefined){const current=await task('task.get',{id:value.taskId});if(current)await prepare('task.updateFields',{id:current.id,expectedValues:current,changes:{locked:changes.locked}});}value={...value,...changes};}
  day(value.startDate);day(value.endDate);if(value.startDate>value.endDate)throw Error('日期窗口无效');value.times=slots(value.times);integer(value.estimatedMinutes,1,1439,'耗时');integer(value.priority,0,3,'优先级');if(value.locked!==undefined&&typeof value.locked!=='boolean')throw Error('锁定需为开关');return result([write('occurrences',value)],value);}
 async function instant(date,time,zone){const r=await clock.toUtc({date,time,zone});if(r.status!=='unique')throw Error(`${date} ${time} 在 ${zone} 为${r.status==='ambiguous'?'歧义':'不存在'}时刻，请修改时段`);return r.instants[0];}
-async function busyState(s,{includeBlocks=true,taskSnapshot}={}){let tasks=taskSnapshot;if(!tasks){const startAt=await instant(add(s.r.startDate,-1),'00:00',s.a.timezone),endAt=await instant(add(s.r.endDate,2),'00:00',s.a.timezone);tasks=await task('task.range',{startAt,endAt});}const warnings=[],conflicts=[];let courseItems=[],courseStatus='absent';const directory=await services.directory();const schedule=directory.some(x=>x.moduleId==='app.schedule');if(schedule){try{const busy=await services.query({moduleId:'app.schedule',serviceId:'schedule.query.busy',majorVersion:1},{startDate:add(s.r.startDate,-1),endDate:add(s.r.endDate,1)});courseItems=busy.items;courseStatus='included';}catch(e){courseStatus='failed';conflicts.push('课表已接入但读取失败，当前方案不可确认：'+String(e));}}else warnings.push('未计入课程');
+async function busyState(s,{includeBlocks=true,taskSnapshot}={}){let tasks=taskSnapshot;if(!tasks){const startAt=await instant(add(s.r.startDate,-1),'00:00',s.a.timezone),endAt=await instant(add(s.r.endDate,2),'00:00',s.a.timezone);tasks=await task('task.range',{startAt,endAt});}const warnings=[],conflicts=[];let courseItems=[],courseStatus='absent';const directory=await services.directory();const schedule=directory.some(x=>x.moduleId==='app.schedule');if(schedule){try{
+ // Preserve the timezone boundary padding while respecting the timetable's
+ // inclusive 30-day query limit. A rolling window plus padding spans 32 days.
+ const last=add(s.r.endDate,1);
+ for(let first=add(s.r.startDate,-1);first<=last;){const endDate=add(first,29)<last?add(first,29):last;const busy=await services.query({moduleId:'app.schedule',serviceId:'schedule.query.busy',majorVersion:1},{startDate:first,endDate});courseItems.push(...busy.items);first=add(endDate,1);}
+ courseItems.sort((a,b)=>a.startAt.localeCompare(b.startAt)||a.id.localeCompare(b.id));courseStatus='included';
+ }catch(e){courseItems=[];courseStatus='failed';conflicts.push('课表已接入但读取失败，当前方案不可确认：'+String(e));}}else warnings.push('未计入课程');
  const blocks=[];
  if(includeBlocks){const localNow=await clock.local(s.a.timezone);blocks.push({date:localNow.date,start:0,end:minute(localNow.time)});
   const items=[...tasks.map(t=>({id:t.id,startAt:t.plannedStartAt,endAt:t.plannedEndAt})),...courseItems.map(x=>({...x,id:'course:'+x.id}))],positions=await localPositions(items,s.a.timezone);
@@ -45,7 +51,7 @@ async function alreadyApplied(key,request,kind){const receipt=await data.get('re
 async function historyWrites(batch){const prior=(await all('batches')).filter(b=>b.id!==batch.id).sort((a,b)=>(b.sequence||0)-(a.sequence||0)||b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id));batch.sequence=Math.max(0,...prior.map(b=>b.sequence||0))+1;const receipts=[];for(const b of [batch,...prior.slice(49)])if(b.request)receipts.push(write('receipts',{id:b.id,kind:b.kind||'plan',request:oldRequest(b),createdAt:b.createdAt}));return [write('batches',batch),...receipts,...prior.slice(49).map(b=>({collection:'batches',id:b.id,value:null}))];}
 export async function batchApply({batchKey,preview}){if(typeof batchKey!=='string'||!batchKey||batchKey.length>200)throw Error('缺少批次键');const request=planRequest(preview),previous=await alreadyApplied(batchKey,request,'plan');if(previous)return previous;if(preview?.schemaVersion!==1)throw Error('方案版本无效');const fresh=await planPreview(preview.input);if(fresh.basis!==preview.basis||canonical(fresh.assigned)!==canonical(preview.assigned)||canonical(fresh.unassigned)!==canonical(preview.unassigned))throw Error('预览依据已变化，请重新生成');if(!fresh.confirmable||!fresh.assigned.length)throw Error('当前方案不可确认');const writes=[],changes=[];for(const c of fresh.assigned){const before=c.taskId?await task('task.get',{id:c.taskId}):null;const fields={plannedStartAt:c.plannedStartAt,plannedEndAt:c.plannedEndAt,plannedTimezone:c.plannedTimezone,estimatedMinutes:c.estimatedMinutes,priority:c.priority,locked:!!c.locked,executionExpiresOn:['daily','weekly'].includes(c.kind)||c.optional?c.endDate:null};let after;if(before){await prepare('task.updateFields',{id:before.id,expectedUpdatedAt:before.updatedAt,changes:fields});after=await task('task.get',{id:before.id});}else{const created=await prepare('task.create',{title:c.title,...fields});after=await task('task.get',{id:created.id});}const oldOccurrence=await data.get('occurrences',c.id),occurrence={...c,taskId:after.id,status:'confirmed',createdByPlanner:!!c.createdByPlanner||!before};for(const k of ['task','localStart','localEnd','plannedStartAt','plannedEndAt','plannedTimezone'])delete occurrence[k];const standalone=!c.ruleId&&c.planningEndDate&&!oldOccurrence;if(!standalone)writes.push(write('occurrences',occurrence));changes.push({taskId:after.id,before,after,...(standalone?{}:{occurrenceId:c.id,beforeOccurrence:oldOccurrence,afterOccurrence:occurrence})});}
  const batch={id:batchKey,createdAt:await clock.now(),request,changes,undone:false};writes.push(...await historyWrites(batch));return result(writes,{id:batchKey,applied:changes.length,unassigned:fresh.unassigned.length});}
-export async function batchUndo({id}){const batch=await data.get('batches',id);if(!batch)throw Error('批次不存在');if(batch.undone)return result([],{id,alreadyUndone:true});for(const c of batch.changes){if(canonical(await task('task.get',{id:c.taskId}))!==canonical(c.after)||(c.occurrenceId&&canonical(await data.get('occurrences',c.occurrenceId))!==canonical(c.afterOccurrence)))throw Error('撤销已停止：任务或实例已被后续修改或完成');}await validateUndoOccupancy(batch,await availabilityGet());const writes=[];for(const c of batch.changes){await prepare('task.restore',{id:c.taskId,expected:c.after,value:c.before});if(c.occurrenceId)writes.push({collection:'occurrences',id:c.occurrenceId,value:c.beforeOccurrence});}writes.push(write('batches',{...batch,undone:true,undoneAt:await clock.now()}));return result(writes,{id,restored:batch.changes.length});}
+export async function batchUndo({id}){const batch=await data.get('batches',id);if(!batch)throw Error('批次不存在');if(batch.undone)return result([],{id,alreadyUndone:true});for(const c of batch.changes){if(canonical(await task('task.get',{id:c.taskId}))!==canonical(c.after)||(c.occurrenceId&&canonical(await data.get('occurrences',c.occurrenceId))!==canonical(c.afterOccurrence)))throw Error('撤销已停止：任务或实例已被后续修改或完成');}for(const c of batch.seriesChanges||[])if(canonical(await data.get('series',c.id))!==canonical(c.after))throw Error('持续规划已变更，不能撤销旧批次');await validateUndoOccupancy(batch,await availabilityGet());const writes=(batch.seriesChanges||[]).map(c=>({collection:'series',id:c.id,value:c.before}));for(const c of batch.changes){await prepare('task.restore',{id:c.taskId,expected:c.after,value:c.before});if(c.occurrenceId)writes.push({collection:'occurrences',id:c.occurrenceId,value:c.beforeOccurrence});}writes.push(write('batches',{...batch,undone:true,undoneAt:await clock.now()}));return result(writes,{id,restored:batch.changes.length});}
 
 // Board display has no effect on availability, deadlines, or operation validation.
 const boardFields=['id','title','priority','dueDate','dueAt','dueTimezone','plannedDate','plannedStartAt','plannedEndAt','plannedTimezone','estimatedMinutes','locked','updatedAt'];
@@ -89,6 +95,7 @@ function editable(t){if(!t||t.completedAt||t.deletedAt||t.archivedAt)throw Error
 async function deadlineFor(t,timezone){if(!t.dueDate)return null;if(t.dueAt)return utcInstant(t.dueAt);return instant(add(t.dueDate,1),'00:00',t.dueTimezone||timezone||(await availabilityGet()).timezone);}
 export async function operationPreview(input){
  const {kind='move',taskId,targetTaskId}=input;
+ if(input.scope&&!['only','following'].includes(input.scope))throw Error('调整范围无效');
  if(!['move','swap','resize'].includes(kind))throw Error('插入顺延需先明确可安排时段和搜索上限');
  const a=await availabilityGet(),first=await task('task.get',{id:taskId});editable(first);
  const changes=[],zone=input.timezone||input.plannedTimezone||a.timezone;
@@ -112,12 +119,28 @@ export async function operationPreview(input){
   else endAt=input.plannedEndAt?utcInstant(input.plannedEndAt):new Date(Date.parse(startAt)+(first.estimatedMinutes||a.defaultMinutes)*60000).toISOString();
   changes.push({taskId:first.id,before:first,fields:{plannedStartAt:startAt,plannedEndAt:endAt,plannedTimezone:zone}});
  }
+ const seriesOccurrences=await all('occurrences'),origin=seriesOccurrences.find(o=>o.taskId===taskId&&o.seriesId),series=origin?await data.get('series',origin.seriesId):null;
+ if(input.scope==='following'){
+  if(kind!=='move'||!origin||!series)throw Error('本次及以后只适用于批量任务移动');
+  const delta=Date.parse(changes[0].fields.plannedStartAt)-Date.parse(first.plannedStartAt);
+  for(const occurrence of seriesOccurrences.filter(o=>o.seriesId===origin.seriesId&&o.sequence>origin.sequence).sort((a,b)=>a.sequence-b.sequence)){
+   const current=await task('task.get',{id:occurrence.taskId});if(!current||current.completedAt||current.deletedAt||current.archivedAt)continue;
+   const actual=await clock.toLocal({utc:current.plannedStartAt,zone:series.draft.timezone}),actualEnd=await clock.toLocal({utc:current.plannedEndAt,zone:series.draft.timezone});
+   if(occurrence.manualAdjusted||actual.date!==occurrence.date||actual.time!==occurrence.start||actualEnd.time!==occurrence.end)throw Error('后续第'+(occurrence.sequence+1)+'次已有手动安排，请仅调整本次或逐项处理');editable(current);
+   changes.push({taskId:current.id,before:current,fields:{plannedStartAt:new Date(Date.parse(current.plannedStartAt)+delta).toISOString(),plannedEndAt:new Date(Date.parse(current.plannedEndAt)+delta).toISOString(),plannedTimezone:current.plannedTimezone}});
+  }
+ }
  const now=await clock.now(),overdue=[],conflicts=[];
+ if(series&&kind==='move'){
+  for(const change of changes){const start=await clock.toLocal({utc:change.fields.plannedStartAt,zone:series.draft.timezone}),end=await clock.toLocal({utc:change.fields.plannedEndAt,zone:series.draft.timezone}),window=series.draft.rules.timeWindow;if(start.date!==end.date||!series.draft.rules.weekdays.includes(weekday(start.date))||minute(start.time)<minute(window.start)||minute(end.time)>minute(window.end))conflicts.push(change.before.title+'：调整不符合批量任务的星期或允许时段规则');}
+  const dates=[];for(const occurrence of seriesOccurrences.filter(o=>o.seriesId===series.id).sort((a,b)=>a.sequence-b.sequence)){const changed=changes.find(c=>c.taskId===occurrence.taskId),current=changed?.before||await task('task.get',{id:occurrence.taskId});if(!current||current.deletedAt||current.archivedAt)continue;const local=await clock.toLocal({utc:changed?.fields.plannedStartAt||current.plannedStartAt,zone:series.draft.timezone});dates.push({date:local.date,changed:!!changed,sequence:occurrence.sequence});}
+  for(let i=1;i<dates.length;i++)if(dates[i].changed||dates[i-1].changed){const gap=Math.round((Date.parse(dates[i].date)-Date.parse(dates[i-1].date))/86400000),interval=series.draft.rules.interval;if(gap<interval.minDays||gap>interval.maxDays)conflicts.push('第'+(dates[i-1].sequence+1)+'次与第'+(dates[i].sequence+1)+'次相隔'+gap+'天，需满足'+interval.minDays+'～'+interval.maxDays+'天');}
+ }
  for(const c of changes){const duration=(Date.parse(c.fields.plannedEndAt)-Date.parse(c.fields.plannedStartAt))/60000;if(!Number.isInteger(duration)||duration<1)throw Error('安排时长需为正整数分钟');c.fields.estimatedMinutes=duration;if(Date.parse(c.fields.plannedStartAt)<Date.parse(now))conflicts.push(c.before.title+'：安排时间已过去');const deadline=await deadlineFor(c.before,a.timezone);if(deadline&&Date.parse(c.fields.plannedEndAt)>Date.parse(deadline))overdue.push({taskId:c.taskId,title:c.before.title,dueDate:c.before.dueDate,dueAt:c.before.dueAt||null});}
  const positions=await localPositions(changes.map(c=>({startAt:c.fields.plannedStartAt,endAt:c.fields.plannedEndAt})),a.timezone),starts=positions.map(p=>p.startDate),ends=positions.map(p=>p.endDate);
  const from=starts.sort()[0],to=ends.sort()[ends.length-1],days=Math.round((Date.parse(to)-Date.parse(from))/86400000)+1;
- if(days>28)throw Error('单次操作涉及的日期跨度超过28天，请分开调整');
- const s={a,r:range({startDate:from,days},from),records:await relatedOccurrences(changes.map(c=>c.taskId))},busy=await busyState(s,{includeBlocks:false}),ids=new Set(changes.map(c=>c.taskId));
+ if(days>30)throw Error('单次操作涉及的日期跨度超过30天，请分开调整');
+ const s={a,r:{startDate:from,endDate:to,days},records:await relatedOccurrences(changes.map(c=>c.taskId))},busy=await busyState(s,{includeBlocks:false}),ids=new Set(changes.map(c=>c.taskId));
  const occupancy=[...busy.tasks.filter(t=>!ids.has(t.id)).map(t=>({id:t.id,title:t.title,startAt:t.plannedStartAt,endAt:t.plannedEndAt})),...busy.courseItems];
  for(const c of changes){const position={startAt:c.fields.plannedStartAt,endAt:c.fields.plannedEndAt};for(const b of occupancy)if(intervalsOverlap(position,b))conflicts.push(c.before.title+'：与已有占用冲突');for(const b of s.a.busy.filter(b=>b.date>=from&&b.date<=to)){const block={startAt:await instant(b.date,b.start,a.timezone),endAt:await instant(b.date,b.end,a.timezone)};if(intervalsOverlap(position,block))conflicts.push(c.before.title+'：与手动占用冲突');}}
  if(changes.length===2&&intervalsOverlap({startAt:changes[0].fields.plannedStartAt,endAt:changes[0].fields.plannedEndAt},{startAt:changes[1].fields.plannedStartAt,endAt:changes[1].fields.plannedEndAt}))conflicts.push('交换后的两个安排互相重叠');
@@ -135,7 +158,7 @@ export async function operationApply({operationKey,preview,allowOverdue=false}){
  if(fresh.basis!==preview.basis||canonical(fresh.changes)!==canonical(preview.changes)||canonical(fresh.overdue)!==canonical(preview.overdue)||canonical(fresh.undoOccupancy)!==canonical(preview.undoOccupancy))throw Error('预览依据已变化，请重新预览');
  if(!fresh.confirmable)throw Error(fresh.conflicts.join('；'));if(fresh.overdue.length&&!allowOverdue)throw Error('安排超过截止，请明确确认后重试');
  const changes=[],writes=[];
- for(const c of fresh.changes){await prepare('task.updateFields',{id:c.taskId,expectedValues:c.before,changes:c.fields});const after=await task('task.get',{id:c.taskId}),occurrences=await relatedOccurrences([c.taskId]);if(occurrences.length>1)throw Error('任务绑定多个规划实例，无法整体调整');let delta={};if(occurrences.length){const beforeOccurrence=occurrences[0],local=await clock.toLocal({utc:after.plannedStartAt,zone:after.plannedTimezone}),afterOccurrence={...beforeOccurrence,date:local.date,estimatedMinutes:after.estimatedMinutes,locked:after.locked,status:'confirmed'};writes.push(write('occurrences',afterOccurrence));delta={occurrenceId:beforeOccurrence.id,beforeOccurrence,afterOccurrence};}changes.push({taskId:c.taskId,before:c.before,after,...delta});}
+ for(const c of fresh.changes){await prepare('task.updateFields',{id:c.taskId,expectedValues:c.before,changes:c.fields});const after=await task('task.get',{id:c.taskId}),occurrences=await relatedOccurrences([c.taskId]);if(occurrences.length>1)throw Error('任务绑定多个规划实例，无法整体调整');let delta={};if(occurrences.length){const beforeOccurrence=occurrences[0],local=await clock.toLocal({utc:after.plannedStartAt,zone:after.plannedTimezone}),afterOccurrence={...beforeOccurrence,date:local.date,estimatedMinutes:after.estimatedMinutes,locked:after.locked,status:'confirmed',...(beforeOccurrence.seriesId?{manualAdjusted:true}:{})};writes.push(write('occurrences',afterOccurrence));delta={occurrenceId:beforeOccurrence.id,beforeOccurrence,afterOccurrence};}changes.push({taskId:c.taskId,before:c.before,after,...delta});}
  const batch={id:operationKey,kind:fresh.kind,undoOccupancy:fresh.undoOccupancy,createdAt:await clock.now(),request,changes,undone:false};return result([...writes,...await historyWrites(batch)],{id:operationKey,applied:changes.length});
 }
 
@@ -150,4 +173,82 @@ export async function operationInspect({proposal,timezone,expectedTasks}){
   const preview=await operationPreview({...input,...(timezone?{timezone}:{}),...(selectedExpected?{expectedTasks:selectedExpected}:{})});
   return {previewBlocks:preview.previewBlocks,previewLabel:proposal.intent==='resize'?'调整时长 · 1项':preview.previewLabel,conflicts:preview.conflicts,overdue:preview.overdue,valid:preview.confirmable};
  }catch(error){return {previewBlocks:[],previewLabel:'无法安排',conflicts:[String(error)],overdue:[],valid:false};}
+}
+
+// A series is an explicit, user-confirmed rolling instruction. Its existing
+// occurrences are immutable inputs to replenishment, including manual moves.
+async function creationPlan(input,{seriesId='draft',series=null,reserved=[]}={}){
+ const global=await availabilityGet(),zone=input.timezone||global.timezone,today=await clock.today(zone),draft=creationDraft(input,today,zone);
+ if(!series&&draft.firstDate<today)throw Error('首次日期不能早于今天');
+ const startDate=today,endDate=add(today,29),a={...global,timezone:zone},records=await all('occurrences'),tasks=await taskRows();
+ const seriesTasks=new Set(records.filter(o=>o.seriesId===seriesId).map(o=>o.taskId)),localTasks=[];for(const t of tasks){if(t.plannedStartAt&&seriesTasks.has(t.id)){const local=await clock.toLocal({utc:t.plannedStartAt,zone});localTasks.push({...t,plannedDate:local.date});}else localTasks.push(t);}
+ const s={a,today,r:{startDate,endDate,days:30}},busy=await busyState(s),adjustments=input.adjustments||[];
+ // Exclude the whole current minute before the five-minute search. This also
+ // leaves review time when a preview starts exactly at a clock-minute boundary.
+ // Only the chosen slots enter the preview basis, never volatile clock seconds.
+ const now=await clock.now(),localNow=await clock.toLocal({utc:now,zone});
+ busy.blocks.push({date:localNow.date,start:0,end:Math.min(1440,minute(localNow.time)+1)});
+ for(const p of await localPositions(reserved.map(c=>({startAt:c.plannedStartAt,endAt:c.plannedEndAt})),zone))for(let d=p.startDate;d<=p.endDate;d=add(d,1)){const from=d===p.startDate?p.startMinute:0,to=d===p.endDate?p.endMinute:1440;if(from<to)busy.blocks.push({date:d,start:from,end:to});}
+ if(!Array.isArray(adjustments)||adjustments.length>200)throw Error('调整项最多200个');
+ const planned=arrangeCreation(draft,{seriesId,startDate,endDate,records,tasks:localTasks,a,busy:busy.blocks,adjustments});
+ const conflicts=[...busy.conflicts,...planned.conflicts];
+ for(const c of planned.assigned){try{c.plannedStartAt=await instant(c.date,c.start,zone);c.plannedEndAt=await instant(c.date,c.end,zone);c.plannedTimezone=zone;if(c.plannedStartAt<now)conflicts.push(c.title+'：安排时间已过去');}catch(e){conflicts.push(String(e));}}
+ const normalized={...draft,...(adjustments.length?{adjustments}:{} )};
+ return {schemaVersion:1,input:normalized,startDate,endDate,...planned,conflicts,warnings:[...busy.warnings,...planned.warnings],confirmable:!conflicts.length&&!planned.unassigned.length&&planned.assigned.length>0,basis:canonical({draft,series,records,tasks,a,today,reserved,courseItems:busy.courseItems,courseStatus:busy.courseStatus})};
+}
+export async function creationPreview(input){return creationPlan(input);}
+async function createSeriesTasks(series,assigned){
+ const writes=[],changes=[];
+ for(const c of assigned){const occurrenceId=series.id+':batch:'+c.sequence;if(await data.get('occurrences',occurrenceId))throw Error('实例已存在，请刷新安排');
+  const created=await prepare('task.create',{title:series.draft.title,notes:series.draft.notes,estimatedMinutes:c.estimatedMinutes,priority:c.priority,plannedStartAt:c.plannedStartAt,plannedEndAt:c.plannedEndAt,plannedTimezone:c.plannedTimezone,locked:false});
+  const after=await task('task.get',{id:created.id}),occurrence={...c,id:occurrenceId,seriesId:series.id,taskId:after.id,status:'confirmed',createdByPlanner:true};
+  for(const k of ['plannedStartAt','plannedEndAt','plannedTimezone'])delete occurrence[k];
+  writes.push(write('occurrences',occurrence));changes.push({taskId:after.id,before:null,after,occurrenceId,beforeOccurrence:null,afterOccurrence:occurrence});
+ }
+ return {writes,changes};
+}
+export async function creationApply({creationKey,preview}){
+ if(typeof creationKey!=='string'||!creationKey||creationKey.length>160)throw Error('缺少有效创建键');
+ const request=canonical({creation:preview?.input}),old=await alreadyApplied(creationKey,request,'series-create');if(old)return old;
+ if(preview?.schemaVersion!==1)throw Error('预览版本无效');const fresh=await creationPreview(preview.input);
+ if(fresh.basis!==preview.basis||canonical(fresh.assigned)!==canonical(preview.assigned)||canonical(fresh.unassigned)!==canonical(preview.unassigned))throw Error('预览依据已变化，请重新预览');
+ if(!fresh.confirmable)throw Error('请先处理所有未安排项和规则冲突');
+ if(await data.get('series',creationKey))throw Error('创建键已被使用');
+ const now=await clock.now(),draft={...fresh.input};delete draft.adjustments;
+ const series={id:creationKey,draft,status:'active',createdAt:now,windowThrough:fresh.endDate,lastAttemptDate:fresh.startDate,blocked:[]};
+ const applied=await createSeriesTasks(series,fresh.assigned),batch={id:creationKey,kind:'series-create',request,createdAt:now,undone:false,changes:applied.changes,seriesChanges:[{id:series.id,before:null,after:series}]};
+ return result([...applied.writes,write('series',series),...await historyWrites(batch)],{id:creationKey,seriesId:series.id,applied:applied.changes.length});
+}
+export async function rollingPreview(){
+ const plans=[],reserved=[];for(const series of await all('series'))if(series.status==='active'&&series.draft.autoExtend!==false){const preview=await safeSeriesPlan(series,reserved);plans.push({seriesId:series.id,preview});if(!preview.conflicts.length)reserved.push(...preview.assigned);}
+ return {schemaVersion:1,plans,assignedCount:plans.reduce((n,p)=>n+(p.preview.conflicts.length?0:p.preview.assigned.length),0),blocked:plans.filter(p=>p.preview.conflicts.length||p.preview.unassigned.length).map(p=>({seriesId:p.seriesId,title:p.preview.input.title,reasons:[...p.preview.conflicts,...p.preview.unassigned.map(c=>c.reason)]}))};
+}
+async function safeSeriesPlan(series,reserved=[]){try{return await creationPlan(series.draft,{seriesId:series.id,series,reserved});}catch(error){const today=await clock.today();return {schemaVersion:1,input:series.draft,startDate:today,endDate:add(today,29),assigned:[],unassigned:[],conflicts:[String(error)],warnings:[],confirmable:false,basis:canonical(series)};}}
+async function applyRollingPlans(preview,key,request){
+ const writes=[],changes=[],seriesChanges=[],blocked=[];
+ for(const plan of preview.plans){const before=await data.get('series',plan.seriesId);if(!before||before.status!=='active'||before.draft.autoExtend===false)throw Error('持续规划规则已改变');
+  const p=plan.preview,reasons=[...p.conflicts,...p.unassigned.map(c=>c.reason)],assigned=p.conflicts.length?[]:p.assigned;
+  const applied=await createSeriesTasks(before,assigned);writes.push(...applied.writes);changes.push(...applied.changes);
+  const after={...before,lastAttemptDate:p.startDate,windowThrough:reasons.length?before.windowThrough:p.endDate,blocked:reasons};if(canonical(after)!==canonical(before)){writes.push(write('series',after));seriesChanges.push({id:before.id,before,after});}if(reasons.length)blocked.push({seriesId:before.id,reasons});
+ }
+ if(!writes.length)return result([],{id:key,applied:0,blocked,skipped:true});
+ const batch={id:key,kind:'rolling',request,createdAt:await clock.now(),undone:false,changes,seriesChanges};
+ return result([...writes,...await historyWrites(batch)],{id:key,applied:changes.length,blocked});
+}
+export async function rollingApply({operationKey,preview}){
+ if(typeof operationKey!=='string'||!operationKey||operationKey.length>160)throw Error('缺少操作键');const request=canonical({rolling:preview}),old=await alreadyApplied(operationKey,request,'rolling');if(old)return old;
+ const fresh=await rollingPreview();if(preview?.schemaVersion!==1||canonical(fresh)!==canonical(preview))throw Error('补齐依据已改变，请刷新');return applyRollingPlans(fresh,operationKey,request);
+}
+export async function seriesReplenish({ruleId,event}){
+ if(ruleId!=='rolling-series'||event?.type!=='host.clock.tick')throw Error('仅支持系统时钟触发的持续补齐');
+ const plans=[],reserved=[];for(const series of await all('series'))if(series.status==='active'&&series.draft.autoExtend!==false){const today=await clock.today(series.draft.timezone);if(!series.blocked?.length&&(series.lastAttemptDate===today||series.windowThrough>=add(today,29)))continue;const preview=await safeSeriesPlan(series,reserved);plans.push({seriesId:series.id,preview});if(!preview.conflicts.length)reserved.push(...preview.assigned);}
+ if(!plans.length)return result([],{applied:0,skipped:true});const key=await ids.new();return applyRollingPlans({plans},key,canonical({automation:'rolling-series',plans}));
+}
+
+export async function seriesTaskContext({taskId}){
+ const records=(await all('occurrences')).filter(o=>o.seriesId),current=records.find(o=>o.taskId===taskId);
+ if(!current)return {seriesId:null};const series=await data.get('series',current.seriesId);if(!series)return {seriesId:null};
+ const rows=[];for(const o of records.filter(o=>o.seriesId===current.seriesId).sort((a,b)=>a.sequence-b.sequence)){const t=await task('task.get',{id:o.taskId});if(!t||t.deletedAt||t.archivedAt||!t.plannedStartAt)continue;const local=await clock.toLocal({utc:t.plannedStartAt,zone:series.draft.timezone}),end=await clock.toLocal({utc:t.plannedEndAt,zone:series.draft.timezone});rows.push({taskId:t.id,title:t.title,date:local.date,sequence:o.sequence,manual:!!o.manualAdjusted||local.date!==o.date||local.time!==o.start||end.time!==o.end,completed:!!t.completedAt,locked:!!t.locked});}
+ const index=rows.findIndex(r=>r.taskId===taskId);
+ return {seriesId:series.id,rules:series.draft.rules,current:rows[index]||{sequence:current.sequence},previous:index>0?rows[index-1]:null,next:index>=0?rows[index+1]||null:null,following:rows.filter(r=>r.sequence>current.sequence&&!r.completed),timezone:series.draft.timezone};
 }

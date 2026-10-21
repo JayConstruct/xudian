@@ -1,5 +1,6 @@
 import {services, ui, clock, ids} from '@xudian/sdk';
 import {add, day} from './engine.js';
+import {renderCreation} from './creation.js';
 
 const ref = id => ({moduleId: 'app.planner', serviceId: 'planner.' + id, majorVersion: 1});
 const query = (id, input = {}) => services.query(ref(id), input);
@@ -25,7 +26,7 @@ const temporal = (key, label, value, type = 'dateInput') => ({
   type, key, text: label, value: value || null, clearable: true, event: {type: 'field', key},
 });
 const checkbox = (key, label, value, event) => ({type: 'checkbox', key, text: label, value, event});
-const panel = async (page, context = {}) => ui.panel('app.planner.' + page, {...context, editorSession: await ids.new()}, {adaptive: true, wide: 'center', heightFactor: page === 'quickAdd' ? .56 : page === 'taskDetail' ? .78 : .88});
+const panel = async (page, context = {}) => ui.panel('app.planner.' + page, {...context, editorSession: await ids.new()}, {adaptive: true, wide: 'center', heightFactor: page === 'quickAdd' ? .94 : page === 'taskDetail' ? .78 : .88});
 const stamp = (date, time) => `${date}T${time}:00`;
 const summary = t => t?.dueDate ? `${t.dueDate.slice(5).replace('-', '/')}截止` : '';
 const duration = minutes => minutes >= 60 ? `耗时${Math.round(minutes / 6) / 10}h` : `耗时${minutes}min`;
@@ -143,7 +144,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   if (loadRange && event != null) throw Error('时间轴范围加载不接受事件');
   const a = await query('availability.get');
   const today = await clock.today(a.timezone);
-  if (context.pageId === 'app.planner.quickAdd') return quickAdd(state, event, formValues, a);
+  if (context.pageId === 'app.planner.quickAdd') return renderCreation(state, event, formValues, a);
   if (context.pageId === 'app.planner.taskDetail') return detail(state, event, context, formValues, a);
   state.displayHours = displayPreference(await ui.preferences.get(displayKey));
   state.zoom = zoomIndex(await ui.preferences.get(zoomKey));
@@ -387,7 +388,8 @@ async function applyMove(event, a) {
   const proposal = event.intent === 'swap' && event.targetId
     ? {kind: 'swap', taskId: event.taskId || event.id, targetTaskId: event.targetId, timezone: a.timezone}
     : {kind: event.intent === 'resize' ? 'resize' : 'move', taskId: event.taskId || event.id, date: event.start.slice(0, 10), start: event.start.slice(11, 16), endDate: event.end.slice(0, 10), end: event.end.slice(11, 16), timezone: a.timezone,
-      ...(event.intent === 'resize' ? {} : {preserveDuration: event.preserveDuration !== false})};
+      ...(event.intent === 'resize' ? {} : {preserveDuration: event.preserveDuration !== false}),
+      ...(event.scope ? {scope: event.scope} : {})};
   if (event.expectedTasks) {
     proposal.expectedTasks = Object.fromEntries([proposal.taskId, proposal.targetTaskId].filter(id => id && event.expectedTasks[id]).map(id => [id, event.expectedTasks[id]]));
   }
@@ -425,38 +427,6 @@ async function moveConfirmation(preview, zone, precise) {
   };
 }
 
-async function quickAdd(state, event, forms, a) {
-  state.draft ||= {title: '', notes: '', dueDate: null, dueTime: null, estimatedMinutes: a.defaultMinutes};
-  const d = draft(state, forms, event);
-  try {
-    if (event?.type === 'description') state.description = true;
-    if (event?.type === 'time') state.time = true;
-    if (event?.type === 'rules') state.step = 'rules';
-    if (event?.type === 'back') state.step = null;
-    if (event?.type === 'save') {
-      const saved = await execute('task.create', {title: d.title, notes: d.notes || '', ...(await deadline(d, a.timezone)), estimatedMinutes: Number(d.estimatedMinutes)});
-      if (saved) { await ui.navigate('app.planner.home'); return savedPanel(state, '任务已保存'); }
-    }
-    delete state.error;
-  } catch (e) { state.error = String(e); }
-  const children = state.step === 'rules' ? [
-    text('耗时'),
-    input('estimatedMinutes', '预计分钟', d.estimatedMinutes),
-    text('保存任务后，再从图形规划发起安排。'),
-  ] : [
-    input('title', '任务简称', d.title),
-    ...(state.description ? [input('notes', '详细描述（可留空）', d.notes, {multiline: true})] : [{type: 'row', children: [button('添加描述', {type: 'description'}, 'text')]}]),
-    {type: 'row', layout: 'flex', children: [
-      {...temporal('dueDate', '截止日期（可留空）', d.dueDate), flex: 1},
-      ...(!state.time ? [button('＋ 时间', {type: 'time'}, 'text')] : []),
-    ]},
-    ...(state.time ? [temporal('dueTime', '截止时间（可留空）', d.dueTime, 'timeInput')] : []),
-    row('添加规则', `${d.estimatedMinutes}分钟`, {type: 'rules'}),
-  ];
-  if (state.error) children.push(text(state.error));
-  return {state, header: {title: state.step === 'rules' ? '任务规则' : '新建任务', ...(state.step === 'rules' ? {backEvent: {type: 'back'}} : {})}, tree: {type: 'column', key: 'planner:quickAdd', compact: true, spacing: 8, children, footer: fullWidthFooter(button('保存任务', {type: 'save'}, 'filled'))}};
-}
-
 async function detail(state, event, context, forms, a) {
   const current = await task(context.taskId);
   if (!current || current.deletedAt) return {state, tree: text('任务已不可用，请关闭后刷新')};
@@ -469,7 +439,7 @@ async function detail(state, event, context, forms, a) {
     const start = current.plannedStartAt ? await clock.toLocal({utc: current.plannedStartAt, zone: a.timezone}) : null;
     const end = current.plannedEndAt ? await clock.toLocal({utc: current.plannedEndAt, zone: a.timezone}) : null;
     state.draft = {title: current.title, notes: current.notes || '', dueDate: current.dueDate, dueTime: due?.time || null,
-      estimatedMinutes: current.estimatedMinutes || a.defaultMinutes, locked: !!current.locked,
+      estimatedMinutes: current.estimatedMinutes || a.defaultMinutes, locked: !!current.locked, scheduleScope: 'only',
       startDate: start?.date || await clock.today(a.timezone), start: start?.time || '', endDate: end?.date || start?.date || await clock.today(a.timezone), end: end?.time || ''};
     state.originalDeadlineDraft = {dueDate: state.draft.dueDate, dueTime: state.draft.dueTime};
   }
@@ -505,11 +475,12 @@ async function detail(state, event, context, forms, a) {
       if (saved) { await ui.navigate('app.planner.home'); return savedPanel(state, '已恢复初始截止'); }
     }
     if (event?.type === 'schedule') {
-      const saved = await applyMove({taskId: current.id, start: stamp(d.startDate, d.start), end: stamp(d.endDate, d.end), intent: 'move', preserveDuration: false, expectedTasks: {[current.id]: state.original}}, a);
+      const saved = await applyMove({taskId: current.id, start: stamp(d.startDate, d.start), end: stamp(d.endDate, d.end), intent: 'move', preserveDuration: false, scope: d.scheduleScope || 'only', expectedTasks: {[current.id]: state.original}}, a);
       if (saved) { await ui.navigate('app.planner.home'); return savedPanel(state, '安排已更新'); }
     }
     delete state.error;
   } catch (e) { state.error = String(e); }
+  const seriesContext = state.step === 'time' ? await query('series.taskContext', {taskId: current.id}) : null;
   const adjusted = (current.deadlineHistory || []).length > 0;
   const labelDeadline = await localDeadlineLabels([current.initialDeadline, ...(current.deadlineHistory || []).flatMap(h => [h.before, h.after])], a.timezone);
   const children = state.step === 'time' ? [
@@ -518,6 +489,7 @@ async function detail(state, event, context, forms, a) {
     ...(current.locked ? [text('请先返回详情解除固定并保存，再调整起止或时长。')] : [
       temporal('startDate', '开始日期', d.startDate), temporal('start', '开始时间', d.start, 'timeInput'),
       temporal('endDate', '结束日期', d.endDate), temporal('end', '结束时间', d.end, 'timeInput'),
+      ...(seriesContext?.seriesId ? seriesTimeControls(d, seriesContext) : []),
     ]),
   ] : [
     input('title', '任务简称', d.title),
@@ -536,4 +508,27 @@ async function detail(state, event, context, forms, a) {
   return {state, header: {title: state.step === 'time' ? '编辑时间' : '任务详情', ...(state.step === 'time' ? {backEvent: {type: 'back'}} : {})}, tree: {type: 'column', key: 'planner:detail:' + current.id, children,
     ...(state.step === 'time' ? (!current.locked ? {footer: fullWidthFooter(button('应用安排', {type: 'schedule'}, 'filled'))} : {}) : {footer: fullWidthFooter(button('保存修改', {type: 'saveDetail'}, 'filled'))}),
   }};
+}
+
+function seriesTimeControls(d, context) {
+  const interval = context.rules.interval, scope = d.scheduleScope || 'only';
+  const delta = (a, b) => Math.round((Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / 86400000);
+  const short = date => `${Number(date.slice(5, 7))}月${Number(date.slice(8))}日`;
+  const before = context.previous ? delta(d.startDate, context.previous.date) : null;
+  const after = context.next ? delta(context.next.date, scope === 'following' ? context.current.date : d.startDate) : null;
+  const valid = [before, after].filter(value => value !== null).every(value => value >= interval.minDays && value <= interval.maxDays);
+  const affected = context.following || [];
+  return [
+    {type: 'formSection', title: '调整范围', children: [
+      {type: 'choiceCard', title: '仅本次', subtitle: '其他任务日期保持不变', selected: scope === 'only', event: {type: 'field', key: 'scheduleScope', value: 'only'}},
+      {type: 'choiceCard', title: '本次及以后', subtitle: `联动后续${affected.length}次安排`, selected: scope === 'following', event: {type: 'field', key: 'scheduleScope', value: 'following'}},
+      ...(scope === 'following' && affected.length ? [text('受影响：' + affected.map(item => short(item.date) + (item.manual ? '（已手动调整）' : '')).join('、'))] : []),
+      ...(scope === 'following' && affected.some(item => item.manual) ? [{type: 'notice', tone: 'warning', text: '后续存在手动调整，请选择仅本次或逐项修改。'}] : []),
+    ]},
+    {type: 'formSection', title: '间隔检查', children: [
+      ...(context.previous ? [row('距上一次（' + short(context.previous.date) + '）', before + '天')] : [text('这是首次安排')]),
+      ...(context.next ? [row('距下一次（' + short(context.next.date) + '）', after + '天')] : [text('这是当前最后一次安排')]),
+      {type: 'notice', tone: valid ? 'success' : 'warning', text: valid ? `符合${interval.minDays}～${interval.maxDays}天间隔` : '超出间隔规则，请调整日期或选择联动后续安排。'},
+    ]},
+  ];
 }

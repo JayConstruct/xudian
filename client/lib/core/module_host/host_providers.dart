@@ -3,10 +3,12 @@ import '../security/capability_registry.dart';
 import 'script_app_module.dart';
 import 'host_manager_page.dart';
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -35,6 +37,12 @@ final moduleHostProvider = FutureProvider<ModuleHost>(
       directory: Directory('${support.path}/modules-v3'),
       systemTimezoneResolver: const SystemTimezonePlatform().resolve,
     );
+    final lifecycle = _HostClockLifecycle(host);
+    WidgetsBinding.instance.addObserver(lifecycle);
+    final state = WidgetsBinding.instance.lifecycleState;
+    if (state != null && state != AppLifecycleState.resumed) {
+      host.setClockAutomationActive(false);
+    }
     host.validateCandidate = (candidate) {
       final registry = ModuleRegistry([
         HostManagerModule(),
@@ -46,8 +54,11 @@ final moduleHostProvider = FutureProvider<ModuleHost>(
       registry.dispose();
     };
     ref.onDispose(() {
-      host.close();
-      store.close();
+      WidgetsBinding.instance.removeObserver(lifecycle);
+      unawaited(() async {
+        await host.close();
+        await store.close();
+      }());
     });
     await host.initialize();
     final catalog = (jsonDecode(
@@ -147,6 +158,16 @@ final moduleHostProvider = FutureProvider<ModuleHost>(
     return host;
   }),
 );
+
+class _HostClockLifecycle with WidgetsBindingObserver {
+  _HostClockLifecycle(this.host);
+  final ModuleHost host;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    host.setClockAutomationActive(state == AppLifecycleState.resumed);
+  }
+}
 
 final hostPublisherRegistryProvider = FutureProvider<TrustedPublisherRegistry>(
   (ref) async => TrustedPublisherRegistry.fromJson(

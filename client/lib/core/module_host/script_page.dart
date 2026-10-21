@@ -28,6 +28,7 @@ import '../../app/app_ui_feedback.dart';
 import '../../app/app_motion.dart';
 import '../ui/responsive_content_grid.dart';
 import '../ui/input_validation.dart';
+import '../ui/script_form_controls.dart';
 
 import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
@@ -1925,7 +1926,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         duration: Duration(milliseconds: duration.toInt()),
         spacing: spacing.toDouble(),
         scrollController: scrolling
-            ? scrollControllers.putIfAbsent('page', ScrollController.new)
+            ? scrollControllers.putIfAbsent(
+                '${tree?['scrollKey'] ?? 'page'}',
+                ScrollController.new,
+              )
             : null,
         padding: scrolling
             ? EdgeInsets.fromLTRB(
@@ -2140,6 +2144,42 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         );
       case 'grid':
         return ResponsiveContentGrid(children: children);
+      case 'segmented':
+        final items = objects(spec['items']);
+        if (items.isEmpty || items.length > 12) {
+          throw const FormatException('Invalid segmented choices');
+        }
+        return ScriptSegmentedControl(
+          key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
+          labels: [for (final item in items) '${bind(item['label']) ?? ''}'],
+          selectedIndex: (bind(spec['selectedIndex']) as num? ?? 0).toInt(),
+          onSelected: busy || bind(spec['disabled']) == true
+              ? null
+              : (index) => _render(bind(items[index]['event'])),
+        );
+      case 'formSection':
+        final action = spec['action'] is Map ? object(spec['action']) : null;
+        return ScriptFormSection(
+          key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
+          title: '${bind(spec['title']) ?? ''}',
+          actionLabel: action == null ? null : '${bind(action['text']) ?? ''}',
+          onAction: busy || action?['event'] == null
+              ? null
+              : () => _render(bind(action!['event'])),
+          children: children,
+        );
+      case 'notice':
+        return ScriptNotice(text: text, tone: '${spec['tone'] ?? 'info'}');
+      case 'choiceCard':
+        return ScriptChoiceCard(
+          key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
+          title: '${bind(spec['title']) ?? ''}',
+          subtitle: '${bind(spec['subtitle']) ?? ''}',
+          selected: bind(spec['selected']) == true,
+          onTap: busy || event == null || bind(spec['disabled']) == true
+              ? null
+              : () => _render(event),
+        );
       case 'inset':
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2162,6 +2202,23 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           children: children,
         );
       case 'card':
+        if (spec['tone'] == 'soft' || spec['tone'] == 'selected') {
+          final scheme = Theme.of(uiContext).colorScheme;
+          return Material(
+            color: spec['tone'] == 'selected'
+                ? scheme.primary.withValues(alpha: .10)
+                : scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          );
+        }
         return ContentSurface(
           child: Padding(
             padding: EdgeInsets.all(tree?['compact'] == true ? 8 : 16),
@@ -2213,11 +2270,27 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           trailing: trailing == false
               ? null
               : trailing is String
-              ? Text(trailing)
+              ? ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.sizeOf(uiContext).width * .42,
+                  ),
+                  child: Text(
+                    trailing,
+                    textAlign: TextAlign.end,
+                    style: spec['trailingAccent'] == true
+                        ? TextStyle(
+                            color: Theme.of(uiContext).colorScheme.primary,
+                          )
+                        : null,
+                  ),
+                )
               : event == null
               ? null
               : const UiIcon(Icons.chevron_right),
           enabled: enabled,
+          selected: bind(spec['selected']) == true,
+          selectedTileColor: Theme.of(uiContext).colorScheme.primary
+              .withValues(alpha: .08),
           onTap: event == null || !enabled ? null : () => _render(event),
         );
       case 'source':
@@ -2537,7 +2610,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                         )
                       : null
                 : '${bind(spec['errorText'])}',
-            prefixIcon: spec['inputMode'] == 'search'
+            prefixIcon:
+                spec['inputMode'] == 'search' && spec['showSearchIcon'] != false
                 ? const UiIcon(Icons.search)
                 : null,
             suffixIcon: spec['clearable'] == true && controller.text.isNotEmpty
@@ -2736,8 +2810,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   Widget pageContent() {
     final spec = tree!;
     final rootChildren = objects(spec['children']);
+    final scrollKey = '${spec['scrollKey'] ?? 'page'}';
     final controller = scrollControllers.putIfAbsent(
-      'page',
+      scrollKey,
       ScrollController.new,
     );
     if (spec['followEnd'] != null &&
@@ -2784,10 +2859,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                         spec['template'] == null &&
                         rootChildren.length > 50
                   ? ListView.builder(
-                      controller: scrollControllers.putIfAbsent(
-                        'page',
-                        ScrollController.new,
-                      ),
+                      key: PageStorageKey(scrollKey),
+                      controller: controller,
                       padding: EdgeInsets.fromLTRB(
                         spec['edgeToEdge'] == true
                             ? 0
@@ -2823,10 +2896,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                       },
                     )
                   : SingleChildScrollView(
-                      controller: scrollControllers.putIfAbsent(
-                        'page',
-                        ScrollController.new,
-                      ),
+                      key: PageStorageKey(scrollKey),
+                      controller: controller,
                       padding: EdgeInsets.fromLTRB(
                         spec['edgeToEdge'] == true
                             ? 0

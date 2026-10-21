@@ -48,3 +48,48 @@ export function taskCandidate(t,a,r){
   dueDate,requiresSelection:!dueDate,planningEndDate:r.endDate};
 }
 export function intervalsOverlap(a,b){return Date.parse(a.startAt)<Date.parse(b.endAt)&&Date.parse(b.startAt)<Date.parse(a.endAt);}
+
+// Creation drafts deliberately contain relative rules, never historical task IDs.
+export function creationDraft(value,today,timezone){
+ const rules=value.rules||{},interval=rules.interval||{minDays:4,maxDays:6};
+ if(Object.keys(rules).some(k=>!['interval','weekdays','timeWindow','optional','weekly','repeat'].includes(k)))throw Error('包含尚未支持的规则，请移除后重试');
+ if(rules.weekly||rules.repeat||rules.optional)throw Error('此批量入口暂不支持该重复规则，请使用间隔规则');
+ const minDays=integer(interval.minDays,1,366,'最小间隔'),maxDays=integer(interval.maxDays,minDays,366,'最大间隔');
+ const v=rule({title:value.title,kind:'interval',startDate:value.firstDate||today,timezone:value.timezone||timezone,estimatedMinutes:value.estimatedMinutes??30,priority:value.priority??0,maxGapDays:maxDays,earlyDays:maxDays-minDays,firstDeadline:value.firstDate||today,weekdays:rules.weekdays||[1,2,3,4,5,6,7],times:[rules.timeWindow||{start:'09:00',end:'21:00'}]});
+ if(value.days!==undefined&&value.days!==30)throw Error('滚动规划窗口固定为未来30天');
+ if(value.autoExtend!==undefined&&typeof value.autoExtend!=='boolean')throw Error('持续补齐需为开关');
+ if(value.notes!==undefined&&(typeof value.notes!=='string'||value.notes.length>10000))throw Error('任务描述最多10000字');
+ return {title:v.title,notes:value.notes||'',estimatedMinutes:v.estimatedMinutes,priority:v.priority,timezone:v.timezone,firstDate:v.startDate,days:30,autoExtend:value.autoExtend!==false,rules:{interval:{minDays,maxDays},weekdays:v.weekdays,timeWindow:v.times[0]}};
+}
+
+export function arrangeCreation(draft,{seriesId='draft',startDate,endDate,records=[],tasks=[],a,busy=[],adjustments=[]}){
+ let fixedSnapshots=null;
+ if(adjustments.length){
+  const baseline=arrangeCreation(draft,{seriesId,startDate,endDate,records,tasks,a,busy});fixedSnapshots=Object.fromEntries(baseline.assigned.map(c=>[c.id,{date:c.date,start:c.start,end:c.end}]));
+  for(const adjustment of adjustments){const current=baseline.assigned.find(c=>c.id===adjustment.id);if(!current)continue;
+   if(adjustment.scope==='following'){if(adjustments.some(x=>x.id!==adjustment.id&&baseline.assigned.some(c=>c.id===x.id&&c.sequence>current.sequence)))throw Error('后续已有手动安排，请仅调整本次或先还原后续修改');const delta=Math.round((Date.parse(day(adjustment.date))-Date.parse(current.date))/86400000),offset=minute(adjustment.start)-minute(current.start);for(const c of baseline.assigned.filter(c=>c.sequence>current.sequence)){const from=minute(c.start)+offset,to=minute(c.end)+offset;if(from<0||to>=1440)throw Error('联动后的时段跨午夜，请调整时间');fixedSnapshots[c.id]={date:add(c.date,delta),start:time(from),end:time(to)};}}
+   fixedSnapshots[adjustment.id]=adjustment;
+  }
+ }
+ const byTask=new Map(tasks.map(t=>[t.id,t])),history=records.filter(o=>o.seriesId===seriesId).sort((x,y)=>x.sequence-y.sequence),latest=history[history.length-1];
+ const assigned=[],unassigned=[],conflicts=[],warnings=[],occupied=busy.map(b=>({...b}));
+ const interval=draft.rules.interval,min=interval.minDays,max=interval.maxDays;
+ let previous=latest?(byTask.get(latest.taskId)?.plannedDate||latest.date):null,sequence=latest?latest.sequence+1:0;
+ const seen=new Set();
+ for(const adjustment of adjustments){if(!adjustment||typeof adjustment.id!=='string'||seen.has(adjustment.id))throw Error('调整实例重复或无效');seen.add(adjustment.id);day(adjustment.date);if(minute(adjustment.start)>=minute(adjustment.end))throw Error('调整时段不能跨午夜');if(adjustment.scope&&!['only','following'].includes(adjustment.scope))throw Error('调整范围无效');}
+ const effective={...a,weekly:Object.keys(a.weekly).length?a.weekly:Object.fromEntries([1,2,3,4,5,6,7].map(d=>[d,[draft.rules.timeWindow]]))};
+ for(let n=0;n<200;n++,sequence++){
+  let from=previous?add(previous,min):draft.firstDate>startDate?draft.firstDate:startDate,to=previous?add(previous,max):add(from,max-1);
+  if(from<startDate)from=startDate;
+  if(to<startDate){to=add(startDate,max-min);warnings.push('上次安排距今已超出最大间隔；保留原任务，从今天继续规划');}
+  if(from>endDate)break;if(to>endDate)to=endDate;
+  const id=seriesId+':batch:'+sequence,override=fixedSnapshots?.[id]||adjustments.find(x=>x.id===id),c={id,seriesId,sequence,index:sequence+1,ruleId:null,kind:previous?'interval':'once',title:draft.title,notes:draft.notes,estimatedMinutes:draft.estimatedMinutes,priority:draft.priority,timezone:draft.timezone,optional:false,weekdays:draft.rules.weekdays,times:[draft.rules.timeWindow],startDate:from,endDate:to,windowStart:from,windowEnd:to,maxGapDays:max,earlyDays:max-min};
+  if(override&&minute(override.end)-minute(override.start)!==draft.estimatedMinutes){unassigned.push({...c,reason:'调整时长与任务耗时不同，请修改结束时间'});break;}
+  const planned=arrange([c],effective,{startDate,endDate},occupied,override?{[id]:override}:{});
+  if(!planned.assigned.length){unassigned.push({...c,reason:planned.unassigned[0]?.reason||'此窗口没有可用时间'});break;}
+  const chosen=planned.assigned[0];if(adjustments.some(x=>x.id===id||x.scope==='following'&&Number(x.id.split(':').pop())<sequence))chosen.manualAdjusted=true;assigned.push(chosen);occupied.push({date:chosen.date,start:minute(chosen.start),end:minute(chosen.end)});previous=chosen.date;
+ }
+ for(const id of seen)if(!assigned.some(c=>c.id===id)&&!unassigned.some(c=>c.id===id))conflicts.push('调整实例已不在当前30天窗口：'+id);
+ if(!latest&&draft.firstDate>endDate)conflicts.push('首次日期超出未来30天，请选择窗口内的日期');
+ return {assigned,unassigned,conflicts,warnings};
+}

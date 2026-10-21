@@ -200,7 +200,10 @@ class ModuleHost {
   void discardInstallBatch(HostInstallBatchPlan plan) =>
       _installBatchPlans.remove(plan.id);
   void _notifyRegistry() {
-    if (!_batchInstalling) registryChanges.add(null);
+    if (!_batchInstalling) {
+      registryChanges.add(null);
+      unawaited(checkClockAutomation(force: true));
+    }
   }
 
   DateTime Function() clockNow = DateTime.now;
@@ -227,7 +230,77 @@ class ModuleHost {
   Future<void> _lifecycle = Future.value();
   StreamSubscription? _automationSubscription;
   Future<void> _automationTail = Future.value();
+  Timer? _clockAutomationTimer;
+  bool _clockAutomationReady = false;
+  bool _clockAutomationActive = true;
+  bool _closed = false;
+  int? _clockAutomationMinute;
   Future<void> drainAutomation() => _automationTail;
+
+  /// Native clock notifications use the same reviewed automation grants as
+  /// module events. Services decide civil dates in their own configured zones.
+  /// Neither page queries nor script-published events can invoke this path.
+  Future<void> checkClockAutomation({bool force = false}) {
+    if (_closed ||
+        preview ||
+        !_clockAutomationReady ||
+        !_clockAutomationActive) {
+      return Future.value();
+    }
+    // Ordinary module lifecycle changes must not create a clock work queue.
+    // Registering an otherwise empty Future chain in a UI caller's zone can
+    // leave shutdown waiting on a suspended widget/fake-async event loop.
+    final hasClockRules = instances.values.any(
+      (instance) =>
+          store.active(instance.actor) &&
+          instance.actor.permissions.contains('automation.execute') &&
+          (instance.package.definition['rules'] as List? ?? []).any((raw) {
+            final rule = object(raw);
+            final publishers =
+                rule['publishers'] as List? ??
+                [rule['publisher'] ?? instance.actor.moduleId];
+            return rule['event'] == 'host.clock.tick' &&
+                publishers.contains('app.host');
+          }),
+    );
+    if (!hasClockRules) return Future.value();
+    final now = clockNow().toUtc();
+    final minute = now.millisecondsSinceEpoch ~/ Duration.millisecondsPerMinute;
+    if (!force && _clockAutomationMinute == minute) return _automationTail;
+    _clockAutomationMinute = minute;
+    _automationTail = _workerZone.run(
+      () => _automationTail
+          .then((_) async {
+            // Installation/enable must finish before an automatic command can read
+            // its package, actor, or persistent data.
+            await _lifecycle;
+            if (_closed || !_clockAutomationActive) return;
+            await _automate({
+              'moduleId': 'app.host',
+              'event': {'type': 'host.clock.tick', 'at': now.toIso8601String()},
+            }, trustedClock: true);
+          })
+          .catchError((Object error) {
+            // A failed periodic check must never block navigation or future ticks.
+          }),
+    );
+    return _automationTail;
+  }
+
+  void setClockAutomationActive(bool active) {
+    if (_closed) return;
+    final resumed = active && !_clockAutomationActive;
+    _clockAutomationActive = active;
+    _clockAutomationTimer?.cancel();
+    _clockAutomationTimer = null;
+    if (!active || !_clockAutomationReady) return;
+    _clockAutomationTimer = _workerZone.createPeriodicTimer(
+      const Duration(minutes: 1),
+      (_) => unawaited(checkClockAutomation()),
+    );
+    if (resumed) unawaited(checkClockAutomation(force: true));
+  }
+
   Future<void> _serialize(Future<void> Function() operation) {
     final next = _lifecycle.then((_) => operation());
     _lifecycle = next.then((_) {}, onError: (Object error) {});
@@ -339,11 +412,16 @@ class ModuleHost {
       }
     }
     _automationSubscription ??= store.events.stream.listen((message) {
-      _automationTail = _automationTail
-          .then((_) => _automate(message))
-          .catchError((Object error) {});
+      _automationTail = _workerZone.run(
+        () => _automationTail
+            .then((_) => _automate(message))
+            .catchError((Object error) {}),
+      );
     });
     await store.drainOutbox();
+    _clockAutomationReady = true;
+    setClockAutomationActive(_clockAutomationActive);
+    unawaited(checkClockAutomation(force: true));
   }
 
   Future<void> _fail(String id, String reason) async {
@@ -2512,9 +2590,15 @@ class ModuleHost {
     return true;
   }
 
-  Future<void> _automate(Map<String, Object?> message) async {
+  Future<void> _automate(
+    Map<String, Object?> message, {
+    bool trustedClock = false,
+  }) async {
     final event = object(message['event']);
+    // Reserve this event name even if a module forges a matching publisher.
+    if (event['type'] == 'host.clock.tick' && !trustedClock) return;
     for (final instance in instances.values.toList()) {
+      if (_closed || !store.active(instance.actor)) continue;
       if (!instance.actor.permissions.contains('automation.execute')) continue;
       for (final raw in instance.package.definition['rules'] as List? ?? []) {
         final rule = object(raw);
@@ -2555,10 +2639,21 @@ class ModuleHost {
           ServiceRef(instance.actor.moduleId, rule['serviceId'] as String, 1),
           {'ruleId': rule['id'], 'event': event},
         ).timeout(const Duration(seconds: 10));
+        if (event['type'] == 'host.clock.tick' &&
+            object(session.result)['skipped'] == true &&
+            session.writes.isEmpty &&
+            session.events.isEmpty) {
+          return;
+        }
         final plan = store.seal(session);
         review(plan.id, instance.actor);
         await commit(instance.actor, plan.id);
-        if (object(session.result)['skipped'] == true) status = 'skipped';
+        if (object(session.result)['skipped'] == true) {
+          // An unchanged rolling horizon is the normal minute-tick outcome.
+          // Preserve useful failure/change history without logging empty polls.
+          if (event['type'] == 'host.clock.tick') return;
+          status = 'skipped';
+        }
       }
     } catch (e) {
       status = 'failure';
@@ -2664,7 +2759,12 @@ class ModuleHost {
   }
 
   Future<void> close() async {
+    _closed = true;
+    _clockAutomationTimer?.cancel();
     await _automationSubscription?.cancel();
+    // A host that was never initialized has no work to drain. Its initial
+    // completed Future may belong to a widget's now-idle fake async zone.
+    if (_automationSubscription != null) await _automationTail;
     for (final id in instances.keys.toList()) {
       _stop(id);
     }

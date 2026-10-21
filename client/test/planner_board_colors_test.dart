@@ -113,7 +113,7 @@ void main() {
     );
     expect(texture, findsOneWidget);
     expect(tester.widget<CustomPaint>(texture).painter, isNotNull);
-    expect(find.byIcon(Icons.school_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.school_outlined), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -132,7 +132,7 @@ void main() {
             matching: find.byType(Container),
           ),
         )
-        .map((container) => container.decoration)
+        .map((container) => container.foregroundDecoration)
         .whereType<BoxDecoration>()
         .map((decoration) => decoration.border)
         .whereType<Border>();

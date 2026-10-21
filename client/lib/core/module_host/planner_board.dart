@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+import '../../app/frosted_toolbar_surface.dart';
 import '../ui/content_colors.dart';
 import '../ui/ui_motion.dart';
 import 'planner_timeline_window.dart';
@@ -203,6 +204,19 @@ class _PlannerBoardState extends State<PlannerBoard>
   double _columnWidth = 112;
   double _cardHeight = 48;
   BoardItem? _selectedItem;
+  final _selectionTapGroup = Object();
+
+  void _clearSelection(PointerDownEvent event) {
+    if (_selectedItem != null && !_dragActive.value) {
+      setState(() => _selectedItem = null);
+    }
+  }
+
+  Widget _selectionRegion(Widget child) => TapRegion(
+    groupId: _selectionTapGroup,
+    onTapOutside: _clearSelection,
+    child: child,
+  );
   List<BoardItem>? _focusDays;
   List<BoardItem> _focusItems = const [];
   int? _focusStart, _focusEnd;
@@ -1037,9 +1051,7 @@ class _PlannerBoardState extends State<PlannerBoard>
         (elapsed - _scrollElapsed).inMicroseconds /
         Duration.microsecondsPerSecond;
     _scrollElapsed = elapsed;
-    final position = _pointerPosition,
-        viewport = _viewport,
-        item = _activeItem;
+    final position = _pointerPosition, viewport = _viewport, item = _activeItem;
     if (!mounted || position == null || viewport == null || item == null) {
       _scrollTicker.stop();
       return;
@@ -1736,11 +1748,8 @@ class _PlannerBoardState extends State<PlannerBoard>
     );
     final full = scheduled && height >= timeHeight * 2 + titleHeight + 12;
     final two = scheduled && height >= titleHeight + timeHeight + 12;
-    final icon = titleLines > 1
-        ? null
-        : item['readOnly'] == true
-        ? Icons.school_outlined
-        : item['fixed'] == true
+    final icon =
+        titleLines == 1 && item['readOnly'] != true && item['fixed'] == true
         ? Icons.lock_rounded
         : null;
     final title = Row(
@@ -1799,7 +1808,9 @@ class _PlannerBoardState extends State<PlannerBoard>
             onTap: () => _activate(item),
             child: Container(
               height: compactCandidate ? height - 10 : height,
-              decoration: BoxDecoration(
+              // Paint outlines over the card without adding border padding.
+              // Selecting a block must keep its text geometry unchanged.
+              foregroundDecoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(9),
                 border:
                     _selectedItem?['id'] == item['id'] ||
@@ -2103,7 +2114,7 @@ class _PlannerBoardState extends State<PlannerBoard>
         ),
       );
     }
-    return card;
+    return _selectedItem?['id'] == item['id'] ? _selectionRegion(card) : card;
   }
 
   String _edgeTime(BoardItem item, bool beginning) {
@@ -2794,58 +2805,60 @@ class _PlannerBoardState extends State<PlannerBoard>
               top: handleTop.toDouble(),
               width: math.min(24, laneWidth),
               height: 24,
-              child: Tooltip(
-                message: '拖动调整时长',
-                child: Listener(
-                  key: ValueKey('resize:${segment.key}'),
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (details) => _resizeDown = details.position,
-                  child: Draggable<BoardItem>(
-                    data: {...item, '_boardGeneration': _viewGeneration},
-                    rootOverlay: true,
-                    dragAnchorStrategy: (draggable, context, position) {
-                      _feedbackPointer.value = position;
-                      return Offset.zero;
-                    },
-                    onDragUpdate: (details) =>
-                        _feedbackPointer.value = details.globalPosition,
-                    onDragStarted: () {
-                      if (_resizeDown != null) {
-                        _beginResize(item, _resizeDown!);
-                        _pinnedSegment = segment.key;
-                      }
-                    },
-                    onDragEnd: (_) => _clearDrag(),
-                    feedback: AnimatedBuilder(
-                      animation: Listenable.merge([
-                        _feedbackPointer,
-                        _proposal,
-                        _validation,
-                      ]),
-                      builder: (context, _) => _dashboard
-                          ? _dragHint(context)
-                          : _ScreenClampedFeedback(
-                              pointer: _feedbackPointer.value,
-                              safeBounds: _feedbackBounds(context),
-                              child: Material(
-                                elevation: 4,
-                                borderRadius: BorderRadius.circular(8),
-                                child: const Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Text('调整时长'),
+              child: _selectionRegion(
+                Tooltip(
+                  message: '拖动调整时长',
+                  child: Listener(
+                    key: ValueKey('resize:${segment.key}'),
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: (details) => _resizeDown = details.position,
+                    child: Draggable<BoardItem>(
+                      data: {...item, '_boardGeneration': _viewGeneration},
+                      rootOverlay: true,
+                      dragAnchorStrategy: (draggable, context, position) {
+                        _feedbackPointer.value = position;
+                        return Offset.zero;
+                      },
+                      onDragUpdate: (details) =>
+                          _feedbackPointer.value = details.globalPosition,
+                      onDragStarted: () {
+                        if (_resizeDown != null) {
+                          _beginResize(item, _resizeDown!);
+                          _pinnedSegment = segment.key;
+                        }
+                      },
+                      onDragEnd: (_) => _clearDrag(),
+                      feedback: AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _feedbackPointer,
+                          _proposal,
+                          _validation,
+                        ]),
+                        builder: (context, _) => _dashboard
+                            ? _dragHint(context)
+                            : _ScreenClampedFeedback(
+                                pointer: _feedbackPointer.value,
+                                safeBounds: _feedbackBounds(context),
+                                child: Material(
+                                  elevation: 4,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text('调整时长'),
+                                  ),
                                 ),
                               ),
-                            ),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 24,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: _selectedItem?['id'] == item['id']
-                              ? scheme.primary
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 24,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: _selectedItem?['id'] == item['id']
+                                ? scheme.primary
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
                       ),
                     ),
@@ -3090,106 +3103,96 @@ class _PlannerBoardState extends State<PlannerBoard>
         sourceLabel != null &&
         sourceLabel.isNotEmpty &&
         (item['readOnly'] == true || sourceLabel != '任务');
-    return Material(
-      key: const ValueKey('planner-selection-panel'),
-      elevation: 2,
-      shadowColor: scheme.shadow.withValues(alpha: .15),
-      color: scheme.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 16, 14),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${item['title'] ?? ''}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => setState(() => _selectedItem = null),
-                  icon: const Icon(Icons.close),
-                  tooltip: '关闭选中任务',
-                ),
-              ],
-            ),
-            Text(
-              '${_full(start)} — ${_midnight(start) == _midnight(end) ? _time(end) : _full(end)} · ${_elapsed(_duration(item) ?? end.difference(start))}',
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-            if ((item['deadlineText'] ?? item['deadlineSummary'])
-                    ?.toString()
-                    .isNotEmpty ==
-                true)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '${item['deadlineText'] ?? _summary(item)}',
-                  style: TextStyle(
-                    color: item['overdue'] == true
-                        ? scheme.error
-                        : scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            if (showSource) Text(sourceLabel),
-            if (fallbackGaps.isNotEmpty)
-              Wrap(
-                spacing: 12,
+    return _selectionRegion(
+      FrostedToolbarSurface(
+        key: const ValueKey('planner-selection-panel'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  for (final gap in fallbackGaps)
-                    Text(
-                      '空闲${_elapsed(gap.$2.difference(gap.$1))}',
-                      style: Theme.of(context).textTheme.labelSmall,
+                  Expanded(
+                    child: Text(
+                      '${item['title'] ?? ''}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => _selectedItem = null),
+                    icon: const Icon(Icons.close),
+                    tooltip: '关闭选中任务',
+                  ),
                 ],
               ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                if (edit is Map && _movable(item)) ...[
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => widget.onEvent({
-                        ...Map<String, Object?>.from(edit),
-                        'id': item['id'],
-                      }),
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('编辑时间'),
+              Text(
+                '${_full(start)} — ${_midnight(start) == _midnight(end) ? _time(end) : _full(end)} · ${_elapsed(_duration(item) ?? end.difference(start))}',
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+              if ((item['deadlineText'] ?? item['deadlineSummary'])
+                      ?.toString()
+                      .isNotEmpty ==
+                  true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${item['deadlineText'] ?? _summary(item)}',
+                    style: TextStyle(
+                      color: item['overdue'] == true
+                          ? scheme.error
+                          : scheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: FilledButton.tonal(
-                    onPressed: item['event'] == null
-                        ? null
-                        : () => widget.onEvent(item['event']),
-                    child: const Text('查看详情'),
+                ),
+              if (showSource) Text(sourceLabel),
+              if (fallbackGaps.isNotEmpty)
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    for (final gap in fallbackGaps)
+                      Text(
+                        '空闲${_elapsed(gap.$2.difference(gap.$1))}',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  if (edit is Map && _movable(item)) ...[
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => widget.onEvent({
+                          ...Map<String, Object?>.from(edit),
+                          'id': item['id'],
+                        }),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: const Text('编辑时间'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: FilledButton.tonal(
+                      onPressed: item['event'] == null
+                          ? null
+                          : () => widget.onEvent(item['event']),
+                      child: const Text('查看详情'),
+                    ),
                   ),
-                ),
-                IconButton(
-                  onPressed: () => _zoom([item]),
-                  icon: const Icon(Icons.zoom_in),
-                  tooltip: '放大该时段',
-                ),
-              ],
-            ),
-          ],
+                  IconButton(
+                    onPressed: () => _zoom([item]),
+                    icon: const Icon(Icons.zoom_in),
+                    tooltip: '放大该时段',
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -4852,9 +4855,9 @@ class _PlannerBoardState extends State<PlannerBoard>
               ),
             if (_selectedItem != null && _dashboard)
               Positioned(
-                left: 0,
-                right: 0,
-                bottom: widget.bottomInset,
+                left: 12,
+                right: 12,
+                bottom: widget.bottomInset + 8,
                 child: AnimatedBuilder(
                   animation: Listenable.merge([
                     _vertical,
@@ -5208,11 +5211,10 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
       color: theme.colorScheme.onSurfaceVariant,
     );
     final timeStyle = detailStyle.copyWith(fontSize: 10);
-    final icon = item['_titleLines'] == 2
-        ? null
-        : item['readOnly'] == true
-        ? Icons.school_outlined
-        : item['fixed'] == true
+    final icon =
+        item['_titleLines'] != 2 &&
+            item['readOnly'] != true &&
+            item['fixed'] == true
         ? Icons.lock_rounded
         : null;
     return LayoutBuilder(

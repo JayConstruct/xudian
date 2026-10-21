@@ -37,12 +37,14 @@ class DetailPage extends StatelessWidget {
     required this.title,
     required this.child,
     this.leading,
+    this.actions,
     this.titleMaxLines = 1,
   });
 
   final String title;
   final Widget child;
   final Widget? leading;
+  final List<Widget>? actions;
   final int titleMaxLines;
 
   @override
@@ -80,6 +82,7 @@ class DetailPage extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           leading: leading,
+          actions: actions,
           centerTitle: false,
         ),
         body: SafeArea(

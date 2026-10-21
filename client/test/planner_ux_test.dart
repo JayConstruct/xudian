@@ -623,7 +623,7 @@ void main() {
         return true;
       };
       await page(event: {'type': 'add'});
-      expect(presentations.single['heightFactor'], .56);
+      expect(presentations.single['heightFactor'], .94);
       var result = await page(pageId: 'app.planner.quickAdd');
       expect(object(result['tree'])['compact'], isTrue);
       expect(object(result['tree'])['spacing'], 8);
