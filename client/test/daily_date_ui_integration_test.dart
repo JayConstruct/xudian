@@ -62,6 +62,11 @@ Future<void> _settle(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+void _expectCourseSummary(int count) {
+  expect(find.byType(AgendaItem), findsOneWidget);
+  expect(find.text('全部课程（$count）'), findsOneWidget);
+}
+
 Future<void> _until(
   WidgetTester tester,
   bool Function() ready, {
@@ -283,7 +288,14 @@ void main() {
       );
       expect(find.text('今天的任务'), findsOneWidget);
       expect(find.text('明天的任务'), findsNothing);
+      _expectCourseSummary(3);
+      await tester.tap(find.text('全部课程（3）'));
+      await _settle(tester);
       expect(find.byType(AgendaItem), findsNWidgets(3));
+      await tester.ensureVisible(find.text('收起课程'));
+      await tester.tap(find.text('收起课程'));
+      await _settle(tester);
+      _expectCourseSummary(3);
       await tester.ensureVisible(find.byTooltip('添加任务'));
       await tester.tap(find.byTooltip('添加任务'));
       await _settle(tester);
@@ -305,7 +317,7 @@ void main() {
       );
       expect(find.text('今天的任务'), findsNothing);
       expect(find.text('明天的任务'), findsOneWidget);
-      expect(find.byType(AgendaItem), findsNWidgets(2));
+      _expectCourseSummary(2);
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller,
         same(controller),
@@ -706,7 +718,7 @@ void main() {
 
       expect(headerDate('10月10日'), findsOneWidget);
       expect(find.text('今天的任务'), findsOneWidget);
-      expect(find.byType(AgendaItem), findsNWidgets(3));
+      _expectCourseSummary(3);
       await swipe(-60);
       expect(headerDate('10月11日'), findsOneWidget);
       expectWorkspaceAndDraft();
@@ -717,14 +729,14 @@ void main() {
       );
       expect(find.text('明天的任务'), findsOneWidget);
       expect(find.text('今天的任务'), findsNothing);
-      expect(find.byType(AgendaItem), findsNWidgets(2));
+      _expectCourseSummary(2);
       expectWorkspaceAndDraft();
       await swipe(60);
       expect(headerDate('10月10日'), findsOneWidget);
       await _settle(tester);
       expect(find.text('今天的任务'), findsOneWidget);
       expect(find.text('明天的任务'), findsNothing);
-      expect(find.byType(AgendaItem), findsNWidgets(3));
+      _expectCourseSummary(3);
       expectWorkspaceAndDraft();
 
       final gate = Completer<void>();
@@ -767,7 +779,7 @@ void main() {
         '2026-10-10',
       );
       expect(find.text('今天的任务'), findsOneWidget);
-      expect(find.byType(AgendaItem), findsNWidgets(3));
+      _expectCourseSummary(3);
       expectWorkspaceAndDraft();
       final finalStates = find
           .byType(ScriptPage)
@@ -804,7 +816,7 @@ void main() {
       Finder headerDate(String date) =>
           find.descendant(of: header, matching: find.textContaining(date));
       expect(find.text('今天的任务'), findsOneWidget);
-      expect(find.byType(AgendaItem), findsNWidgets(3));
+      _expectCourseSummary(3);
       final courseWidgets = tester
           .widgetList<AgendaItem>(find.byType(AgendaItem))
           .toList();
@@ -834,7 +846,7 @@ void main() {
         expect(find.text('今天的任务').hitTestable(), findsNothing);
         expect(find.byType(AgendaItem).hitTestable(), findsNothing);
         expect(find.text('今天的任务', skipOffstage: false), findsOneWidget);
-        expect(find.byType(AgendaItem, skipOffstage: false), findsNWidgets(3));
+        expect(find.byType(AgendaItem, skipOffstage: false), findsOneWidget);
         expect(find.semantics.byLabel('今天的任务'), findsNothing);
       }
       // The header permits an ABA reversal while the wave's date band is inert.
@@ -868,7 +880,7 @@ void main() {
       expect(tester.state(strip), same(stripState));
       expect(find.text('今天的任务'), findsNothing);
       expect(find.text('明天的任务'), findsOneWidget);
-      expect(find.byType(AgendaItem), findsNWidgets(2));
+      _expectCourseSummary(2);
       expect(
         tester.widgetList<AgendaItem>(find.byType(AgendaItem)).toList(),
         isNot(equals(courseWidgets)),
@@ -1111,7 +1123,7 @@ void main() {
         findsOneWidget,
         reason: _hitDiagnostics(tester, find.text('明天的任务')),
       );
-      expect(find.byType(AgendaItem), findsNWidgets(2));
+      _expectCourseSummary(2);
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller,
         same(draft),
@@ -1174,7 +1186,7 @@ void main() {
       await _settle(tester);
       expect(find.text('明天的任务'), findsOneWidget);
       expect(find.text('预取后新增的明天任务'), findsOneWidget);
-      expect(find.byType(AgendaItem), findsNWidgets(2));
+      _expectCourseSummary(2);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
