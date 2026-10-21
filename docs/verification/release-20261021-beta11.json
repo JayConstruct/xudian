@@ -1,0 +1,132 @@
+{
+  "date": "2026-10-21",
+  "sourceCommit": "a1596402fa0668204c20117e2634f93eae7f187a",
+  "moduleSourceCommit": "afe01ae9e33016a8a108290668d72f2bf1ff9fc8",
+  "appTag": "v0.2.0-beta.11",
+  "moduleTag": "modules-20261021-ui-ux",
+  "status": "published-and-verified",
+  "checks": {
+    "pythonTests": 220,
+    "moduleCatalogTests": 36,
+    "releaseRelatedFlutterTests": 122,
+    "finalIntegrationFlutterTests": 22,
+    "fullFlutterCI": {
+      "passed": 1634,
+      "failed": 0,
+      "runId": 39521471280
+    },
+    "mainCI": {
+      "runId": 39521471118,
+      "conclusion": "success"
+    },
+    "flutterAnalyze": "passed",
+    "architecture": "passed (149 Dart files)",
+    "nodeResultParityAndBridgeCounts": "passed",
+    "onlineModuleCatalog": "passed (9 entries and all author packages)",
+    "initialCI": {
+      "runId": 39520228446,
+      "passed": 1625,
+      "failed": 9,
+      "cause": "Old full-course-count and repeated-date-label assertions; updated and retested without changing released module bytes"
+    },
+    "localFullFlutter": "Stopped after local HTTP timeouts; not counted as a complete pass"
+  },
+  "emulator": {
+    "buildNumber": 177,
+    "installedVersionCode": 4177,
+    "apkSha256": "f5ff35b17a6e16bcef4c3041fd26143b3e595aff99b789d7346f98a7f36b2963",
+    "installedApkSha256": "f5ff35b17a6e16bcef4c3041fd26143b3e595aff99b789d7346f98a7f36b2963",
+    "sourceFingerprint": "0015d1951025ce7666ad6d26a96fc3e3fa880dc6cf8cc474aa32ea0df2912502",
+    "completed": true
+  },
+  "pages": {
+    "dailyCompactExpandedAndCollapsed": true,
+    "plannerAndCompactQuickAdd": true,
+    "temporaryInputDraftCancelled": true,
+    "existingAIHistoryAndSchedule": true,
+    "aboutAndPublicUpdateNotes": {
+      "aboutPageOpened": true,
+      "updatePageOpened": true,
+      "installedVersion": "0.2.0-beta.11",
+      "installedVersionCode": 4177,
+      "installedApkSha256": "f5ff35b17a6e16bcef4c3041fd26143b3e595aff99b789d7346f98a7f36b2963",
+      "publishedReleaseNotesVisible": true,
+      "channelPreferenceChanged": false,
+      "existingAppAndModuleDataRetained": true,
+      "usedExistingEmulatorSigning": true
+    },
+    "appAndModuleDataRetained": true,
+    "existingSigningPreserved": true
+  },
+  "publicRelease": {
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.11",
+    "publishedAt": "2026-10-21T00:42:59Z",
+    "prerelease": true,
+    "anonymousDownloadsVerified": true,
+    "buildNumber": 138,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "file": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "versionName": "0.2.0-beta.11",
+        "versionCode": 2138,
+        "size": 26324157,
+        "sha256": "ed1677d34b6ad69a702b567b5765623ba1bd9b7913d95d652b5b175c881a78c5"
+      },
+      {
+        "file": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "versionName": "0.2.0-beta.11",
+        "versionCode": 1138,
+        "size": 24149191,
+        "sha256": "52a1a72942ecf9e5999e4b8b2b7820d4b135ed4d5a610f8864712559ab0bd017"
+      },
+      {
+        "file": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "versionName": "0.2.0-beta.11",
+        "versionCode": 4138,
+        "size": 27929774,
+        "sha256": "421a612cc498f71302b3ec0d1893f2fa6434001b1de2cf2b4576fc3497bfdfa6"
+      }
+    ],
+    "allSixBundledModulesMatchTaggedSource": true
+  },
+  "modules": {
+    "app.ai": {
+      "version": "1.5.1",
+      "sha256": "78c0c90f8958fdfda0b2722c94ca989b93e490baa00d8dc0c9dbbe385805d714",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261021-ui-ux/app.ai-1.5.1.xmodule"
+    },
+    "app.views.today": {
+      "version": "1.8.1",
+      "sha256": "9661c726fa890752089c8f36d646e3b137bf9e7a130fc1767bacd12a061db685",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261021-ui-ux/app.views.today-1.8.1.xmodule"
+    },
+    "app.schedule": {
+      "version": "1.16.3",
+      "sha256": "9136394f97d2193f294ba1b0ff82da80d1b98b55ee5cc81720812a56ff6da68f",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261021-ui-ux/app.schedule-1.16.3.xmodule"
+    },
+    "app.planner": {
+      "version": "1.6.2",
+      "sha256": "2c02ca5a3ba3fa3209e4ecec8f10c1d84bab3ff8f16164d229884c664b86e82c",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261021-ui-ux/app.planner-1.6.2.xmodule"
+    },
+    "app.import.shiguang": {
+      "version": "1.7.3",
+      "sha256": "a317c1144ca4ad8e76d00fdc417420d49769b804440ba59134016660486176ba",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261021-ui-ux/app.import.shiguang-1.7.3.xmodule"
+    }
+  },
+  "modulePublicPackagesAndInstalledDigestsMatch": true,
+  "catalogBranch": "module-catalog",
+  "limitations": [
+    "Public fixed-signature APKs verified separately, not installed over emulator development signature",
+    "Floating emulator IME only; not a full-width keyboard matrix",
+    "ARM device FPS and Windows native runtime not measured",
+    "Remaining UI audit backlog not included"
+  ],
+  "localEvidence": "dist/verification/release-20261021-beta11/"
+}
