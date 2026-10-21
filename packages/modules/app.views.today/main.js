@@ -27,8 +27,11 @@ async function overview(state,event,context) {
 }
 const field=(key,label,value='',type='text',options)=>({key,label,value,type:['dueDate','plannedDate'].includes(key)?'date':type,required:['name','title'].includes(key),maxLength:key==='title'?300:120,...(options?{options}: {})});
 async function execute(id,input) { const plan=await services.prepare(ref(id),input); if(await ui.review(plan.planId)) return services.commit(plan.planId); }
-async function plannedLabels(tasks) {
-  const labels=tasks.map(task=>task.plannedDate&&`计划 ${task.plannedDate}`);
+function shortDate(value,selectedDate) {
+  return value.slice(0,4)===selectedDate.slice(0,4)?`${Number(value.slice(5,7))}/${Number(value.slice(8,10))}`:value;
+}
+async function plannedLabels(tasks,selectedDate) {
+  const labels=tasks.map(task=>task.plannedDate&&`计划 ${task.plannedDate===selectedDate?'当天':shortDate(task.plannedDate,selectedDate)}`);
   const precise=tasks.flatMap((task,index)=>task.plannedStartAt&&task.plannedEndAt&&task.plannedTimezone?[{task,index}]:[]);
   // The host accepts up to 256 instants. Keep pagination bounded too: two
   // boundaries per task, one bridge round trip for the usual 50-item page.
@@ -40,10 +43,29 @@ async function plannedLabels(tasks) {
     ]));
     batch.forEach(({task,index},i)=>{
       const start=local[i*2],end=local[i*2+1];
-      labels[index]=`计划 ${start.date} ${start.time}–${end.time} (${task.plannedTimezone})`;
+      const startDate=start.date===selectedDate?'':`${shortDate(start.date,selectedDate)} `;
+      const endDate=end.date===start.date?'':`${shortDate(end.date,selectedDate)} `;
+      labels[index]=`计划 ${startDate}${start.time}–${endDate}${end.time} (${task.plannedTimezone})`;
     });
   }
   return labels;
+}
+async function deadlineLabels(tasks,selectedDate,today) {
+  const labels=tasks.map(task=>task.dueDate?`${task.dueDate===today?'今天':shortDate(task.dueDate,selectedDate)}截止`:'');
+  const exact=tasks.flatMap((task,index)=>task.dueAt?[{task,index}]:[]);
+  const now=exact.length?Date.parse(await clock.now()):null;
+  for(let offset=0;offset<exact.length;offset+=256) {
+    const batch=exact.slice(offset,offset+256);
+    const local=await clock.toLocalMany(batch.map(({task})=>({utc:task.dueAt,zone:task.dueTimezone||'UTC'})));
+    batch.forEach(({task,index},position)=>{
+      const value=local[position];
+      labels[index]=`${value.date===today?'今天':shortDate(value.date,selectedDate)} ${value.time}截止 (${task.dueTimezone||'UTC'})`;
+    });
+  }
+  return labels.map((value,index)=>{
+    const task=tasks[index],overdue=task.dueAt?Date.parse(task.dueAt)<now:task.dueDate&&task.dueDate<today;
+    return !task.completed&&overdue?`已逾期 · ${value}`:value;
+  });
 }
 export async function render({state={},event,formValues={},context={}}) {
   state={...state};
@@ -87,9 +109,8 @@ export async function render({state={},event,formValues={},context={}}) {
     const values=await ui.dialog({title:'编辑任务',fields:[field('title','标题',t.title),field('priority','优先级',String(t.priority),'select',[0,1,2,3].map(x=>({value:String(x),label:String(x)}))),field('dueDate','到期日期 YYYY-MM-DD（留空清除）',t.dueDate),field('plannedDate','计划日期 YYYY-MM-DD（留空清除）',t.plannedDate)]});
     if(values) {
       const changes={...values,priority:Number(values.priority),dueDate:values.dueDate||null,plannedDate:values.plannedDate||null};
-      // Saving a title or priority must not clear an unchanged precise plan.
-      if(changes.plannedDate===(t.plannedDate||null))delete changes.plannedDate;
-      await execute('task.updateFields',{id:t.id,changes,expectedUpdatedAt:t.updatedAt});
+      for(const key of Object.keys(changes))if(changes[key]===(t[key]??null))delete changes[key];
+      if(Object.keys(changes).length)await execute('task.updateFields',{id:t.id,changes,expectedUpdatedAt:t.updatedAt});
     }
   }
   if(event?.type==='field') {
@@ -116,14 +137,14 @@ export async function render({state={},event,formValues={},context={}}) {
     const hasMore=tasks.length>taskLimit;
     children.push({...section(selectedDate<today?'当日任务':'待办事项',hasMore?`${taskLimit}+`:tasks.length,{label:'添加任务',icon:'add',event:{type:'toggleQuick'}}),key:'feed:heading'});
     if(!tasks.length)children.push({...label(selectedDate===today?'暂无今天待办或逾期任务':`${selectedDate} 没有安排任务`),key:'feed:empty'});
-    const visibleTasks=tasks.slice(0,taskLimit),planLabels=await plannedLabels(visibleTasks);
+    const visibleTasks=tasks.slice(0,taskLimit),planLabels=await plannedLabels(visibleTasks,selectedDate),dueLabels=await deadlineLabels(visibleTasks,selectedDate,today);
     for(const [index,task] of visibleTasks.entries()) {
       const fields=(task.fieldDefinitions||[]).map(field=>({type:'row',children:[
         label((field.label||field.id)+': '+(Array.isArray(task.fields[field.key])?task.fields[field.key].join('、'):(task.fields[field.key]??'未设置'))),
         ...(field.commands?.set?[button('修改字段',{type:'field',task,field}),button('清除字段',{type:'clearField',task,field})]:[]),
       ]}));
       children.push({type:'taskItem',key:task.id,title:task.title,completed:task.completed,
-        subtitle:[task.dueDate&&`到期 ${task.dueDate}`,planLabels[index],projectNames.get(task.projectId),task.priority&&`优先级 ${task.priority}`].filter(Boolean).join(' · '),
+        subtitle:[dueLabels[index],planLabels[index],projectNames.get(task.projectId),task.priority&&`优先级 ${task.priority}`].filter(Boolean).join(' · '),
         event:{type:'complete',task},openEvent:{type:'edit',task},
         ...(fields.length?{children:[{type:'disclosure',key:'task-fields:'+task.id,text:'扩展字段',children:fields}]}: {}),
       });

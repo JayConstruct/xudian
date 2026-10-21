@@ -121,11 +121,10 @@ void main() {
           },
         }),
       );
-      expect(
-        nodes(page['tree'])
-            .singleWhere((n) => n['type'] == 'taskItem')['subtitle'],
-        contains('2026-10-11 02:00–03:00 (Asia/Shanghai)'),
-      );
+      final subtitle = nodes(page['tree'])
+          .singleWhere((node) => node['type'] == 'taskItem')['subtitle'];
+      expect(subtitle, contains('计划 02:00–03:00 (Asia/Shanghai)'));
+      expect(subtitle, isNot(contains('2026-10-11')));
       await command('app.tasks', 'task.updateFields', {
         'id': created['id'],
         'changes': {'plannedDate': '2026-10-12'},

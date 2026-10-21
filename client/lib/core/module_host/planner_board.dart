@@ -10,6 +10,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../ui/content_colors.dart';
+import '../ui/ui_motion.dart';
 import 'planner_timeline_window.dart';
 
 typedef BoardItem = Map<String, Object?>;
@@ -120,7 +121,8 @@ class _BoardGeometry {
   final Map<Object?, BoardItem> byId;
 }
 
-class _PlannerBoardState extends State<PlannerBoard> {
+class _PlannerBoardState extends State<PlannerBoard>
+    with SingleTickerProviderStateMixin {
   final _horizontal = _PlannerLinkedScrollController();
   final _header = _PlannerLinkedScrollController();
   final _candidatesScroll = ScrollController();
@@ -165,7 +167,9 @@ class _PlannerBoardState extends State<PlannerBoard> {
       <(DateTime, DateTime), List<(Object?, DateTime, DateTime)>>{};
 
   String? _pinnedSegment;
-  Timer? _fineTimer, _intentTimer, _scrollTimer, _previewTimer;
+  Timer? _fineTimer, _intentTimer, _previewTimer;
+  late final Ticker _scrollTicker;
+  Duration _scrollElapsed = Duration.zero;
   int _fineStep = 1;
   double get _finePixels =>
       _dashboard ? math.max(_scale, _fineStep == 1 ? 4 : 2) : _scale;
@@ -666,6 +670,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
   @override
   void initState() {
     super.initState();
+    _scrollTicker = createTicker(_autoScrollFrame);
     _horizontal.peer = _header;
     _header.peer = _horizontal;
     _resetTimelineWindow();
@@ -885,8 +890,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
     _clockElapsed.stop();
     _fineTimer?.cancel();
     _intentTimer?.cancel();
-    _scrollTimer?.cancel();
-    _scrollTimer = null;
+    _scrollTicker.dispose();
     _previewTimer?.cancel();
     _dragSession++;
     _horizontal.dispose();
@@ -928,8 +932,8 @@ class _PlannerBoardState extends State<PlannerBoard> {
     if (endGesture) _setDragActive(false);
     _fineTimer?.cancel();
     _intentTimer?.cancel();
-    _scrollTimer?.cancel();
-    _scrollTimer = null;
+    _scrollTicker.stop();
+    _scrollElapsed = Duration.zero;
     _previewTimer?.cancel();
     _dragSession++;
     _previewRevision++;
@@ -1023,45 +1027,57 @@ class _PlannerBoardState extends State<PlannerBoard> {
   }
 
   void _ensureAutoScroll() {
-    _scrollTimer ??= Timer.periodic(const Duration(milliseconds: 32), (_) {
-      final position = _pointerPosition,
-          viewport = _viewport,
-          item = _activeItem;
-      if (!mounted || position == null || viewport == null || item == null) {
-        return;
-      }
-      double edge(double value, double min, double max) {
-        const margin = 44.0;
-        if (value < min + margin) {
-          return -14 * ((min + margin - value) / margin).clamp(0, 1);
-        }
-        if (value > max - margin) {
-          return 14 * ((value - max + margin) / margin).clamp(0, 1);
-        }
-        return 0;
-      }
+    if (_scrollTicker.isActive) return;
+    _scrollElapsed = Duration.zero;
+    _scrollTicker.start();
+  }
 
-      bool scroll(ScrollController controller, double delta) {
-        if (!controller.hasClients || delta == 0) return false;
-        final next = (controller.offset + delta).clamp(
-          0,
-          controller.position.maxScrollExtent,
-        );
-        if ((next - controller.offset).abs() < .01) return false;
-        controller.jumpTo(next.toDouble());
-        return true;
+  void _autoScrollFrame(Duration elapsed) {
+    final seconds =
+        (elapsed - _scrollElapsed).inMicroseconds /
+        Duration.microsecondsPerSecond;
+    _scrollElapsed = elapsed;
+    final position = _pointerPosition,
+        viewport = _viewport,
+        item = _activeItem;
+    if (!mounted || position == null || viewport == null || item == null) {
+      _scrollTicker.stop();
+      return;
+    }
+    double edge(double value, double min, double max) {
+      const margin = 44.0;
+      const speed = 14 / .032;
+      if (value < min + margin) {
+        return -speed * ((min + margin - value) / margin).clamp(0, 1);
       }
+      if (value > max - margin) {
+        return speed * ((value - max + margin) / margin).clamp(0, 1);
+      }
+      return 0;
+    }
 
-      final x = scroll(
-        _horizontal,
-        edge(position.dx, viewport.left, viewport.right),
+    bool scroll(ScrollController controller, double velocity) {
+      if (!controller.hasClients || velocity == 0 || seconds <= 0) return false;
+      final next = (controller.offset + velocity * seconds).clamp(
+        0,
+        controller.position.maxScrollExtent,
       );
-      final y = scroll(
-        _vertical,
-        edge(position.dy, viewport.top, viewport.bottom),
-      );
-      if (x || y) _hover(item, position, fromScroll: true);
-    });
+      if ((next - controller.offset).abs() < .01) return false;
+      controller.jumpTo(next.toDouble());
+      return true;
+    }
+
+    final horizontalChanged = scroll(
+      _horizontal,
+      edge(position.dx, viewport.left, viewport.right),
+    );
+    final verticalChanged = scroll(
+      _vertical,
+      edge(position.dy, viewport.top, viewport.bottom),
+    );
+    if (horizontalChanged || verticalChanged) {
+      _hover(item, position, fromScroll: true);
+    }
   }
 
   void _beginResize(BoardItem item, Offset global) {
@@ -3949,6 +3965,22 @@ class _PlannerBoardState extends State<PlannerBoard> {
     );
   }
 
+  Widget _candidateRegion({required Widget child}) {
+    final duration = AppMotion.duration(
+      context,
+      const Duration(milliseconds: 220),
+    );
+    const key = ValueKey('planner-candidate-region');
+    if (duration == Duration.zero) return SizedBox(key: key, child: child);
+    return AnimatedSize(
+      key: key,
+      duration: duration,
+      curve: Curves.easeInOutCubic,
+      alignment: Alignment.topCenter,
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -4056,8 +4088,12 @@ class _PlannerBoardState extends State<PlannerBoard> {
                               key: const ValueKey('planner-toggle-candidates'),
                               onPressed: _toggleCandidates,
                               icon: AnimatedRotation(
+                                key: ValueKey(AppMotion.reduced(context)),
                                 turns: _candidatesExpanded ? 0 : -.25,
-                                duration: const Duration(milliseconds: 200),
+                                duration: AppMotion.duration(
+                                  context,
+                                  const Duration(milliseconds: 200),
+                                ),
                                 child: const Icon(Icons.expand_more, size: 18),
                               ),
                               label: Row(
@@ -4201,11 +4237,7 @@ class _PlannerBoardState extends State<PlannerBoard> {
                 ),
               ),
             if (_focusDays == null && !_timeline)
-              AnimatedSize(
-                key: const ValueKey('planner-candidate-region'),
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeInOutCubic,
-                alignment: Alignment.topCenter,
+              _candidateRegion(
                 child: _dashboard && !_candidatesExpanded
                     ? const SizedBox(width: double.infinity)
                     : SizedBox(

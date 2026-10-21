@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.views.today",
     "name": "日程",
-    "version": "1.8.0",
+    "version": "1.8.1",
     "hostApi": "^1.23.0",
     "dataVersion": 1,
     "permissions": [

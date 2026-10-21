@@ -292,7 +292,10 @@ class WorkspaceChromeHeader extends StatelessWidget {
       child: Align(
         alignment: Alignment.bottomCenter,
         heightFactor: 1 - controller.progress,
-        child: Offstage(offstage: controller.collapsed, child: child),
+        child: ExcludeFocus(
+          excluding: controller.collapsed,
+          child: Offstage(offstage: controller.collapsed, child: child),
+        ),
       ),
     ),
   );

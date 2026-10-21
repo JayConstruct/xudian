@@ -12,6 +12,11 @@ const ref=serviceId=>({moduleId:'app.schedule',serviceId,majorVersion:1});
 const text=value=>({type:'text',text:value});
 const button=(label,type)=>({type:'button',text:label,event:{type}});
 const field=(key,label,value,type='text',extra={})=>({key,label,value,type,...extra});
+function conflictField(conflict,choices) {
+  const timeBasis=conflict.key==='timetable:timeBasis';
+  const options=conflict.options?conflict.options.map(value=>({value,label:value==='extra'?'保留为临时课':'撤销失效调课'})):timeBasis?[{value:'local',label:'保留目标基准，重新解释导入周次/节次'},{value:'source',label:'采用来源基准，影响目标内全部课程'}]:[{value:'local',label:'保留本地'},{value:'source',label:'采用来源'}];
+  return field(conflict.key,`${conflict.field}：本地 ${JSON.stringify(conflict.local)} / 来源 ${JSON.stringify(conflict.source)}`,choices[conflict.key]||conflict.options?.[0]||(timeBasis?'':'local'),'select',{required:true,options});
+}
 // Presentation preferences survive page sessions without writing schedule data.
 export function normalizeUrl(value) {
   let url=String(value??'').trim();
@@ -199,7 +204,7 @@ export async function render({state={},event,formValues={},context={}}) {
     }
     if (event?.type==='preview' && state.input) await prepare(state);
     if (event?.type==='conflicts' && state.plan?.result.conflicts?.length) {
-      const choices=await ui.dialog({title:'处理来源与本地修改冲突',presentation:'page',submitLabel:'重新查看实际变更',fields:state.plan.result.conflicts.map(c=>field(c.key,`${c.field}：本地 ${JSON.stringify(c.local)} / 来源 ${JSON.stringify(c.source)}`,state.input.choices[c.key]||c.options?.[0]||'local','select',{required:true,options:c.options?c.options.map(value=>({value,label:value==='extra'?'保留为临时课':'撤销失效调课'})):[{value:'local',label:'保留本地'},{value:'source',label:'采用来源'}]}))});
+      const choices=await ui.dialog({title:'处理来源与本地修改冲突',presentation:'page',submitLabel:'重新查看实际变更',fields:state.plan.result.conflicts.map(conflict=>conflictField(conflict,state.input.choices))});
       if (choices) {state.input.choices={...state.input.choices,...choices};await prepare(state);}
     }
     if (event?.type==='clear') {delete state.input;delete state.payload;delete state.plan;delete state.error;delete state.notice;delete state.timezoneNotice;}
@@ -263,7 +268,7 @@ function detail(state) {
     {...text('教务浏览器当前支持 Android。'),style:'muted'},
     ]:[]),
     ...(draft?[
-      {type:'column',children:[{type:'sectionHeader',title:'导入预览'},text('1 采集课程 → 2 确认学期 → 3 查看实际变更 → 4 确认导入'),text(`${draft.timetable.name} · ${draft.courses.length} 门课程 · ${draft.meetings.length} 个安排`),text(`第一周 ${draft.timetable.firstMonday} · ${draft.timetable.totalWeeks} 周 · ${draft.timetable.periods.length} 节`),...draft.warnings.map(text),text(`来源：${state.options?.scopeAlias||'自动识别学校与学期'}`),button('查看实际变更','preview'),button('修改学期配置','configure'),...(state.plan?.result.blocked?[text(`${state.plan.result.conflicts.length} 项冲突`),button('处理导入冲突','conflicts')]:[]),button('取消本次导入','clear')]}
+      {type:'column',children:[{type:'sectionHeader',title:'导入预览'},text('1 采集课程 → 2 确认学期 → 3 查看实际变更 → 4 确认导入'),text(`${draft.timetable.name} · ${draft.courses.length} 门课程 · ${draft.meetings.length} 个安排`),text(`第一周 ${draft.timetable.firstMonday} · ${draft.timetable.totalWeeks} 周 · ${draft.timetable.periods.length} 节`),...draft.warnings.map(text),text(`来源：${state.options?.scopeAlias||'自动识别学校与学期'}`),button('查看实际变更','preview'),button('修改学期配置','configure'),...(state.plan?.result.blocked?[text(`${state.plan.result.conflicts.length} 项冲突`),...(state.plan.result.warnings||[]).filter(warning=>!draft.warnings.includes(warning)).map(text),button('处理导入冲突','conflicts')]:[]),button('取消本次导入','clear')]}
     ]:[]),
     ...(!isFile?[{type:'column',children:[
       {type:'sectionHeader',title:'脚本来源'},

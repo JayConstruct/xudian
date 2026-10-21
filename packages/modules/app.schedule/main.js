@@ -70,33 +70,56 @@ export async function queryBusy({startDate,endDate}) {
 }
 export async function queryTodayFeed({date:selectedDate}={}) {
   const date=selectedDate===undefined?await clock.today():feedDate(selectedDate),items=[];
+  const now=selectedDate===undefined?null:Date.parse(await clock.now());
   for(const timetable of await data.query('timetables')) {
     // The list query already read this timetable in the same invocation.
     // One local-clock read supplies both today's date and sorting metadata.
     const [content,local]=await Promise.all([snapshot(timetable.id,timetable),clock.local(timetable.timezone)]);
     const today=todayFromSnapshot(content,selectedDate===undefined?local.date:date);
+    const offsets=new Map();
+    const offset=time=> {
+      if(!offsets.has(time))offsets.set(time,clock.toUtc({date,time,zone:timetable.timezone}).then(result=> {
+        if(result.status!=='unique'||result.instants.length!==1)throw new Error(`${timetable.name} ${date} ${time} 的课程时间存在夏令时歧义或不存在，请查看课表确认`);
+        return (Date.parse(result.instants[0])-now)/60000;
+      }));
+      return offsets.get(time);
+    };
     for(const item of today.items) {
       const startTime=timetable.periods[item.startPeriod-1].start,endTime=timetable.periods[item.endPeriod-1].end;
+      const [startOffset,endOffset]=selectedDate===undefined?[
+        (civil(item.date)-civil(local.date))/dayMs*1440+timeMinutes(startTime)-timeMinutes(local.time),
+        (civil(item.date)-civil(local.date))/dayMs*1440+timeMinutes(endTime)-timeMinutes(local.time),
+      ]:await Promise.all([offset(startTime),offset(endTime)]);
       items.push({...item,timetableId:timetable.id,timetableName:timetable.name,timezone:timetable.timezone,startTime,endTime,
         // Compare course times relative to now so different timetable timezones
         // still sort chronologically, including when their civil dates differ.
-        startOffset:(civil(item.date)-civil(local.date))/dayMs*1440+timeMinutes(startTime)-timeMinutes(local.time),isLocalToday:item.date===local.date});
+        startOffset,endOffset,isLocalToday:item.date===local.date});
     }
   }
-  items.sort((a,b)=>(selectedDate===undefined?a.startOffset-b.startOffset:a.startTime.localeCompare(b.startTime))||a.title.localeCompare(b.title)||a.timetableId.localeCompare(b.timetableId));
+  items.sort((left,right)=>left.startOffset-right.startOffset||left.title.localeCompare(right.title)||left.timetableId.localeCompare(right.timetableId));
   return {date,items};
 }
 export async function renderTodayFeed({state={},event,context={}}={}) {
+  state={...state};
   if(event?.type==='viewSchedule')await ui.navigate('app.schedule.home');
   if(event?.type==='openCourse')await ui.navigate('app.schedule.occurrence',{timetableId:event.timetableId,...event.reference});
   const today=await queryTodayFeed(context.selectedDate===undefined?{}:{date:context.selectedDate}),currentDate=await clock.today(),multipleTables=new Set(today.items.map(item=>item.timetableId)).size>1;
+  if(state.feedDate!==today.date) {state.feedDate=today.date;state.coursesExpanded=false;}
+  if(event?.type==='toggleCourses'&&event.date===today.date)state.coursesExpanded=!state.coursesExpanded;
+  const multipleZones=new Set(today.items.map(item=>item.timezone)).size>1;
+  const current=today.items.find(item=>item.startOffset<=0&&item.endOffset>0),next=today.items.find(item=>item.startOffset>0);
+  const last=today.items.reduce((latest,item)=>!latest||item.endOffset>latest.endOffset?item:latest,null);
+  const focus=today.date===currentDate?(current||next||last):today.date<currentDate?last:today.items[0];
+  const visible=state.coursesExpanded?today.items:focus?[focus]:[];
   const children=[{type:'sectionHeader',title:today.date===currentDate?'今日课程':'当日课程',count:today.items.length,action:{label:'查看课表',event:{type:'viewSchedule'}}}];
   if(!today.items.length)children.push({type:'text',text:today.date===currentDate?'今天没有课程':`${today.date} 没有课程`,style:'muted'});
-  for(const item of today.items)children.push({type:'agendaItem',key:item.occurrenceId+'|'+item.timetableId,title:item.title,
+  for(const item of visible)children.push({type:'agendaItem',key:item.occurrenceId+'|'+item.timetableId,title:item.title,
     startTime:item.startTime,endTime:item.endTime,color:item.color,
-    subtitle:[`第 ${item.startPeriod}–${item.endPeriod} 节`,[item.location,item.teacher].filter(Boolean).join(' · '),multipleTables?item.timetableName:null,item.date!==today.date?`${item.date} · ${item.timezone}`:null].filter(Boolean).join(' · '),
-    ...(item.isLocalToday&&item.startOffset>0&&item.startOffset<=30?{badge:'即将开始'}: {}),event:{type:'openCourse',timetableId:item.timetableId,reference:occurrenceReference(item)},
+    subtitle:[`第 ${item.startPeriod}–${item.endPeriod} 节`,[item.location,item.teacher].filter(Boolean).join(' · '),multipleTables?item.timetableName:null,item.date!==today.date?`${item.date} · ${item.timezone}`:multipleZones?item.timezone:null].filter(Boolean).join(' · '),
+    ...(item.isLocalToday&&item.startOffset<=0&&item.endOffset>0?{badge:'正在上课'}:item.isLocalToday&&item.startOffset>0&&item.startOffset<=30?{badge:'即将开始'}:!state.coursesExpanded?{badge:today.date<currentDate?'当日最后一节':today.date>currentDate?'当日首节':item.endOffset<=0?'已结束':'下一节'}:{}),
+    event:{type:'openCourse',timetableId:item.timetableId,reference:occurrenceReference(item)},
   });
+  if(today.items.length)children.push(button(state.coursesExpanded?'收起课程':`全部课程（${today.items.length}）`,{type:'toggleCourses',date:today.date}));
   return {state,tree:{type:'column',children}};
 }
 function normalized(value) { if(Array.isArray(value))return value.map(normalized);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(key=>[key,normalized(value[key])]));return value; }
@@ -174,6 +197,13 @@ async function offerImportedSchedule(result,state) {
 const button=(text,event)=>({type:'button',text,event});
 const text=value=>({type:'text',text:value});
 const field=(key,label,value='',type='text',options)=>({key,label,value,type,...(options?{options}: {})});
+function importConflictField(conflict,choices) {
+  const basis=conflict.key==='timetable:timeBasis';
+  const options=conflict.options?conflict.options.map(value=>({value,label:value==='extra'?'保留为临时课':'撤销失效调课'})):basis?
+    [{value:'local',label:'保留目标基准，重新解释导入周次/节次'},{value:'source',label:'采用来源基准，影响目标内全部课程'}]:
+    [{value:'local',label:'保留本地'},{value:'source',label:'采用来源'}];
+  return {...field(conflict.key,`${conflict.field}：本地 ${JSON.stringify(conflict.local)} / 来源 ${JSON.stringify(conflict.source)}`,choices[conflict.key]||conflict.options?.[0]||(basis?'':'local'),'select',options),...(basis?{required:true}:{})};
+}
 function periodsText(periods) { return periods.map(p=>`${p.start}-${p.end}`).join('\n'); }
 function parsePeriods(text) { return text.split(/\n|,/).filter(x=>x.trim()).map((line,i)=>{ const [start,end]=line.trim().split('-'); return {number:i+1,start,end}; }); }
 function pageId(value) { return value.startsWith('app.')?value:'app.schedule.'+value; }
@@ -394,9 +424,9 @@ export async function render({state={},context={},event,formValues={}}) {
     }
   }
   if(event?.type==='resolveImport' && state.importPlan?.result.conflicts?.length) {
-    const choices=await ui.dialog({title:'来源和本地修改冲突',fields:state.importPlan.result.conflicts.map(c=>field(c.key,`${c.field}：本地 ${JSON.stringify(c.local)} / 来源 ${JSON.stringify(c.source)}`,c.options?.[0]||'local','select',c.options?c.options.map(value=>({value,label:value==='extra'?'保留为临时课':'撤销失效调课'})):[{value:'local',label:'保留本地'},{value:'source',label:'采用来源'}]))});
+    const choices=await ui.dialog({title:'来源和本地修改冲突',fields:state.importPlan.result.conflicts.map(conflict=>importConflictField(conflict,state.importInput.choices))});
     if(choices) {
-      state.importInput={...state.importInput,choices};
+      state.importInput={...state.importInput,choices:{...state.importInput.choices,...choices}};
       const plan=await services.prepare(ref('schedule.import.prepare'),state.importInput);
       state.importPlan={planId:plan.planId,result:plan.result};state.importSummary=await importSummary(plan,state.importDraft);delete state.importError;
     }

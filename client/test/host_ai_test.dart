@@ -9,6 +9,8 @@ import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 
+import 'planner_task_schedule_test.dart' show sourcePackage;
+
 void main() {
   late AppDatabase db;
   late CollectionStore store;
@@ -20,12 +22,7 @@ void main() {
     dir = await Directory.systemTemp.createTemp('host-ai-');
     host = ModuleHost(store: store, directory: dir);
     await host.initialize();
-    await host.install(
-      await ScriptPackage.verify(
-        await File('../dist/modules/app.ai.xmodule').readAsBytes(),
-        allowUnsignedLocal: true,
-      ),
-    );
+    await host.install(await sourcePackage('app.ai'));
     final actor = host.instances['app.ai']!.actor;
     final p = await host.prepare(
       actor,
@@ -258,12 +255,7 @@ void main() {
   test(
     'script AI deduplicates tools and conditionally undoes unchanged task',
     () async {
-      await host.install(
-        await ScriptPackage.verify(
-          await File('../dist/modules/app.tasks.xmodule').readAsBytes(),
-          allowUnsignedLocal: true,
-        ),
-      );
+      await host.install(await sourcePackage('app.tasks'));
       final owner = host.instances['app.tasks']!.actor;
       Future<Object?> taskCommand(String id, Map<String, Object?> input) async {
         final p = await host.prepare(

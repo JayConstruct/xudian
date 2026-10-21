@@ -1015,6 +1015,63 @@ export async function render({event, formValues={}}) {
     },
   );
 
+  test(
+    'first-import time basis requires an explicit choice and shows the warning',
+    () async {
+      final incoming = await convert(payload());
+      final targetPlan = await host.prepare(
+        schedule,
+        const ServiceRef('app.schedule', 'schedule.timetable.save', 1),
+        {
+          'timetable': {
+            ...object(incoming['timetable']),
+            'firstMonday': '2026-09-14',
+          },
+        },
+      );
+      host.review(targetPlan.id, schedule);
+      final target = object(await host.commit(schedule, targetPlan.id));
+      final input = {
+        'draft': incoming,
+        'mode': 'merge',
+        'targetTimetableId': target['id'],
+        'choices': <String, Object?>{},
+      };
+      final preview = await host.prepare(adapter, importRef, input);
+      expect(object(preview.result)['blocked'], true);
+      Map<String, Object?>? dialog;
+      host.interaction = (_, method, arguments) async {
+        if (method == 'ui.dialog') {
+          dialog = arguments;
+          return null;
+        }
+        fail(
+          'Cancelled conflict selection must not navigate or commit: $method',
+        );
+      };
+      final result = object(
+        await host.invokePage(adapter.moduleId, 'render', {
+          'state': {
+            'view': 'detail',
+            'sourceKind': 'json',
+            'input': input,
+            'plan': {'planId': preview.id, 'result': preview.result},
+          },
+          'event': {'type': 'conflicts'},
+        }),
+      );
+      final basis = objects(dialog!['fields'])
+          .singleWhere((entry) => entry['key'] == 'timetable:timeBasis');
+      expect(basis['required'], true);
+      expect(basis['value'], '');
+      expect(objects(basis['options']).first['label'], contains('重新解释'));
+      expect(objects(basis['options']).last['label'], contains('全部课程'));
+      expect(jsonEncode(result['tree']), contains('取消合并并选择新建课表'));
+      expect(await store.query(schedule, 'courses', {}), isEmpty);
+      expect(object(object(result['state'])['input'])['choices'], isEmpty);
+    },
+  );
+
   test('optional source and arbitrary first-week date produce stable imports with readable actual changes', () async {
     String? planId;
     var configurations = 0;

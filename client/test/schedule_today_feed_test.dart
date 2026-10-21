@@ -227,7 +227,9 @@ void main() {
     expect(items.map((item) => item['startTime']), ['09:50', '14:00', '18:30']);
     expect(items.first['location'], '调课教室');
     final page = object(
-      await host.invokePage('app.schedule', 'renderTodayFeed', {}),
+      await host.invokePage('app.schedule', 'renderTodayFeed', {
+        'state': {'feedDate': '2026-10-10', 'coursesExpanded': true},
+      }),
     );
     final tile = nodes(page['tree'])
         .singleWhere((node) => node['title'] == '真实课程');
@@ -294,10 +296,8 @@ void main() {
         agenda.singleWhere((node) => node['title'] == '程序设计')['badge'],
         '即将开始',
       );
-      expect(
-        agenda.singleWhere((node) => node['title'] == '高等数学')['badge'],
-        isNull,
-      );
+      expect(agenda, hasLength(1));
+      expect(agenda.single['title'], '程序设计');
       final header = nodes(page['tree'])
           .singleWhere((node) => node['type'] == 'sectionHeader');
       expect(header['count'], 3);
@@ -318,6 +318,312 @@ void main() {
           .where((node) => node['type'] == 'agendaItem')
           .toList();
       expect(agenda.any((node) => node['badge'] == '即将开始'), false);
+      expect(agenda.single['title'], '程序设计');
+      expect(agenda.single['badge'], '正在上课');
+    },
+  );
+
+  for (final count in [0, 1, 4, 10]) {
+    test(
+      '$count courses stay compact with scoped expand and collapse state',
+      () async {
+        await command('schedule.timetable.save', {'timetable': table('real')});
+        for (var index = 0; index < count; index++) {
+          await course('real', '课程 $index', 6, 1);
+        }
+        var page = object(
+          await host.invokePage('app.schedule', 'renderTodayFeed', {}),
+        );
+        List<Map<String, Object?>> agenda() =>
+            nodes(page['tree'])
+                .where((node) => node['type'] == 'agendaItem')
+                .toList();
+        expect(agenda(), hasLength(count == 0 ? 0 : 1));
+        expect(
+          nodes(page['tree'])
+              .singleWhere((node) => node['type'] == 'sectionHeader')['count'],
+          count,
+        );
+        if (count == 0) {
+          expect(
+            nodes(page['tree']).where((node) => node['type'] == 'button'),
+            isEmpty,
+          );
+          return;
+        }
+        final expand = nodes(page['tree'])
+            .singleWhere((node) => node['text'] == '全部课程（$count）');
+        page = object(
+          await host.invokePage('app.schedule', 'renderTodayFeed', {
+            'state': page['state'],
+            'event': expand['event'],
+          }),
+        );
+        expect(agenda(), hasLength(count));
+        page = object(
+          await host.invokePage('app.schedule', 'renderTodayFeed', {
+            'state': page['state'],
+          }),
+        );
+        expect(agenda(), hasLength(count));
+        final collapse = nodes(page['tree'])
+            .singleWhere((node) => node['text'] == '收起课程');
+        page = object(
+          await host.invokePage('app.schedule', 'renderTodayFeed', {
+            'state': page['state'],
+            'event': collapse['event'],
+          }),
+        );
+        expect(agenda(), hasLength(1));
+        expect(agenda().single['badge'], '已结束');
+        page = object(
+          await host.invokePage('app.schedule', 'renderTodayFeed', {
+            'state': page['state'],
+            'event': expand['event'],
+          }),
+        );
+        page = object(
+          await host.invokePage('app.schedule', 'renderTodayFeed', {
+            'state': page['state'],
+            'context': {'selectedDate': '2026-10-11'},
+            'event': expand['event'],
+          }),
+        );
+        expect(object(page['state'])['coursesExpanded'], false);
+        expect(agenda(), isEmpty);
+      },
+    );
+  }
+
+  test('focus follows start/end boundaries, last-ended summary, history and future', () async {
+    await command('schedule.demo.create', {});
+    Future<Map<String, Object?>> focused({String? date}) async {
+      final page = object(
+        await host.invokePage('app.schedule', 'renderTodayFeed', {
+          'context': {'selectedDate': ?date},
+        }),
+      );
+      expect(
+        nodes(page['tree']).any((node) => node['text'] == '全部课程（3）'),
+        true,
+      );
+      return nodes(page['tree'])
+          .singleWhere((node) => node['type'] == 'agendaItem');
+    }
+
+    host.clockNow = () => DateTime.utc(2026, 10, 9, 23);
+    expect((await focused(date: '2026-10-10'))['title'], '高等数学');
+    host.clockNow = () => DateTime.utc(2026, 10, 10, 0);
+    expect((await focused())['badge'], '正在上课');
+    host.clockNow = () => DateTime.utc(2026, 10, 10, 1, 40);
+    final between = await focused();
+    expect(between['title'], '程序设计');
+    expect(between['badge'], '下一节');
+    host.clockNow = () => DateTime.utc(2026, 10, 10, 14);
+    final ended = await focused();
+    expect(ended['title'], '大学英语');
+    expect(ended['badge'], '已结束');
+    host.clockNow = () => DateTime.utc(2026, 10, 11, 6);
+    final history = await focused(date: '2026-10-10');
+    expect(history['title'], '大学英语');
+    expect(history['badge'], '当日最后一节');
+    expect((await focused(date: '2026-10-12'))['badge'], '当日首节');
+  });
+
+  test('selected-date mixed timezones sort by relative instant and keep source identities when expanded', () async {
+    await command('schedule.timetable.save', {
+      'timetable': {
+        ...table('china'),
+        'periods': [
+          {'number': 1, 'start': '14:00', 'end': '14:45'},
+          {'number': 2, 'start': '14:50', 'end': '15:35'},
+        ],
+      },
+    });
+    await command('schedule.timetable.save', {
+      'timetable': table('new-york', zone: 'America/New_York'),
+    });
+    await course('china', '中国课程', 6, 1);
+    await course('new-york', '纽约课程', 6, 1);
+    for (final courseId in ['中国课程', '纽约课程']) {
+      await command('schedule.course.save', {
+        'course': {
+          ...object(await store.get(actor, 'courses', courseId)),
+          'name': '同名课程',
+        },
+      });
+    }
+    final selected = object(
+      await host.query(
+        actor,
+        const ServiceRef('app.schedule', 'schedule.query.todayFeed', 1),
+        {'date': '2026-10-10'},
+      ),
+    );
+    final items = objects(selected['items']);
+    expect(items.map((item) => item['timetableId']), ['china', 'new-york']);
+    expect(items.map((item) => item['startTime']), ['14:00', '08:00']);
+    var page = object(
+      await host.invokePage('app.schedule', 'renderTodayFeed', {
+        'context': {'selectedDate': '2026-10-10'},
+      }),
+    );
+    final compact = nodes(page['tree'])
+        .singleWhere((node) => node['type'] == 'agendaItem');
+    expect(object(compact['event'])['timetableId'], 'china');
+    final expand = nodes(page['tree'])
+        .singleWhere((node) => node['type'] == 'button');
+    page = object(
+      await host.invokePage('app.schedule', 'renderTodayFeed', {
+        'state': page['state'],
+        'context': {'selectedDate': '2026-10-10'},
+        'event': expand['event'],
+      }),
+    );
+    final agenda = nodes(page['tree'])
+        .where((node) => node['type'] == 'agendaItem')
+        .toList();
+    expect(agenda, hasLength(2));
+    expect(agenda.map((node) => node['key']).toSet(), hasLength(2));
+    expect(agenda.first['subtitle'], contains('Asia/Shanghai'));
+    expect(agenda.last['subtitle'], contains('America/New_York'));
+    expect(object(agenda.last['event'])['timetableId'], 'new-york');
+  });
+
+  test(
+    'selected mixed-zone courses use date-specific UTC offsets across DST',
+    () async {
+      await command('schedule.timetable.save', {
+        'timetable': {
+          ...table('utc', zone: 'UTC'),
+          'firstMonday': '2026-11-02',
+          'periods': [
+            {'number': 1, 'start': '12:30', 'end': '13:15'},
+            {'number': 2, 'start': '13:20', 'end': '14:05'},
+          ],
+        },
+      });
+      await command('schedule.timetable.save', {
+        'timetable': {
+          ...table('new-york', zone: 'America/New_York'),
+          'firstMonday': '2026-11-02',
+        },
+      });
+      await course('utc', 'UTC课程', 7, 1);
+      await course('new-york', '纽约课程', 7, 1);
+      final result = object(
+        await host.query(
+          actor,
+          const ServiceRef('app.schedule', 'schedule.query.todayFeed', 1),
+          {'date': '2026-11-08'},
+        ),
+      );
+      final items = objects(result['items']);
+      expect(items.map((item) => item['title']), ['UTC课程', '纽约课程']);
+      expect(
+        (items.last['startOffset'] as num) -
+            (items.first['startOffset'] as num),
+        30,
+      );
+      host.clockNow = () => DateTime.utc(2026, 11, 8, 15);
+      final past = object(
+        await host.query(
+          actor,
+          const ServiceRef('app.schedule', 'schedule.query.todayFeed', 1),
+          {'date': '2026-11-08'},
+        ),
+      );
+      expect(objects(past['items']).map((item) => item['title']), [
+        'UTC课程',
+        '纽约课程',
+      ]);
+    },
+  );
+
+  test(
+    'historical courses expand fully and collapse back to the last lesson',
+    () async {
+      await command('schedule.demo.create', {});
+      host.clockNow = () => DateTime.utc(2026, 10, 11, 6);
+      var page = object(
+        await host.invokePage('app.schedule', 'renderTodayFeed', {
+          'context': {'selectedDate': '2026-10-10'},
+        }),
+      );
+      final expand = nodes(page['tree'])
+          .singleWhere((node) => node['text'] == '全部课程（3）');
+      page = object(
+        await host.invokePage('app.schedule', 'renderTodayFeed', {
+          'context': {'selectedDate': '2026-10-10'},
+          'state': page['state'],
+          'event': expand['event'],
+        }),
+      );
+      final agenda = nodes(page['tree'])
+          .where((node) => node['type'] == 'agendaItem')
+          .toList();
+      expect(agenda.map((node) => node['title']), ['高等数学', '程序设计', '大学英语']);
+      expect(agenda.any((node) => node['badge'] == '即将开始'), false);
+      final collapse = nodes(page['tree'])
+          .singleWhere((node) => node['text'] == '收起课程');
+      page = object(
+        await host.invokePage('app.schedule', 'renderTodayFeed', {
+          'context': {'selectedDate': '2026-10-10'},
+          'state': page['state'],
+          'event': collapse['event'],
+        }),
+      );
+      expect(
+        nodes(page['tree'])
+            .singleWhere((node) => node['type'] == 'agendaItem')['title'],
+        '大学英语',
+      );
+    },
+  );
+
+  test(
+    'selected courses never guess nonexistent or ambiguous DST boundaries',
+    () async {
+      for (final fixture in [
+        (
+          monday: '2026-03-02',
+          date: '2026-03-08',
+          start: '02:00',
+          end: '02:30',
+        ),
+        (
+          monday: '2026-10-26',
+          date: '2026-11-01',
+          start: '01:00',
+          end: '01:30',
+        ),
+      ]) {
+        await command('schedule.timetable.save', {
+          'timetable': {
+            ...table('dst', zone: 'America/New_York'),
+            'firstMonday': fixture.monday,
+            'periods': [
+              {'number': 1, 'start': fixture.start, 'end': fixture.end},
+              {'number': 2, 'start': '03:00', 'end': '03:30'},
+            ],
+          },
+        });
+        await course('dst', 'DST课程', 7, 1);
+        await expectLater(
+          host.query(
+            actor,
+            const ServiceRef('app.schedule', 'schedule.query.todayFeed', 1),
+            {'date': fixture.date},
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('夏令时歧义或不存在'),
+            ),
+          ),
+        );
+      }
     },
   );
 
@@ -421,7 +727,7 @@ void main() {
         .singleWhere((node) => node['type'] == 'taskItem');
     expect(checkbox['title'], '今天的新任务');
     expect(object(checkbox['openEvent'])['type'], 'edit');
-    expect(checkbox['subtitle'], contains('计划 2026-10-10'));
+    expect(checkbox['subtitle'], contains('计划 当天'));
     var collapsed = object(
       await host.invokePage('app.views.today', 'render', {
         'context': {'pageId': 'app.views.today.tasks'},
@@ -477,7 +783,7 @@ void main() {
         .singleWhere((node) => node['type'] == 'taskItem');
     expect(checkbox['title'], '点击正文修改后的任务');
     expect(checkbox['subtitle'], contains('优先级 2'));
-    expect(checkbox['subtitle'], contains('到期 2026-10-11'));
+    expect(checkbox['subtitle'], contains('10/11截止'));
     page = object(
       await host.invokePage('app.views.today', 'render', {
         'context': {'pageId': 'app.views.today.tasks'},

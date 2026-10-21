@@ -25,7 +25,7 @@ const temporal = (key, label, value, type = 'dateInput') => ({
   type, key, text: label, value: value || null, clearable: true, event: {type: 'field', key},
 });
 const checkbox = (key, label, value, event) => ({type: 'checkbox', key, text: label, value, event});
-const panel = async (page, context = {}) => ui.panel('app.planner.' + page, {...context, editorSession: await ids.new()}, {adaptive: true, wide: 'center', heightFactor: page === 'quickAdd' ? .66 : page === 'taskDetail' ? .78 : .88});
+const panel = async (page, context = {}) => ui.panel('app.planner.' + page, {...context, editorSession: await ids.new()}, {adaptive: true, wide: 'center', heightFactor: page === 'quickAdd' ? .56 : page === 'taskDetail' ? .78 : .88});
 const stamp = (date, time) => `${date}T${time}:00`;
 const summary = t => t?.dueDate ? `${t.dueDate.slice(5).replace('-', '/')}截止` : '';
 const duration = minutes => minutes >= 60 ? `耗时${Math.round(minutes / 6) / 10}h` : `耗时${minutes}min`;
@@ -454,7 +454,7 @@ async function quickAdd(state, event, forms, a) {
     row('添加规则', `${d.estimatedMinutes}分钟`, {type: 'rules'}),
   ];
   if (state.error) children.push(text(state.error));
-  return {state, header: {title: state.step === 'rules' ? '任务规则' : '新建任务', ...(state.step === 'rules' ? {backEvent: {type: 'back'}} : {})}, tree: {type: 'column', key: 'planner:quickAdd', children, footer: fullWidthFooter(button('保存任务', {type: 'save'}, 'filled'))}};
+  return {state, header: {title: state.step === 'rules' ? '任务规则' : '新建任务', ...(state.step === 'rules' ? {backEvent: {type: 'back'}} : {})}, tree: {type: 'column', key: 'planner:quickAdd', compact: true, spacing: 8, children, footer: fullWidthFooter(button('保存任务', {type: 'save'}, 'filled'))}};
 }
 
 async function detail(state, event, context, forms, a) {

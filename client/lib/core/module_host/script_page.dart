@@ -97,6 +97,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   String get sessionKey =>
       '${widget.moduleId}:${widget.handler}:${canonicalJson(withoutRuntimePageContext(widget.pageContext))}';
   bool busy = false, dirty = false;
+  bool _plannerDragging = false, _refreshAfterPlannerDrag = false;
   Completer<void>? _renderFinished;
   bool showProgress = false;
   bool routeActive = true;
@@ -971,6 +972,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
 
   Future<void> _render([Object? event]) async {
     if (!mounted) return;
+    if (event == null && _plannerDragging) {
+      _refreshAfterPlannerDrag = true;
+      return;
+    }
     if (!workspaceActive) {
       dirty = true;
       if (event != null) _queueEvent(event);
@@ -2670,7 +2675,16 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         return WorkspaceDragRegion(
           builder: (context, onDragActiveChanged) => PlannerBoard(
             bottomInset: WorkspaceContentInsets.bottomOf(uiContext),
-            onDragActiveChanged: onDragActiveChanged,
+            onDragActiveChanged: (active) {
+              _plannerDragging = active;
+              onDragActiveChanged(active);
+              if (!active && _refreshAfterPlannerDrag) {
+                _refreshAfterPlannerDrag = false;
+                Timer.run(() {
+                  if (mounted) unawaited(_render());
+                });
+              }
+            },
             enabled: !busy && !staleTree && routeActive && workspaceActive,
             previewIdentity: spec['previewIdentity'],
             quickAdjust: _quickAdjust,

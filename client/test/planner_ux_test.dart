@@ -612,6 +612,35 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  test(
+    'quick-add requests a compact panel and preserves expanded fields',
+    () async {
+      final presentations = <Map<String, Object?>>[];
+      host.interaction = (_, method, arguments) async {
+        if (method == 'ui.panel') {
+          presentations.add(object(arguments['presentation']));
+        }
+        return true;
+      };
+      await page(event: {'type': 'add'});
+      expect(presentations.single['heightFactor'], .56);
+      var result = await page(pageId: 'app.planner.quickAdd');
+      expect(object(result['tree'])['compact'], isTrue);
+      expect(object(result['tree'])['spacing'], 8);
+      result = await page(
+        pageId: 'app.planner.quickAdd',
+        state: object(result['state']),
+        forms: {'title': '保留草稿'},
+        event: {'type': 'description'},
+      );
+      expect(object(object(result['state'])['draft'])['title'], '保留草稿');
+      expect(
+        nodes(result['tree']).any((node) => node['key'] == 'notes'),
+        isTrue,
+      );
+    },
+  );
+
   testWidgets('quick-add save button fills the panel width', (tester) async {
     await tester.binding.setSurfaceSize(const Size(400, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -644,6 +673,52 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'compact quick-add retains its draft in a short large-text viewport',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 340,
+                height: 330,
+                child: MediaQuery(
+                  data: const MediaQueryData(
+                    textScaler: TextScaler.linear(1.5),
+                  ),
+                  child: ScriptPage(
+                    host: host,
+                    moduleId: 'app.planner',
+                    handler: 'render',
+                    pageContext: const {'pageId': 'app.planner.quickAdd'},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await settlePlanner(tester);
+      await tester.enterText(find.byType(TextField).first, '窄屏草稿');
+      await settlePlanner(tester);
+      expect(
+        find.widgetWithText(FilledButton, '保存任务').hitTestable(),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('添加规则'));
+      expect(find.text('添加规则').hitTestable(), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        '窄屏草稿',
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   test(
     'dashboard is the only home layout with compact header actions',

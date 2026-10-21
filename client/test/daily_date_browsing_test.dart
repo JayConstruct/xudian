@@ -480,15 +480,25 @@ void main() {
         'weeks': [1],
       },
     });
-    final current = object(
+    var current = object(
       await host.invokePage('app.schedule', 'renderTodayFeed', {
         'context': {'selectedDate': '2026-10-11'},
       }),
     );
+    final compact = nodes(current['tree'])
+        .where((node) => node['type'] == 'agendaItem').toList();
+    expect(compact, hasLength(1));
+    expect(compact.single['title'], '高等数学');
+    final expand = nodes(current['tree']).singleWhere((node) => node['text'] == '全部课程（4）');
+    current = object(await host.invokePage('app.schedule', 'renderTodayFeed', {
+      'context': {'selectedDate': '2026-10-11'},
+      'state': current['state'], 'event': expand['event'],
+    }));
     final rows = nodes(current['tree'])
-        .where((n) => n['type'] == 'agendaItem')
+        .where((node) => node['type'] == 'agendaItem')
         .toList();
     expect(rows, hasLength(4));
+    expect(rows.map((node) => node['title']), ['高等数学', '程序设计', '大学英语', '纽约周日课程']);
     expect(
       rows.singleWhere((n) => n['title'] == '高等数学')['subtitle'],
       contains('调课教室'),
@@ -509,15 +519,23 @@ void main() {
       'Asia/Shanghai',
       'America/New_York',
     });
-    final future = object(
+    var future = object(
       await host.invokePage('app.schedule', 'renderTodayFeed', {
         'context': {'selectedDate': '2026-10-12'},
+        'state': current['state'],
       }),
     );
     expect(
-      nodes(future['tree']).where((n) => n['type'] == 'agendaItem'),
-      hasLength(3),
+      nodes(future['tree']).where((node) => node['type'] == 'agendaItem'),
+      hasLength(1),
     );
+    expect(object(future['state'])['coursesExpanded'], false);
+    final futureExpand = nodes(future['tree']).singleWhere((node) => node['text'] == '全部课程（3）');
+    future = object(await host.invokePage('app.schedule', 'renderTodayFeed', {
+      'context': {'selectedDate': '2026-10-12'},
+      'state': future['state'], 'event': futureExpand['event'],
+    }));
+    expect(nodes(future['tree']).where((node) => node['type'] == 'agendaItem'), hasLength(3));
     expect(nodes(future['tree']).any((n) => n['badge'] == '即将开始'), false);
     final outOfTerm = object(
       await host.invokePage('app.schedule', 'renderTodayFeed', {

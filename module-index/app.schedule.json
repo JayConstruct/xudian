@@ -2001,6 +2001,212 @@
       "size": 28976,
       "sha256": "6e92f39cc625d4f76fa97280bdba7566a8cd08e5fea29727d9aa927258b2c56b",
       "signature": null
+    },
+    {
+      "version": "1.16.3",
+      "manifest": {
+        "id": "app.schedule",
+        "name": "大学课表",
+        "version": "1.16.3",
+        "hostApi": "^1.34.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "files",
+          "clock.today"
+        ],
+        "dependencies": [],
+        "description": "管理学期、作息、课程、调课记录与多个课表，支持导入和备份。",
+        "author": "JayConstruct"
+      },
+      "services": [
+        {
+          "id": "schedule.query.timetables",
+          "major": 1,
+          "handler": "queryTimetables",
+          "kind": "query",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "schedule.query.week",
+          "major": 1,
+          "handler": "queryWeek",
+          "kind": "query",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "host",
+          "tool": {
+            "description": "schedule.query.week"
+          }
+        },
+        {
+          "id": "schedule.query.today",
+          "major": 1,
+          "handler": "queryToday",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "host",
+          "tool": {
+            "description": "schedule.query.today"
+          }
+        },
+        {
+          "id": "schedule.import.prepare",
+          "major": 1,
+          "handler": "importPlan",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "provider"
+        },
+        {
+          "id": "schedule.timetable.save",
+          "major": 1,
+          "handler": "saveTimetable",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "host"
+        },
+        {
+          "id": "schedule.course.save",
+          "major": 1,
+          "handler": "saveCourse",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "host"
+        },
+        {
+          "id": "schedule.change.save",
+          "major": 1,
+          "handler": "saveChange",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "host"
+        },
+        {
+          "id": "schedule.entity.delete",
+          "major": 1,
+          "handler": "deleteEntity",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "host"
+        },
+        {
+          "id": "schedule.backup.export",
+          "major": 1,
+          "handler": "exportBackup",
+          "kind": "query",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "host"
+        },
+        {
+          "id": "schedule.query.todayFeed",
+          "major": 1,
+          "handler": "queryTodayFeed",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "schedule.demo.create",
+          "major": 1,
+          "handler": "createDemo",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          },
+          "confirmation": "host"
+        },
+        {
+          "id": "schedule.query.busy",
+          "major": 1,
+          "handler": "queryBusy",
+          "kind": "query",
+          "input": {
+            "type": "object",
+            "required": [
+              "startDate",
+              "endDate"
+            ],
+            "properties": {
+              "startDate": {
+                "type": "string"
+              },
+              "endDate": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261021-ui-ux/app.schedule-1.16.3.xmodule",
+      "size": 30395,
+      "sha256": "9136394f97d2193f294ba1b0ff82da80d1b98b55ee5cc81720812a56ff6da68f",
+      "signature": null
     }
   ]
 }

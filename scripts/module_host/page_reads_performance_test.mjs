@@ -22,13 +22,15 @@ function local({utc,zone}) {
   const values=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(utc)).map(part=>[part.type,part.value]));
   return {date:`${values.year}-${values.month}-${values.day}`,time:`${values.hour}:${values.minute}`};
 }
-const legacyLabels=`async function plannedLabels(tasks) {
+const legacyLabels=`async function plannedLabels(tasks,selectedDate) {
   const labels=[];
   for(const task of tasks) {
     if(task.plannedStartAt&&task.plannedEndAt&&task.plannedTimezone) {
       const start=await clock.toLocal({utc:task.plannedStartAt,zone:task.plannedTimezone}),end=await clock.toLocal({utc:task.plannedEndAt,zone:task.plannedTimezone});
-      labels.push(\`计划 \${start.date} \${start.time}–\${end.time} (\${task.plannedTimezone})\`);
-    } else labels.push(task.plannedDate&&\`计划 \${task.plannedDate}\`);
+      const startDate=start.date===selectedDate?'':\`\${shortDate(start.date,selectedDate)} \`;
+      const endDate=end.date===start.date?'':\`\${shortDate(end.date,selectedDate)} \`;
+      labels.push(\`计划 \${startDate}\${start.time}–\${endDate}\${end.time} (\${task.plannedTimezone})\`);
+    } else labels.push(task.plannedDate&&\`计划 \${task.plannedDate===selectedDate?'当天':shortDate(task.plannedDate,selectedDate)}\`);
   }
   return labels;
 }
@@ -49,7 +51,7 @@ for(const count of [0,50,129,10000]) {
         return args.items.map(local);
       }
       throw Error('Unexpected request '+method);
-    },source=>legacy?source.replace(/async function plannedLabels\(tasks\) \{[\s\S]*?(?=export async function render)/,legacyLabels):source);
+    },source=>legacy?source.replace(/async function plannedLabels\(tasks,selectedDate\) \{[\s\S]*?(?=async function deadlineLabels)/,legacyLabels):source);
     return {result:clone(await module.render({context:{pageId:'app.views.today.tasks',selectedDate:'2026-11-01'},state:{selectedDate:'2026-11-01',taskLimit:10000}})),batches,calls};
   }
   const current=await render(false),legacy=await render(true);
@@ -66,20 +68,18 @@ const legacySnapshot=`async function snapshot(timetableId) {
   return {t,courses:await data.query('courses',{filter}),meetings:await data.query('meetings',{filter}),changes:await data.query('occurrenceChanges',{filter})};
 }
 `;
-const legacyFeed=`export async function queryTodayFeed({date:selectedDate}={}) {
-  const date=selectedDate===undefined?await clock.today():feedDate(selectedDate),items=[];
-  for(const timetable of await data.query('timetables')) {
-    const today=await queryToday({timetableId:timetable.id,...(selectedDate===undefined?{}:{date})}),local=await clock.local(timetable.timezone);
-    for(const item of today.items) {
-      const startTime=timetable.periods[item.startPeriod-1].start,endTime=timetable.periods[item.endPeriod-1].end;
-      items.push({...item,timetableId:timetable.id,timetableName:timetable.name,timezone:timetable.timezone,startTime,endTime,
-        startOffset:(civil(item.date)-civil(local.date))/dayMs*1440+timeMinutes(startTime)-timeMinutes(local.time),isLocalToday:item.date===local.date});
-    }
+function utc({date,time,zone}) {
+  const wall=Date.parse(`${date}T${time}:00Z`);
+  let instant=wall;
+  for(let iteration=0;iteration<4;iteration++) {
+    const current=local({utc:new Date(instant).toISOString(),zone});
+    const offset=Date.parse(`${current.date}T${current.time}:00Z`)-instant;
+    const next=wall-offset;
+    if(next===instant)return {status:'unique',instants:[new Date(instant).toISOString()]};
+    instant=next;
   }
-  items.sort((a,b)=>(selectedDate===undefined?a.startOffset-b.startOffset:a.startTime.localeCompare(b.startTime))||a.title.localeCompare(b.title)||a.timetableId.localeCompare(b.timetableId));
-  return {date,items};
+  throw Error('Fixture time did not resolve');
 }
-`;
 const tables=['America/New_York','Asia/Shanghai'].map(zone=>({id:zone,name:zone,firstMonday:'2026-10-26',totalWeeks:2,timezone:zone,periods:[{number:1,start:'09:00',end:'10:00'}]}));
 async function feed(input,legacy) {
   const calls=[],pending=new Map();
@@ -87,6 +87,8 @@ async function feed(input,legacy) {
     calls.push([method,args]);
     if(method==='clock.today')return args.zone?local({utc:'2026-11-01T03:00:00Z',zone:args.zone}).date:'2026-11-01';
     if(method==='clock.local')return local({utc:'2026-11-01T03:00:00Z',zone:args.zone});
+    if(method==='clock.now')return '2026-11-01T03:00:00Z';
+    if(method==='clock.toUtc')return utc(args);
     if(method==='data.get')return tables.find(table=>table.id===args.id);
     if(method==='data.query'){
       if(args.collection==='timetables')return tables;
@@ -99,7 +101,7 @@ async function feed(input,legacy) {
       });
     }
     throw Error('Unexpected request '+method);
-  },source=>legacy?source.replace(/async function snapshot\([\s\S]*?(?=export async function queryTimetables)/,legacySnapshot).replace(/export async function queryTodayFeed\([\s\S]*?(?=export async function renderTodayFeed)/,legacyFeed):source);
+  },source=>legacy?source.replace(/async function snapshot\([\s\S]*?(?=export async function queryTimetables)/,legacySnapshot).replace('todayFromSnapshot(content,selectedDate===undefined?local.date:date)','todayFromSnapshot(content,selectedDate===undefined?await clock.today(timetable.timezone):date)'):source);
   const timeout=setTimeout(()=>{throw Error('Independent snapshot requests did not arrive together');},2000);
   try{return {result:clone(await module.queryTodayFeed(input)),calls};}finally{clearTimeout(timeout);}
 }

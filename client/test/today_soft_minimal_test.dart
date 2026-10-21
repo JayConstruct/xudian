@@ -136,7 +136,7 @@ void main() {
         );
         await settle(tester);
         expect(find.byType(DayOverview), findsOneWidget);
-        expect(find.byType(AgendaItem), findsNWidgets(3));
+        expect(find.byType(AgendaItem), findsOneWidget);
         expect(find.byType(DailyTaskItem), findsOneWidget);
         expect(
           tester
@@ -145,7 +145,13 @@ void main() {
           3,
         );
         expect(find.textContaining('1 项待办'), findsOneWidget);
-        expect(find.text('高等数学'), findsOneWidget);
+        expect(find.text('程序设计'), findsOneWidget);
+        expect(find.text('高等数学'), findsNothing);
+        expect(find.text('全部课程（3）'), findsOneWidget);
+        if (config.scale == 1) {
+          expect(find.text('程序设计').hitTestable(), findsOneWidget);
+          expect(find.text('完成英语阅读练习').hitTestable(), findsOneWidget);
+        }
         final scrollables = tester.widgetList<Scrollable>(
           find.byType(Scrollable),
         );
@@ -164,10 +170,21 @@ void main() {
           ),
           hasLength(config.width == 320 && config.scale == 2 ? 1 : 0),
         );
+        await tester.ensureVisible(find.text('全部课程（3）'));
+        await tester.tap(find.text('全部课程（3）'));
+        await settle(tester);
+        expect(find.byType(AgendaItem), findsNWidgets(3));
+        expect(find.byType(DailyTaskItem), findsOneWidget);
+        expect(find.text('收起课程'), findsOneWidget);
         await tester.ensureVisible(find.text('高等数学'));
         await tester.tap(find.text('高等数学'));
         await settle(tester);
         expect(interactions.last['page'], 'app.schedule.occurrence');
+        await tester.ensureVisible(find.text('收起课程'));
+        await tester.tap(find.text('收起课程'));
+        await settle(tester);
+        expect(find.byType(AgendaItem), findsOneWidget);
+        expect(find.text('高等数学'), findsNothing);
         await tester.ensureVisible(find.text('完成英语阅读练习'));
         await tester.tap(find.text('完成英语阅读练习'));
         await settle(tester);

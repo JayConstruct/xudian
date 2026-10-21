@@ -1,5 +1,5 @@
 import {data,ids} from '@xudian/sdk';
-import {validateTimetable,validateMeeting,validateChange,occurrences,overlaps,addDays,validOriginal} from './calendar.js';
+import {validateTimetable,validateMeeting,validateChange,occurrences,overlaps,addDays,validOriginal,normalizeWeeks} from './calendar.js';
 import {customCourseColor} from './colors.js';
 const canon=value=>JSON.stringify(normalize(value));
 function normalize(v) { if(Array.isArray(v)) return v.map(normalize); if(v&&typeof v==='object') return Object.fromEntries(Object.keys(v).sort().map(k=>[k,normalize(v[k])])); return v; }
@@ -19,6 +19,18 @@ function identicalEntity(collection,left,right) {
   if(collection==='courses') {delete a.colorMode;delete b.colorMode;}
   return canon(a)===canon(b);
 }
+function timeBasis(timetable) {
+  return {firstMonday:timetable.firstMonday,totalWeeks:timetable.totalWeeks,timezone:timetable.timezone,
+    periods:timetable.periods.map(period=>({number:period.number,start:period.start,end:period.end}))};
+}
+function basisPreview(timetable,draft) {
+  const meeting=draft.meetings?.[0];
+  if(!meeting)return {...timeBasis(timetable)};
+  const week=normalizeWeeks(meeting.weeks,draft.timetable.totalWeeks)[0];
+  const day=addDays(timetable.firstMonday,(week-1)*7+meeting.weekday-1);
+  const start=timetable.periods[meeting.startPeriod-1]?.start,end=timetable.periods[meeting.endPeriod-1]?.end;
+  return {...timeBasis(timetable),example:`首个导入安排：${day} ${start&&end?`${start}–${end}`:'节次超出范围，不能沿用此基准'} · ${timetable.timezone}`};
+}
 export async function importPlan(input) {
   const {draft,targetTimetableId,mode='new',choices={}}=input;
   if(draft?.draftVersion!==1 || typeof draft.scope!=='string'||!draft.scope || typeof draft.adapterVersion!=='string'||typeof draft.complete!=='boolean') throw new Error('ScheduleImportDraft v1 无效');
@@ -37,6 +49,20 @@ export async function importPlan(input) {
   const source=sources.find(s=>s.timetableId===tid&&s.sourceKey===sourceKey);
   const mappings={...(source?.mappings||{})},writes=[],conflicts=[],warnings=[...(draft.warnings||[])];
   const incomingTable=clean(draft.timetable);
+  if(mode!=='new'&&!source?.timetableBaseline&&canon(timeBasis(t))!==canon(timeBasis(incomingTable))) {
+    const key='timetable:timeBasis',choice=choices[key];
+    warnings.push('来源与目标的学期、时区或节次时间基准不同。保留本地会按目标基准重新解释导入周次和节次；采用来源会改变目标课表内所有课程的基准。此操作不转换课程的实际日期或时刻；如需保留两边原有时间，请取消合并并选择新建课表。');
+    if(!['local','source'].includes(choice))return {writes:[],events:[],result:{timetableId:tid,blocked:true,warnings,conflicts:[{
+      key,collection:'timetables',field:'首次导入时间基准：保留本地＝按目标重新解释导入课程；采用来源＝改变既有课程基准；保留两边原时间请选择新建课表',
+      local:basisPreview(t,draft),source:basisPreview(incomingTable,draft),
+    }]}};
+    warnings.push(choice==='source'?'已明确选择采用来源时间基准，既有课程也将按来源基准解释。':'已明确选择保留本地时间基准，导入课程将按目标基准解释。');
+    if(choice==='source') {
+      t={...t,...timeBasis(incomingTable)};
+      validateTimetable(t);
+      writes.push({collection:'timetables',id:tid,value:t});
+    }
+  }
   if(mode!=='new' && source?.timetableBaseline) {
     const base=source.timetableBaseline,current=clean(t),merged={...current};
     delete incomingTable.datasetId;

@@ -361,6 +361,53 @@ void main() {
     },
   );
 
+  testWidgets('fully hidden header releases focus and cannot regain it', (
+    tester,
+  ) async {
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (value) {
+            context = value;
+            return Column(
+              children: [
+                WorkspaceChromeHeader(
+                  controller: controller,
+                  child: SizedBox(
+                    height: 96,
+                    child: Focus(focusNode: focus, child: const SizedBox()),
+                  ),
+                ),
+                const Expanded(child: SizedBox()),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    focus.requestFocus();
+    await tester.pump();
+    expect(focus.hasFocus, isTrue);
+    move(200, 200);
+    await tester.pump();
+    await tester.pump();
+    expect(controller.collapsed, isTrue);
+    expect(focus.hasFocus, isFalse);
+    focus.requestFocus();
+    await tester.pump();
+    expect(focus.hasFocus, isFalse);
+    controller.reveal();
+    await tester.pump();
+    await tester.pump();
+    focus.requestFocus();
+    await tester.pump();
+    expect(focus.hasFocus, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'header clips exactly physical travel and retains state through resize and hiding',
     (tester) async {

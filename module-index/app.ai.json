@@ -296,6 +296,82 @@
       "size": 9610,
       "sha256": "e0b838f33f44bc3498a8bb24ba1ca3dc8c5f9e189567d82933b1d68669f19506",
       "signature": null
+    },
+    {
+      "version": "1.5.1",
+      "manifest": {
+        "id": "app.ai",
+        "name": "AI 助手",
+        "version": "1.5.1",
+        "hostApi": "^1.31.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "http",
+          "secrets",
+          "grants.request",
+          "grants.revoke",
+          "packages.prepare",
+          "packages.review",
+          "clock.today"
+        ],
+        "dependencies": [],
+        "defaultInstall": true,
+        "httpOrigins": [],
+        "description": "提供 AI 助手入口和宿主服务接口。",
+        "author": "JayConstruct"
+      },
+      "services": [
+        {
+          "id": "ai.connection.save",
+          "major": 1,
+          "handler": "saveConnection",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "ai.history.save",
+          "major": 1,
+          "handler": "saveHistory",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "ai.preferences.save",
+          "major": 1,
+          "handler": "savePreferences",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "advanced"
+            ],
+            "properties": {
+              "advanced": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261021-ui-ux/app.ai-1.5.1.xmodule",
+      "size": 11026,
+      "sha256": "78c0c90f8958fdfda0b2722c94ca989b93e490baa00d8dc0c9dbbe385805d714",
+      "signature": null
     }
   ]
 }

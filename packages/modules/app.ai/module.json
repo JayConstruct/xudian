@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.ai",
     "name": "AI 助手",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "hostApi": "^1.31.0",
     "dataVersion": 1,
     "permissions": [

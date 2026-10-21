@@ -219,6 +219,38 @@ void main() {
         .onViewportChanged!({'startDate': startDate, 'visibleDays': days});
   }
 
+  testWidgets('background refresh waits until the planner gesture ends', (
+    tester,
+  ) async {
+    await mount(tester);
+    final initialCalls = host.calls.length;
+    board(tester).onDragActiveChanged!(true);
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pump();
+    expect(host.calls, hasLength(initialCalls));
+    expect(renderer(tester).busy, isFalse);
+    expect(board(tester).enabled, isTrue);
+    board(tester).onDragActiveChanged!(false);
+    await _until(tester, () => host.calls.length > initialCalls);
+    await _until(tester, () => renderer(tester).busy == false);
+    expect(board(tester).enabled, isTrue);
+  });
+
+  testWidgets('explicit planner events are not deferred by the gesture gate', (
+    tester,
+  ) async {
+    await mount(tester);
+    board(tester).onDragActiveChanged!(true);
+    board(tester).onEvent({'type': 'jump'});
+    await _until(
+      tester,
+      () => renderer(tester).state['startDate'] == '2026-11-11',
+    );
+    board(tester).onDragActiveChanged!(false);
+    await tester.pump();
+    expect(renderer(tester).busy, isFalse);
+  });
+
   testWidgets(
     'in-window scroll stays local and saves only the latest viewport',
     (tester) async {

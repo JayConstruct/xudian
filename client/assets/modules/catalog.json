@@ -1,8 +1,8 @@
 [
   {
     "id": "app.ai",
-    "asset": "assets/modules/app.ai-1.5.0.xmodule",
-    "sha256": "e0b838f33f44bc3498a8bb24ba1ca3dc8c5f9e189567d82933b1d68669f19506",
+    "asset": "assets/modules/app.ai-1.5.1.xmodule",
+    "sha256": "78c0c90f8958fdfda0b2722c94ca989b93e490baa00d8dc0c9dbbe385805d714",
     "default": true
   },
   {
@@ -25,8 +25,8 @@
   },
   {
     "id": "app.views.today",
-    "asset": "assets/modules/app.views.today-1.8.0.xmodule",
-    "sha256": "51a3f89d3fac605daeab1801303cc823c60faf355c3dee3e26ba11d36a2f3a32",
+    "asset": "assets/modules/app.views.today-1.8.1.xmodule",
+    "sha256": "9661c726fa890752089c8f36d646e3b137bf9e7a130fc1767bacd12a061db685",
     "default": true
   },
   {
