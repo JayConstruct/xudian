@@ -24,6 +24,8 @@ Android 检查工作流支持 `v*` tag 触发。正式版使用 `vMAJOR.MINOR.PA
 
 同时推送 main 与版本标签时，main 先核对当前版本对应标签的实际提交和同一工作流的标签运行。只有提交完全一致且标签运行正在进行或已成功，才省去 main 的重复测试与构建；main 的 `android` 总关卡继续等待该标签运行的 `android` 检查通过，并传递失败或取消结果。轻量与附注标签均核对到提交。查询失败、标签尚未注册运行、提交不符或标签运行已失败时，main 正常执行完整检查；PR、手动运行和标签本身始终完整执行。去重不会复用其他提交的 APK，也不会自动发布未打标签的提交。
 
+为使去重在计划阶段命中，发布时先在待推送提交上创建对应版本标签，再同时推送 main 和标签，例如 `git push --atomic origin main refs/tags/v0.2.0-beta.14`（替换为实际版本）。已经先行启动的 main 检查会继续执行。
+
 在 GitHub 的 `Settings → Environments` 创建 `android-release`，在该 Environment 中配置四个 secrets：
 
 - `ANDROID_KEYSTORE_BASE64`：固定 keystore 的 Base64 内容。

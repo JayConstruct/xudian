@@ -2,6 +2,16 @@
 
 本页索引实际执行证据，测试数量只代表对应日期和范围。生产代码的 `host_*`、`script_*`、`schedule_*` 等回归与旧行为夹具分别核对；Linux 测试不能替代各平台运行及性能验收。
 
+## 2026-10-22 Android 发布流水线提速
+
+流程优化提交 `e544b29` 将检查、三个 Flutter 测试分片和三 ABI 构建并行执行，保留 `android` 总关卡与隔离签名。随后提交 `2de8d02` 修正规划回归的异步等待：同时等待画板和菜单刷新，保留原有断言。main 与同一提交的版本标签可合并重复计算，main 继续等待标签检查结果；失败、取消和 API 查询异常均有回归覆盖，真实 beta.13 运行元数据的匹配及等待逻辑也已核验。
+
+基准为 beta.13 标签原 Android 作业 **11分54秒**；优化后首次完整 CI 从触发至总关卡完成 **6分01秒**，最终缓存命中 **5分45秒**。两次成功运行的三个分片均为552／567／567项，合计 **1,686项 Flutter** 全部通过，三 ABI 构建与总关卡成功。最终运行日志确认恢复 Gradle 缓存，APK构建步骤由首轮275秒缩短至166秒。宿主机性能及排队会波动，这两轮记录用于展示实际耗时，不承诺固定时长。
+
+本地233项Python、36项模块目录、首轮20项及修复后49项相关Flutter回归、actionlint、仓库及架构检查通过。当前源码已强制编译为build185／versionCode4185，沿用既有签名保留数据覆盖安装；APK与设备摘要一致，启动及主页、更新设置页验证通过。该轮运行验证CI流程，App版本继续为beta.13。首次缓存复验曾出现1项规划菜单断言时序失败，完整记录保留在 `cache-probe-failed.json/log`；修复后最终全量通过，未通过重试策略跳过断言。
+
+[首次 CI](https://github.com/JayConstruct/xudian/actions/runs/39714771057)、[缓存命中 CI](https://github.com/JayConstruct/xudian/actions/runs/39716316250)、[结构化验收记录](verification/ci-speed-20261022.json)。完整日志及截图保留在本机 `dist/verification/ci-speed-20261022/`、`dist/verification/ci-speed-*-20261022.*` 与 `.cache/emulator-update/`。
+
 ## 2026-10-22 beta.13 与冷启动更新检查发布
 
 源码提交 `1f4ba3b` 已发布为 [`v0.2.0-beta.13`](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.13)。设置新增“更新设置 → 启动时检查更新”，默认关闭并保存到本机；开启后从下次冷启动起，在首帧之后异步并行检查 App 和已安装模块。返回前台不重复触发，两类检查分别限时30秒，失败静默处理；发现更新提供查看入口，下载和安装保留用户确认。本次无需发布独立模块。

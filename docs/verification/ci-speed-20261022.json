@@ -1,0 +1,98 @@
+{
+  "date": "2026-10-22",
+  "sourceCommit": "2de8d022193a140ad01d510ac052886a1f457ae7",
+  "workflowCommit": "e544b297316c7734455abe3282ed4225d5a9f916",
+  "baseline": {
+    "runId": 39711426127,
+    "url": "https://github.com/JayConstruct/xudian/actions/runs/39711426127",
+    "sourceCommit": "1f4ba3bfdef07a5a6ec22d4fa2e447b3f1cfbc35",
+    "androidValidationSeconds": 714,
+    "fullFlutterTests": 1686
+  },
+  "firstRun": {
+    "sourceCommit": "e544b297316c7734455abe3282ed4225d5a9f916",
+    "runId": 39714771057,
+    "url": "https://github.com/JayConstruct/xudian/actions/runs/39714771057",
+    "conclusion": "success",
+    "validationSecondsFromTrigger": 361,
+    "jobsSeconds": {
+      "plan": 5,
+      "checks": 63,
+      "tests (0)": 310,
+      "tests (1)": 280,
+      "tests (2)": 288,
+      "build": 345,
+      "android": 5
+    },
+    "flutterShardsPassed": [
+      552,
+      567,
+      567
+    ],
+    "totalFlutterPassed": 1686,
+    "apkBuildSeconds": 275,
+    "gradleCacheRestored": false
+  },
+  "cacheHitRun": {
+    "sourceCommit": "2de8d022193a140ad01d510ac052886a1f457ae7",
+    "runId": 39716316250,
+    "url": "https://github.com/JayConstruct/xudian/actions/runs/39716316250",
+    "conclusion": "success",
+    "validationSecondsFromTrigger": 345,
+    "jobsSeconds": {
+      "plan": 6,
+      "checks": 71,
+      "tests (0)": 328,
+      "tests (1)": 288,
+      "tests (2)": 255,
+      "build": 237,
+      "android": 4
+    },
+    "flutterShardsPassed": [
+      567,
+      552,
+      567
+    ],
+    "totalFlutterPassed": 1686,
+    "apkBuildSeconds": 166,
+    "gradleCacheRestored": true
+  },
+  "local": {
+    "pythonTests": 233,
+    "moduleCatalogTests": 36,
+    "relatedFlutterTests": 20,
+    "fixRelatedFlutterTests": 49,
+    "actionlint": "passed",
+    "emulator": {
+      "buildNumber": 185,
+      "installedVersionCode": 4185,
+      "apkSha256": "b2b65f4b59cb0a3fbad00a76919f69ba654d43bc5abb8f895b984e73f7f66efb",
+      "installedApkSha256": "b2b65f4b59cb0a3fbad00a76919f69ba654d43bc5abb8f895b984e73f7f66efb",
+      "sourceFingerprint": "ac0ededdbe85f96b6bb33d51499c000f740911ff26ed14197a7322423b2ea364",
+      "completed": true
+    }
+  },
+  "pages": {
+    "homeAndUpdateSettingsOpened": true
+  },
+  "initialCacheProbe": {
+    "runId": 39715388454,
+    "conclusion": "failure",
+    "passedFlutter": 1685,
+    "failedFlutter": 1,
+    "failure": "Planner zoom regression observed board state before open menu refreshed",
+    "fixedBy": "2de8d022193a140ad01d510ac052886a1f457ae7"
+  },
+  "deduplication": {
+    "unitAndRealHistoricalRunMetadataVerified": true,
+    "historicalTagRunId": 39711426127,
+    "sourceCommit": "1f4ba3bfdef07a5a6ec22d4fa2e447b3f1cfbc35",
+    "mainGateWaitsForMatchingTagAndroidResult": true,
+    "apiFailureRunsFullChecks": true
+  },
+  "limitations": [
+    "Hosted runner timing varies; these are single cold/cache-hit observations",
+    "No new app tag was published for this workflow-only validation; existing isolated signing tests passed"
+  ],
+  "localEvidence": "dist/verification/ci-speed-20261022/"
+}
