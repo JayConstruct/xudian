@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-22",
+  "sourceCommit": "9d3d8b61ca49338723b4a44637b818687487c99d",
+  "appTag": "v0.2.0-beta.14",
+  "status": "published-and-verified",
+  "checks": {
+    "relatedFlutterTests": 139,
+    "pythonTests": 233,
+    "moduleCatalogTests": 36,
+    "flutterAnalyze": "passed",
+    "architecture": "passed (154 Dart files)",
+    "fullFlutterCI": {
+      "passed": 1690,
+      "shards": [
+        554,
+        568,
+        568
+      ],
+      "failed": 0,
+      "runId": 39724948320,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39724948320"
+    },
+    "mainCI": {
+      "runId": 39724948187,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39724948187"
+    },
+    "actionlint": "passed",
+    "nodeResultParityAndBridgeCounts": "passed in tag CI",
+    "mainTagDeduplicationVerified": true,
+    "androidGateSecondsFromTrigger": 337,
+    "releaseSecondsFromTrigger": 371
+  },
+  "emulator": {
+    "buildNumber": 188,
+    "installedVersionCode": 4188,
+    "apkSha256": "d606efdaa4c718e45a06051ea3f7d99cd7fe3461aec0a135389d4fe37f9acbd0",
+    "installedApkSha256": "d606efdaa4c718e45a06051ea3f7d99cd7fe3461aec0a135389d4fe37f9acbd0",
+    "completed": true,
+    "sourceFingerprint": "cb5d47b6ac48f486f673144f178a2470efc41db65a9d6942eb0553d467233e5b",
+    "versionName": "0.2.0-beta.14"
+  },
+  "pages": {
+    "plannerOpened": true,
+    "existingCourseBlocksOpened": true,
+    "threeAndSevenColumnLayoutsVerified": true,
+    "originalThreeColumnsRestored": true,
+    "businessDataUnchanged": true,
+    "shortTaskGroupingValidatedInWidgetTests": true,
+    "shortTaskGroupingLiveBatchCreated": false
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.14",
+    "sourceCommit": "9d3d8b61ca49338723b4a44637b818687487c99d",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.14",
+    "publishedAt": "2026-10-22T05:00:11Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 147,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "name": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "version": "0.2.0-beta.14",
+        "versionCode": 1147,
+        "sha256": "fa21ccaddf5d1e449007e075c97e3de4177a48ba40706635c7b3c22d2e9e3938",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "version": "0.2.0-beta.14",
+        "versionCode": 2147,
+        "sha256": "64a8e9c43dbfc051119167c5678bc771f31cd1939426463557d9d2a494ca07bf",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "version": "0.2.0-beta.14",
+        "versionCode": 4147,
+        "sha256": "ba77f11defae36be1bf0c20b3b95a3f58a4b202e5a065e21a2fcf9c9f3cb30cd",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false,
+    "releaseNotesVerified": true
+  },
+  "limitations": [
+    "Public fixed-signature APKs verified separately; emulator retains the existing development signature and data",
+    "Consecutive and overlapping half-hour batches verified in widget fixtures; emulator page checked using existing data",
+    "No ARM physical-device or native Windows runtime acceptance"
+  ],
+  "localEvidence": "dist/verification/release-20261022-beta14/"
+}
