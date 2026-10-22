@@ -455,14 +455,17 @@ void main() {
         await tester.tap(find.byTooltip('放大时间轴'));
       }
       // Each preference write also invalidates the real page. Wait for the
-      // serialized actions and their refreshes rather than a fixed one-frame
-      // timing assumption on a busy test worker.
-      for (var attempt = 0; attempt < 8; attempt++) {
+      // serialized actions, page and open menu refreshes. The board can paint
+      // the new scale before the header notification rebuilds the menu.
+      final zoomWait = Stopwatch()..start();
+      while (zoomWait.elapsed < const Duration(seconds: 8)) {
         await settlePlanner(tester);
         if (tester
-                .widget<PlannerBoard>(find.byType(PlannerBoard))
-                .options['pixelsPerMinute'] ==
-            3) {
+                    .widget<PlannerBoard>(find.byType(PlannerBoard))
+                    .options['pixelsPerMinute'] ==
+                3 &&
+            find.text('最大').evaluate().length == 1 &&
+            find.text('显示列数').evaluate().length == 1) {
           break;
         }
       }
