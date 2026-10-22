@@ -4,16 +4,16 @@ import '../ui/ui_design.dart';
 import '../../app/app_toast.dart';
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pub_semver/pub_semver.dart';
 
 import '../module_catalog/module_catalog.dart';
-import 'host_providers.dart';
+import '../module_catalog/catalog_providers.dart';
+
+export '../module_catalog/catalog_providers.dart';
 import 'module_host.dart';
 import 'module_management_widgets.dart';
 import 'module_catalog_widgets.dart';
@@ -22,36 +22,9 @@ import 'script_app_module.dart';
 import '../ui/ui_composition.dart';
 import 'host_api.dart';
 import 'script_detail_page.dart';
-import 'bundled_module_retirement.dart';
 import 'module_install_review_dialog.dart';
 
 export 'module_install_review_dialog.dart';
-
-final moduleCatalogClientProvider = FutureProvider<ModuleCatalogClient>((
-  ref,
-) async {
-  final host = await ref.watch(moduleHostProvider.future);
-  final rows = await host.store.sql(
-    "SELECT value FROM host_meta WHERE key='module-catalog-repository'",
-  );
-  final bundled = jsonDecode(
-    await rootBundle.loadString('assets/modules/catalog.json'),
-  ) as List;
-  final client = ModuleCatalogClient(
-    cacheDirectory: Directory('${host.directory.path}/catalog-cache'),
-    publishers: await ref.watch(hostPublisherRegistryProvider.future),
-    excludedModuleIds: await ref.watch(retiredBundledModuleIdsProvider.future),
-    preinstalledDigests: {
-      for (final raw in bundled)
-        object(raw)['id'] as String: object(raw)['sha256'] as String,
-    },
-    repository: rows.isEmpty
-        ? 'JayConstruct/xudian-modules'
-        : rows.first['value'] as String,
-  );
-  ref.onDispose(client.dispose);
-  return client;
-});
 
 Future<Map<String, InstalledCatalogModule>> _installed(
   ModuleHost host, {

@@ -9,6 +9,10 @@ import '../core/performance/ui_load_trace.dart';
 
 import 'dart:async';
 
+import '../core/app_updates/startup_update_preference.dart';
+import '../core/app_updates/startup_updates.dart';
+import '../features/settings/update_settings_page.dart';
+
 import '../core/module_host/module_host.dart';
 import '../core/module_host/module_package.dart';
 import '../core/module_host/host_providers.dart';
@@ -99,6 +103,30 @@ class _AppShellState extends ConsumerState<AppShell> {
     workspaceHeader.addListener(_headerChanged);
     workspaceChrome.addListener(_headerChanged);
     _restoreInstalledModules();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_checkStartupUpdates());
+    });
+  }
+
+  Future<void> _checkStartupUpdates() async {
+    if (!await ref.read(startupUpdatesProvider.notifier).start()) return;
+    if (!mounted ||
+        ref.read(startupUpdateEnabledProvider).asData?.value != true ||
+        !ref.read(startupUpdatesProvider).hasUpdates) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('发现 App 或模块更新'),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: '查看',
+          onPressed: () => Navigator.of(context).push<void>(
+            MaterialPageRoute(builder: (_) => const UpdateSettingsPage()),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _restoreInstalledModules() =>

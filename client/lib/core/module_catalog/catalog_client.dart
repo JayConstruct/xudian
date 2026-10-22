@@ -323,6 +323,7 @@ class ModuleCatalogClient {
     Uri url,
     T Function(Object?) parse, {
     bool offline = false,
+    bool allowCacheFallback = true,
   }) async {
     loadedFromCache = offline;
     final cache = await _cache(url.toString());
@@ -334,7 +335,11 @@ class ModuleCatalogClient {
       try {
         bytes = await _retry(url, maximumBytes: 4 * 1024 * 1024);
       } catch (error) {
-        if (!_networkError(error) || !await cache.exists()) rethrow;
+        if (!allowCacheFallback ||
+            !_networkError(error) ||
+            !await cache.exists()) {
+          rethrow;
+        }
         loadedFromCache = true;
         bytes = await cache.readAsBytes();
       }
@@ -344,18 +349,24 @@ class ModuleCatalogClient {
     return result;
   }
 
-  Future<ModuleCatalog> loadCatalog({bool offline = false}) => _metadata(
+  Future<ModuleCatalog> loadCatalog({
+    bool offline = false,
+    bool allowCacheFallback = true,
+  }) => _metadata(
     catalogUrl,
     (json) => ModuleCatalog.fromJson(json).without(excludedModuleIds),
     offline: offline,
+    allowCacheFallback: allowCacheFallback,
   );
   Future<ModuleVersionIndex> loadIndex(
     CatalogModule module, {
     bool offline = false,
+    bool allowCacheFallback = true,
   }) => _metadata(
     module.indexUrl,
     (json) => ModuleVersionIndex.fromJson(json, module),
     offline: offline,
+    allowCacheFallback: allowCacheFallback,
   );
 
   Future<ScriptPackage> _verify(List<int> bytes, CatalogVersion release) async {

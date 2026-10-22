@@ -39,6 +39,7 @@ class ConfigurationExporter {
         'ui.layout': UiLayout().toJson(),
         'ui.selection': UiSelection().toJson(),
         'app.updateChannel': 'stable',
+        'app.checkUpdatesOnStartup': 'false',
       };
       for (final row in await db.select(db.appSettings).get()) {
         if (const {

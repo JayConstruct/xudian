@@ -6,6 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/app/app.dart';
+import 'package:task_app/core/app_updates/github_app_updates.dart';
+import 'package:task_app/core/app_updates/startup_update_preference.dart';
+import 'package:task_app/core/app_updates/startup_updates.dart';
+import 'package:task_app/features/settings/update_settings_page.dart';
 import 'package:task_app/core/performance/startup_readiness.dart';
 import 'package:task_app/app/mobile_bottom_dock.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
@@ -90,6 +94,76 @@ void main() {
     await db.close();
     await directory.delete(recursive: true);
   });
+  testWidgets(
+    'cold launch checks never block workspace; resume does not repeat; timeout preserves module notice',
+    (tester) async {
+      await db
+          .into(db.appSettings)
+          .insert(
+            AppSettingsCompanion.insert(
+              key: StartupUpdatePreference.storageKey,
+              value: 'true',
+            ),
+          );
+      final appResult = Completer<AppUpdateResult>();
+      final moduleResult = Completer<ModuleUpdateSummary>();
+      var appChecks = 0, moduleChecks = 0;
+      final app = XudianApp();
+      app.registry.registerBuiltin(
+        BuiltinModuleRegistration(
+          module: _StartupPages(),
+          title: 'startup',
+          description: 'test',
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
+            startupAppCheckProvider.overrideWithValue(() {
+              appChecks++;
+              return appResult.future;
+            }),
+            startupModuleCheckProvider.overrideWithValue(() {
+              moduleChecks++;
+              return moduleResult.future;
+            }),
+          ],
+          child: app,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('workspace default'), findsOneWidget);
+      expect(appChecks, 1);
+      expect(moduleChecks, 1);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(appChecks, 1);
+      expect(moduleChecks, 1);
+      moduleResult.complete(
+        const ModuleUpdateSummary({'test.one': '模块 2.0.0'}),
+      );
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('发现 App 或模块更新'), findsOneWidget);
+      await tester.tap(find.text('查看'));
+      await tester.pumpAndSettle();
+      expect(find.byType(UpdateSettingsPage), findsOneWidget);
+      expect(find.text('启动检查未完成，点击重试'), findsOneWidget);
+      expect(find.textContaining('模块 2.0.0'), findsOneWidget);
+      appResult.complete(
+        const AppUpdateResult(InstalledAppVersion('1.0.0', '1'), null),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('启动检查未完成，点击重试'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.registry.dispose();
+    },
+  );
   for (final restoreFails in [false, true]) {
     testWidgets(
       restoreFails

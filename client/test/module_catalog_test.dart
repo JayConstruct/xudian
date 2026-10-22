@@ -147,6 +147,32 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('background freshness checks can reject cache fallback', () async {
+    await fixture.add(await makePackage('test.cached'));
+    final catalog = await fixture.client.loadCatalog();
+    final item = catalog.modules['test.cached']!;
+    await fixture.client.loadIndex(item);
+    final offline = ModuleCatalogClient(
+      cacheDirectory: directory,
+      networkRetries: 0,
+      transport:
+          (uri, {cancellation, onProgress, required maximumBytes}) async {
+            throw const SocketException('offline');
+          },
+    );
+    addTearDown(offline.dispose);
+    await expectLater(
+      offline.loadCatalog(allowCacheFallback: false),
+      throwsA(isA<SocketException>()),
+    );
+    await expectLater(
+      offline.loadIndex(item, allowCacheFallback: false),
+      throwsA(isA<SocketException>()),
+    );
+    expect((await offline.loadCatalog()).modules.keys, ['test.cached']);
+    expect((await offline.loadIndex(item)).versions, hasLength(1));
+  });
+
   test('optional query does not fetch a missing provider', () async {
     await fixture.add(
       await makePackage(

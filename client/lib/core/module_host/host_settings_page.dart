@@ -12,6 +12,8 @@ import '../../features/settings/appearance_settings_page.dart';
 import '../../features/settings/settings_tools_page.dart';
 import '../../features/settings/settings_widgets.dart';
 import '../../features/settings/app_update_page.dart';
+import '../../features/settings/update_settings_page.dart';
+import '../app_updates/startup_updates.dart';
 import '../../features/settings/ui_layout.dart';
 import '../../features/settings/ui_layout_page.dart';
 import '../modules/module_registry.dart';
@@ -101,6 +103,15 @@ class HostSettingsPage extends ConsumerWidget {
             SettingsGroup(
               title: '功能与支持',
               children: [
+                SettingsEntry(
+                  title: '更新设置',
+                  subtitle: ref.watch(startupUpdatesProvider).hasUpdates
+                      ? '发现可用更新，点击查看'
+                      : '启动时检查 App 与模块更新',
+                  icon: Icons.system_update_rounded,
+                  protected: true,
+                  onTap: () => open(const UpdateSettingsPage()),
+                ),
                 SettingsEntry(
                   title: '模块与连接',
                   subtitle: '模块管理、商店与模块提供的设置',
