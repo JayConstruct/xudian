@@ -20,6 +20,10 @@ Android 检查工作流支持 `v*` tag 触发。正式版使用 `vMAJOR.MINOR.PA
 
 测试版自动标记为 GitHub Pre-release，不设为 Latest，App 正式更新检查仍会过滤它，开启测试通道后可检查并打开对应下载页。所有 App tag（包括 alpha／beta／rc）发布均使用同一固定签名；历史 CI 临时签名或本机开发签名安装不因此自动兼容。安装前备份数据，签名不匹配时不要通过卸载现有应用来强行覆盖。
 
+流水线将静态／Python／目录检查、三个 Flutter 测试分片和三 ABI APK 构建并行执行。每个分片保留两个测试进程，使用 Flutter 内置的 `--total-shards=3 --shard-index=0/1/2` 覆盖完整测试集；各测试任务独立生成模块夹具。构建通过 `setup-java` 缓存 Gradle 状态，并启用 Gradle 构建缓存。`android` 总关卡要求检查、全部分片和构建均成功；失败、取消或意外跳过都会阻止后续签名，签名仍在独立 runner 中执行。
+
+同时推送 main 与版本标签时，main 先核对当前版本对应标签的实际提交和同一工作流的标签运行。只有提交完全一致且标签运行正在进行或已成功，才省去 main 的重复测试与构建；main 的 `android` 总关卡继续等待该标签运行的 `android` 检查通过，并传递失败或取消结果。轻量与附注标签均核对到提交。查询失败、标签尚未注册运行、提交不符或标签运行已失败时，main 正常执行完整检查；PR、手动运行和标签本身始终完整执行。去重不会复用其他提交的 APK，也不会自动发布未打标签的提交。
+
 在 GitHub 的 `Settings → Environments` 创建 `android-release`，在该 Environment 中配置四个 secrets：
 
 - `ANDROID_KEYSTORE_BASE64`：固定 keystore 的 Base64 内容。
