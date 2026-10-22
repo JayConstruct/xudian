@@ -2,6 +2,18 @@
 
 本页索引实际执行证据，测试数量只代表对应日期和范围。生产代码的 `host_*`、`script_*`、`schedule_*` 等回归与旧行为夹具分别核对；Linux 测试不能替代各平台运行及性能验收。
 
+## 2026-10-22 beta.13 与冷启动更新检查发布
+
+源码提交 `1f4ba3b` 已发布为 [`v0.2.0-beta.13`](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.13)。设置新增“更新设置 → 启动时检查更新”，默认关闭并保存到本机；开启后从下次冷启动起，在首帧之后异步并行检查 App 和已安装模块。返回前台不重复触发，两类检查分别限时30秒，失败静默处理；发现更新提供查看入口，下载和安装保留用户确认。本次无需发布独立模块。
+
+main 与标签 CI 均成功，标签流水线完成三 ABI 构建、隔离固定签名及公开发布。云端完整 **1,686 项 Flutter** 回归通过；本地 **62 项相关 Flutter**、**220 项 Python**、**36 项模块目录**测试，以及静态分析、154文件架构、仓库边界、Node结果等价和桥接计数检查通过。
+
+当前 beta.13 源码强制构建为 build183／versionCode4183，沿用既有签名保留数据覆盖安装，设备与产物 SHA-256 均为 `8a173779e6ab1128874d1b746e2dcd5bf51606870017afcc916faab60e69282e`，Android 确认冷启动成功。实际验证开关保存及跨冷启动保留、开启后 App 和模块检查结果、关闭后跳过检查，并恢复验收前的开关偏好。
+
+匿名重新下载三个公开 APK、`SHA256SUMS` 和 `SOURCE_COMMIT`，核对应用身份、beta.13版本、ABI、源码提交、摘要、有效固定签名及六个内置模块字节。公开构建号为 142。公开固定签名 APK 单独验证，模拟器保留既有开发签名与数据；ARM真机及Windows原生运行未验收。
+
+[结构化发布验收记录](verification/release-20261022-beta13.json)。下载包、完整日志与页面截图保留在本机 `dist/verification/release-20261022-beta13/`、`dist/verification/startup-updates-*-20261022-beta13.*` 和 `.cache/emulator-update/`，不提交本机产物。
+
 ## 2026-10-21 beta.12 与任务新建、持续规划发布
 
 源码提交 `07bbbd1` 已发布为 [`v0.2.0-beta.12`](https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.12)，任务规划1.7.1由同一提交发布为 [`modules-20261021-task-creation`](https://github.com/JayConstruct/xudian/releases/tag/modules-20261021-task-creation)。包括单次／批量新建、无图标模板子页、规则选择、冻结预览、手动调时及前台滚动补齐未来30天；选中任务不缩小内容，点击其他区域取消选中，课程块移除图标。新增的 `automation.execute` 权限用于已确认系列的持续补齐，要求先升级App至宿主API 1.37.0，再由用户确认模块更新；关闭应用期间不承诺后台常驻。
