@@ -669,6 +669,66 @@ void main() {
     },
   );
 
+  testWidgets(
+    'day sheet edits save through the real reviewed service and refresh the open sheet',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 860);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      late Map<String, Object?> original;
+      await tester.runAsync(() async {
+        original = await createTask('每日短任务');
+      });
+      var reviews = 0;
+      host.interaction = (_, method, args) async {
+        if (method == 'ui.review') {
+          reviews++;
+          return true;
+        }
+        return null;
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: _PlannerHeaderHarness(host: host)),
+        ),
+      );
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('planner-day:2026-10-14')));
+      await settle(tester);
+      final card = find.byKey(ValueKey('planner-day-card:${original['id']}'));
+      await tester.tapAt(tester.getCenter(card));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('planner-day-duration')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '3');
+      await tester.tap(find.text('确定'));
+      await settle(tester);
+      expect(
+        find.text('结束于 09:03'),
+        findsOneWidget,
+        reason: tester
+            .widgetList<Text>(find.byType(Text))
+            .map((text) => text.data)
+            .join(' | '),
+      );
+      await tester.tap(find.byKey(const ValueKey('planner-day-confirm')));
+      await settle(tester);
+      expect(reviews, 1);
+      await tester.runAsync(() async {
+        final saved = await raw(original['id']);
+        expect(saved['plannedStartAt'], original['plannedStartAt']);
+        expect(saved['plannedEndAt'], '2026-10-14T01:03:00.000Z');
+        expect(saved['estimatedMinutes'], 3);
+      });
+      expect(find.byKey(const ValueKey('planner-day-sheet')), findsOneWidget);
+      expect(find.byKey(const ValueKey('planner-day-editor')), findsNothing);
+      expect(find.text('3分钟'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   for (final intent in ['resize', 'swap', 'overdue']) {
     testWidgets(
       'quick adjustment ${intent == 'resize' ? 'applies resize' : 'keeps $intent confirmation'}',

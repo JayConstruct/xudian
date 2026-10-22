@@ -14,6 +14,8 @@ import '../ui/content_colors.dart';
 import '../ui/ui_motion.dart';
 import 'planner_timeline_window.dart';
 
+part 'planner_day_sheet.dart';
+
 typedef BoardItem = Map<String, Object?>;
 
 /// A presentation-only date/time board. Scripts own scheduling, validation,
@@ -208,6 +210,20 @@ class _PlannerBoardState extends State<PlannerBoard>
   double get _minimumTitleBandHeight =>
       MediaQuery.textScalerOf(context).scale(12) * 1.4 + 8;
   BoardItem? _selectedItem;
+  DateTime? _dayListDate;
+  bool _dayListClosing = false;
+
+  void _closeDayList() {
+    if (_dayListDate == null || _dayListClosing) return;
+    setState(() {
+      if (AppMotion.reduced(context)) {
+        _dayListDate = null;
+      } else {
+        _dayListClosing = true;
+      }
+    });
+  }
+
   final _selectionTapGroup = Object();
 
   void _clearSelection(PointerDownEvent event) {
@@ -3735,58 +3751,72 @@ class _PlannerBoardState extends State<PlannerBoard>
     final today = _today(day);
     final scheme = Theme.of(context).colorScheme;
     return Semantics(
+      button: true,
       label:
           '${date.year}年${date.month}月${date.day}日 ${today ? '今天' : _weekday(date)}',
       child: ExcludeSemantics(
-        child: Container(
-          key: ValueKey('planner-day:${day['date']}'),
-          width: _columnWidth,
-          height: height,
-          decoration: BoxDecoration(
-            color: today ? scheme.primary.withValues(alpha: .04) : null,
-            border: Border(
-              left: BorderSide(
-                color: scheme.outlineVariant.withValues(alpha: .4),
-              ),
-              bottom: BorderSide(
-                color: scheme.outlineVariant.withValues(alpha: .4),
+        child: InkWell(
+          onTap: !widget.enabled
+              ? null
+              : () => setState(() {
+                  _dayListDate = date;
+                  _dayListClosing = false;
+                  _selectedItem = null;
+                  _candidatesExpanded = false;
+                }),
+          child: Container(
+            key: ValueKey('planner-day:${day['date']}'),
+            width: _columnWidth,
+            height: height,
+            decoration: BoxDecoration(
+              color: today ? scheme.primary.withValues(alpha: .04) : null,
+              border: Border(
+                left: BorderSide(
+                  color: scheme.outlineVariant.withValues(alpha: .4),
+                ),
+                bottom: BorderSide(
+                  color: scheme.outlineVariant.withValues(alpha: .4),
+                ),
               ),
             ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  today ? '今天' : _weekday(date),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: today ? scheme.primary : scheme.onSurfaceVariant,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    today ? '今天' : _weekday(date),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: today ? scheme.primary : scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: today
-                    ? BoxDecoration(
-                        color: scheme.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      )
-                    : null,
-                child: Text(
-                  '${date.day}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: today ? FontWeight.w600 : FontWeight.w500,
-                    color: today ? scheme.onPrimary : scheme.onSurface,
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
+                  decoration: today
+                      ? BoxDecoration(
+                          color: scheme.primary,
+                          borderRadius: BorderRadius.circular(12),
+                        )
+                      : null,
+                  child: Text(
+                    '${date.day}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: today ? FontWeight.w600 : FontWeight.w500,
+                      color: today ? scheme.onPrimary : scheme.onSurface,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -4848,7 +4878,12 @@ class _PlannerBoardState extends State<PlannerBoard>
         );
         final content = Stack(
           children: [
-            Positioned.fill(child: board),
+            Positioned.fill(
+              child: ExcludeSemantics(
+                excluding: _dayListDate != null,
+                child: board,
+              ),
+            ),
             if (_timeline && _candidatesExpanded)
               Positioned(
                 top: 0,
@@ -4883,6 +4918,56 @@ class _PlannerBoardState extends State<PlannerBoard>
                   builder: (context, _) => _dragActive.value
                       ? const SizedBox.shrink()
                       : _selectionPanel(),
+                ),
+              ),
+            if (_dayListDate != null)
+              Positioned.fill(
+                child: PopScope(
+                  canPop: !widget.enabled,
+                  onPopInvokedWithResult: (didPop, result) {
+                    if (!didPop && widget.enabled) {
+                      _closeDayList();
+                    }
+                  },
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: GestureDetector(
+                          excludeFromSemantics: true,
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _closeDayList,
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                      Positioned(
+                        top: _timeline ? railHeight + 4 : 8,
+                        left: 12,
+                        right: 12,
+                        bottom: widget.bottomInset + 8,
+                        child: _PlannerDaySheetTransition(
+                          key: ValueKey(_dayListDate),
+                          visible: !_dayListClosing,
+                          onDismissed: () {
+                            if (mounted && _dayListClosing) {
+                              setState(() => _dayListDate = null);
+                            }
+                          },
+                          child: _PlannerDaySheet(
+                            date: _dayListDate!,
+                            candidates: _candidates,
+                            blocks: _blocks,
+                            options: widget.options,
+                            enabled: widget.enabled && !_dayListClosing,
+                            canMove: _movable,
+                            onEvent: widget.onEvent,
+                            onPreview: widget.onPreview,
+                            onDragActiveChanged: widget.onDragActiveChanged,
+                            onClose: _closeDayList,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             if (!_dashboard)
