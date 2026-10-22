@@ -1,0 +1,123 @@
+{
+  "date": "2026-10-22",
+  "sourceCommit": "aaffc6bbf65ff20560032efd67048106c9af9e06",
+  "appTag": "v0.2.0-beta.16",
+  "status": "published-and-verified",
+  "checks": {
+    "relatedFlutterTests": 50,
+    "flutterAnalyze": "passed",
+    "architecture": "passed (154 Dart files)",
+    "repository": "passed",
+    "releaseVersion": "passed",
+    "pythonTestsCI": 233,
+    "moduleCatalogTestsCI": 36,
+    "fullFlutterCI": {
+      "passed": 1709,
+      "shards": [
+        561,
+        574,
+        574
+      ],
+      "failed": 0,
+      "runId": 39787900028,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39787900028"
+    },
+    "mainCI": {
+      "runId": 39787899491,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39787899491"
+    },
+    "mainTagDeduplicationVerified": true,
+    "nodeResultParityAndBridgeCounts": "passed in tag CI"
+  },
+  "emulator": {
+    "buildNumber": 200,
+    "installedVersionCode": 4200,
+    "apkSha256": "34b6a87e922a1ad1682ac1ae0ca78fbc82dd1a1225bb125c4bc2089a31c1edb8",
+    "installedApkSha256": "34b6a87e922a1ad1682ac1ae0ca78fbc82dd1a1225bb125c4bc2089a31c1edb8",
+    "completed": true,
+    "sourceFingerprint": "02f9d63b952b19eda5d33ce7e566a0a31b5e377dbec101a363b883b4fd1c17d4",
+    "versionName": "0.2.0-beta.16"
+  },
+  "pages": {
+    "verified": [
+      "full-screen day view covers header and dock",
+      "long press preserves scheduled card positions",
+      "hover insertion preserves scheduled card positions",
+      "date header opens day sheet",
+      "background semantics excluded",
+      "unscheduled task drags into chronological list",
+      "past-time service validation blocks confirmation",
+      "start time dialog returns 23:00",
+      "duration dialog returns 3 minutes",
+      "95-minute and 3-minute cards have equal heights",
+      "service validation enables confirmation for 23:00–23:03",
+      "cancel restores original 30-minute unscheduled task",
+      "Android back closes day sheet",
+      "day sheet reopens"
+    ],
+    "businessDataUnchanged": true,
+    "emulatorTaskWrites": false,
+    "savePersistence": "Verified by real-service integration test with an isolated in-memory database."
+  },
+  "layout": {
+    "defaultRowHeightDp": 48,
+    "scheduledGapDp": 8,
+    "fullScreen": true,
+    "timeRangeLines": 1,
+    "dragAndHoverPreserveCardPositions": true
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.16",
+    "sourceCommit": "aaffc6bbf65ff20560032efd67048106c9af9e06",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.16",
+    "publishedAt": "2026-10-22T13:40:08Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 151,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "name": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "version": "0.2.0-beta.16",
+        "versionCode": 1151,
+        "sha256": "fb6ac260fad27ac7d17d6045f928a1166614febe64f1b57b97b3b5152a9fa211",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "version": "0.2.0-beta.16",
+        "versionCode": 2151,
+        "sha256": "c7be3e53e74b1ed0398106c4f22f63d528269af38e300725385f142ed6f2e9ce",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "version": "0.2.0-beta.16",
+        "versionCode": 4151,
+        "sha256": "a97e5fe23b105552b444bd53cbc82083cfeee96d393b1ee5f6f0a9d7aeb12515",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false,
+    "releaseNotesVerified": true
+  },
+  "limitations": [
+    "Public fixed-signature APKs verified separately; emulator retains its existing development signature and data",
+    "No ARM physical-device or native Windows runtime acceptance"
+  ],
+  "localEvidence": "dist/verification/release-20261022-beta16/"
+}
