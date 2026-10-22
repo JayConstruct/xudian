@@ -1,7 +1,7 @@
 part of 'planner_board.dart';
 
 /// Retains the sheet through its exit without rebuilding its list on each tick.
-/// The board's dismiss barrier stays in place until this transition finishes.
+/// The full-screen layer stays in place until this transition finishes.
 class _PlannerDaySheetTransition extends StatefulWidget {
   const _PlannerDaySheetTransition({
     super.key,
@@ -459,8 +459,10 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     final end = selected ? _end : _date(item['end']);
     final canMove = widget.canMove(item);
     final height = math.max(
-      64.0,
-      MediaQuery.textScalerOf(context).scale(14) * 3.5 + 16,
+      48.0,
+      MediaQuery.textScalerOf(context).scale(14) * 1.5 +
+          MediaQuery.textScalerOf(context).scale(12) * 1.3 +
+          8,
     );
     String label(DateTime time) {
       final day = DateTime.utc(time.year, time.month, time.day);
@@ -488,7 +490,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
             child: Container(
               key: feedback ? null : ValueKey('planner-day-card:${item['id']}'),
               height: height,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               foregroundDecoration: selected
                   ? BoxDecoration(
                       borderRadius: BorderRadius.circular(9),
@@ -497,60 +499,47 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                   : null,
               child: Row(
                 children: [
-                  if (!candidate) ...[
-                    SizedBox(
-                      key: feedback
-                          ? null
-                          : ValueKey('planner-day-times:${item['id']}'),
-                      width: math.min(
-                        96,
-                        MediaQuery.textScalerOf(context).scale(66),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            label(start!),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: scheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            label(end!),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
                   Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${item['title'] ?? ''}',
-                          maxLines: selected ? 1 : 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: foreground,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${item['title'] ?? ''}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: foreground,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (selected) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '待确认',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.primary,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                        if (selected)
+                        if (!candidate)
                           Text(
-                            '待确认',
+                            '${label(start!)}–${label(end!)}',
+                            key: feedback
+                                ? null
+                                : ValueKey('planner-day-times:${item['id']}'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.primary,
+                              color: scheme.onSurfaceVariant,
+                              fontSize: 12,
+                              height: 1.3,
                             ),
                           ),
                       ],
@@ -608,13 +597,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     builder: (context, hovering, rejected) => AnimatedContainer(
       key: ValueKey('planner-day-slot:$index'),
       duration: const Duration(milliseconds: 120),
-      height: empty
-          ? 88
-          : hovering.isNotEmpty
-          ? 32
-          : _dragging
-          ? 22
-          : 8,
+      height: empty ? 88 : 8,
       alignment: Alignment.center,
       decoration: hovering.isEmpty
           ? null
@@ -624,10 +607,13 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Theme.of(context).colorScheme.primary),
             ),
-      child: hovering.isNotEmpty || empty
-          ? Text(
-              empty ? '拖到这里安排任务' : '放到这里，再调整时间',
-              style: Theme.of(context).textTheme.labelSmall,
+      child: empty
+          ? Text('拖到这里安排任务', style: Theme.of(context).textTheme.labelSmall)
+          : hovering.isNotEmpty
+          ? SizedBox(
+              height: 2,
+              width: double.infinity,
+              child: ColoredBox(color: Theme.of(context).colorScheme.primary),
             )
           : null,
     ),
@@ -638,6 +624,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     final id = _draft!['id'];
     final picked = await showTimePicker(
       context: context,
+      useRootNavigator: false,
       initialTime: TimeOfDay(hour: previous.hour, minute: previous.minute),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
@@ -661,10 +648,11 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     final id = _draft!['id'];
     final minutes = await showDialog<int>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => _PlannerDayDurationDialog(minutes: _minutes),
     );
-    // Native dialogs temporarily deactivate ScriptPage. Keep the local choice;
-    // confirmation still requires an active board and service validation.
+    // Keep the local choice; confirmation still requires an active board and
+    // service validation.
     if (!mounted || minutes == null || _draft?['id'] != id) {
       return;
     }
@@ -813,187 +801,190 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
         (widget.options['candidateCount'] as num? ?? widget.candidates.length)
             .toInt() -
         (widget.candidates.length - candidates.length);
-    return FrostedToolbarSurface(
+    return Material(
       key: const ValueKey('planner-day-sheet'),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-        child: LayoutBuilder(
-          builder: (context, constraints) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${_day.month}月${_day.day}日 ${const ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][_day.weekday - 1]}',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        Text(
-                          '当日任务',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+      color: scheme.surface,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${_day.month}月${_day.day}日 ${const ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][_day.weekday - 1]}',
+                            style: theme.textTheme.titleMedium,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: widget.onClose,
-                    tooltip: '关闭当日任务',
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              const Divider(height: 12),
-              Semantics(
-                key: const ValueKey('planner-day-candidates-toggle'),
-                container: true,
-                child: InkWell(
-                  onTap: () => setState(() => _expanded = !_expanded),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          '待安排 $candidateCount',
-                          style: theme.textTheme.titleSmall,
-                        ),
-                        Icon(
-                          _expanded ? Icons.expand_less : Icons.expand_more,
-                          size: 18,
-                        ),
-                        const Spacer(),
-                        Flexible(
-                          child: Text(
-                            '长按拖到下方安排',
-                            maxLines: 1,
+                          Text(
+                            '当日任务',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: widget.onClose,
+                      tooltip: '关闭当日任务',
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const Divider(height: 12),
+                Semantics(
+                  key: const ValueKey('planner-day-candidates-toggle'),
+                  container: true,
+                  child: InkWell(
+                    onTap: () => setState(() => _expanded = !_expanded),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            '待安排 $candidateCount',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          Icon(
+                            _expanded ? Icons.expand_less : Icons.expand_more,
+                            size: 18,
+                          ),
+                          const Spacer(),
+                          Flexible(
+                            child: Text(
+                              '长按拖到下方安排',
+                              maxLines: 1,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (_expanded && candidates.isNotEmpty)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: math.min(208, constraints.maxHeight * .32),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      primary: false,
+                      itemCount: candidates.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 6),
+                      itemBuilder: (_, index) =>
+                          _card(candidates[index], candidate: true),
+                    ),
+                  ),
+                if (_expanded && candidates.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('暂无待安排任务'),
+                  ),
+                if (widget.options['candidatePageLabel'] != null)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (widget.options['candidatePreviousEvent'] != null)
+                        IconButton(
+                          tooltip: '上一页待安排任务',
+                          onPressed: !widget.enabled
+                              ? null
+                              : () => widget.onEvent(
+                                  widget.options['candidatePreviousEvent'],
+                                ),
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                      Text(
+                        '${widget.options['candidatePageLabel']}',
+                        style: theme.textTheme.labelSmall,
+                      ),
+                      if (widget.options['candidateNextEvent'] != null)
+                        IconButton(
+                          tooltip: '下一页待安排任务',
+                          onPressed: !widget.enabled
+                              ? null
+                              : () => widget.onEvent(
+                                  widget.options['candidateNextEvent'],
+                                ),
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                    ],
+                  ),
+                const Divider(height: 16),
+                Row(
+                  children: [
+                    Text(
+                      '已安排 ${items.length}',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    const Spacer(),
+                    Text(
+                      '按时间排序',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Expanded(
+                  child: ListView(
+                    key: _listKey,
+                    controller: _scroll,
+                    padding: EdgeInsets.zero,
+                    children: [
+                      if (items.isEmpty) _slot(0, empty: true),
+                      for (var index = 0; index < items.length; index++) ...[
+                        _slot(index),
+                        DragTarget<BoardItem>(
+                          onWillAcceptWithDetails: (details) =>
+                              widget.canMove(details.data) &&
+                              details.data['id'] != items[index]['id'],
+                          onAcceptWithDetails: (details) =>
+                              _place(details.data, index + 1),
+                          builder: (_, hovering, _) => DecoratedBox(
+                            decoration: BoxDecoration(
+                              border: hovering.isEmpty
+                                  ? null
+                                  : Border(
+                                      bottom: BorderSide(
+                                        color: scheme.primary,
+                                        width: 3,
+                                      ),
+                                    ),
+                            ),
+                            child: _card(items[index]),
+                          ),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-              ),
-              if (_expanded && candidates.isNotEmpty)
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: math.min(208, constraints.maxHeight * .32),
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    primary: false,
-                    itemCount: candidates.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 6),
-                    itemBuilder: (_, index) =>
-                        _card(candidates[index], candidate: true),
-                  ),
-                ),
-              if (_expanded && candidates.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('暂无待安排任务'),
-                ),
-              if (widget.options['candidatePageLabel'] != null)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (widget.options['candidatePreviousEvent'] != null)
-                      IconButton(
-                        tooltip: '上一页待安排任务',
-                        onPressed: !widget.enabled
-                            ? null
-                            : () => widget.onEvent(
-                                widget.options['candidatePreviousEvent'],
-                              ),
-                        icon: const Icon(Icons.chevron_left),
-                      ),
-                    Text(
-                      '${widget.options['candidatePageLabel']}',
-                      style: theme.textTheme.labelSmall,
-                    ),
-                    if (widget.options['candidateNextEvent'] != null)
-                      IconButton(
-                        tooltip: '下一页待安排任务',
-                        onPressed: !widget.enabled
-                            ? null
-                            : () => widget.onEvent(
-                                widget.options['candidateNextEvent'],
-                              ),
-                        icon: const Icon(Icons.chevron_right),
-                      ),
-                  ],
-                ),
-              const Divider(height: 16),
-              Row(
-                children: [
-                  Text(
-                    '已安排 ${items.length}',
-                    style: theme.textTheme.titleSmall,
-                  ),
-                  const Spacer(),
-                  Text(
-                    '按时间排序',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Expanded(
-                child: ListView(
-                  key: _listKey,
-                  controller: _scroll,
-                  padding: EdgeInsets.zero,
-                  children: [
-                    if (items.isEmpty) _slot(0, empty: true),
-                    for (var index = 0; index < items.length; index++) ...[
-                      _slot(index),
-                      DragTarget<BoardItem>(
-                        onWillAcceptWithDetails: (details) =>
-                            widget.canMove(details.data) &&
-                            details.data['id'] != items[index]['id'],
-                        onAcceptWithDetails: (details) =>
-                            _place(details.data, index + 1),
-                        builder: (_, hovering, _) => DecoratedBox(
-                          decoration: BoxDecoration(
-                            border: hovering.isEmpty
-                                ? null
-                                : Border(
-                                    bottom: BorderSide(
-                                      color: scheme.primary,
-                                      width: 3,
-                                    ),
-                                  ),
-                          ),
-                          child: _card(items[index]),
-                        ),
-                      ),
+                      if (items.isNotEmpty) _slot(items.length),
                     ],
-                    if (items.isNotEmpty) _slot(items.length),
-                  ],
-                ),
-              ),
-              if (_draft != null)
-                _editor()
-              else
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    '点击任务可调整时间',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
                   ),
                 ),
-            ],
+                if (_draft != null)
+                  _editor()
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '点击任务可调整时间',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

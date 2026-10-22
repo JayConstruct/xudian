@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_host/planner_board.dart';
 
@@ -49,8 +50,10 @@ Future<void> _mount(
   List<BoardItem> blocks = const [],
   List<BoardItem> candidates = const [_candidate],
   ValueChanged<Object?>? onEvent,
+  ValueChanged<bool>? onDragActiveChanged,
   Future<BoardItem> Function(BoardItem)? onPreview,
   bool enabled = true,
+  bool active = true,
   bool reduced = false,
   bool settle = true,
   Size size = const Size(390, 860),
@@ -68,23 +71,27 @@ Future<void> _mount(
           textScaler: scaler,
           disableAnimations: reduced,
         ),
-        child: Scaffold(
-          body: PlannerBoard(
-            days: _days,
-            candidates: candidates,
-            blocks: blocks,
-            bottomInset: 70,
-            enabled: enabled,
-            options: const {
-              'dashboard': true,
-              'continuousDates': true,
-              'initialDate': '2026-10-22',
-              'today': '2026-10-22',
-              'startMinute': 420,
-              'endMinute': 1440,
-            },
-            onEvent: onEvent ?? (_) {},
-            onPreview: onPreview,
+        child: TickerMode(
+          enabled: active,
+          child: Scaffold(
+            body: PlannerBoard(
+              days: _days,
+              candidates: candidates,
+              blocks: blocks,
+              bottomInset: 70,
+              enabled: enabled,
+              options: const {
+                'dashboard': true,
+                'continuousDates': true,
+                'initialDate': '2026-10-22',
+                'today': '2026-10-22',
+                'startMinute': 420,
+                'endMinute': 1440,
+              },
+              onEvent: onEvent ?? (_) {},
+              onDragActiveChanged: onDragActiveChanged,
+              onPreview: onPreview,
+            ),
           ),
         ),
       ),
@@ -114,6 +121,252 @@ Future<void> _drop(WidgetTester tester, int index) async {
 void main() {
   double opacity(WidgetTester tester) =>
       tester.widget<FadeTransition>(_key('planner-day-fade')).opacity.value;
+
+  testWidgets(
+    'day view covers parent chrome and returns to the same board position',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 860);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var chromeTaps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                SizedBox(
+                  height: 72,
+                  child: TextButton(
+                    onPressed: () => chromeTaps++,
+                    child: const Text('规划工具栏'),
+                  ),
+                ),
+                Expanded(
+                  child: PlannerBoard(
+                    days: _days,
+                    candidates: const [_candidate],
+                    options: const {
+                      'dashboard': true,
+                      'continuousDates': true,
+                      'initialDate': '2026-10-22',
+                      'today': '2026-10-22',
+                    },
+                    onEvent: (_) {},
+                  ),
+                ),
+                SizedBox(
+                  height: 84,
+                  child: TextButton(
+                    onPressed: () => chromeTaps++,
+                    child: const Text('底部导航'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = tester.getRect(_key('planner-day:2026-10-22'));
+      await _open(tester);
+      final semantics = tester.ensureSemantics();
+      await tester.pump();
+      final accessibility = tester
+          .binding
+          .renderViews
+          .single
+          .owner!
+          .semanticsOwner!
+          .rootSemanticsNode!
+          .toStringDeep();
+      expect(accessibility, contains('关闭当日任务'));
+      expect(accessibility, contains('待安排'));
+      expect(accessibility, isNot(contains('规划工具栏')));
+      expect(accessibility, isNot(contains('底部导航')));
+      semantics.dispose();
+      expect(
+        tester.getRect(_key('planner-day-sheet')),
+        const Rect.fromLTWH(0, 0, 390, 860),
+      );
+      expect(find.text('规划工具栏').hitTestable(), findsNothing);
+      expect(find.text('底部导航').hitTestable(), findsNothing);
+      await tester.tap(find.byTooltip('关闭当日任务'));
+      await tester.pumpAndSettle();
+      expect(_key('planner-day-sheet'), findsNothing);
+      expect(tester.getRect(_key('planner-day:2026-10-22')), before);
+      expect(find.text('底部导航').hitTestable(), findsOneWidget);
+      expect(chromeTaps, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final reduced in [false, true]) {
+    testWidgets(
+      'full-screen drag keeps boundaries and insertion gaps fixed (reduced=$reduced)',
+      (tester) async {
+        final active = <bool>[];
+        await _mount(
+          tester,
+          reduced: reduced,
+          onDragActiveChanged: active.add,
+          blocks: [
+            _task(
+              '课程',
+              '2026-10-22T08:00:00',
+              '2026-10-22T09:35:00',
+              readOnly: true,
+            ),
+            _task('报销', '2026-10-22T11:00:00', '2026-10-22T11:03:00'),
+          ],
+        );
+        await _open(tester);
+        final before = tester.getRect(_key('planner-day-sheet'));
+        expect(before, const Rect.fromLTWH(0, 0, 390, 860));
+        final course = tester.getRect(_key('planner-day-card:课程'));
+        final short = tester.getRect(_key('planner-day-card:报销'));
+        final viewport = tester.getRect(find.byType(PlannerBoard));
+        final gesture = await tester.startGesture(
+          tester.getCenter(_key('planner-day-card:整理笔记')),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pumpAndSettle();
+        expect(active, [true]);
+        final expanded = tester.getRect(_key('planner-day-sheet'));
+        expect(expanded.top, before.top);
+        expect(expanded, before);
+        expect(tester.getRect(find.byType(PlannerBoard)), viewport);
+        expect(tester.getRect(_key('planner-day-card:课程')), course);
+        expect(tester.getRect(_key('planner-day-card:报销')), short);
+        expect(tester.getSize(_key('planner-day-slot:1')).height, 8);
+        await gesture.moveTo(tester.getCenter(_key('planner-day-slot:1')));
+        await tester.pumpAndSettle();
+        expect(tester.getSize(_key('planner-day-slot:1')).height, 8);
+        expect(tester.getRect(_key('planner-day-card:课程')), course);
+        expect(tester.getRect(_key('planner-day-card:报销')), short);
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(active, [true, false]);
+        expect(tester.getRect(_key('planner-day-sheet')), before);
+        expect(_key('planner-day-editor'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'cancelling a drag retains full-screen bounds and releases the dock signal',
+    (tester) async {
+      final active = <bool>[];
+      await _mount(tester, onDragActiveChanged: active.add);
+      await _open(tester);
+      final before = tester.getRect(_key('planner-day-sheet'));
+      final gesture = await tester.startGesture(
+        tester.getCenter(_key('planner-day-card:整理笔记')),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(_key('planner-day-sheet')).bottom, before.bottom);
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(tester.getRect(_key('planner-day-sheet')), before);
+      expect(active, [true, false]);
+      expect(_key('planner-day-editor'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'dialogs stay above the full-screen page and back dismisses them first',
+    (tester) async {
+      await _mount(tester);
+      await _open(tester);
+      await _drop(tester, 0);
+      await tester.tap(_key('planner-day-start'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TimePickerDialog).hitTestable(), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(TimePickerDialog), findsNothing);
+      expect(_key('planner-day-sheet'), findsOneWidget);
+      await tester.tap(_key('planner-day-duration'));
+      await tester.pumpAndSettle();
+      expect(find.text('确定').hitTestable(), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('确定'), findsNothing);
+      expect(_key('planner-day-sheet'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(_key('planner-day-sheet'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Android keeps back in Flutter after dialog edits and host busy changes',
+    (tester) async {
+      final handling = <bool>[];
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'SystemNavigator.setFrameworkHandlesBack') {
+            handling.add(call.arguments as bool);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await _mount(tester);
+      await _open(tester);
+      expect(handling.last, isTrue);
+      await _drop(tester, 0);
+      await tester.tap(_key('planner-day-duration'));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(handling.last, isTrue);
+      await _mount(tester, enabled: false);
+      expect(handling.last, isTrue);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(_key('planner-day-sheet'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('host review dialogs remain usable and restore the day page', (
+    tester,
+  ) async {
+    await _mount(tester);
+    await _open(tester);
+    final dialog = showDialog<void>(
+      context: tester.element(find.byType(PlannerBoard)),
+      builder: (context) => AlertDialog(
+        title: const Text('操作审核'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消审核'),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('取消审核').hitTestable(), findsOneWidget);
+    expect(_key('planner-day-sheet'), findsNothing);
+    await tester.tap(find.text('取消审核'));
+    await tester.pumpAndSettle();
+    await dialog;
+    expect(_key('planner-day-sheet'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'day sheet enters gently and retains content until exit finishes',
@@ -167,7 +420,7 @@ void main() {
       expect(find.byType(PlannerBoard), findsOneWidget);
       await _open(tester);
       expect(opacity(tester), 1);
-      await tester.tapAt(const Offset(5, 250));
+      await tester.tap(find.byTooltip('关闭当日任务'));
       await tester.pumpAndSettle();
       expect(_key('planner-day-sheet'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -212,7 +465,7 @@ void main() {
   );
 
   testWidgets(
-    'date header opens sorted equal cards with two time rows on the left',
+    'date header opens compact equal cards with a single time range',
     (tester) async {
       await _mount(
         tester,
@@ -233,17 +486,25 @@ void main() {
       final course = tester.getRect(_key('planner-day-card:课程'));
       final short = tester.getRect(_key('planner-day-card:报销'));
       expect(course.height, short.height);
+      expect(course.height, lessThanOrEqualTo(48));
+      expect(
+        tester.getSize(_key('planner-day-card:整理笔记')).height,
+        course.height,
+      );
       expect(short.top - course.bottom, 8);
       final times = _key('planner-day-times:课程');
-      final start = find.descendant(of: times, matching: find.text('08:00'));
-      final end = find.descendant(of: times, matching: find.text('09:35'));
+      expect(tester.widget<Text>(times).data, '08:00–09:35');
+      expect(tester.widget<Text>(times).maxLines, 1);
       final title = find.descendant(
         of: _key('planner-day-card:课程'),
         matching: find.text('课程'),
       );
-      expect(tester.getRect(start).bottom, lessThan(tester.getRect(end).top));
-      expect(tester.getRect(times).right, lessThan(tester.getRect(title).left));
-      expect(find.text('前日 23:30'), findsOneWidget);
+      expect(
+        tester.getRect(title).bottom,
+        lessThanOrEqualTo(tester.getRect(times).top),
+      );
+      expect(tester.getRect(times).left, tester.getRect(title).left);
+      expect(find.text('前日 23:30–00:15'), findsOneWidget);
       expect(find.textContaining('空闲'), findsNothing);
       await tester.tap(find.byTooltip('关闭当日任务'));
       await tester.pumpAndSettle();
@@ -435,8 +696,8 @@ void main() {
     (tester) async {
       await _mount(tester);
       await _open(tester);
-      await _mount(tester, enabled: false);
-      expect(_key('planner-day-sheet'), findsOneWidget);
+      await _mount(tester, enabled: false, active: false);
+      expect(_key('planner-day-sheet'), findsNothing);
       final route = ModalRoute.of(tester.element(find.byType(PlannerBoard)))!;
       expect(route.popDisposition, RoutePopDisposition.bubble);
       await _mount(tester, enabled: true);

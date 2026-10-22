@@ -212,17 +212,94 @@ class _PlannerBoardState extends State<PlannerBoard>
   BoardItem? _selectedItem;
   DateTime? _dayListDate;
   bool _dayListClosing = false;
+  OverlayEntry? _dayListOverlay;
+  final _dayListNavigator = GlobalKey<NavigatorState>();
+  bool _dayListVisible = true;
+
+  void _showDayList() {
+    _dayListOverlay = OverlayEntry(
+      builder: (overlayContext) => InheritedTheme.captureAll(
+        context,
+        MediaQuery(
+          data: MediaQuery.of(overlayContext).copyWith(
+            disableAnimations: MediaQuery.disableAnimationsOf(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          ),
+          child: _dayListPage(),
+        ),
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_dayListOverlay!);
+  }
+
+  void _hideDayList() {
+    _dayListOverlay?.remove();
+    _dayListOverlay?.dispose();
+    _dayListOverlay = null;
+    setState(() => _dayListDate = null);
+  }
 
   void _closeDayList() {
     if (_dayListDate == null || _dayListClosing) return;
-    setState(() {
-      if (AppMotion.reduced(context)) {
-        _dayListDate = null;
-      } else {
-        _dayListClosing = true;
-      }
-    });
+    final navigator = _dayListNavigator.currentState;
+    if (navigator != null && navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    if (AppMotion.reduced(context)) {
+      _hideDayList();
+    } else {
+      setState(() => _dayListClosing = true);
+      _dayListOverlay?.markNeedsBuild();
+    }
   }
+
+  Widget _dayListPage() => Positioned.fill(
+    child: Visibility(
+      visible: _dayListVisible,
+      maintainState: true,
+      child: BlockSemantics(
+        child: Semantics(
+          container: true,
+          explicitChildNodes: true,
+          scopesRoute: true,
+          namesRoute: true,
+          label: '当日任务',
+          child: NotificationListener<NavigationNotification>(
+            // The board's PopScope owns platform back handling for this layer.
+            onNotification: (_) => true,
+            child: Navigator(
+              key: _dayListNavigator,
+              onDidRemovePage: (_) {},
+              pages: [
+                MaterialPage<void>(
+                  child: _PlannerDaySheetTransition(
+                    key: ValueKey(_dayListDate),
+                    visible: !_dayListClosing,
+                    onDismissed: () {
+                      if (mounted && _dayListClosing) _hideDayList();
+                    },
+                    child: _PlannerDaySheet(
+                      date: _dayListDate!,
+                      candidates: _candidates,
+                      blocks: _blocks,
+                      options: widget.options,
+                      enabled: widget.enabled && !_dayListClosing,
+                      canMove: _movable,
+                      onEvent: widget.onEvent,
+                      onPreview: widget.onPreview,
+                      onDragActiveChanged: widget.onDragActiveChanged,
+                      onClose: _closeDayList,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   final _selectionTapGroup = Object();
 
@@ -918,6 +995,8 @@ class _PlannerBoardState extends State<PlannerBoard>
 
   @override
   void dispose() {
+    _dayListOverlay?.remove();
+    _dayListOverlay?.dispose();
     _rangeGeneration++;
     _rangeRetryTimer?.cancel();
     _clockTimer?.cancel();
@@ -3758,12 +3837,15 @@ class _PlannerBoardState extends State<PlannerBoard>
         child: InkWell(
           onTap: !widget.enabled
               ? null
-              : () => setState(() {
-                  _dayListDate = date;
-                  _dayListClosing = false;
-                  _selectedItem = null;
-                  _candidatesExpanded = false;
-                }),
+              : () {
+                  setState(() {
+                    _dayListDate = date;
+                    _dayListClosing = false;
+                    _selectedItem = null;
+                    _candidatesExpanded = false;
+                  });
+                  _showDayList();
+                },
           child: Container(
             key: ValueKey('planner-day:${day['date']}'),
             width: _columnWidth,
@@ -4032,6 +4114,17 @@ class _PlannerBoardState extends State<PlannerBoard>
 
   @override
   Widget build(BuildContext context) {
+    _dayListVisible =
+        TickerMode.valuesOf(context).enabled &&
+        ModalRoute.isCurrentOf(context) != false;
+    final dayListOverlay = _dayListOverlay;
+    if (dayListOverlay != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(dayListOverlay, _dayListOverlay)) {
+          dayListOverlay.markNeedsBuild();
+        }
+      });
+    }
     final scheme = Theme.of(context).colorScheme;
     final scaler = MediaQuery.textScalerOf(context);
     final cardHeight = math.max(
@@ -4920,56 +5013,6 @@ class _PlannerBoardState extends State<PlannerBoard>
                       : _selectionPanel(),
                 ),
               ),
-            if (_dayListDate != null)
-              Positioned.fill(
-                child: PopScope(
-                  canPop: !widget.enabled,
-                  onPopInvokedWithResult: (didPop, result) {
-                    if (!didPop && widget.enabled) {
-                      _closeDayList();
-                    }
-                  },
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GestureDetector(
-                          excludeFromSemantics: true,
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _closeDayList,
-                          child: const SizedBox.expand(),
-                        ),
-                      ),
-                      Positioned(
-                        top: _timeline ? railHeight + 4 : 8,
-                        left: 12,
-                        right: 12,
-                        bottom: widget.bottomInset + 8,
-                        child: _PlannerDaySheetTransition(
-                          key: ValueKey(_dayListDate),
-                          visible: !_dayListClosing,
-                          onDismissed: () {
-                            if (mounted && _dayListClosing) {
-                              setState(() => _dayListDate = null);
-                            }
-                          },
-                          child: _PlannerDaySheet(
-                            date: _dayListDate!,
-                            candidates: _candidates,
-                            blocks: _blocks,
-                            options: widget.options,
-                            enabled: widget.enabled && !_dayListClosing,
-                            canMove: _movable,
-                            onEvent: widget.onEvent,
-                            onPreview: widget.onPreview,
-                            onDragActiveChanged: widget.onDragActiveChanged,
-                            onClose: _closeDayList,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
             if (!_dashboard)
               Positioned(
                 top: 4,
@@ -5021,9 +5064,15 @@ class _PlannerBoardState extends State<PlannerBoard>
               ),
           ],
         );
-        return constraints.hasBoundedHeight
-            ? content
-            : SizedBox(height: 640, child: content);
+        return PopScope(
+          canPop: _dayListDate == null || !_dayListVisible,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && _dayListVisible) _closeDayList();
+          },
+          child: constraints.hasBoundedHeight
+              ? content
+              : SizedBox(height: 640, child: content),
+        );
       },
     );
   }
