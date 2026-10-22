@@ -203,6 +203,10 @@ class _PlannerBoardState extends State<PlannerBoard>
   String? _previewSignature;
   double _columnWidth = 112;
   double _cardHeight = 48;
+  // Reserve larger hit labels only when a real band cannot fit one title row.
+  // A half-hour block at the default scale already has enough room for text.
+  double get _minimumTitleBandHeight =>
+      MediaQuery.textScalerOf(context).scale(12) * 1.4 + 8;
   BoardItem? _selectedItem;
   final _selectionTapGroup = Object();
 
@@ -1827,7 +1831,7 @@ class _PlannerBoardState extends State<PlannerBoard>
                     : null,
               ),
               padding: EdgeInsets.symmetric(
-                horizontal: scheduled ? (titleLines > 1 ? 2 : 7) : 10,
+                horizontal: scheduled ? (titleLines > 1 ? 2 : 3) : 10,
                 vertical: item['_resident'] == true ? 2 : 4,
               ),
               child: scheduled
@@ -2188,7 +2192,15 @@ class _PlannerBoardState extends State<PlannerBoard>
   }
 
   _BoardGeometry _index(List<BoardItem> items, double cardHeight) {
-    final settings = (_days, _startMinute, _endMinute, _scale, cardHeight);
+    final titleBandHeight = _minimumTitleBandHeight;
+    final settings = (
+      _days,
+      _startMinute,
+      _endMinute,
+      _scale,
+      cardHeight,
+      titleBandHeight,
+    );
     if (identical(items, _blocks) &&
         identical(items, _geometrySource) &&
         settings == _geometrySettings &&
@@ -2236,6 +2248,10 @@ class _PlannerBoardState extends State<PlannerBoard>
       }
     }
     final byKey = <String, _BoardGroup>{};
+    double labelBottom(_BoardSegment segment) =>
+        segment.bottom - segment.top >= titleBandHeight
+        ? segment.bottom
+        : math.max(segment.bottom, segment.top + cardHeight);
     final groupsByDay = <List<_BoardGroup>>[];
     for (final day in segments) {
       day.sort((a, b) {
@@ -2256,7 +2272,7 @@ class _PlannerBoardState extends State<PlannerBoard>
             lane = ends.length;
             ends.add(0);
           }
-          ends[lane] = math.max(segment.bottom, segment.top + cardHeight);
+          ends[lane] = labelBottom(segment);
           segment.lane = lane;
         }
         final group = _BoardGroup(
@@ -2277,7 +2293,7 @@ class _PlannerBoardState extends State<PlannerBoard>
         current.add(segment);
         groupBottom = math.max(
           current.length == 1 ? 0 : groupBottom,
-          math.max(segment.bottom, segment.top + cardHeight),
+          labelBottom(segment),
         );
       }
       finish();
@@ -2339,14 +2355,18 @@ class _PlannerBoardState extends State<PlannerBoard>
         index.byKey[_pinnedSegment] != null) {
       groups.add(index.byKey[_pinnedSegment]!);
     }
+    final titleBandHeight = _minimumTitleBandHeight;
+    final minimumTitleWidth =
+        MediaQuery.textScalerOf(context).scale(12) * 2 + 8;
     for (final group in groups) {
-      final laneWidth = (_columnWidth - 6) / group.lanes;
+      final laneWidth = (_columnWidth - 2) / group.lanes;
       final allShort = group.segments.every(
-        (segment) => segment.bottom - segment.top < cardHeight,
+        (segment) => segment.bottom - segment.top < titleBandHeight,
       );
-      // Two ordinary overlapping tasks remain separate, even on a phone.
-      // Only genuinely dense or tiny bands need the grouped fallback.
-      final dense = laneWidth < 72 && (group.lanes > 2 || allShort);
+      // Keep each title when a lane can hold at least two scaled glyphs. Tiny
+      // bands still need the shared hit target and exact-duration stripes.
+      final dense =
+          laneWidth < minimumTitleWidth || (laneWidth < 72 && allShort);
       final first = group.segments.first;
       final dayLeft = first.dayIndex * _columnWidth;
       if (!preview && !savingStatusAdded) {
@@ -2357,7 +2377,7 @@ class _PlannerBoardState extends State<PlannerBoard>
             continue;
           }
           const statusWidth = 16.0, statusHeight = 12.0;
-          final left = dayLeft + 3 + segment.lane * laneWidth;
+          final left = dayLeft + 1 + segment.lane * laneWidth;
           final badgeLeft = left + laneWidth - statusWidth - 2;
           final narrow = group.lanes == 2 && laneWidth < 72;
           final timePainter = TextPainter(
@@ -2371,8 +2391,7 @@ class _PlannerBoardState extends State<PlannerBoard>
             textScaler: MediaQuery.textScalerOf(context),
             textDirection: Directionality.of(context),
           )..layout();
-          final startGlyphRight =
-              left + 3 + (narrow ? 2 : 7) + timePainter.width;
+          final startGlyphRight = left + (narrow ? 2 : 3) + timePainter.width;
           timePainter.dispose();
           final compactHeight =
               MediaQuery.textScalerOf(context).scale(12) * 1.4 + 8;
@@ -2632,14 +2651,14 @@ class _PlannerBoardState extends State<PlannerBoard>
         if (!pinned && !inWindow) continue;
         final item = segment.item, start = segment.start, end = segment.end;
         final from = segment.from, to = segment.to;
-        final left = dayLeft + 3 + segment.lane * laneWidth;
+        final left = dayLeft + 1 + segment.lane * laneWidth;
         if (inWindow) {
           result.add(
             Positioned(
               key: ValueKey('${preview ? prefix : 'occupancy'}:${segment.key}'),
               left: left,
               top: segment.top,
-              width: math.max(.1, laneWidth - (dense ? 0 : 2)),
+              width: math.max(.1, laneWidth - (dense ? 0 : 1)),
               height: segment.bottom - segment.top,
               child: IgnorePointer(
                 child: Container(
@@ -2714,12 +2733,9 @@ class _PlannerBoardState extends State<PlannerBoard>
         result.add(
           Positioned(
             key: ValueKey('block:${segment.key}'),
-            left: left + (short ? 17 : (cardItem['_titleLines'] == 2 ? 2 : 3)),
+            left: left + (short ? 17 : 0),
             top: labelTop.toDouble(),
-            width: math.max(
-              1,
-              laneWidth - (short ? 20 : (cardItem['_titleLines'] == 2 ? 4 : 6)),
-            ),
+            width: math.max(1, laneWidth - (short ? 20 : 1)),
             child: _card(
               cardItem,
               short ? cardHeight : actualHeight,
@@ -5221,10 +5237,11 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
       builder: (context, constraints) {
         _contentHeight = constraints.maxHeight;
         final geometry = _geometry(constraints.maxHeight);
-        _twoLineTitleHeight = item['_titleLines'] == 2
+        _twoLineTitleHeight =
+            item['_titleLines'] == 2 && item['readOnly'] != true
             ? scaler.scale(11) * 1.15 * 2
             : null;
-        final rows = <({String key, String text, TextStyle style, int lines})>[
+        final rows = <({String key, String text, TextStyle style, int? lines})>[
           (
             key: 'title',
             text: '$continuation${item['title'] ?? ''}',
@@ -5233,6 +5250,8 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
                 _twoLineTitleHeight != null &&
                     geometry.available + .01 >= _twoLineTitleHeight!
                 ? 2
+                : item['readOnly'] == true
+                ? null
                 : 1,
           ),
           if ('${item['location'] ?? ''}'.trim().isNotEmpty)
@@ -5272,8 +5291,11 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
                   Expanded(
                     child: Text(
                       row.text,
+                      softWrap: true,
                       maxLines: row.lines,
-                      overflow: TextOverflow.ellipsis,
+                      overflow: row.lines == null
+                          ? TextOverflow.clip
+                          : TextOverflow.ellipsis,
                       style: row.style,
                     ),
                   ),

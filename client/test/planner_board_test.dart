@@ -725,7 +725,68 @@ void main() {
   );
 
   testWidgets(
-    'narrow overlap titles fall back to one line before disappearing at the viewport edge',
+    'imported course titles wrap across several lines and blocks use the grid width',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const title = '高等数学与线性代数课程教学实践';
+      const identity = '$title:2026-10-15';
+      await _mount(
+        tester,
+        blocks: [
+          {
+            ..._block(
+              title,
+              '2026-10-15T08:00:00',
+              '2026-10-15T11:00:00',
+              readOnly: true,
+            ),
+            'location': '教学楼101',
+          },
+        ],
+        options: const {'dashboard': true, 'initialMinute': 480},
+      );
+      await tester.pumpAndSettle();
+      final text = find.descendant(
+        of: find.byKey(const ValueKey('block:$identity')),
+        matching: find.text(title),
+      );
+      final titleWidget = tester.widget<Text>(text);
+      final card = find.byKey(const ValueKey('block:$identity'));
+      final band = find.byKey(const ValueKey('occupancy:$identity'));
+      final start = find.byKey(const ValueKey('block-time-start:$identity'));
+      final end = find.byKey(const ValueKey('block-time-end:$identity'));
+      final grid = tester.getRect(find.byType(DragTarget<BoardItem>));
+      expect(titleWidget.softWrap, isTrue);
+      expect(titleWidget.maxLines, isNull);
+      expect(
+        tester.getSize(text).height,
+        greaterThan(tester.getSize(start).height * 2),
+      );
+      expect(tester.getRect(card), tester.getRect(band));
+      expect(tester.getRect(card).left - grid.left, closeTo(1, .1));
+      expect(
+        tester.getRect(text).left - tester.getRect(card).left,
+        closeTo(3, .1),
+      );
+      expect(
+        tester.getRect(card).width,
+        greaterThan(grid.width / _days.length - 4),
+      );
+      expect(tester.getRect(text).bottom, lessThan(tester.getRect(end).top));
+      expect(tester.getSize(band).height, 180);
+      final original = tester.getRect(text);
+      await tester.tap(text);
+      await tester.pumpAndSettle();
+      expect(tester.getRect(text), original);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'overlapping course titles retain wrapped layout while scrolling clips the visible text',
     (tester) async {
       tester.view.physicalSize = const Size(320, 900);
       tester.view.devicePixelRatio = 1;
@@ -748,7 +809,9 @@ void main() {
       expect(find.text('高等数学课程'), findsOneWidget);
       expect(find.text('整理研究资料'), findsOneWidget);
       final course = tester.widget<Text>(find.text('高等数学课程'));
-      expect(course.maxLines, 1);
+      expect(course.maxLines, isNull);
+      final titleHeight = tester.getSize(find.text('高等数学课程')).height;
+      expect(titleHeight, greaterThan(25));
       final scroll = tester
           .widget<SingleChildScrollView>(
             find.byKey(const ValueKey('planner-vertical')),
@@ -756,7 +819,8 @@ void main() {
           .controller!;
       scroll.jumpTo(scroll.offset - 30);
       await tester.pumpAndSettle();
-      expect(tester.widget<Text>(find.text('高等数学课程')).maxLines, 2);
+      expect(tester.widget<Text>(find.text('高等数学课程')).maxLines, isNull);
+      expect(tester.getSize(find.text('高等数学课程')).height, titleHeight);
       expect(tester.takeException(), isNull);
     },
   );
@@ -1677,6 +1741,112 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'consecutive half-hour subtasks keep full-width titles and exact time edges',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final blocks = [
+        _block('阅读第一节', '2026-10-15T09:00:00', '2026-10-15T09:30:00'),
+        _block('阅读第二节', '2026-10-15T09:30:00', '2026-10-15T10:00:00'),
+        _block('阅读第三节', '2026-10-15T10:00:00', '2026-10-15T10:30:00'),
+        _block('整理笔记', '2026-10-15T10:30:00', '2026-10-15T11:00:00'),
+      ];
+      await _mount(
+        tester,
+        blocks: blocks,
+        options: const {'dashboard': true, 'initialMinute': 540},
+      );
+      await tester.pumpAndSettle();
+      final rects = <Rect>[];
+      for (final block in blocks) {
+        final card = find.byKey(ValueKey('block:${block['id']}:2026-10-15'));
+        expect(
+          find
+              .descendant(
+                of: card,
+                matching: find.text(block['title'] as String),
+              )
+              .hitTestable(),
+          findsOneWidget,
+        );
+        final rect = tester.getRect(card);
+        rects.add(rect);
+        expect(rect.height, 30);
+        expect(rect.width, greaterThan(100));
+        expect(
+          tester.getRect(
+            find.byKey(ValueKey('occupancy:${block['id']}:2026-10-15')),
+          ),
+          rect,
+        );
+      }
+      for (var i = 1; i < rects.length; i++) {
+        expect(rects[i].left, rects[0].left);
+        expect(rects[i].top, rects[i - 1].bottom);
+      }
+      expect(find.textContaining('项短任务'), findsNothing);
+      await tester.tap(find.text('阅读第二节'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('planner-selection-panel')),
+        findsOneWidget,
+      );
+      for (var i = 0; i < blocks.length; i++) {
+        expect(
+          tester.getRect(
+            find.byKey(ValueKey('block:${blocks[i]['id']}:2026-10-15')),
+          ),
+          rects[i],
+        );
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final count in [2, 3]) {
+    testWidgets(
+      '$count overlapping half-hour tasks keep separate readable titles',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await _mount(
+          tester,
+          blocks: [
+            for (var i = 0; i < count; i++)
+              _block('子任务$i', '2026-10-15T09:00:00', '2026-10-15T09:30:00'),
+          ],
+          options: const {'dashboard': true, 'initialMinute': 540},
+        );
+        await tester.pumpAndSettle();
+        Rect? previous;
+        for (var i = 0; i < count; i++) {
+          final card = find.byKey(ValueKey('block:子任务$i:2026-10-15'));
+          expect(
+            find
+                .descendant(of: card, matching: find.text('子任务$i'))
+                .hitTestable(),
+            findsOneWidget,
+          );
+          final rect = tester.getRect(card);
+          expect(rect.height, 30);
+          expect(rect.width, greaterThan(30));
+          if (previous != null) expect(rect.left, greaterThan(previous.right));
+          previous = rect;
+        }
+        expect(
+          find.byKey(const ValueKey('dense:子任务0:2026-10-15')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets(
     'short-task choices zoom only time geometry and return to the unchanged schedule',
