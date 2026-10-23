@@ -258,7 +258,7 @@ void main() {
             .widget<ScriptKeyedList>(find.byType(ScriptKeyedList))
             .items
             .length,
-        52,
+        53,
       );
       expect(find.byType(ListView), findsOneWidget);
       expect(
@@ -370,7 +370,7 @@ void main() {
   );
 
   testWidgets(
-    'task feedback follows approved commit and presentation failure never undoes success',
+    'native completion commits once without a review and notification failure never undoes success',
     (tester) async {
       final created = object(
         await tester.runAsync<Object?>(
@@ -402,23 +402,7 @@ void main() {
       await show(tester, reduced: true);
       await tester.tap(find.byType(Checkbox));
       await settle(tester);
-      expect(notifications, 0);
-      expect(reviews, hasLength(1));
-      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, false);
-      expect(
-        object(await store.get(tasks, 'tasks', id))['completedAt'],
-        isNull,
-      );
-      reviews.last.complete(false);
-      await settle(tester);
-      expect(notifications, 0);
-      expect(find.byType(DailyTaskItem), findsOneWidget);
-      await tester.tap(find.byType(Checkbox));
-      await settle(tester);
-      expect(notifications, 0);
-      expect(reviews, hasLength(2));
-      reviews.last.complete(true);
-      await settle(tester);
+      expect(reviews, isEmpty);
       expect(notifications, 1);
       expect(find.byType(DailyTaskItem), findsNothing);
       expect(find.byType(MaterialBanner), findsNothing);
@@ -432,7 +416,7 @@ void main() {
   );
 
   testWidgets(
-    'production task exit starts only after approval and survives its store refresh',
+    'native completion exits after commit and survives its store refresh',
     (tester) async {
       await tester.runAsync(
         () => command('task.create', {
@@ -440,22 +424,14 @@ void main() {
           'plannedDate': '2026-10-10',
         }),
       );
-      final review = Completer<bool>();
-      host.interaction = (_, method, args) async =>
-          method == 'ui.review' ? review.future : null;
+      var reviews = 0;
+      host.interaction = (_, method, args) async {
+        if (method == 'ui.review') reviews++;
+        return null;
+      };
       await show(tester);
       final original = tester.element(find.byType(DailyTaskItem));
       await tester.tap(find.byType(Checkbox));
-      await settle(tester);
-      expect(tester.element(find.byType(DailyTaskItem)), same(original));
-      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, false);
-      expect(
-        tester
-            .widget<ScriptKeyedList>(find.byType(ScriptKeyedList))
-            .feedbackKey,
-        isNull,
-      );
-      review.complete(true);
       await flushUntil(
         tester,
         () =>
@@ -465,6 +441,7 @@ void main() {
             null,
       );
       expect(tester.element(find.byType(DailyTaskItem)), same(original));
+      expect(reviews, 0);
       final ignores = tester.widgetList<IgnorePointer>(
         find.ancestor(
           of: find.byType(DailyTaskItem),
@@ -503,7 +480,7 @@ void main() {
   );
 
   testWidgets(
-    'production conflicting commit keeps the task pending without success feedback',
+    'native completion rejects a stale row without success feedback',
     (tester) async {
       final created = object(
         await tester.runAsync<Object?>(
@@ -513,16 +490,13 @@ void main() {
           }),
         ),
       );
-      final review = Completer<bool>();
       var notifications = 0;
       host.interaction = (_, method, args) async {
-        if (method == 'ui.review') return review.future;
+        if (method == 'ui.review') return true;
         if (method == 'ui.notify') notifications++;
         return null;
       };
       await show(tester);
-      await tester.tap(find.byType(Checkbox));
-      await settle(tester);
       host.clockNow = () => DateTime.utc(2026, 10, 10, 6, 0, 1);
       await tester.runAsync(
         () => command('task.updateFields', {
@@ -530,7 +504,7 @@ void main() {
           'changes': {'priority': 1},
         }),
       );
-      review.complete(true);
+      await tester.tap(find.byType(Checkbox));
       await settle(tester);
       expect(
         object(

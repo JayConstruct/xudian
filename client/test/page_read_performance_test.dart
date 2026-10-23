@@ -76,7 +76,7 @@ void main() {
             .map(object)
             .toList();
         expect(rows, hasLength(50));
-        expect(rows.every((row) => row['subtitle'] == '计划 01:30–01:30 (America/New_York)'), isTrue);
+        expect(rows.every((row) => row['subtitle'] == '计划 01:30–01:30'), isTrue);
         final bridges = samples.where((sample) => sample.name == 'page.bridge');
         expect(bridges.where((sample) => sample.arguments['method'] == 'clock.toLocalMany'), hasLength(1));
         expect(bridges.where((sample) => sample.arguments['method'] == 'clock.toLocal'), isEmpty);
@@ -111,6 +111,8 @@ void main() {
         switch (method) {
           case 'clock.today':
             return '2026-11-01';
+          case 'clock.systemTimezone':
+            return {'zone': 'Asia/Shanghai', 'source': 'system'};
           case 'services.query':
             return object(args['ref'])['serviceId'] == 'task.list' ? tasks : [];
           case 'clock.toLocalMany':
@@ -141,7 +143,7 @@ void main() {
         final end = clockToLocal({'utc': task['plannedEndAt'], 'zone': task['plannedTimezone']});
         expect(start['date'], '2026-11-01');
         expect(end['date'], start['date']);
-        expect(rows[index]['subtitle'], '计划 ${start['time']}–${end['time']} (${task['plannedTimezone']})');
+        expect(rows[index]['subtitle'], '计划 ${start['time']}–${end['time']}');
       }
       expect(rows.last['subtitle'], '计划 当天');
       expect(singleCalls, 0);

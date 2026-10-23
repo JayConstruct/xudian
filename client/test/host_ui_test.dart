@@ -141,7 +141,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets(
-    'script task input prepares host-reviewed changes and writes generic records',
+    'native task creation and completion save once and expose completion review',
     (tester) async {
       await setup(tester, tasks: true);
       expect(find.text('暂无今天待办或逾期任务'), findsOneWidget);
@@ -151,9 +151,7 @@ void main() {
       await tester.ensureVisible(find.text('添加'));
       await tester.tap(find.text('添加'));
       await settleNative(tester);
-      expect(find.text('确认实际数据变更'), findsOneWidget);
-      await tester.tap(find.text('确认'));
-      await settleNative(tester);
+      expect(find.text('确认实际数据变更'), findsNothing);
       expect(find.text('买牛奶'), findsOneWidget);
       final rows = await tester.runAsync(
         () => store.query(host.instances['app.tasks']!.actor, 'tasks', {}),
@@ -161,6 +159,28 @@ void main() {
       expect(object(rows!.single)['title'], '买牛奶');
       expect(object(rows.single)['plannedDate'], '2026-10-08');
       expect(await tester.runAsync(() => db.select(db.tasks).get()), isEmpty);
+      await tester.tap(find.byType(Checkbox));
+      await settleNative(tester);
+      expect(find.text('确认实际数据变更'), findsNothing);
+      final completed = await tester.runAsync(
+        () => store.query(host.instances['app.tasks']!.actor, 'tasks', {}),
+      );
+      expect(object(completed!.single)['completedAt'], isNotNull);
+      expect(object(completed.single)['actualCompletedOn'], isNotNull);
+      await tester.tap(find.text('完成记录与复盘'));
+      await settleNative(tester);
+      expect(find.text('买牛奶'), findsOneWidget);
+      expect(find.textContaining('完成'), findsWidgets);
+      await tester.tap(find.byType(Checkbox));
+      await settleNative(tester);
+      expect(find.text('确认实际数据变更'), findsNothing);
+      final reopened = await tester.runAsync(
+        () => store.query(host.instances['app.tasks']!.actor, 'tasks', {}),
+      );
+      expect(object(reopened!.single)['completedAt'], isNull);
+      await tester.binding.handlePopRoute();
+      await settleNative(tester);
+      expect(find.text('买牛奶'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

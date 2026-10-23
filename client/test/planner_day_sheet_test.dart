@@ -123,6 +123,52 @@ void main() {
       tester.widget<FadeTransition>(_key('planner-day-fade')).opacity.value;
 
   testWidgets(
+    'closing the day page preserves task detail navigation under the app overlay',
+    (tester) async {
+      final navigation = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigation,
+          builder: (context, child) => Overlay.wrap(child: child!),
+          home: Scaffold(
+            body: PlannerBoard(
+              days: _days,
+              candidates: const [_candidate],
+              options: const {
+                'dashboard': true,
+                'continuousDates': true,
+                'initialDate': '2026-10-22',
+                'today': '2026-10-22',
+              },
+              onEvent: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final rootController = HeroControllerScope.of(navigation.currentContext!);
+      expect(rootController.navigator, navigation.currentState);
+      await _open(tester);
+      expect(tester.takeException(), isNull);
+      expect(rootController.navigator, navigation.currentState);
+      await tester.tap(find.byTooltip('关闭当日任务'));
+      await tester.pumpAndSettle();
+      expect(rootController.navigator, navigation.currentState);
+      navigation.currentState!.push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('采购清单详情')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('采购清单详情').hitTestable(), findsOneWidget);
+      navigation.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(PlannerBoard), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'day view covers parent chrome and returns to the same board position',
     (tester) async {
       tester.view.physicalSize = const Size(390, 860);

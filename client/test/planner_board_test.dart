@@ -19,6 +19,7 @@ Future<void> _mount(
   List<BoardItem> previewBlocks = const [],
   BoardItem options = const {},
   ValueChanged<Object?>? onEvent,
+  void Function(Object?, Object?)? onCommandAction,
   TextScaler scaler = TextScaler.noScaling,
   BoardItem? selectEvent,
   List<Object?> selectedIds = const [],
@@ -44,6 +45,7 @@ Future<void> _mount(
             previewBlocks: previewBlocks,
             options: options,
             onEvent: onEvent ?? (_) {},
+            onCommandAction: onCommandAction,
             selectEvent: selectEvent,
             selectedIds: selectedIds,
             onPreview: onPreview,
@@ -113,6 +115,91 @@ List<BoardItem> _month() => List.generate(28, (index) {
 });
 
 void main() {
+  testWidgets(
+    'selected item actions dispatch their command only after a click',
+    (tester) async {
+      final events = <Object?>[];
+      final commands = <Object?>[];
+      const command = {
+        'ref': {
+          'moduleId': 'example.tasks',
+          'serviceId': 'complete',
+          'majorVersion': 1,
+        },
+        'input': {'id': 'action-task', 'completed': true},
+      };
+      await _mount(
+        tester,
+        blocks: [
+          {
+            ..._block(
+              'action-task',
+              '2026-10-15T09:00:00',
+              '2026-10-15T10:00:00',
+            ),
+            'actions': [
+              {
+                'label': '已完成',
+                'icon': 'check',
+                'event': {'type': 'complete'},
+                'command': command,
+              },
+            ],
+          },
+        ],
+        options: const {'dashboard': true},
+        onEvent: events.add,
+        onCommandAction: (event, input) {
+          events.add(event);
+          commands.add(input);
+        },
+      );
+      expect(commands, isEmpty);
+      await tester.tap(find.text('action-task'));
+      await tester.pump();
+      expect(commands, isEmpty);
+      await tester.tap(find.text('已完成'));
+      expect(events.single, {'type': 'complete'});
+      expect(commands.single, command);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'completed blocks show completion and cannot expose time editing',
+    (tester) async {
+      await _mount(
+        tester,
+        blocks: [
+          {
+            ..._block('完成的任务', '2026-10-15T09:00:00', '2026-10-15T10:00:00'),
+            'completed': true,
+            'sourceLabel': '已完成',
+            'editTimeEvent': {'type': 'edit'},
+            'actions': [
+              {
+                'label': '重新打开',
+                'icon': 'undo',
+                'event': {'type': 'reopen'},
+              },
+            ],
+          },
+        ],
+        options: const {'dashboard': true},
+      );
+      final title = tester.widget<Text>(find.text('完成的任务'));
+      expect(title.style?.decoration, TextDecoration.lineThrough);
+      expect(find.byIcon(Icons.check_circle_outline), findsWidgets);
+      await tester.tap(find.text('完成的任务'));
+      await tester.pump();
+      expect(find.text('已完成'), findsOneWidget);
+      expect(find.text('重新打开'), findsOneWidget);
+      expect(find.text('编辑时间'), findsNothing);
+      expect(find.byType(LongPressDraggable<BoardItem>), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('date rail tracks the visible portion of the scrollable days', (
     tester,
   ) async {

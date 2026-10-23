@@ -13,6 +13,7 @@ import '../../app/frosted_toolbar_surface.dart';
 import '../ui/content_colors.dart';
 import '../ui/ui_motion.dart';
 import 'planner_timeline_window.dart';
+import 'planner_status_indicator.dart';
 
 part 'planner_day_sheet.dart';
 
@@ -43,6 +44,7 @@ class PlannerBoard extends StatefulWidget {
     this.pendingAdjustment,
     this.previewIdentity,
     this.options = const {},
+    this.onCommandAction,
     required this.onEvent,
   });
 
@@ -52,6 +54,9 @@ class PlannerBoard extends StatefulWidget {
   final List<Object?> selectedIds;
   final BoardItem? selectEvent;
   final ValueChanged<Object?> onEvent;
+
+  /// Only a real action click passes its declared command to the page host.
+  final void Function(Object? event, Object? command)? onCommandAction;
 
   /// Debounced display-only validation. Replies may contain previewBlocks,
   /// previewLabel, conflicts and valid; the drop event must still be validated
@@ -268,32 +273,36 @@ class _PlannerBoardState extends State<PlannerBoard>
           child: NotificationListener<NavigationNotification>(
             // The board's PopScope owns platform back handling for this layer.
             onNotification: (_) => true,
-            child: Navigator(
-              key: _dayListNavigator,
-              onDidRemovePage: (_) {},
-              pages: [
-                MaterialPage<void>(
-                  child: _PlannerDaySheetTransition(
-                    key: ValueKey(_dayListDate),
-                    visible: !_dayListClosing,
-                    onDismissed: () {
-                      if (mounted && _dayListClosing) _hideDayList();
-                    },
-                    child: _PlannerDaySheet(
-                      date: _dayListDate!,
-                      candidates: _candidates,
-                      blocks: _blocks,
-                      options: widget.options,
-                      enabled: widget.enabled && !_dayListClosing,
-                      canMove: _movable,
-                      onEvent: widget.onEvent,
-                      onPreview: widget.onPreview,
-                      onDragActiveChanged: widget.onDragActiveChanged,
-                      onClose: _closeDayList,
+            child: HeroControllerScope.none(
+              // The app overlay sits above the root Navigator. This page must
+              // not take ownership of its HeroController.
+              child: Navigator(
+                key: _dayListNavigator,
+                onDidRemovePage: (_) {},
+                pages: [
+                  MaterialPage<void>(
+                    child: _PlannerDaySheetTransition(
+                      key: ValueKey(_dayListDate),
+                      visible: !_dayListClosing,
+                      onDismissed: () {
+                        if (mounted && _dayListClosing) _hideDayList();
+                      },
+                      child: _PlannerDaySheet(
+                        date: _dayListDate!,
+                        candidates: _candidates,
+                        blocks: _blocks,
+                        options: widget.options,
+                        enabled: widget.enabled && !_dayListClosing,
+                        canMove: _movable,
+                        onEvent: widget.onEvent,
+                        onPreview: widget.onPreview,
+                        onDragActiveChanged: widget.onDragActiveChanged,
+                        onClose: _closeDayList,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -775,6 +784,7 @@ class _PlannerBoardState extends State<PlannerBoard>
           item['_boardGeneration'] == _viewGeneration) &&
       item['fixed'] != true &&
       item['readOnly'] != true &&
+      item['completed'] != true &&
       item['moveEvent'] is Map &&
       _duration(item) != null;
 
@@ -1810,6 +1820,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     final deadline = item['deadlineSummary'] as String?;
     final start = _date(item['start']), end = _date(item['end']);
     final scheduled = start != null && end != null;
+    final edgeStatus = item['statusIndicator'] == 'edgeToCorner';
     final compactCandidate =
         _timeline && !scheduled && item['_candidateList'] != true;
     final subtitle = _summary(item);
@@ -1847,8 +1858,11 @@ class _PlannerBoardState extends State<PlannerBoard>
     );
     final full = scheduled && height >= timeHeight * 2 + titleHeight + 12;
     final two = scheduled && height >= titleHeight + timeHeight + 12;
-    final icon =
-        titleLines == 1 && item['readOnly'] != true && item['fixed'] == true
+    final icon = edgeStatus
+        ? null
+        : item['completed'] == true
+        ? Icons.check_circle_outline
+        : titleLines == 1 && item['readOnly'] != true && item['fixed'] == true
         ? Icons.lock_rounded
         : null;
     final title = Row(
@@ -1859,6 +1873,9 @@ class _PlannerBoardState extends State<PlannerBoard>
             maxLines: full ? titleLines : 1,
             overflow: TextOverflow.ellipsis,
             style: textTheme.labelMedium?.copyWith(
+              decoration: item['completed'] == true && !edgeStatus
+                  ? TextDecoration.lineThrough
+                  : null,
               fontWeight: FontWeight.w600,
               fontSize: titleLines > 1
                   ? 11
@@ -1879,7 +1896,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     );
     Widget card = Semantics(
       label:
-          '${item['title'] ?? ''}，${scheduled ? '${_full(start)}至${_full(end)}' : subtitle}${item['readOnly'] == true ? '，来源只读' : ''}${item['fixed'] == true ? '，固定时间' : ''}',
+          '${item['title'] ?? ''}，${scheduled ? '${_full(start)}至${_full(end)}' : subtitle}${item['completed'] == true ? '，已完成' : ''}${item['readOnly'] == true ? '，来源只读' : ''}${item['fixed'] == true ? '，固定时间' : ''}',
       child: Material(
         elevation:
             scheduled &&
@@ -2213,7 +2230,49 @@ class _PlannerBoardState extends State<PlannerBoard>
         ),
       );
     }
-    return _selectedItem?['id'] == item['id'] ? _selectionRegion(card) : card;
+    if (_selectedItem?['id'] == item['id']) card = _selectionRegion(card);
+    // Keep the animation outside conditional drag/selection wrappers: completing
+    // a task removes its drag source but must preserve the marker's State.
+    if (edgeStatus && scheduled && item['_resident'] != true) {
+      double? leadingLabelWidth;
+      if (full) {
+        final time = TextPainter(
+          text: TextSpan(
+            text: _edgeTime(item, true),
+            style: textTheme.labelSmall?.copyWith(fontSize: 10),
+          ),
+          textScaler: scaler,
+          textDirection: Directionality.of(context),
+        )..layout();
+        leadingLabelWidth = time.width + (titleLines > 1 ? 2 : 3) + 2;
+        time.dispose();
+      }
+      card = PlannerStatusIndicator(
+        key: ValueKey('planner-status:${sourceSegment ?? item['id']}'),
+        completed: item['completed'] == true,
+        railWidth: titleLines > 1 ? 2 : 3,
+        leadingLabelWidth: leadingLabelWidth,
+        color: ContentColors.foreground(
+          accent,
+          _surface(item),
+          scheme.onSurface,
+        ),
+        // Tiny labels have no start-time row. Use their bottom padding rather
+        // than covering the title or making its line shorter.
+        badgeSize: full
+            ? math.min(16, timeHeight + 1)
+            : math.min(
+                16,
+                math.max(
+                  titleLines > 1 ? 2 : 3,
+                  height - titleHeight - (two ? timeHeight : 0) - 8,
+                ),
+              ),
+        badgeAtBottom: !full,
+        child: card,
+      );
+    }
+    return card;
   }
 
   String _edgeTime(BoardItem item, bool beginning) {
@@ -3205,6 +3264,14 @@ class _PlannerBoardState extends State<PlannerBoard>
     final item = _selectedItem!;
     final start = _date(item['start'])!, end = _date(item['end'])!;
     final edit = item['editTimeEvent'] ?? widget.options['editTimeEvent'];
+    final actions =
+        (item['actions'] is List ? item['actions'] as List : const [])
+            .whereType<Map>()
+            .where(
+              (action) => action['label'] is String && action['event'] is Map,
+            )
+            .take(3)
+            .toList();
     final scheme = Theme.of(context).colorScheme;
     final fallbackGaps = _gaps(item)
         .where((gap) => !_gapVisibleInGrid(gap))
@@ -3272,6 +3339,40 @@ class _PlannerBoardState extends State<PlannerBoard>
                   ],
                 ),
               const SizedBox(height: 8),
+              if (actions.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final action in actions)
+                        FilledButton.icon(
+                          onPressed:
+                              !widget.enabled || action['disabled'] == true
+                              ? null
+                              : () {
+                                  if (widget.onCommandAction != null &&
+                                      action['command'] is Map) {
+                                    widget.onCommandAction!(
+                                      action['event'],
+                                      action['command'],
+                                    );
+                                  } else {
+                                    widget.onEvent(action['event']);
+                                  }
+                                },
+                          icon: Icon(switch (action['icon']) {
+                            'check' => Icons.check_circle_outline,
+                            'undo' => Icons.undo,
+                            'history' => Icons.history,
+                            _ => Icons.play_arrow_outlined,
+                          }, size: 18),
+                          label: Text(action['label'] as String),
+                        ),
+                    ],
+                  ),
+                ),
               Row(
                 children: [
                   if (edit is Map && _movable(item)) ...[
@@ -5347,7 +5448,11 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
     final continuation = widget.continuation, accent = widget.accent;
     final theme = Theme.of(context);
     final scaler = MediaQuery.textScalerOf(context);
+    final edgeStatus = item['statusIndicator'] == 'edgeToCorner';
     final titleStyle = theme.textTheme.labelMedium!.copyWith(
+      decoration: item['completed'] == true && !edgeStatus
+          ? TextDecoration.lineThrough
+          : null,
       fontWeight: FontWeight.w600,
       fontSize: item['_titleLines'] == 2 ? 11 : null,
       height: item['_titleLines'] == 2 ? 1.15 : null,
@@ -5361,10 +5466,13 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
       color: theme.colorScheme.onSurfaceVariant,
     );
     final timeStyle = detailStyle.copyWith(fontSize: 10);
-    final icon =
-        item['_titleLines'] != 2 &&
-            item['readOnly'] != true &&
-            item['fixed'] == true
+    final icon = edgeStatus
+        ? null
+        : item['completed'] == true
+        ? Icons.check_circle_outline
+        : item['_titleLines'] != 2 &&
+              item['readOnly'] != true &&
+              item['fixed'] == true
         ? Icons.lock_rounded
         : null;
     return LayoutBuilder(

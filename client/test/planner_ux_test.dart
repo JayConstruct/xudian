@@ -989,12 +989,12 @@ void main() {
         'plannedTimezone': 'Asia/Shanghai',
       }, module: 'app.tasks'),
     );
-    var completed = true;
     var reviews = 0;
+    var dialogs = 0;
     host.interaction = (_, method, args) async {
       if (method == 'ui.dialog') {
-        // The dialog retains its date field when completion is switched off.
-        return {'completed': completed, 'actualCompletedOn': '2026-10-12'};
+        dialogs++;
+        return {'actualCompletedOn': '2026-10-12'};
       }
       if (method == 'ui.review') reviews++;
       return true;
@@ -1025,15 +1025,93 @@ void main() {
     await applyCompletion();
     final finished = await currentTask();
     expect(finished['completedAt'], isNotNull);
-    expect(finished['actualCompletedOn'], '2026-10-12');
+    expect(finished['actualCompletedOn'], '2026-10-13');
     expect(finished['completedTimezone'], 'Asia/Shanghai');
-    completed = false;
+    expect(dialogs, 0);
+    final completedDetail = await page(
+      pageId: 'app.planner.taskDetail',
+      context: {'taskId': original['id']},
+    );
+    expect(
+      nodes(completedDetail['tree'])
+          .where((n) => n['text'] == '已完成 · 2026-10-13 08:00'),
+      hasLength(1),
+    );
+    expect(
+      nodes(completedDetail['tree']).where((n) => n['text'] == '保存修改'),
+      isEmpty,
+    );
+    await page(
+      pageId: 'app.planner.taskDetail',
+      context: {'taskId': original['id']},
+      state: object(completedDetail['state']),
+      event: {'type': 'completionDate'},
+    );
+    final corrected = await currentTask();
+    expect(corrected['actualCompletedOn'], '2026-10-12');
+    expect(corrected['completedAt'], finished['completedAt']);
     await applyCompletion();
     final reopened = await currentTask();
     expect(reopened['completedAt'], isNull);
     expect(reopened['actualCompletedOn'], isNull);
     expect(reopened['completedTimezone'], isNull);
-    expect(reviews, 2);
+    expect(reviews, 3);
+    expect(dialogs, 1);
+  });
+
+  test('board completes a selected task, keeps its completed block, and reopens it', () async {
+    final original = object(
+      await run('task.create', {
+        'title': '时间轴完成验收',
+        'plannedStartAt': '2026-10-13T10:00:00Z',
+        'plannedEndAt': '2026-10-13T10:30:00Z',
+        'plannedTimezone': 'Asia/Shanghai',
+      }, module: 'app.tasks'),
+    );
+    host.interaction = (_, method, args) async {
+      expect(method, isNot('ui.dialog'));
+      return true;
+    };
+    Map<String, Object?> block(Map<String, Object?> rendered) => object(
+      (nodes(rendered['tree'])
+                  .singleWhere((n) => n['type'] == 'plannerBoard')['blocks']
+              as List)
+          .single,
+    );
+    final initial = await page();
+    final initialBlock = block(initial);
+    expect(initialBlock['statusIndicator'], 'edgeToCorner');
+    expect(initialBlock['completed'], false);
+    final action = object((initialBlock['actions'] as List).single);
+    expect(action['label'], '已完成');
+    expect(object(object(action['command'])['input'])['completed'], true);
+    final completed = await page(
+      state: object(initial['state']),
+      event: object(action['event']),
+    );
+    expect(object(completed['state'])['error'], isNull);
+    final completedBlock = block(completed);
+    expect(completedBlock['id'], original['id']);
+    expect(completedBlock['completed'], true);
+    expect(completedBlock['statusIndicator'], 'edgeToCorner');
+    expect(completedBlock['colorKey'], initialBlock['colorKey']);
+    expect(completedBlock['color'], initialBlock['color']);
+    expect(completedBlock['sourceLabel'], '已完成');
+    expect(completedBlock.containsKey('moveEvent'), false);
+    expect(completedBlock.containsKey('editTimeEvent'), false);
+    final reopen = object((completedBlock['actions'] as List).single);
+    expect(reopen['label'], '重新打开');
+    final reopened = await page(
+      state: object(completed['state']),
+      event: object(reopen['event']),
+    );
+    expect(block(reopened)['completed'], false);
+    expect(block(reopened)['statusIndicator'], 'edgeToCorner');
+    expect(block(reopened)['colorKey'], initialBlock['colorKey']);
+    expect(block(reopened)['color'], initialBlock['color']);
+    expect(block(reopened)['plannedStartAt'], initialBlock['plannedStartAt']);
+    expect(block(reopened)['start'], initialBlock['start']);
+    expect(block(reopened)['end'], initialBlock['end']);
   });
 
   test(
@@ -1582,7 +1660,7 @@ void main() {
       final board = nodes(rendered['tree'])
           .singleWhere((n) => n['type'] == 'plannerBoard');
       final item = object((board['candidates'] as List).single);
-      expect(item['deadlineText'], '截止 2026-10-14 20:30（Asia/Shanghai）');
+      expect(item['deadlineText'], '截止 2026-10-14 20:30');
       expect(
         object(object(board['previewQuery'])['ref'])['serviceId'],
         'planner.operation.inspect',

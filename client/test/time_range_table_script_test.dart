@@ -28,6 +28,7 @@ class _CountingModuleHost extends ModuleHost {
     bool Function()? shouldRun,
     PagePlanReview? onReview,
     InlinePagePlanReview? onInlineReview,
+    bool Function()? commandIsCurrent,
     void Function(ChangePlan)? onCommit,
   }) {
     pageInvocations++;
@@ -46,6 +47,7 @@ class _CountingModuleHost extends ModuleHost {
       shouldRun: shouldRun,
       onReview: onReview,
       onInlineReview: onInlineReview,
+      commandIsCurrent: commandIsCurrent,
       onCommit: onCommit,
     );
   }

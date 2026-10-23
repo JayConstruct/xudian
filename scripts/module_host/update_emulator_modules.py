@@ -394,7 +394,7 @@ def _verify_same_package(emulator, module, row):
             for _ in range(10):
                 current = emulator.nodes()
                 if (_find(emulator, current, ['模块管理']) is not None
-                        and _find(emulator, current, ['导入 .xmodule']) is not None):
+                        and _find(emulator, current, ['模块 ID', '版本与状态']) is None):
                     break
             else:
                 raise RuntimeError('模块详情关闭后未返回模块管理；停止后续安装')
@@ -405,12 +405,85 @@ def _verify_same_package(emulator, module, row):
     raise RuntimeError('无法读取已安装模块 SHA-256；不会将同版本导入报告为成功')
 
 
+def _bundled_modules(modules):
+    catalog = ROOT / 'client/assets/modules/catalog.json'
+    if not catalog.exists():
+        return set()
+    entries = json.loads(catalog.read_text())
+    if not isinstance(entries, list):
+        raise ValueError('客户端预装目录格式无效')
+    pins = {}
+    for entry in entries:
+        identity, digest = entry.get('id'), entry.get('sha256')
+        if not isinstance(identity, str) or identity in pins or not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest):
+            raise ValueError('客户端预装目录 ID 或摘要无效/重复')
+        pins[identity] = digest
+    bundled = set()
+    for module in modules:
+        if module['id'] not in pins:
+            continue
+        if pins[module['id']] != module['sha256']:
+            raise RuntimeError(f'{module["id"]} 当前源码摘要与客户端预装 pin 不一致；'
+                               '请更新预装资源并覆盖安装当前 APK，不能以本地导入替代官方来源')
+        bundled.add(module['id'])
+    return bundled
+
+
+def _rectangle(node):
+    match = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.get('bounds', ''))
+    if not match:
+        return None
+    left, top, right, bottom = map(int, match.groups())
+    return (left, top, right, bottom) if right > left and bottom > top else None
+
+
+def _open_bundled_restore(emulator, module, nodes):
+    """Choose the target's measured row, never an arbitrary duplicate button."""
+    nodes = _scroll_to_top(emulator, nodes, description='模块管理列表')
+    in_restore_section = False
+    previous = None
+    stable = 0
+    for _ in range(60):
+        labels = _labels(emulator, nodes)
+        _check_host_error(labels)
+        in_restore_section |= '恢复随客户端发布的模块' in labels
+        if in_restore_section:
+            identities = [node for node in nodes if emulator.label(node) == module['id']]
+            candidates = []
+            for identity in identities:
+                row = _rectangle(identity)
+                if row is None:
+                    continue
+                for node in nodes:
+                    if emulator.label(node) != '安装 / 恢复' or node.get('enabled') == 'false':
+                        continue
+                    button = _rectangle(node)
+                    if button is not None and max(row[1], button[1]) < min(row[3], button[3]):
+                        candidates.append(node)
+            # Duplicate accessibility references to the same node are harmless;
+            # two distinct buttons sharing a row are ambiguous and must stop.
+            candidates = list({id(node): node for node in candidates}.values())
+            if len(candidates) == 1:
+                emulator.tap_node(candidates[0])
+                return
+            if candidates:
+                raise RuntimeError('预装模块恢复按钮归属不明确；不会点击：' + module['id'])
+        stable = stable + 1 if labels == previous else 0
+        if stable >= 2:
+            break
+        previous = labels
+        _swipe(emulator, nodes)
+        nodes = emulator.nodes()
+    raise RuntimeError('模块管理中找不到目标预装模块恢复入口：' + module['id'])
+
+
 def update_modules(module_ids, emulator, output_dir, *, allowed_added_permissions=frozenset()):
     """Update only named modules; preserve data and stop at newly requested permissions."""
     allowed = _permission_authorization(allowed_added_permissions)
     modules = prepare_modules(module_ids, output_dir)
     if not modules:
         return []
+    bundled = _bundled_modules(modules)
     emulator.adb('shell', 'am', 'start', '-W', '-n', f'{PACKAGE}/.MainActivity')
     for _ in range(10):
         labels = _labels(emulator, emulator.nodes())
@@ -420,7 +493,8 @@ def update_modules(module_ids, emulator, output_dir, *, allowed_added_permission
         raise RuntimeError('App 启动后未就绪')
     for module in modules:
         filename = Path(module['package']).name
-        emulator.adb('push', module['package'], '/sdcard/Download/' + filename)
+        if module['id'] not in bundled:
+            emulator.adb('push', module['package'], '/sdcard/Download/' + filename)
         emulator.manager()
         nodes = emulator.nodes()
         # manager() taps the route; its first accessibility snapshot can still
@@ -438,11 +512,16 @@ def update_modules(module_ids, emulator, output_dir, *, allowed_added_permission
             nodes = emulator.nodes()
         else:
             raise RuntimeError('模块管理中找不到导入按钮：' + str(_labels(emulator, nodes)))
-        emulator.tap_node(button)
-        _select_download(emulator, filename)
+        if module['id'] in bundled:
+            _open_bundled_restore(emulator, module, nodes)
+            module['installationSource'] = 'bundled'
+        else:
+            emulator.tap_node(button)
+            _select_download(emulator, filename)
+            module['installationSource'] = 'local'
         changed = _confirm_review(emulator, module, allowed_added_permissions=allowed)
         row = _verify_installed(emulator, module)
-        if not changed:
+        if not changed or module['id'] in bundled:
             _verify_same_package(emulator, module, row)
         module['status'] = 'installed' if changed else 'already-installed'
         action = '模块安装完成' if changed else '模块同版本已复用，未重新安装'

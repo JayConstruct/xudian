@@ -146,13 +146,14 @@ void main() {
     },
   );
 
-  test('same-day plan label is compact without hiding timezone', () async {
+  test('same-day labels keep local time without showing timezone', () async {
     final result = await page();
     final row = nodes(result['tree'])
         .singleWhere((node) => node['type'] == 'taskItem');
-    expect(row['subtitle'], contains('今天 18:30截止 (Asia/Shanghai)'));
-    expect(row['subtitle'], contains('计划 17:00–18:00 (Asia/Shanghai)'));
+    expect(row['subtitle'], contains('今天 18:30截止'));
+    expect(row['subtitle'], contains('计划 17:00–18:00'));
     expect(row['subtitle'], isNot(contains('2026-10-21')));
+    expect(row['subtitle'], isNot(contains('Asia/Shanghai')));
   });
 
   test(

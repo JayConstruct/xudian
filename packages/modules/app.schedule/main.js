@@ -106,7 +106,6 @@ export async function renderTodayFeed({state={},event,context={}}={}) {
   const today=await queryTodayFeed(context.selectedDate===undefined?{}:{date:context.selectedDate}),currentDate=await clock.today(),multipleTables=new Set(today.items.map(item=>item.timetableId)).size>1;
   if(state.feedDate!==today.date) {state.feedDate=today.date;state.coursesExpanded=false;}
   if(event?.type==='toggleCourses'&&event.date===today.date)state.coursesExpanded=!state.coursesExpanded;
-  const multipleZones=new Set(today.items.map(item=>item.timezone)).size>1;
   const current=today.items.find(item=>item.startOffset<=0&&item.endOffset>0),next=today.items.find(item=>item.startOffset>0);
   const last=today.items.reduce((latest,item)=>!latest||item.endOffset>latest.endOffset?item:latest,null);
   const focus=today.date===currentDate?(current||next||last):today.date<currentDate?last:today.items[0];
@@ -115,7 +114,7 @@ export async function renderTodayFeed({state={},event,context={}}={}) {
   if(!today.items.length)children.push({type:'text',text:today.date===currentDate?'今天没有课程':`${today.date} 没有课程`,style:'muted'});
   for(const item of visible)children.push({type:'agendaItem',key:item.occurrenceId+'|'+item.timetableId,title:item.title,
     startTime:item.startTime,endTime:item.endTime,color:item.color,
-    subtitle:[`第 ${item.startPeriod}–${item.endPeriod} 节`,[item.location,item.teacher].filter(Boolean).join(' · '),multipleTables?item.timetableName:null,item.date!==today.date?`${item.date} · ${item.timezone}`:multipleZones?item.timezone:null].filter(Boolean).join(' · '),
+    subtitle:[`第 ${item.startPeriod}–${item.endPeriod} 节`,[item.location,item.teacher].filter(Boolean).join(' · '),multipleTables?item.timetableName:null,item.date!==today.date?item.date:null].filter(Boolean).join(' · '),
     ...(item.isLocalToday&&item.startOffset<=0&&item.endOffset>0?{badge:'正在上课'}:item.isLocalToday&&item.startOffset>0&&item.startOffset<=30?{badge:'即将开始'}:!state.coursesExpanded?{badge:today.date<currentDate?'当日最后一节':today.date>currentDate?'当日首节':item.endOffset<=0?'已结束':'下一节'}:{}),
     event:{type:'openCourse',timetableId:item.timetableId,reference:occurrenceReference(item)},
   });
@@ -227,7 +226,7 @@ export async function render({state={},context={},event,formValues={}}) {
     const plan=await services.prepare(ref('schedule.demo.create'),{});
     if(plan.result.alreadyExists)state.notice='示例课表已存在，保留了现有内容';
     else if(await ui.review(plan.planId)) {
-      const saved=await services.commit(plan.planId);state.timetableId=saved.timetableId;selectTimetable(saved.timetableId);state.notice='已添加示例课表，今天会显示对应课程'+(saved.timezoneSource==='fallback'?`。设备时区未能获取，当前使用 ${saved.timezone}`:'');
+      const saved=await services.commit(plan.planId);state.timetableId=saved.timetableId;selectTimetable(saved.timetableId);state.notice='已添加示例课表，今天会显示对应课程'+(saved.timezoneSource==='fallback'?'。请在学期设置的高级设置中核对时间设置。':'');
     }
   }
   let timetables=await data.query('timetables');
@@ -369,7 +368,7 @@ export async function render({state={},context={},event,formValues={}}) {
       field('periods','每行一个节次 HH:mm-HH:mm',periodsText(original?.periods||defaultPeriods),'multiline')]});
     if(values) {
       const saved=await command('schedule.timetable.save',{timetable:{...original,...values,timezone:zone.zone,totalWeeks:Number(values.totalWeeks),displayWeekStart:Number(values.displayWeekStart),periods:parsePeriods(values.periods)},...(original?{expectedTimetable:original}:{})});
-      if(saved) { state.timetableId=saved.result.id; selectTimetable(saved.result.id); if(zone.source==='fallback')state.notice=`设备时区未能获取，当前使用 ${zone.zone}。可在学期信息的高级设置中修改。`; }
+      if(saved) { state.timetableId=saved.result.id; selectTimetable(saved.result.id); if(zone.source==='fallback')state.notice='请在学期设置的高级设置中核对时间设置。'; }
     }
   }
   if(event?.type==='course') {
@@ -449,11 +448,11 @@ export async function render({state={},context={},event,formValues={}}) {
   if(page==='app.schedule.settings') {
     const counts=t?await snapshot(t.id):{courses:[],meetings:[],changes:[]};
     children.push(group('概览',[
-      listTile(t?.name||'还没有课表',t?`${t.firstMonday} 起 · ${t.totalWeeks} 周 · ${t.timezone}`:'新建或导入课表后开始使用','calendar',t?{type:'chooseTimetable'}:{type:'navigate',page:'timetables'}),
+      listTile(t?.name||'还没有课表',t?`${t.firstMonday} 起 · ${t.totalWeeks} 周`:'新建或导入课表后开始使用','calendar',t?{type:'chooseTimetable'}:{type:'navigate',page:'timetables'}),
       listTile('课程与安排',`${counts.courses.length} 门课程 · ${counts.meetings.length} 个周期安排 · ${counts.changes.length} 条调课`,'school',null,''),
       go('今日课程','today','查看今天的课程与上课时间','calendar')
     ]));
-    children.push(group('课表配置',[go('学期设置','semester','名称、学期日期、周数与时区','tune'),go('作息设置','periods',t?`${t.periods.length} 个节次，按上午、下午和晚间编辑`:'设置各节次起止时间','schedule'),go('显示设置','display',t?`${scheduleShowWeekends(t)?'显示周末':'仅工作日'} · 课表总高度 ${48+t.periods.length*scheduleRowHeight(t)}`:'周末显示与课表总高度','tune'),go('课表管理','timetables',`${timetables.length} 张课表，可切换、新建或删除`,'list')]));
+    children.push(group('课表配置',[go('学期设置','semester','名称、学期日期、周数与高级设置','tune'),go('作息设置','periods',t?`${t.periods.length} 个节次，按上午、下午和晚间编辑`:'设置各节次起止时间','schedule'),go('显示设置','display',t?`${scheduleShowWeekends(t)?'显示周末':'仅工作日'} · 课表总高度 ${48+t.periods.length*scheduleRowHeight(t)}`:'周末显示与课表总高度','tune'),go('课表管理','timetables',`${timetables.length} 张课表，可切换、新建或删除`,'list')]));
     children.push(group('课程与调课',[go('课程管理','courses','课程信息与周期上课安排','school'),go('调课记录','changes','取消、移动与临时加课','history')]));
     children.push(group('数据管理',[go('导入与备份','imports','JSON 备份与教务导入','importExport'),listTile('添加示例课表','独立课表，每天 3 门课程；重复添加会保留现有内容','school',{type:'createDemo'})]));
     return {state,tree:{type:'column',children}};
@@ -492,7 +491,7 @@ export async function render({state={},context={},event,formValues={}}) {
   }
   if(page==='app.schedule.timetables') {
     children.push({type:'sectionHeader',title:'我的课表',count:timetables.length,action:{label:'新建课表',icon:'add',event:{type:'newTimetable'}}});
-    for(const table of timetables) children.push(group(table.name,[listTile(table.id===t?.id?'当前课表':'选择课表',`${table.firstMonday} 起 · ${table.totalWeeks} 周 · ${table.timezone}`,'calendar',{type:'select',id:table.id}),listTile('删除课表','删除前展示实际变更并确认','history',{type:'delete',collection:'timetables',id:table.id})]));
+    for(const table of timetables) children.push(group(table.name,[listTile(table.id===t?.id?'当前课表':'选择课表',`${table.firstMonday} 起 · ${table.totalWeeks} 周`,'calendar',{type:'select',id:table.id}),listTile('删除课表','删除前展示实际变更并确认','history',{type:'delete',collection:'timetables',id:table.id})]));
     return {state,tree:{type:'column',children}};
   }
   if(!t) {
@@ -504,7 +503,7 @@ export async function render({state={},context={},event,formValues={}}) {
     const draft=semesterDraft(t),labels={name:'课表名称',firstMonday:'第一教学周周一（YYYY-MM-DD）',totalWeeks:'总教学周数',displayWeekStart:'显示起始（1=周一，7=周日）'};
     children.push({type:'sectionHeader',title:'学期信息',subtitle:t.name});
     for(const [key,label] of Object.entries(labels))children.push({type:'input',key:`semester.${t.id}.${key}`,text:label,value:draft.values[key],onChangeEvent:{type:'semesterField',field:key}});
-    children.push(listTile(state.timezoneAdvanced?'收起高级设置':'高级设置',`课表时区：${draft.values.timezone}`,null,{type:'toggleTimezone'}));
+    children.push(listTile(state.timezoneAdvanced?'收起高级设置':'高级设置','课表时间基准',null,{type:'toggleTimezone'}));
     if(state.timezoneAdvanced)children.push({type:'input',key:`semester.${t.id}.timezone`,text:'课表时区',value:draft.values.timezone,onChangeEvent:{type:'semesterField',field:'timezone'}},text('修改时区会影响课程对应的实际时间，保存前请核对。'));
     const dirty=JSON.stringify(draft.values)!==draft.baseline;
     state.semesterDraft={...draft,dirty};

@@ -29,7 +29,7 @@ const legacyLabels=`async function plannedLabels(tasks,selectedDate) {
       const start=await clock.toLocal({utc:task.plannedStartAt,zone:task.plannedTimezone}),end=await clock.toLocal({utc:task.plannedEndAt,zone:task.plannedTimezone});
       const startDate=start.date===selectedDate?'':\`\${shortDate(start.date,selectedDate)} \`;
       const endDate=end.date===start.date?'':\`\${shortDate(end.date,selectedDate)} \`;
-      labels.push(\`计划 \${startDate}\${start.time}–\${endDate}\${end.time} (\${task.plannedTimezone})\`);
+      labels.push(\`计划 \${startDate}\${start.time}–\${endDate}\${end.time}\`);
     } else labels.push(task.plannedDate&&\`计划 \${task.plannedDate===selectedDate?'当天':shortDate(task.plannedDate,selectedDate)}\`);
   }
   return labels;
@@ -43,6 +43,7 @@ for(const count of [0,50,129,10000]) {
     const module=await moduleFor('app.views.today',async(method,args)=>{
       calls.push(method);
       if(method==='clock.today')return '2026-11-01';
+      if(method==='clock.systemTimezone')return {zone:'Asia/Shanghai',source:'system'};
       if(method==='services.query')return args.ref.serviceId==='task.list'?tasks:[];
       if(method==='clock.toLocal')return local(args);
       if(method==='clock.toLocalMany'){
@@ -56,6 +57,10 @@ for(const count of [0,50,129,10000]) {
   }
   const current=await render(false),legacy=await render(true);
   assert.deepEqual(current.result,legacy.result);
+  // Completion controls resolve at most one shared device zone for unzoned tasks.
+  const zoneReads=tasks.some(task=>!task.plannedTimezone)?1:0;
+  assert.equal(current.calls.filter(method=>method==='clock.systemTimezone').length,zoneReads);
+  assert.equal(legacy.calls.filter(method=>method==='clock.systemTimezone').length,zoneReads);
   assert.equal(current.calls.filter(method=>method==='clock.toLocal').length,0);
   assert.equal(legacy.calls.filter(method=>method==='clock.toLocal').length,count*2);
   assert.equal(current.batches.length,Math.ceil(count/128));

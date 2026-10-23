@@ -60,6 +60,7 @@ void main() {
     );
     final candidate = objects((await board())['candidates']).single;
     expect(candidate['colorKey'], created['id']);
+    expect(candidate.containsKey('statusIndicator'), false);
 
     final preview = object(
       await host.query(
@@ -92,6 +93,7 @@ void main() {
     });
     final scheduled = objects((await board())['blocks']).single;
     expect(scheduled['colorKey'], candidate['colorKey']);
+    expect(scheduled['statusIndicator'], 'edgeToCorner');
   });
 
   test(
@@ -133,6 +135,7 @@ void main() {
           (item) => 'course:${item['id']}' == block['id'],
         );
         expect(block['courseId'], 'color-course');
+        expect(block.containsKey('statusIndicator'), false);
         expect(block['colorKey'], 'color-course');
         expect(block['color'], '#AD71D8');
         expect(block['color'], meeting['color']);

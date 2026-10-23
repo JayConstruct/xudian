@@ -43,6 +43,7 @@ import 'planner_quick_adjust.dart';
 import 'collection_store.dart';
 import 'data_change_review.dart';
 import 'inline_plan_review.dart';
+import 'native_command_approval.dart';
 import 'ui_preferences.dart';
 
 class ScriptPage extends StatefulWidget {
@@ -127,6 +128,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   );
   final _inlineApprovals = Expando<InlinePlanApproval>(
     'native plan confirmation',
+  );
+  final _commandApprovals = Expando<NativeCommandApproval>(
+    'native single command interaction',
   );
   _InlinePlanPreview? _inlinePlanPreview;
   final _timelineViewports = <String, BoardItem>{};
@@ -537,6 +541,24 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       }
     }
     unawaited(_render(event));
+  }
+
+  void _commandEvent(Object? event, Object? declaration) {
+    if (!mounted || busy || staleTree || !routeActive || !workspaceActive) {
+      return;
+    }
+    if (event is! Map || declaration == null) {
+      unawaited(_render(event));
+      return;
+    }
+    // Use a fresh event identity. Only this actual native callback may attach
+    // authority; a script sending identical JSON cannot recover it.
+    final nativeEvent = freezeJson(event) as Map<String, Object?>;
+    final approval = NativeCommandApproval.fromInteraction(
+      _bindValue(declaration),
+    );
+    if (approval != null) _commandApprovals[nativeEvent] = approval;
+    unawaited(_render(nativeEvent));
   }
 
   void _showPlannerUndo(PlannerQuickAdjustment adjustment, Object instance) {
@@ -1018,6 +1040,16 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final sentRevisions = Map<String, int>.of(formRevisions);
     final adjustment = event is Map ? _plannerApprovals[event] : null;
     final inlineApproval = event is Map ? _inlineApprovals[event] : null;
+    final commandApproval = event is Map ? _commandApprovals[event] : null;
+    bool commandIsCurrent() =>
+        mounted &&
+        current == epoch &&
+        routeActive &&
+        workspaceActive &&
+        requestedDateIntent == dateIntentRevision &&
+        canonicalJson(requestContext) == canonicalJson(pageContext) &&
+        runtimeRevision == runtimeScope?.currentRevision() &&
+        identical(instance, widget.host.instances[widget.moduleId]);
     String? approvedPlanId;
     try {
       if (event != null && _timelineViewports.isNotEmpty ||
@@ -1072,6 +1104,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               input,
               onReads: (reads) => resultReads = reads,
               onReplayable: (value) => replayable = value,
+              commandIsCurrent: commandIsCurrent,
               onInlineReview: inlineApproval == null
                   ? null
                   : (plan, confirmation) {
@@ -1092,7 +1125,16 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                       }
                       return inlineApproval.allows(plan, confirmation);
                     },
-              onReview: adjustment != null
+              onReview: commandApproval != null
+                  ? (reference, preparedInput, plan, confirmation) =>
+                        commandIsCurrent() &&
+                        commandApproval.allows(
+                          reference: reference.toJson(),
+                          input: preparedInput,
+                          writes: plan.writes,
+                          confirmation: confirmation,
+                        )
+                  : adjustment != null
                   ? (reference, preparedInput, plan, confirmation) {
                       if (reference.major != 1 ||
                           !mounted ||
@@ -1612,11 +1654,15 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                 PageRuntimeContextScope.read(context)?.update(patch);
               }
             }
-            _render(
-              value == null && entry.key != 'change'
-                  ? entry.value
-                  : {...object(entry.value), 'value': value},
-            );
+            final event = value == null && entry.key != 'change'
+                ? entry.value
+                : {...object(entry.value), 'value': value};
+            if (ref == 'ui.taskItem@1' && entry.key == 'change' ||
+                ref == 'ui.button@1' && entry.key == 'press') {
+              _commandEvent(event, spec['command']);
+            } else {
+              _render(event);
+            }
           }
         },
     };
@@ -1788,6 +1834,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         'ref': dailyRef,
         'key':
             spec['key'] ?? '$dailyRef:${spec['title'] ?? spec['date'] ?? ''}',
+        if (spec['type'] == 'taskItem') 'command': spec['command'],
         'props': {
           for (final entry in spec.entries)
             if (!const {
@@ -1797,6 +1844,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               'openEvent',
               'children',
               'action',
+              'command',
             }.contains(entry.key))
               entry.key: entry.value,
           if (action != null) 'actionLabel': action['label'],
@@ -1878,7 +1926,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   spec['interrupt'] as String,
                 );
               } else if (!busy && bind(spec['disabled']) != true) {
-                _render(bind(spec['event']));
+                _commandEvent(bind(spec['event']), spec['command']);
               }
             },
           },
@@ -2313,7 +2361,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             : bind(spec['disabled']) == true
             ? null
             : () {
-                if (!busy) _render(event);
+                if (!busy) _commandEvent(event, spec['command']);
               };
         return switch (spec['variant']) {
           'text' => TextButton(
@@ -2637,7 +2685,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           },
           onSubmitted: event == null
               ? null
-              : (v) => _render({...object(event), 'value': v}),
+              : (v) => _commandEvent({
+                  ...object(event),
+                  'value': v,
+                }, spec['command']),
         );
       case 'timeRangeTable':
         final key = string(spec['key'], 'time range table key');
@@ -2800,6 +2851,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             onEvent: busy
                 ? (_) {}
                 : (event) => _plannerEvent(event, quickConfig),
+            onCommandAction: busy ? null : _commandEvent,
           ),
         );
       default:

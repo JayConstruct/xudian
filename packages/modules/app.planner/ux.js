@@ -33,15 +33,26 @@ const duration = minutes => minutes >= 60 ? `耗时${Math.round(minutes / 6) / 1
 const rangeLabel = (start, end) => start.slice(0, 7) === end.slice(0, 7)
   ? `${Number(start.slice(5, 7))}月${Number(start.slice(8))}日—${Number(end.slice(8))}日`
   : `${Number(start.slice(5, 7))}月${Number(start.slice(8))}日—${Number(end.slice(5, 7))}月${Number(end.slice(8))}日`;
-const deadlineLabel = t => t?.dueAt ? `${t.dueAt}（UTC）` : t?.dueDate ? `${t.dueDate}${t.dueTimezone ? '（' + t.dueTimezone + '）' : ''}` : '未设置';
+const deadlineLabel = t => t?.dueDate || '未设置';
 async function localDeadlineLabels(values, defaultZone) {
   const exact = values.filter(t => t?.dueAt), labels = new Map();
   for (let i = 0; i < exact.length; i += 256) {
     const items = exact.slice(i, i + 256);
     const times = await clock.toLocalMany(items.map(t => ({utc: t.dueAt, zone: t.dueTimezone || defaultZone})));
-    items.forEach((t, index) => labels.set(t, `${times[index].date} ${times[index].time}（${t.dueTimezone || defaultZone}）`));
+    items.forEach((t, index) => labels.set(t, `${times[index].date} ${times[index].time}`));
   }
   return t => labels.get(t) || deadlineLabel(t);
+}
+const completionCommand = (current, completed, zone, date, expectedUpdatedAt = current.updatedAt) => ({
+  ref: {moduleId: 'app.tasks', serviceId: 'task.setCompleted', majorVersion: 1},
+  input: {id: current.id, completed, expectedUpdatedAt, ...(completed ? {actualCompletedOn: date, completedTimezone: zone} : {})},
+});
+async function setCompletion(current, completed, zone, expectedUpdatedAt = current.updatedAt, actualCompletedOn) {
+  const prepared = await services.prepare({moduleId: 'app.tasks', serviceId: 'task.setCompleted', majorVersion: 1}, {
+    id: current.id, completed, expectedUpdatedAt,
+    ...(completed ? {actualCompletedOn: actualCompletedOn || await clock.today(zone), completedTimezone: zone} : {}),
+  });
+  if (await ui.review(prepared.planId)) return services.commit(prepared.planId);
 }
 function savedPanel(state, message) {
   return {state: {}, clearForms: Object.keys(state.draft || {}), tree: text(message)};
@@ -180,6 +191,12 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       }
     }
     if (event?.type === 'add') await panel('quickAdd');
+    if (event?.type === 'completeTask') {
+      const current = await task(event.id);
+      if (!current || current.deletedAt || current.archivedAt) throw Error('任务已不可用，请刷新');
+      const saved = await setCompletion(current, !current.completedAt, a.timezone, event.expectedUpdatedAt);
+      if (saved) await ui.notify({message: current.completedAt ? '任务已重新打开' : '任务已完成，已记录完成时间', kind: 'success'});
+    }
     if (event?.type === 'detail') await panel('taskDetail', {taskId: event.id});
     if (event?.type === 'editTime') await panel('taskDetail', {taskId: event.id, step: 'time'});
     if (event?.type === 'tools') await panel('tools', {screen: event.screen || 'rules'});
@@ -256,7 +273,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   const now = await clock.now(), daysByZone = {[a.timezone]: today};
   const localNow = await clock.toLocal({utc: now, zone: a.timezone});
   for (const t of data.tasks) if (t.dueDate && !t.dueAt && t.dueTimezone && !daysByZone[t.dueTimezone]) daysByZone[t.dueTimezone] = await clock.today(t.dueTimezone);
-  const overdue = t => !!t?.dueDate && (t.dueAt ? Date.parse(t.dueAt) < Date.parse(now) : t.dueDate < daysByZone[t.dueTimezone || a.timezone]);
+  const overdue = t => !t?.completedAt && !!t?.dueDate && (t.dueAt ? Date.parse(t.dueAt) < Date.parse(now) : t.dueDate < daysByZone[t.dueTimezone || a.timezone]);
   const labelDeadline = await localDeadlineLabels([...data.candidates.map(c => c.task), ...data.scheduled], a.timezone);
   const expectedTasks = Object.fromEntries(data.tasks.filter(t => t.revisionToken).map(t => [t.id, {revisionToken: t.revisionToken}]));
   state.boardVersions = expectedTasks;
@@ -281,12 +298,13 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     title: t.title, start: stamp(t.startDate, t.start), end: stamp(t.endDate, t.end),
     durationMinutes: (Date.parse(t.plannedEndAt || t.endAt || stamp(t.endDate, t.end) + 'Z') - Date.parse(t.plannedStartAt || t.startAt || stamp(t.startDate, t.start) + 'Z')) / 60000,
     deadlineSummary: summary(t), deadlineText: t.dueDate ? '截止 ' + labelDeadline(t) : '', overdue: overdue(t),
-    fixed: !!t.locked, readOnly: !!t.readOnly, sourceLabel: t.sourceLabel,
+    completed: !!t.completedAt, fixed: !!t.locked, readOnly: !!t.readOnly, sourceLabel: t.completedAt ? '已完成' : t.sourceLabel,
+    ...(!t.readOnly ? {statusIndicator: 'edgeToCorner', actions: [{label: t.completedAt ? '重新打开' : '已完成', icon: t.completedAt ? 'undo' : 'check', event: {type: 'completeTask', id: t.taskId || t.id, expectedUpdatedAt: t.updatedAt}, command: completionCommand(t, !t.completedAt, a.timezone, today)}]} : {}),
     ...(typeof t.location === 'string' && t.location.trim() ? {location: t.location.trim()} : {}),
     ...(typeof t.teacher === 'string' && t.teacher.trim() ? {teacher: t.teacher.trim()} : {}),
     event: t.readOnly ? {type: 'source', title: t.title, source: t.sourceLabel} : {type: 'detail', id: t.taskId || t.id},
-    ...(!t.readOnly ? {editTimeEvent: {type: 'editTime', id: t.taskId || t.id}} : {}),
-    ...(!t.readOnly && !t.locked ? {moveEvent: {type: 'move', taskId: t.taskId || t.id, expectedTasks: {[t.taskId || t.id]: {revisionToken: t.revisionToken}}}} : {}),
+    ...(!t.readOnly && !t.completedAt ? {editTimeEvent: {type: 'editTime', id: t.taskId || t.id}} : {}),
+    ...(!t.readOnly && !t.locked && !t.completedAt ? {moveEvent: {type: 'move', taskId: t.taskId || t.id, expectedTasks: {[t.taskId || t.id]: {revisionToken: t.revisionToken}}}} : {}),
   }));
   if (event?.type === 'source') await ui.notify({message: `${event.title} · ${event.source}，请到来源修改`});
   const notices = [...data.warnings, ...data.conflicts];
@@ -421,7 +439,7 @@ async function moveConfirmation(preview, zone, precise) {
   return {
     title: '确认' + action,
     message: preview.changes.map(c => `${c.before.title}\n原安排：${label(c.before.plannedStartAt, c.before.plannedEndAt)}\n调整为：${label(c.fields.plannedStartAt, c.fields.plannedEndAt)}\n时长${c.fields.estimatedMinutes}分钟`).join('\n\n')
-      + `\n\n时区：${zone}\n截止时间保持不变。`,
+      + '\n\n截止时间保持不变。',
     confirmLabel,
     ...(preview.overdue?.length ? {acknowledgement: `${preview.overdue.map(c => c.title).join('、')}的安排超出截止时间，我仍按此安排，保留原截止。`} : {}),
   };
@@ -450,12 +468,14 @@ async function detail(state, event, context, forms, a) {
     if (event?.type === 'editTime') state.step = 'time';
     if (event?.type === 'back') state.step = null;
     if (event?.type === 'complete') {
-      const answer = await ui.dialog({title: current.completedAt ? '撤销完成' : '完成任务', fields: [{key: 'completed', label: '已完成', type: 'boolean', value: !current.completedAt}, {key: 'actualCompletedOn', label: '实际完成日期', type: 'date', value: current.actualCompletedOn || await clock.today(a.timezone)}]});
-      if (answer) {
-        const prepared = await services.prepare({moduleId: 'app.tasks', serviceId: 'task.setCompleted', majorVersion: 1}, {id: current.id, completed: answer.completed,
-          ...(answer.completed ? {actualCompletedOn: answer.actualCompletedOn, completedTimezone: a.timezone} : {}),
-          expectedUpdatedAt: state.original.updatedAt});
-        if (await ui.review(prepared.planId)) { await services.commit(prepared.planId); await ui.navigate('app.planner.home'); return savedPanel(state, '完成状态已更新'); }
+      if (await setCompletion(current, !current.completedAt, a.timezone, state.original.updatedAt)) {
+        await ui.navigate('app.planner.home'); return savedPanel(state, current.completedAt ? '任务已重新打开' : '任务已完成，已记录完成时间');
+      }
+    }
+    if (event?.type === 'completionDate' && current.completedAt) {
+      const answer = await ui.dialog({title: '补记完成日期', fields: [{key: 'actualCompletedOn', label: '实际完成日期', type: 'date', value: current.actualCompletedOn || await clock.today(a.timezone)}]});
+      if (answer && await setCompletion(current, true, current.completedTimezone || a.timezone, state.original.updatedAt, answer.actualCompletedOn)) {
+        await ui.navigate('app.planner.home'); return savedPanel(state, '完成日期已更新');
       }
     }
     if (event?.type === 'saveDetail') {
@@ -483,9 +503,19 @@ async function detail(state, event, context, forms, a) {
   const seriesContext = state.step === 'time' ? await query('series.taskContext', {taskId: current.id}) : null;
   const adjusted = (current.deadlineHistory || []).length > 0;
   const labelDeadline = await localDeadlineLabels([current.initialDeadline, ...(current.deadlineHistory || []).flatMap(h => [h.before, h.after])], a.timezone);
-  const children = state.step === 'time' ? [
+  const command = completionCommand(current, !current.completedAt, a.timezone, await clock.today(a.timezone), state.original.updatedAt);
+  const completion = current.completedAt ? await clock.toLocal({utc: current.completedAt, zone: current.completedTimezone || a.timezone}) : null;
+  const children = current.completedAt ? [
     {type: 'sectionHeader', title: current.title},
-    text(`安排时间 · ${a.timezone} · 截止保持不变`),
+    {type: 'notice', tone: 'success', text: `已完成 · ${completion.date} ${completion.time}`},
+    ...(current.actualCompletedOn && current.actualCompletedOn !== completion.date ? [text('实际完成日期：' + current.actualCompletedOn)] : []),
+    ...(current.notes ? [text(current.notes)] : []),
+    ...(current.dueDate ? [text('截止：' + (await localDeadlineLabels([current], a.timezone))(current))] : []),
+    ...(current.plannedStartAt ? [text(`原安排：${d.startDate} ${d.start}—${d.endDate !== d.startDate ? d.endDate + ' ' : ''}${d.end}`)] : []),
+    button('补记完成日期', {type: 'completionDate'}, 'text'),
+  ] : state.step === 'time' ? [
+    {type: 'sectionHeader', title: current.title},
+    text('安排时间 · 截止保持不变'),
     ...(current.locked ? [text('请先返回详情解除固定并保存，再调整起止或时长。')] : [
       temporal('startDate', '开始日期', d.startDate), temporal('start', '开始时间', d.start, 'timeInput'),
       temporal('endDate', '结束日期', d.endDate), temporal('end', '结束时间', d.end, 'timeInput'),
@@ -495,18 +525,17 @@ async function detail(state, event, context, forms, a) {
     input('title', '任务简称', d.title),
     ...(state.description ? [input('notes', '详细描述（可留空）', d.notes, {multiline: true})] : [{type: 'row', children: [button('添加描述', {type: 'description'}, 'text')]}]),
     temporal('dueDate', '截止日期（可留空）', d.dueDate),
-    ...(state.time ? [temporal('dueTime', '截止时间（可留空）', d.dueTime, 'timeInput'), text(`截止时区：${state.original.dueTimezone || a.timezone}`)] : [button('＋ 添加具体时间', {type: 'time'})]),
+    ...(state.time ? [temporal('dueTime', '截止时间（可留空）', d.dueTime, 'timeInput')] : [button('＋ 添加具体时间', {type: 'time'})]),
     ...(adjusted ? [text(`已调整 · 初始截止 ${labelDeadline(current.initialDeadline)}`), button('恢复初始截止', {type: 'restoreDeadline'}),
       {type: 'disclosure', text: '截止修改记录', children: current.deadlineHistory.map(h => text(`${h.changedAt}：${labelDeadline(h.before)} → ${labelDeadline(h.after)}`))}] : []),
     ...(current.plannedStartAt ? [row('安排起止时间', `${d.startDate} ${d.start}—${d.endDate !== d.startDate ? d.endDate + ' ' : ''}${d.end} · ${(Date.parse(current.plannedEndAt) - Date.parse(current.plannedStartAt)) / 60000}分钟`, {type: 'editTime'})] : [
       input('estimatedMinutes', '预计分钟', d.estimatedMinutes), row('精确安排', '设置开始与结束时间', {type: 'editTime'}),
     ]),
     checkbox('locked', '固定时间', !!d.locked, {type: 'field', key: 'locked'}),
-    row(current.completedAt ? '撤销完成／补记日期' : '完成任务', '完成状态单独记录，不改变截止和安排', {type: 'complete'}),
   ];
   if (state.error) children.push(text(state.error));
   return {state, header: {title: state.step === 'time' ? '编辑时间' : '任务详情', ...(state.step === 'time' ? {backEvent: {type: 'back'}} : {})}, tree: {type: 'column', key: 'planner:detail:' + current.id, children,
-    ...(state.step === 'time' ? (!current.locked ? {footer: fullWidthFooter(button('应用安排', {type: 'schedule'}, 'filled'))} : {}) : {footer: fullWidthFooter(button('保存修改', {type: 'saveDetail'}, 'filled'))}),
+    ...(current.completedAt ? {footer: fullWidthFooter({...button('重新打开任务', {type: 'complete'}), command})} : state.step === 'time' ? (!current.locked ? {footer: fullWidthFooter(button('应用安排', {type: 'schedule'}, 'filled'))} : {}) : {footer: fullWidthFooter({type: 'column', children: [{...button('标记已完成', {type: 'complete'}, 'filled'), command}, button('保存修改', {type: 'saveDetail'})]})}),
   }};
 }
 

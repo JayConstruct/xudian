@@ -454,6 +454,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
       surface,
       scheme.onSurface,
     );
+    final edgeStatus = item['statusIndicator'] == 'edgeToCorner';
     final selected = _draft?['id'] == item['id'];
     final start = selected ? _start : _date(item['start']);
     final end = selected ? _end : _date(item['end']);
@@ -478,7 +479,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
 
     Widget card = Semantics(
       label:
-          '${item['title']}，${candidate ? '待安排' : '${label(start!)}至${label(end!)}'}，${selected ? _minutes : _duration(item)}分钟${item['readOnly'] == true ? '，来源只读' : ''}',
+          '${item['title']}，${candidate ? '待安排' : '${label(start!)}至${label(end!)}'}，${selected ? _minutes : _duration(item)}分钟${item['completed'] == true ? '，已完成' : ''}${item['readOnly'] == true ? '，来源只读' : ''}',
       child: Material(
         color: surface,
         borderRadius: BorderRadius.circular(9),
@@ -512,6 +513,10 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.labelLarge?.copyWith(
+                                  decoration:
+                                      item['completed'] == true && !edgeStatus
+                                      ? TextDecoration.lineThrough
+                                      : null,
                                   color: foreground,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -558,11 +563,18 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Icon(
-                    canMove ? Icons.drag_indicator : Icons.lock_outline,
-                    size: 16,
-                    color: scheme.onSurfaceVariant,
-                  ),
+                  if (edgeStatus)
+                    const SizedBox(width: 16)
+                  else
+                    Icon(
+                      item['completed'] == true
+                          ? Icons.check_circle_outline
+                          : canMove
+                          ? Icons.drag_indicator
+                          : Icons.lock_outline,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
                 ],
               ),
             ),
@@ -570,25 +582,33 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
         ),
       ),
     );
-    if (!canMove || feedback) return card;
-    card = LongPressDraggable<BoardItem>(
-      data: item,
-      maxSimultaneousDrags: 1,
-      onDragStarted: () => _drag(true),
-      onDragUpdate: (details) => _pointer = details.globalPosition,
-      onDragEnd: (_) => _drag(false),
-      onDraggableCanceled: (_, _) => _drag(false),
-      feedback: SizedBox(
-        width: math.min(320, MediaQuery.sizeOf(context).width - 48),
-        child: Opacity(
-          opacity: .9,
-          child: _card(item, candidate: candidate, feedback: true),
+    if (canMove && !feedback) {
+      card = LongPressDraggable<BoardItem>(
+        data: item,
+        maxSimultaneousDrags: 1,
+        onDragStarted: () => _drag(true),
+        onDragUpdate: (details) => _pointer = details.globalPosition,
+        onDragEnd: (_) => _drag(false),
+        onDraggableCanceled: (_, _) => _drag(false),
+        feedback: SizedBox(
+          width: math.min(320, MediaQuery.sizeOf(context).width - 48),
+          child: Opacity(
+            opacity: .9,
+            child: _card(item, candidate: candidate, feedback: true),
+          ),
         ),
-      ),
-      childWhenDragging: Opacity(opacity: .35, child: card),
-      child: card,
-    );
-    return card;
+        childWhenDragging: Opacity(opacity: .35, child: card),
+        child: card,
+      );
+    }
+    return edgeStatus
+        ? PlannerStatusIndicator(
+            key: ValueKey('planner-day-status:${item['id']}'),
+            completed: item['completed'] == true,
+            color: foreground,
+            child: card,
+          )
+        : card;
   }
 
   Widget _slot(int index, {bool empty = false}) => DragTarget<BoardItem>(
@@ -946,6 +966,9 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                       for (var index = 0; index < items.length; index++) ...[
                         _slot(index),
                         DragTarget<BoardItem>(
+                          key: ValueKey(
+                            'planner-day-row:${items[index]['id']}',
+                          ),
                           onWillAcceptWithDetails: (details) =>
                               widget.canMove(details.data) &&
                               details.data['id'] != items[index]['id'],

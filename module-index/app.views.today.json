@@ -214,6 +214,43 @@
       "size": 5577,
       "sha256": "9661c726fa890752089c8f36d646e3b137bf9e7a130fc1767bacd12a061db685",
       "signature": null
+    },
+    {
+      "version": "1.9.0",
+      "manifest": {
+        "id": "app.views.today",
+        "name": "日程",
+        "version": "1.9.0",
+        "hostApi": "^1.38.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.query:app.tasks/task.list@1",
+          "services.query:app.tasks/task.get@1",
+          "services.query:app.tasks/project.list@1",
+          "services.command:app.tasks/project.create@1",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/task.updateFields@1",
+          "services.command:app.tasks/task.setCompleted@1",
+          "extensions.command:app.tasks/tasks",
+          "services.query:app.tasks/task.dayCounts@1"
+        ],
+        "dependencies": [
+          {
+            "moduleId": "app.tasks",
+            "version": "^1.6.0"
+          }
+        ],
+        "defaultInstall": true,
+        "description": "按日期汇总任务、课程与各模块提供的日程内容。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261023-task-completion/app.views.today-1.9.0.xmodule",
+      "size": 6497,
+      "sha256": "3ccb80b812c41515bdf0cf10aea51cd1e976780a9daa152c02e1478c322045a9",
+      "signature": null
     }
   ]
 }

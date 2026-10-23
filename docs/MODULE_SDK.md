@@ -1,6 +1,6 @@
 # JavaScript 模块 SDK v1
 
-当前宿主 API 为 `1.36.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
+当前宿主 API 为 `1.40.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](UI_COMPONENTS.md)。
 
 新增模块使用 `formatVersion: 3`、`packageFormat: 2`，按所用能力声明最低 `hostApi`。组件/服务的 `@1` 主版本与宿主 API 版本分别管理，下方完整契约保留兼容规则。
 
@@ -19,6 +19,8 @@
 | 通用页面入场动画 | 1.32 |
 | 页面前进／返回动画、固定预览审核 | 1.33 |
 | 本地时间范围表格 | 1.34 |
+| 原生单项命令确认、规划任务动作与完成状态 | 1.38 |
+| 可选规划区块边缘／角标状态指示 | 1.40 |
 
 模块包目录示例：
 
@@ -85,6 +87,10 @@ query/command 的 JSON Schema 使用明确子集：type、properties、required�
 
 宿主 API `^1.33.0` 支持根节点 `planReview:{planId,eventType}` 配合 `footer:{type:"row",children:[...按钮]}`：宿主读取当前调用者的冻结计划，固定展示实际增改删数量及可打开的完整详情，并接管对应确认按钮。只有用户点击该原生按钮，才对当前页面、当前计划的一次 `ui.review` 授权，随后仍通过 `services.commit` 校验权限和数据快照。正文中的同名脚本事件、不同计划、重复请求、失效页面及需要额外风险勾选的确认继续使用普通审核。仅声明字段不会授权。确认和取消始终位于滚动内容之外。
 
+宿主 API `^1.38.0` 支持 `button.command`、`taskItem.command`、输入框提交的 `input.command`，以及规划区块 `actions[].command`。格式为 `{ref:{moduleId,serviceId,majorVersion},input:{...完整命令输入}}`，输入允许使用现有 `{bind:['formValues',字段名]}` 绑定。用户实际点击原生按钮、勾选框或提交输入框时，宿主冻结当时的输入，只对当前页面工作流中第一次 `ui.review` 的相同服务版本及完整规范输入授予一次确认；脚本自行触发同名事件或声明 `command` 不会授权。冻结写集必须恰有一条非删除 upsert；物理删除、`deletedAt`／`deleted:true` 软删除、多条写入、额外风险勾选、输入错配及重复请求仍展示确认。`services.prepare` 的权限、数据基线和 `services.commit` 的验证保持不变。
+
+原生表单 `ui.dialog` 也支持 `command:{ref,input:固定输入,fields:{服务输入字段名:'表单输出字段key'}}`。用户提交后，宿主把映射的原始表单结果合并到固定输入并冻结，供同一工作流下一次审核精确匹配；取消、缺失输出字段、离开页面或下一工作流均不能复用。模块若需要转换输入，应将转换结果在提交前明确表达，或沿用普通审核，不能把不同的实际输入作为同一次确认。
+
 `ui.navigate` 指向可用工作区时，宿主关闭覆盖工作区的详情路由和模态面板，再激活目标并传递上下文；目标不可用时保留当前页面。目标模块随后打开的确认详情页直接显示，不需要用户手动返回工作区。`ui.panel` 继续打开面板，不切换工作区。
 
 跨宿主调用被拒绝时，脚本捕获的 Error 的 `message` 和 `String(error)` 提供业务正文，去除重复异常前缀与调用堆栈；原始异常文本保存在 `error.diagnostic` 供诊断使用，不应展示给用户。未捕获的页面异常也以业务正文和重试操作显示，原始异常仍供宿主诊断。
@@ -100,6 +106,10 @@ API 1.22 增加 `await clock.systemTimezone()`，无参数，返回 `{zone,sourc
 该调用需要 `clock.today`、`clock` 或精确 `clock.systemTimezone` 权限，可用于有权限的查询、命令准备和只读页面准备；隔离预览、迁移与安装验证不能访问真实系统能力。异步读取完成后重新核对调用者是否仍启用。结果用于新记录默认值，已有记录应保留存储的时区，不能因系统设置变化自动改写；`source: 'fallback'` 应向用户说明。Android 及 Windows 实现与实测限制见 [时区与显示诊断](design/TIMEZONE_DISPLAY.md)。
 
 ## 页面
+
+宿主 API `^1.38.0` 的 `plannerBoard` 区块和候选项支持 `actions:[{label,icon,event,command?}]`，最多三个动作，在选中任务后由原生面板显示；模块负责动作含义和命令输入。区块可声明 `completed:true`，宿主显示已完成样式并禁用拖动，仍可选中查看及执行重新打开等动作。
+
+宿主 API `^1.40.0` 支持规划区块的可选配置 `statusIndicator:'edgeToCorner'`，与已有 `completed` 布尔值配合：未完成时显示贴右边缘的 3dp 彩色竖线，完成时显示 16dp 深色白勾角标；窄列竖线随既有边距缩至 2dp，紧凑区块的角标按可用留白缩小并避让时间，空间不足时保持贴边。宿主以同一形状约 280ms 收拢变形，重新打开时反向过渡，减少动态效果时立即切换；装饰不增加文字 padding、信息行或标题图标列。模块选择是否声明，省略时保留原显示；该字段只影响展示，不修改状态或命令授权。使用模块须声明 `hostApi:'^1.40.0'`，新增原生绘制能力需更新 APK。
 
 宿主 API `^1.37.0` 提供 `segmented {items:[{label,event}],selectedIndex}`、
 `formSection {title,action?:{text,event},children}`、`notice {text,tone}`、

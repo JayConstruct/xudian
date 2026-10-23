@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.views.today",
     "name": "日程",
-    "version": "1.8.1",
-    "hostApi": "^1.23.0",
+    "version": "1.9.0",
+    "hostApi": "^1.38.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -22,7 +22,7 @@
     "dependencies": [
       {
         "moduleId": "app.tasks",
-        "version": "^1.4.0"
+        "version": "^1.6.0"
       }
     ],
     "defaultInstall": true,
@@ -83,6 +83,12 @@
         "content": true,
         "order": 100
       }
+    },
+    {
+      "id": "app.views.today.review",
+      "title": "完成复盘",
+      "icon": "history",
+      "handler": "render"
     }
   ],
   "collections": [],

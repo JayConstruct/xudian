@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.tasks",
     "name": "任务",
-    "version": "1.5.1",
+    "version": "1.6.0",
     "hostApi": "^1.21.0",
     "dataVersion": 1,
     "permissions": [
@@ -109,7 +109,8 @@
               "raw",
               "today",
               "inbox",
-              "daily"
+              "daily",
+              "completed"
             ]
           },
           "offset": {
@@ -154,7 +155,8 @@
                 "raw",
                 "today",
                 "inbox",
-                "daily"
+                "daily",
+                "completed"
               ]
             },
             "offset": {

@@ -98,13 +98,14 @@ export async function taskList({filter,projectId,view='all',today,date,query='',
     currentDate=await clock.today();selectedDate=date??currentDate;validDate(selectedDate);
   }
   if(view!=='raw')for(const field of ['deletedAt','archivedAt','parentTaskId'])conditions.push({field,op:'isNull'});
-  if(view!=='raw'&&!['daily','today'].includes(view))conditions.push({field:'completedAt',op:'isNull'});
+  if(view!=='raw'&&!['daily','today','completed'].includes(view))conditions.push({field:'completedAt',op:'isNull'});
+  if(view==='completed')conditions.push({field:'completedAt',op:'notNull'});
   if(projectId!==undefined)conditions.push(projectId===null?{field:'projectId',op:'isNull'}:{field:'projectId',op:'eq',value:projectId});
   if(view==='inbox')conditions.push({field:'projectId',op:'isNull'});
   if(view==='today') {today=today||await clock.today();validDate(today);conditions.push(dailyFilter(today,today));}
   // Historical dates include associated tasks and their actual completion day.
   if(view==='daily')conditions.push(dailyFilter(selectedDate,currentDate));
-  const options={filter:{all:conditions},sort:taskSort};
+  const options={filter:{all:conditions},sort:view==='completed'?[{field:'completedAt',direction:'desc'},{field:'id',direction:'asc'}]:taskSort};
   let tasks;
   if(query) {
     // Keep QuickJS Unicode casing semantics and paginate after matching.

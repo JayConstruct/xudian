@@ -158,6 +158,49 @@ class ExpandedReviewEmulator(FakeEmulator):
             super().tap_node(node)
 
 
+class BundledRestoreEmulator(FakeEmulator):
+    def __init__(self, module, *, review_version=None, ambiguous=False, **kwargs):
+        super().__init__(**kwargs)
+        self.module = {**module, 'filename': Path(module['package']).name}
+        self.review_version = review_version
+        self.ambiguous = ambiguous
+
+    def visible_labels(self):
+        if self.state == 'manager':
+            return ['模块管理', '导入 .xmodule', '恢复随客户端发布的模块',
+                    'app.other', '安装 / 恢复', self.module['id'], '安装 / 恢复']
+        labels = super().visible_labels()
+        if self.state == 'review' and self.review_version:
+            labels = [label.replace(f'{self.module["name"]} · {self.module["version"]}',
+                                    f'{self.module["name"]} · {self.review_version}')
+                      for label in labels]
+        return labels
+
+    def nodes(self):
+        if self.state != 'manager':
+            return super().nodes()
+        nodes = [ET.Element('node', text=label, bounds=f'[0,{i * 100}][500,{i * 100 + 60}]')
+                 for i, label in enumerate(self.visible_labels())]
+        # Each restore button must belong to its own measured module row.
+        nodes[4].set('bounds', '[600,300][1000,360]')
+        nodes[4].set('module', 'app.other')
+        nodes[6].set('bounds', '[600,500][1000,560]')
+        nodes[6].set('module', self.module['id'])
+        if self.ambiguous:
+            nodes.append(ET.Element('node', text='安装 / 恢复',
+                                    bounds='[700,500][1000,560]', module='app.other'))
+        return nodes
+
+    def tap_node(self, node):
+        if self.label(node) == '安装 / 恢复':
+            self.calls.append(('restore', node.get('module')))
+            if node.get('module') != self.module['id']:
+                raise AssertionError('恢复按钮属于其他模块')
+            self.state = 'installed' if self.already_installed else 'review'
+        else:
+            super().tap_node(node)
+
+
 class ModuleWorkflowTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -178,6 +221,84 @@ class ModuleWorkflowTest(unittest.TestCase):
             'id': module_id, 'version': '1.7.0', 'name': module_id, 'permissions': ['ui']}}))
         (folder / 'main.js').write_text('function render() { return {}; }')
         return folder
+
+    def pin_bundled(self):
+        module = update.prepare_modules(['app.schedule'], self.output)[0]
+        catalog = self.root / 'client/assets/modules/catalog.json'
+        catalog.parent.mkdir(parents=True)
+        catalog.write_text(json.dumps([{'id': module['id'], 'sha256': module['sha256'],
+                                       'asset': 'assets/modules/current.xmodule'}]))
+        return module
+
+    def test_bundled_pin_uses_its_restore_row_without_local_import_and_verifies_installed_digest(self):
+        module = self.pin_bundled()
+        emulator = BundledRestoreEmulator(module)
+        result = update.update_modules([module['id']], emulator, self.output)[0]
+        self.assertEqual(result['installationSource'], 'bundled')
+        self.assertEqual(result['installedSha256'], module['sha256'])
+        self.assertIn(('restore', module['id']), emulator.calls)
+        self.assertIn(('tap', '确认安装'), emulator.calls)
+        self.assertNotIn(('tap', '导入 .xmodule'), emulator.calls)
+        self.assertFalse(any(call[0] == 'push' for call in emulator.calls))
+
+    def test_source_bundled_pin_mismatch_rejects_before_touching_device(self):
+        module = self.pin_bundled()
+        (self.sources / module['id'] / 'main.js').write_text('export function changed() {}')
+        emulator = FakeEmulator()
+        with self.assertRaisesRegex(RuntimeError, '预装 pin 不一致'):
+            update.update_modules([module['id']], emulator, self.output)
+        self.assertEqual(emulator.calls, [])
+
+    def test_stale_apk_bundle_version_or_digest_is_never_confirmed(self):
+        module = self.pin_bundled()
+        for kwargs in ({'review_version': '1.6.0'}, {'bad_digest': True}):
+            with self.subTest(kwargs=kwargs):
+                emulator = BundledRestoreEmulator(module, **kwargs)
+                with self.assertRaisesRegex(RuntimeError, '版本或摘要'):
+                    update.update_modules([module['id']], emulator, self.output)
+                self.assertNotIn(('tap', '确认安装'), emulator.calls)
+                self.assertNotIn(('tap', '导入 .xmodule'), emulator.calls)
+
+    def test_bundled_restore_still_requires_exact_added_permission_authorization(self):
+        module = self.pin_bundled()
+        emulator = BundledRestoreEmulator(module, permission='network')
+        with self.assertRaisesRegex(RuntimeError, '未授权新增权限'):
+            update.update_modules([module['id']], emulator, self.output)
+        self.assertNotIn(('tap', '确认安装'), emulator.calls)
+
+    def test_bundled_install_checks_stored_digest_after_a_successful_review(self):
+        module = self.pin_bundled()
+        emulator = BundledRestoreEmulator(module, stored_digest='different')
+        with self.assertRaisesRegex(RuntimeError, '摘要不同'):
+            update.update_modules([module['id']], emulator, self.output)
+        self.assertIn(('tap', '确认安装'), emulator.calls)
+
+    def test_ambiguous_restore_button_ownership_never_clicks_either_button(self):
+        module = self.pin_bundled()
+        emulator = BundledRestoreEmulator(module, ambiguous=True)
+        with self.assertRaisesRegex(RuntimeError, '归属不明确'):
+            update.update_modules([module['id']], emulator, self.output)
+        self.assertFalse(any(call[0] == 'restore' for call in emulator.calls))
+
+    def test_bundled_same_package_noop_still_verifies_digest(self):
+        module = self.pin_bundled()
+        emulator = BundledRestoreEmulator(module, already_installed=True)
+        result = update.update_modules([module['id']], emulator, self.output)[0]
+        self.assertEqual(result['status'], 'already-installed')
+        self.assertEqual(result['installedSha256'], module['sha256'])
+        self.assertNotIn(('tap', '确认安装'), emulator.calls)
+
+    def test_bundled_digest_dialog_can_close_when_import_button_is_scrolled_offscreen(self):
+        class ScrolledManager(BundledRestoreEmulator):
+            def visible_labels(self):
+                labels = super().visible_labels()
+                if self.state == 'installed':
+                    return [label for label in labels if label != '导入 .xmodule']
+                return labels
+
+        module = self.pin_bundled()
+        result = update.update_modules([module['id']], ScrolledManager(module), self.output)[0]
+        self.assertEqual(result['installedSha256'], module['sha256'])
 
     def test_only_selected_module_and_duplicate_ids_produce_one_deterministic_package(self):
         result = update.prepare_modules(['app.schedule', 'app.schedule'], self.output)

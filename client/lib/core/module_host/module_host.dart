@@ -29,6 +29,7 @@ import 'service_directory_resource.dart';
 import 'system_timezone.dart';
 import 'page_workflow_queue.dart';
 import 'plan_confirmation.dart';
+import 'native_command_approval.dart';
 
 class ServiceRef {
   const ServiceRef(this.moduleId, this.serviceId, this.major);
@@ -100,6 +101,8 @@ class ScriptInstance {
   _PageReplayability? _pageReplayability;
   PagePlanReview? _pagePlanReview;
   InlinePagePlanReview? _inlinePagePlanReview;
+  NativeCommandApproval? _formCommandApproval;
+  bool Function()? _commandIsCurrent;
   void Function(ChangePlan plan)? _pagePlanCommitted;
   final subscriptions = <String, StreamSubscription>{};
   Future<void> tail = Future.value();
@@ -1706,6 +1709,7 @@ class ModuleHost {
     bool Function()? shouldRun,
     PagePlanReview? onReview,
     InlinePagePlanReview? onInlineReview,
+    bool Function()? commandIsCurrent,
     void Function(ChangePlan plan)? onCommit,
   }) {
     if (readOnly && input is Map && input['event'] != null) {
@@ -1732,6 +1736,8 @@ class ModuleHost {
             instance.pagePreparation = readOnly;
             instance._pagePlanReview = readOnly ? null : onReview;
             instance._inlinePagePlanReview = readOnly ? null : onInlineReview;
+            instance._commandIsCurrent = readOnly ? null : commandIsCurrent;
+            instance._formCommandApproval = null;
             instance._pagePlanCommitted = readOnly ? null : onCommit;
             final replayability = _PageReplayability(
               input is Map && input['event'] == null,
@@ -1753,6 +1759,8 @@ class ModuleHost {
             instance._pageReplayability = null;
             instance._pagePlanReview = null;
             instance._inlinePagePlanReview = null;
+            instance._commandIsCurrent = null;
+            instance._formCommandApproval = null;
             instance._pagePlanCommitted = null;
           }
         }, speculative: readOnly)
@@ -2257,24 +2265,64 @@ class ModuleHost {
         final commitResult = await commit(actor, committedPlan.id);
         if (workflow) instance._pagePlanCommitted?.call(committedPlan);
         return commitResult;
+      case 'ui.dialog':
+        if (!actor.permissions.contains('ui') &&
+            !actor.permissions.contains('ui.dialog')) {
+          throw StateError('Capability denied: ui.dialog');
+        }
+        // Opening another form (including a cancelled one) invalidates an
+        // earlier submission's capability within this workflow.
+        if (workflow) instance._formCommandApproval = null;
+        final declaration = freezeJson(args['command']);
+        final submitted = await interaction?.call(actor, method, {
+          for (final entry in args.entries)
+            if (entry.key != 'command') entry.key: entry.value,
+        });
+        store.requireActive(actor);
+        if (workflow &&
+            instance._commandIsCurrent?.call() == true &&
+            submitted is Map) {
+          instance._formCommandApproval = NativeCommandApproval.fromInteraction(
+            declaration,
+            submittedValues: object(submitted),
+          );
+        }
+        return submitted;
       case 'ui.review':
         final plan = store.plan(string(args['planId'], 'planId'), actor);
         final confirmation = args.containsKey('confirmation')
             ? PlanConfirmation.parse(args['confirmation'])
             : null;
         final preparedInvocation = _preparedInvocations[plan];
+        final pageReview = instance._pagePlanReview;
+        // A click is scoped to the next review attempt, including an adopted
+        // plan with no direct service invocation to match against.
+        if (workflow) instance._pagePlanReview = null;
         final quickAccepted =
             workflow &&
             preparedInvocation != null &&
-            instance._pagePlanReview?.call(
+            pageReview?.call(
                   preparedInvocation.reference,
                   preparedInvocation.input,
                   plan,
                   confirmation,
                 ) ==
                 true;
+        final formAccepted =
+            workflow &&
+            preparedInvocation != null &&
+            instance._commandIsCurrent?.call() == true &&
+            instance._formCommandApproval?.allows(
+                  reference: preparedInvocation.reference.toJson(),
+                  input: preparedInvocation.input,
+                  writes: plan.writes,
+                  confirmation: confirmation,
+                ) ==
+                true;
+        if (workflow) instance._formCommandApproval = null;
         final accepted =
             quickAccepted ||
+            formAccepted ||
             workflow &&
                 instance._inlinePagePlanReview?.call(plan, confirmation) ==
                     true ||

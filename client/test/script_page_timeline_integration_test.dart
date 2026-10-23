@@ -38,6 +38,7 @@ class _TimelineHost extends ModuleHost {
     bool Function()? shouldRun,
     PagePlanReview? onReview,
     InlinePagePlanReview? onInlineReview,
+    bool Function()? commandIsCurrent,
     void Function(ChangePlan plan)? onCommit,
   }) async {
     final arguments = object(freezeJson(input));
@@ -66,6 +67,7 @@ class _TimelineHost extends ModuleHost {
       shouldRun: shouldRun,
       onReview: onReview,
       onInlineReview: onInlineReview,
+      commandIsCurrent: commandIsCurrent,
       onCommit: onCommit,
     );
     if (delayReply) {
