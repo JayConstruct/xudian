@@ -248,12 +248,13 @@ void main() {
   });
 
   testWidgets(
-    'real daily date clicks update tasks and courses, preserve drafts and create on the selected day',
+    'real daily date clicks preserve drafts and native create and complete save once without a second review',
     (tester) async {
       tester.view.physicalSize = const Size(390, 1000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      host.systemTimezoneResolver = () async => 'Asia/Shanghai';
       final reviews = <String>[];
       host.interaction = (_, method, args) async {
         if (method == 'ui.review') {
@@ -333,14 +334,57 @@ void main() {
           {'view': 'daily', 'date': '2026-10-11'},
         ),
       ) as List;
+      final createdTasks = tasks
+          .map(object)
+          .where((task) => task['title'] == '保留草稿并安排明天')
+          .toList();
+      expect(createdTasks, hasLength(1));
+      final created = createdTasks.single;
+      expect(created['plannedDate'], '2026-10-11');
+      expect(created['completedAt'], isNull);
+      expect(created['actualCompletedOn'], isNull);
       expect(
-        tasks
-            .map(object)
-            .singleWhere((task) => task['title'] == '保留草稿并安排明天')['plannedDate'],
-        '2026-10-11',
+        reviews,
+        isEmpty,
+        reason: 'The native add click already authorizes this exact single task creation.',
       );
-      expect(reviews, hasLength(1));
       expect(controller.text, isEmpty);
+      final createdRow = find.widgetWithText(DailyTaskItem, '保留草稿并安排明天');
+      expect(createdRow, findsOneWidget);
+      expect(tester.widget<DailyTaskItem>(createdRow).completed, isFalse);
+      final complete = find.descendant(
+        of: createdRow,
+        matching: find.byType(Checkbox),
+      );
+      await tester.ensureVisible(complete);
+      await tester.tap(complete);
+      await _settle(tester);
+      final saved = object(
+        await tester.runAsync<Object?>(
+          () => host.query(
+            host.instances['app.tasks']!.actor,
+            const ServiceRef('app.tasks', 'task.get', 1),
+            {'id': created['id']},
+          ),
+        ),
+      );
+      expect(saved['completedAt'], '2026-10-10T06:00:00.000Z');
+      expect(saved['actualCompletedOn'], '2026-10-10');
+      expect(saved['completedTimezone'], 'Asia/Shanghai');
+      expect(saved['plannedDate'], '2026-10-11');
+      expect(saved['dueDate'], created['dueDate']);
+      expect(saved['updatedAt'], isNot(created['updatedAt']));
+      expect(
+        createdRow,
+        findsNothing,
+        reason: 'The selected future date only shows pending tasks after the saved completion.',
+      );
+      expect(find.text('明天的任务'), findsOneWidget);
+      expect(
+        reviews,
+        isEmpty,
+        reason: 'The native checkbox click authorizes completion without another review.',
+      );
       await tester.ensureVisible(find.text('回到今天'));
       await tester.tap(find.text('回到今天'));
       await _settle(tester);

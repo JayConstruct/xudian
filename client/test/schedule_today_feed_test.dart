@@ -463,6 +463,10 @@ void main() {
     final items = objects(selected['items']);
     expect(items.map((item) => item['timetableId']), ['china', 'new-york']);
     expect(items.map((item) => item['startTime']), ['14:00', '08:00']);
+    expect(items.map((item) => item['timezone']), [
+      'Asia/Shanghai',
+      'America/New_York',
+    ]);
     var page = object(
       await host.invokePage('app.schedule', 'renderTodayFeed', {
         'context': {'selectedDate': '2026-10-10'},
@@ -485,8 +489,14 @@ void main() {
         .toList();
     expect(agenda, hasLength(2));
     expect(agenda.map((node) => node['key']).toSet(), hasLength(2));
-    expect(agenda.first['subtitle'], contains('Asia/Shanghai'));
-    expect(agenda.last['subtitle'], contains('America/New_York'));
+    expect(agenda.first['subtitle'], contains('我的课表 china'));
+    expect(agenda.last['subtitle'], contains('我的课表 new-york'));
+    for (final row in [compact, ...agenda]) {
+      expect(row['subtitle'], isNot(contains('Asia/Shanghai')));
+      expect(row['subtitle'], isNot(contains('America/New_York')));
+    }
+    expect(agenda.map((node) => node['startTime']), ['14:00', '08:00']);
+    expect(object(agenda.first['event'])['timetableId'], 'china');
     expect(object(agenda.last['event'])['timetableId'], 'new-york');
   });
 

@@ -507,14 +507,53 @@ void main() {
         authorize: (_) {},
         audit: false,
       );
+      final availability = object(await query('availability.get'));
+      await run('availability.save', {
+        'availability': {
+          ...availability,
+          'busy': [
+            {'date': '2026-10-11', 'start': '12:00', 'end': '13:00'},
+          ],
+        },
+      });
       final board = object(
         await query('board.get', {'startDate': '2026-10-11', 'days': 1}),
       );
-      final block = objects(board['scheduled']).single;
-      expect(block['id'], 'cross-midnight');
+      final scheduled = objects(board['scheduled']);
+      expect(
+        scheduled.map((item) => item['id']),
+        unorderedEquals(['cross-midnight', 'completed']),
+      );
+      final block = scheduled.singleWhere(
+        (item) => item['id'] == 'cross-midnight',
+      );
       expect(block['startDate'], '2026-10-10');
       expect(block['endDate'], '2026-10-11');
-      expect(objects(board['tasks']).single['id'], 'cross-midnight');
+      expect(block['completedAt'], isNull);
+      final completed = scheduled.singleWhere(
+        (item) => item['id'] == 'completed',
+      );
+      expect(completed['completedAt'], '2026-10-10T06:00:00Z');
+      expect(completed['startDate'], '2026-10-11');
+      expect(completed['start'], '09:00');
+      expect(completed['end'], '10:00');
+      expect(completed['readOnly'], false);
+      final tasks = objects(board['tasks']);
+      expect(
+        tasks.map((item) => item['id']),
+        unorderedEquals(['cross-midnight', 'completed']),
+      );
+      expect(
+        tasks.singleWhere((item) => item['id'] == 'completed')['completedAt'],
+        completed['completedAt'],
+      );
+      final busy = objects(board['busy']);
+      expect(busy.map((item) => item['id']), ['manual:2026-10-11:12:00:0']);
+      expect(busy.single['readOnly'], true);
+      expect(busy.single['sourceLabel'], '忙碌时段');
+      expect(busy.single['startDate'], '2026-10-11');
+      expect(busy.single['start'], '12:00');
+      expect(busy.single['end'], '13:00');
     },
   );
 

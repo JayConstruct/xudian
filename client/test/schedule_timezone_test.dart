@@ -565,28 +565,58 @@ void main() {
     },
   );
 
-  test(
-    'fallback is visible for created timetables and Shiguang import drafts',
-    () async {
-      systemZone = null;
-      mockDialogs();
-      final page = await renderSchedule(
-        'timetables',
-        event: {'type': 'newTimetable'},
-      );
-      expect(object(page['state'])['notice'], contains('设备时区未能获取'));
-      expect(
-        object(
-          (await store.query(schedule, 'timetables', {})).single,
-        )['timezone'],
-        'Asia/Shanghai',
-      );
-      final state = await configureImport();
-      expect(state['timezoneNotice'], contains('当前使用 Asia/Shanghai'));
-      expect(
-        object(object(state['input'])['draft'])['warnings'],
-        contains('设备时区未能获取，当前使用 Asia/Shanghai'),
-      );
-    },
-  );
+  test('fallback guides timetable users to advanced settings while import drafts retain explicit warnings', () async {
+    systemZone = null;
+    mockDialogs();
+    final page = await renderSchedule(
+      'timetables',
+      event: {'type': 'newTimetable'},
+    );
+    expect(object(page['state'])['notice'], '请在学期设置的高级设置中核对时间设置。');
+    final created = object(
+      (await store.query(schedule, 'timetables', {})).single,
+    );
+    expect(created['timezone'], 'Asia/Shanghai');
+    expect(
+      timezoneNodes(page['tree']).any(
+        (node) => [
+          'text',
+          'title',
+          'subtitle',
+        ].any((field) => '${node[field] ?? ''}'.contains('Asia/Shanghai')),
+      ),
+      false,
+    );
+    var settings = await renderSchedule(
+      'semester',
+      context: {'timetableId': created['id']},
+    );
+    final timezoneKey = 'semester.${created['id']}.timezone';
+    expect(
+      timezoneNodes(settings['tree'])
+          .where((node) => node['key'] == timezoneKey),
+      isEmpty,
+    );
+    settings = await renderSchedule(
+      'semester',
+      state: settings['state'],
+      event: {'type': 'toggleTimezone'},
+    );
+    final timezoneField = timezoneNodes(settings['tree'])
+        .singleWhere((node) => node['key'] == timezoneKey);
+    expect(timezoneField['text'], '课表时区');
+    expect(timezoneField['value'], 'Asia/Shanghai');
+    expect(
+      object(
+        await store.get(schedule, 'timetables', created['id'] as String),
+      )['timezone'],
+      'Asia/Shanghai',
+    );
+    final state = await configureImport();
+    expect(state['timezoneNotice'], contains('当前使用 Asia/Shanghai'));
+    expect(
+      object(object(state['input'])['draft'])['warnings'],
+      contains('设备时区未能获取，当前使用 Asia/Shanghai'),
+    );
+  });
 }
