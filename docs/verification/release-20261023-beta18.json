@@ -1,0 +1,271 @@
+{
+  "date": "2026-10-23",
+  "sourceCommit": "0f881fbc21acea27a4a103d4bf37b135e167a878",
+  "appTag": "v0.2.0-beta.18",
+  "supersededAppCandidate": {
+    "tag": "v0.2.0-beta.17",
+    "sourceCommit": "f5cb1c2bf1acb48f61d87ea96f180ebcab8fe055",
+    "published": false,
+    "ciConclusion": "failure",
+    "ciUrl": "https://github.com/JayConstruct/xudian/actions/runs/39967675925",
+    "reason": "Four tests still asserted old confirmation, completed-block and timezone presentation behavior; expectations corrected with data checks preserved"
+  },
+  "status": "published-and-verified",
+  "checks": {
+    "relatedFlutterTests": 56,
+    "pythonTests": 241,
+    "moduleCatalogTests": 36,
+    "nodeResultParityAndBridgeCounts": "passed locally and in tag CI",
+    "flutterAnalyze": "passed",
+    "architecture": "passed (156 Dart files)",
+    "repository": "passed",
+    "releaseVersion": "passed",
+    "pythonTestsCI": 241,
+    "moduleCatalogTestsCI": 36,
+    "onlineDirectoryEntries": 9,
+    "onlineModuleVersions": 60,
+    "fullFlutterCI": {
+      "passed": 1737,
+      "shards": [
+        584,
+        569,
+        584
+      ],
+      "failed": 0,
+      "runId": 39969603190,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39969603190"
+    },
+    "mainCI": {
+      "runId": 39969603118,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/39969603118"
+    },
+    "mainTagDeduplicationVerified": true
+  },
+  "emulator": {
+    "buildNumber": 210,
+    "installedVersionCode": 4210,
+    "apkSha256": "8f482a3f44536ae047240eb11a2890730fb90bb25736d06737ef39396d62ff57",
+    "installedApkSha256": "8f482a3f44536ae047240eb11a2890730fb90bb25736d06737ef39396d62ff57",
+    "completed": true,
+    "sourceFingerprint": "278f20fa1bd30eabf537770a8802c9e20a4e36289a075a782156cfcf782099b8",
+    "versionName": "0.2.0-beta.18"
+  },
+  "pages": {
+    "verified": [
+      "planner completed corner badge",
+      "completed task details close back and reopen",
+      "day list close back and reopen",
+      "completion review return and reopen"
+    ],
+    "releaseAcceptanceTaskWrites": "only dedicated existing verification task completed and reopened",
+    "existingDataPreserved": true,
+    "animationRecord": "dist/verification/completion-edge-20261023/",
+    "fixtureFinalState": "completed",
+    "plannerCompleteAndReopenWithoutDuplicateReview": true,
+    "completedTaskPersistsAcrossColdRestart": true
+  },
+  "installedModules": [
+    {
+      "id": "app.tasks",
+      "version": "1.6.0",
+      "sha256": "401363414be489c5579c2fee8dd03e6c3bdc8021220fbd1d7fd73c053bef6d26",
+      "installedSha256": "401363414be489c5579c2fee8dd03e6c3bdc8021220fbd1d7fd73c053bef6d26",
+      "status": "already-installed"
+    },
+    {
+      "id": "app.views.today",
+      "version": "1.9.0",
+      "sha256": "3ccb80b812c41515bdf0cf10aea51cd1e976780a9daa152c02e1478c322045a9",
+      "installedSha256": "3ccb80b812c41515bdf0cf10aea51cd1e976780a9daa152c02e1478c322045a9",
+      "status": "already-installed"
+    },
+    {
+      "id": "app.planner",
+      "version": "1.7.4",
+      "sha256": "1d687abbb0e48852ad6a814f3ea0625a3fcbdedf3010d172b163f385e7860905",
+      "installedSha256": "1d687abbb0e48852ad6a814f3ea0625a3fcbdedf3010d172b163f385e7860905",
+      "status": "already-installed"
+    },
+    {
+      "id": "app.schedule",
+      "version": "1.16.4",
+      "sha256": "598826a3d8a9ca6b00f6db8f06ecf7d17c3d8ba0bceb308027e752b886b02796",
+      "installedSha256": "598826a3d8a9ca6b00f6db8f06ecf7d17c3d8ba0bceb308027e752b886b02796",
+      "status": "already-installed"
+    }
+  ],
+  "publicRelease": {
+    "tag": "v0.2.0-beta.18",
+    "sourceCommit": "0f881fbc21acea27a4a103d4bf37b135e167a878",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.18",
+    "publishedAt": "2026-10-23T14:32:50Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 155,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "name": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "version": "0.2.0-beta.18",
+        "versionCode": 1155,
+        "sha256": "1565fedbc845ea695f8279bc150c90bf223b7add6e12bea9f61755079284dc80",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "version": "0.2.0-beta.18",
+        "versionCode": 2155,
+        "sha256": "1bb8c5b9e0e3dcb9a503b9f954ba41f2972468c141e41ac05c1009805d55222a",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "version": "0.2.0-beta.18",
+        "versionCode": 4155,
+        "sha256": "e08fb0701847d3898c32d62c575f17dd22e10bb247e0def00d344d7b56cc483f",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false,
+    "releaseNotesVerified": true
+  },
+  "moduleRelease": {
+    "tag": "modules-20261023-task-completion",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261023-task-completion",
+    "publishedAt": "2026-10-23T14:12:59Z",
+    "modules": [
+      {
+        "id": "app.planner",
+        "version": "1.7.4",
+        "sha256": "1d687abbb0e48852ad6a814f3ea0625a3fcbdedf3010d172b163f385e7860905",
+        "size": 53704,
+        "hostApi": "^1.40.0",
+        "anonymousDownloadVerified": true,
+        "sourcePackageIdentical": true
+      },
+      {
+        "id": "app.schedule",
+        "version": "1.16.4",
+        "sha256": "598826a3d8a9ca6b00f6db8f06ecf7d17c3d8ba0bceb308027e752b886b02796",
+        "size": 30320,
+        "hostApi": "^1.34.0",
+        "anonymousDownloadVerified": true,
+        "sourcePackageIdentical": true
+      },
+      {
+        "id": "app.tasks",
+        "version": "1.6.0",
+        "sha256": "401363414be489c5579c2fee8dd03e6c3bdc8021220fbd1d7fd73c053bef6d26",
+        "size": 7756,
+        "hostApi": "^1.21.0",
+        "anonymousDownloadVerified": true,
+        "sourcePackageIdentical": true
+      },
+      {
+        "id": "app.views.today",
+        "version": "1.9.0",
+        "sha256": "3ccb80b812c41515bdf0cf10aea51cd1e976780a9daa152c02e1478c322045a9",
+        "size": 6497,
+        "hostApi": "^1.38.0",
+        "anonymousDownloadVerified": true,
+        "sourcePackageIdentical": true
+      }
+    ],
+    "anonymousDownloadVerified": true
+  },
+  "authorIndexes": {
+    "branch": "module-catalog",
+    "sourceCommit": "0f881fbc21acea27a4a103d4bf37b135e167a878",
+    "indexes": [
+      {
+        "id": "app.ai",
+        "sha256": "50cde969f4b9a0d4d2d141d50367ecab9103b24afeef482e3efa3bbbda4b161c",
+        "versions": 6,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.import.shiguang",
+        "sha256": "6be93e4e0ec562a998153876dcaaa1188dcdec74febec3ef7f7b81bd701563a9",
+        "versions": 9,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.planner",
+        "sha256": "9f33587afc4937326ba790e8f0b3beabbb3663a48301447a60c5b4e8dedb02a8",
+        "versions": 9,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.schedule",
+        "sha256": "84371a1ac403ca573291736df0ad6d8c22dff055299a6faa6a268fffa6664168",
+        "versions": 13,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.tasks",
+        "sha256": "6f9278d98f4e4cc847533727f34bdc1aebc240382a2377076fea39e8d14471c7",
+        "versions": 6,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.ui.contributions",
+        "sha256": "3208feabdb4dc2f35d2a5fefb0b8dd9fd558bd878915b383d52e6a27e65aba40",
+        "versions": 3,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.ui.examples",
+        "sha256": "f8a85321ecf12b2e028bedf3ee346c3df235a5f2c0fb324a00330bf53a5028f6",
+        "versions": 4,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.views.today",
+        "sha256": "aa987907050320fe36bd7033d985b889c204f4e06238fff2e7605c74ae7f9873",
+        "versions": 7,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "example.ui.compact",
+        "sha256": "821872d6c0cd67bb056dbe810747f7cf539dfa3df67fdc12d0f39c562999c6f9",
+        "versions": 3,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      }
+    ],
+    "allNineIndexesIdentical": true
+  },
+  "limitations": [
+    "Public fixed-signature APKs verified separately; emulator retains its existing development signature and data",
+    "No ARM physical-device or native Windows runtime acceptance"
+  ],
+  "localEvidence": "dist/verification/release-20261023-beta18/",
+  "installedModuleVerification": {
+    "verifiedWithEmulatorBuild": 209,
+    "preservedThroughEmulatorBuild": 210,
+    "modulePackagesChangedInBeta18": false,
+    "currentSourceMatchesPublishedPackages": true
+  }
+}
