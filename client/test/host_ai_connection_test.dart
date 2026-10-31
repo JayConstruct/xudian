@@ -11,6 +11,8 @@ import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/data/app_database.dart';
 
+import 'support/local_http_server.dart';
+
 class _LocalHttp extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) =>
@@ -313,50 +315,10 @@ void main() {
   });
 
   test('real local HTTP discovers models, tests chat, and sends without losing history', () async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() => server.close(force: true));
-    final requests = <String>[];
-    final bodies = <Map<String, Object?>>[];
-    server.listen((request) async {
-      requests.add(request.uri.path);
-      expect(
-        request.headers.value('Authorization'),
-        'Bearer fixture-client-key',
-      );
-      request.response.headers.contentType = ContentType.json;
-      if (request.method == 'GET') {
-        request.response.write(
-          jsonEncode({
-            'data': [
-              {'id': 'second'},
-              {'id': 'first'},
-              {'id': 'first'},
-              {'id': ''},
-              null,
-            ],
-          }),
-        );
-      } else {
-        final body = object(
-          jsonDecode(await utf8.decoder.bind(request).join()),
-        );
-        bodies.add(body);
-        expect(body['model'], 'first');
-        expect(body['stream'], false);
-        expect(body.containsKey('temperature'), false);
-        request.response.write(
-          jsonEncode({
-            'choices': [
-              {
-                'message': {'role': 'assistant', 'content': 'OK'},
-              },
-            ],
-          }),
-        );
-      }
-      await request.response.close();
-    });
-    await configure(endpoint: 'http://127.0.0.1:${server.port}');
+    final server = LocalHttpServer('ai');
+    addTearDown(server.close);
+    await server.start();
+    await configure(endpoint: server.endpoint(''));
     interact = (method, args) async {
       if (method == 'http.request') {
         return HttpOverrides.runWithHttpOverrides(
@@ -384,11 +346,26 @@ void main() {
       {'role': 'user', 'content': '你好'},
       {'role': 'assistant', 'content': 'OK'},
     ]);
-    expect(requests, [
+    await server.waitForRequests(3);
+    expect(server.requests.map((r) => r['path']), [
       '/v1/models',
       '/v1/chat/completions',
       '/v1/chat/completions',
     ]);
+    expect(
+      server.requests.every((r) => r['authorization'] == 'Bearer fixture-client-key'),
+      isTrue,
+    );
+    final bodies = server.requests
+        .where((r) => r['method'] == 'POST')
+        .map((r) => object(jsonDecode(r['body'] as String)))
+        .toList();
+    expect(bodies, hasLength(2));
+    for (final body in bodies) {
+      expect(body['model'], 'first');
+      expect(body['stream'], false);
+      expect(body.containsKey('temperature'), false);
+    }
     expect(bodies.first.containsKey('tools'), false);
   });
 

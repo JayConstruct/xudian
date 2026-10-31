@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -7,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/host_network.dart';
 import 'package:task_app/data/app_database.dart';
+
+import 'support/local_http_server.dart';
 
 class _RealHttp extends HttpOverrides {
   @override
@@ -19,7 +20,7 @@ void main() {
   late AppDatabase db;
   late CollectionStore store;
   late HostNetwork network;
-  late HttpServer server;
+  LocalHttpServer? server;
   late ModuleActor actor;
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
@@ -29,34 +30,33 @@ void main() {
     actor = ModuleActor('test.network', '1.0.0', 'network', 1, {});
     store.activate(actor);
     network = HostNetwork(store);
-    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server = null;
   });
   tearDown(() async {
     network.close();
-    await server.close(force: true);
+    await server?.close();
     await store.close();
     await db.close();
   });
-  String endpoint([String path = '/v1']) =>
-      'http://127.0.0.1:${server.port}$path';
+  Future<void> startServer(String scenario) async {
+    server = LocalHttpServer(scenario);
+    await server!.start();
+  }
+  String endpoint([String path = '/v1']) => server!.endpoint(path);
   Future<Object?> request(Map<String, Object?> input) =>
       HttpOverrides.runWithHttpOverrides(
         () => network.request(actor, input),
         _RealHttp(),
       );
   test('credential is an opaque owner-bound handle and authentication is injected only at its endpoint', () async {
+    await startServer('credentials');
     final handle = await network.configure(actor, endpoint(), 'secret-value');
-    String? auth;
-    server.listen((request) async {
-      auth = request.headers.value('authorization');
-      request.response.write('{"ok":true}');
-      await request.response.close();
-    });
     final result = await request({
       'url': endpoint('/v1/chat/completions'),
       'credential': handle,
     });
-    expect(auth, 'Bearer secret-value');
+    await server!.waitForRequests(1);
+    expect(server!.requests.single['authorization'], 'Bearer secret-value');
     expect(result.toString(), isNot(contains('secret-value')));
     final other = ModuleActor('test.other', '1.0.0', 'other', 1, {});
     store.activate(other);
@@ -77,24 +77,12 @@ void main() {
     expect(await const FlutterSecureStorage().readAll(), isEmpty);
   });
   test('redirects are not followed and oversized responses reject', () async {
-    var destinationReached = false;
-    server.listen((req) async {
-      if (req.uri.path == '/redirect') {
-        req.response.statusCode = 302;
-        req.response.headers.set('location', endpoint('/target'));
-      } else if (req.uri.path == '/target') {
-        destinationReached = true;
-      } else {
-        req.response.add(List.filled(1024 * 1024 + 1, 65));
-      }
-      try {
-        await req.response.close();
-      } catch (_) {}
-    });
+    await startServer('redirect and large');
     final response = await request({'url': endpoint('/redirect')});
     expect((response as Map)['status'], 302);
-    expect(destinationReached, false);
     await expectLater(request({'url': endpoint('/large')}), throwsStateError);
+    await server!.waitForRequests(2);
+    expect(server!.requests.map((r) => r['path']), ['/redirect', '/large']);
     expect(
       () => network.validateEndpoint('http://example.com/v1'),
       throwsStateError,
@@ -103,19 +91,15 @@ void main() {
   test(
     'explicit cancel and module revocation close pending requests',
     () async {
-      final arrivals = <Completer<void>>[Completer(), Completer()];
-      var next = 0;
-      server.listen((req) {
-        arrivals[next++].complete();
-      });
+      await startServer('pending');
       var work = request({'id': 'first', 'url': endpoint()});
       var rejected = expectLater(work, throwsException);
-      await arrivals[0].future.timeout(const Duration(seconds: 5));
+      await server!.waitForRequests(1);
       network.cancel(actor, 'first');
       await rejected;
       work = request({'id': 'second', 'url': endpoint()});
       rejected = expectLater(work, throwsException);
-      await arrivals[1].future.timeout(const Duration(seconds: 5));
+      await server!.waitForRequests(2);
       store.deactivate(actor.moduleId);
       network.revokeInactive();
       await rejected;

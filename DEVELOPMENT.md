@@ -58,6 +58,8 @@ flutter test --no-pub --concurrency=2
 
 按功能选择相关测试；涉及数据、生命周期、权限和依赖时扩大回归范围。网络冒烟另可运行 `dart test/openai_compatible_provider_network_smoke.dart`。测试结果和平台范围见 [验证记录](docs/VERIFICATION.md)，Widget 测试不代表真机帧率。
 
+宿主 HTTP 和 AI 连接回归使用独立子进程启动本机服务器，保留真实请求、鉴权与取消断言。启动等待上限为 10 秒，超时后明确报错并清理子进程，进程退出另有 2 秒上限；不要在 Flutter 测试主线程直接调用 `HttpServer.bind`，原生绑定阻塞时同线程的 Dart 超时也无法执行。
+
 独立模块打包使用 `python3 scripts/module_host/build_packages.py`，输出到 `dist/modules/`。修改内容时提升 `module.json` 版本。仅需改变首次安装资源时加 `--defaults`：工具只更新现有清单条目，保留 `default` 标记，写入 `<模块 ID>-<版本>.xmodule`，不自动将课表、拾光等商店模块加入资源；旧资源归档到被忽略的 `dist/bundle-archive/`。候选包、同版本冲突及归档冲突全部校验通过后才写入。审阅 `client/assets/modules/catalog.json` 及资源差异，再运行仓库检查并重建 APK；该资源更新不会自动升级用户已安装的模块。新增预装条目须明确编辑清单并审核，目录发布使用 [作者发布流程](docs/MODULE_CATALOG.md)。
 
 ## 客户端构建与分享
