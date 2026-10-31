@@ -25,7 +25,5 @@
 
 本机记录（不提交截图、APK 或完整运行产物）：
 
-- 更新和安装：`.cache/emulator-update/latest-success.json`、`.cache/content-colors-update.log`。
-- 补充测试：`.cache/content-colors-extra-tests.log`。
-- 页面和重启验收：`dist/verification/content-colors-20261019/pages.json`。
+- 页面和重启验收：`dist/verification/ui/content-colors-20261019/pages.json`。
 - 截图：同目录 `01-schedule.png`、`02-planner.png`、`03-planner-restarted.png`。

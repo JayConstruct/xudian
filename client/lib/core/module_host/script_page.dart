@@ -99,6 +99,13 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   String get sessionKey =>
       '${widget.moduleId}:${widget.handler}:${canonicalJson(withoutRuntimePageContext(widget.pageContext))}';
   bool busy = false, dirty = false;
+  bool _refreshingForms = false, _waitingAction = false;
+  final _formCacheWrites = <Future<void>>{};
+  int _formCacheRevision = 0;
+  String? _formCacheError;
+  bool get _actionBusy => tree?['queueInputActions'] == true
+      ? _waitingAction || busy && !_refreshingForms
+      : busy;
   bool _plannerDragging = false, _refreshAfterPlannerDrag = false;
   Completer<void>? _renderFinished;
   bool showProgress = false;
@@ -544,7 +551,43 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   }
 
   void _commandEvent(Object? event, Object? declaration) {
-    if (!mounted || busy || staleTree || !routeActive || !workspaceActive) {
+    if (!mounted ||
+        _actionBusy ||
+        staleTree ||
+        !routeActive ||
+        !workspaceActive) {
+      return;
+    }
+    if (busy) {
+      final instance = widget.host.instances[widget.moduleId];
+      final identity = canonicalJson(pageContext);
+      final pageKey = tree?['scrollKey'];
+      final dateIntent = dateIntentRevision;
+      final runtimeRevision = PageRuntimeContextScope.read(context)
+          ?.currentRevision();
+      final boundDeclaration = _bindValue(declaration);
+      setState(() => _waitingAction = true);
+      unawaited(() async {
+        bool current() =>
+            mounted &&
+            routeActive &&
+            workspaceActive &&
+            !staleTree &&
+            identical(instance, widget.host.instances[widget.moduleId]) &&
+            identity == canonicalJson(pageContext) &&
+            pageKey == tree?['scrollKey'] &&
+            dateIntent == dateIntentRevision &&
+            runtimeRevision ==
+                PageRuntimeContextScope.read(context)?.currentRevision();
+        while (current() && busy && _refreshingForms) {
+          final finished = _renderFinished;
+          if (finished == null) break;
+          await finished.future;
+        }
+        if (!mounted) return;
+        setState(() => _waitingAction = false);
+        if (current() && !busy) _commandEvent(event, boundDeclaration);
+      }());
       return;
     }
     if (event is! Map || declaration == null) {
@@ -746,6 +789,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       scrollRequests.clear();
       controlValues.clear();
       controlConfigs.clear();
+      _formCacheRevision++;
+      _formCacheError = null;
       state = {};
       formValues = {};
       tree = null;
@@ -1032,6 +1077,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     progressTimer?.cancel();
     setState(() {
       busy = true;
+      _refreshingForms =
+          event == null || event is Map && event['type'] == 'field';
       showProgress = false;
     });
     // Fast renders and opening a chooser should not flash a loading indicator.
@@ -1052,6 +1099,19 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         identical(instance, widget.host.instances[widget.moduleId]);
     String? approvedPlanId;
     try {
+      if (_formCacheWrites.isNotEmpty) {
+        do {
+          await Future.wait(_formCacheWrites.toList());
+        } while (_formCacheWrites.isNotEmpty);
+        if (!mounted ||
+            current != epoch ||
+            event != null && (!routeActive || !workspaceActive || staleTree) ||
+            !identical(instance, widget.host.instances[widget.moduleId]) ||
+            canonicalJson(requestContext) != canonicalJson(pageContext) ||
+            runtimeRevision != runtimeScope?.currentRevision()) {
+          return;
+        }
+      }
       if (event != null && _timelineViewports.isNotEmpty ||
           _timelinePreferenceTail != null) {
         do {
@@ -1234,7 +1294,39 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         queryResult = result['queryResult'];
         for (final entry in object(result['replaceForms'] ?? {}).entries) {
           if (_unchangedForm(entry.key, sentForms, sentRevisions)) {
-            controllers[entry.key]?.text = '${entry.value ?? ''}';
+            final controller = controllers[entry.key];
+            final nextText = '${entry.value ?? ''}';
+            // An echoed value is not a new edit. Reassigning controller.text
+            // would reset the caret and interrupt an active IME composition.
+            if (controller != null && controller.text != nextText) {
+              final previous = controller.value;
+              final selection = previous.selection.isValid
+                  ? previous.selection.copyWith(
+                      baseOffset: previous.selection.baseOffset.clamp(
+                        0,
+                        nextText.length,
+                      ),
+                      extentOffset: previous.selection.extentOffset.clamp(
+                        0,
+                        nextText.length,
+                      ),
+                    )
+                  : TextSelection.collapsed(offset: nextText.length);
+              final composing = previous.composing;
+              final retainComposing =
+                  composing.isValid &&
+                  composing.isNormalized &&
+                  !composing.isCollapsed &&
+                  composing.end <= previous.text.length &&
+                  composing.end <= nextText.length &&
+                  composing.textInside(previous.text) ==
+                      composing.textInside(nextText);
+              controller.value = TextEditingValue(
+                text: nextText,
+                selection: selection,
+                composing: retainComposing ? composing : TextRange.empty,
+              );
+            }
             formValues[entry.key] = entry.value;
             formRevisions[entry.key] = (formRevisions[entry.key] ?? 0) + 1;
             inputTimers.remove(entry.key)?.cancel();
@@ -1348,6 +1440,64 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       (formRevisions[key] ?? 0) == (revisions[key] ?? 0) &&
       canonicalJson(formValues[key]) == canonicalJson(sent[key]);
 
+  void _cacheFormValues() {
+    final config = tree?['formCache'];
+    if (config == null) return;
+    final host = widget.host;
+    final instance = host.instances[widget.moduleId];
+    final identity = canonicalJson(pageContext);
+    final revision = ++_formCacheRevision;
+    bool current() =>
+        mounted &&
+        revision == _formCacheRevision &&
+        identical(instance, widget.host.instances[widget.moduleId]) &&
+        identity == canonicalJson(pageContext);
+    void report({required bool failed}) {
+      if (current()) {
+        setState(() {
+          _formCacheError = failed ? '草稿未保存，请保留当前页面并重试。' : null;
+        });
+      }
+    }
+
+    try {
+      if (config is! Map ||
+          config['preferenceKey'] is! String ||
+          config['fields'] is! List ||
+          (config['fields'] as List).isEmpty ||
+          (config['fields'] as List).length > 64 ||
+          (config['fields'] as List).any(
+            (field) => field is! String || field.isEmpty,
+          ) ||
+          instance == null ||
+          !instance.actor.permissions.contains('ui')) {
+        report(failed: true);
+        return;
+      }
+      final values = freezeJson({
+        for (final field in config['fields'] as List)
+          if (formValues.containsKey(field)) field as String: formValues[field],
+      });
+      // Start the transaction now, before the input debounce or route disposal.
+      // Keep every pending write so a subsequent module workflow can clear the
+      // cache after them, without an older native write resurrecting its draft.
+      final write = ModuleUiPreferences(host.store).set(
+        instance.actor,
+        config['preferenceKey'] as String,
+        values,
+        notify: false,
+      );
+      late final Future<void> pending;
+      pending = write
+          .then<void>((_) => report(failed: false))
+          .catchError((Object _) => report(failed: true))
+          .whenComplete(() => _formCacheWrites.remove(pending));
+      _formCacheWrites.add(pending);
+    } catch (_) {
+      report(failed: true);
+    }
+  }
+
   void _changeForm(
     String key,
     Object? value,
@@ -1358,6 +1508,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       formValues[key] = value;
       formRevisions[key] = (formRevisions[key] ?? 0) + 1;
     });
+    _cacheFormValues();
     inputTimers.remove(key)?.cancel();
     if (event == null) {
       _prepareAdjacentDates(delay: const Duration(milliseconds: 300));
@@ -2298,11 +2449,76 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         final icon = _icon(spec['icon']);
         final subtitle = bind(spec['subtitle']);
         final trailing = bind(spec['trailing']);
-        final enabled = !busy && bind(spec['disabled']) != true;
+        final enabled = !_actionBusy && bind(spec['disabled']) != true;
+        final trailingAction = spec['trailingAction'] is Map
+            ? object(spec['trailingAction'])
+            : null;
+        Widget? trailingControl;
+        if (trailingAction != null) {
+          final label = '${bind(trailingAction['label']) ?? ''}'.trim();
+          if (label.isEmpty) {
+            throw const FormatException('List tile action needs a label');
+          }
+          final actionEvent = bind(trailingAction['event']);
+          final onPressed =
+              enabled &&
+                  bind(trailingAction['disabled']) != true &&
+                  actionEvent != null
+              ? () => _commandEvent(actionEvent, null)
+              : null;
+          final actionIcon = UiIcon(
+            _icon(trailingAction['icon']) ?? Icons.more_horiz,
+          );
+          trailingControl = trailingAction['tonal'] == true
+              ? IconButton.filledTonal(
+                  tooltip: label,
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                  onPressed: onPressed,
+                  icon: actionIcon,
+                )
+              : IconButton(
+                  tooltip: label,
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                  onPressed: onPressed,
+                  icon: actionIcon,
+                );
+          if (trailing is String && trailing.isNotEmpty) {
+            trailingControl = ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(uiContext).width * .42,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      trailing,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: spec['trailingAccent'] == true
+                          ? TextStyle(
+                              color: Theme.of(uiContext).colorScheme.primary,
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  trailingControl,
+                ],
+              ),
+            );
+          }
+        }
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
           dense: tree?['compact'] == true,
-          visualDensity: tree?['compact'] == true
+          visualDensity: tree?['compact'] == true && trailingAction == null
               ? const VisualDensity(vertical: -2)
               : null,
           titleTextStyle: tree?['compact'] == true
@@ -2315,31 +2531,35 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           leading: icon == null ? null : UiIcon(icon),
           title: Text('${bind(spec['title']) ?? text}'),
           subtitle: subtitle == null ? null : Text('$subtitle'),
-          trailing: trailing == false
-              ? null
-              : trailing is String
-              ? ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(uiContext).width * .42,
-                  ),
-                  child: Text(
-                    trailing,
-                    textAlign: TextAlign.end,
-                    style: spec['trailingAccent'] == true
-                        ? TextStyle(
-                            color: Theme.of(uiContext).colorScheme.primary,
-                          )
-                        : null,
-                  ),
-                )
-              : event == null
-              ? null
-              : const UiIcon(Icons.chevron_right),
+          trailing:
+              trailingControl ??
+              (trailing == false
+                  ? null
+                  : trailing is String
+                  ? ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.sizeOf(uiContext).width * .42,
+                      ),
+                      child: Text(
+                        trailing,
+                        textAlign: TextAlign.end,
+                        style: spec['trailingAccent'] == true
+                            ? TextStyle(
+                                color: Theme.of(uiContext).colorScheme.primary,
+                              )
+                            : null,
+                      ),
+                    )
+                  : event == null
+                  ? null
+                  : const UiIcon(Icons.chevron_right)),
           enabled: enabled,
           selected: bind(spec['selected']) == true,
           selectedTileColor: Theme.of(uiContext).colorScheme.primary
               .withValues(alpha: .08),
-          onTap: event == null || !enabled ? null : () => _render(event),
+          onTap: event == null || !enabled
+              ? null
+              : () => _commandEvent(event, null),
         );
       case 'source':
         return ExpansionTile(
@@ -2358,10 +2578,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                 widget.moduleId,
                 spec['interrupt'] as String,
               )
-            : bind(spec['disabled']) == true
+            : tree?['queueInputActions'] == true && _actionBusy ||
+                  bind(spec['disabled']) == true
             ? null
             : () {
-                if (!busy) _commandEvent(event, spec['command']);
+                _commandEvent(event, spec['command']);
               };
         return switch (spec['variant']) {
           'text' => TextButton(
@@ -2859,6 +3080,108 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     }
   }
 
+  Widget _pageTransition(
+    Widget child, {
+    String slot = 'content',
+    bool fillViewport = false,
+  }) {
+    final raw = tree?['pageTransition'];
+    if (raw == null) return child;
+    if (raw is! Map) {
+      return const Text('模块界面无效：页面过渡配置无效');
+    }
+    final direction = raw['direction'];
+    final duration = raw['duration'] ?? 260;
+    if (!const ['forward', 'back'].contains(direction) ||
+        duration is! int ||
+        duration < 100 ||
+        duration > 2000) {
+      return const Text('模块界面无效：页面过渡配置无效');
+    }
+    return ScriptTransition(
+      key: ValueKey('script-page-transition:$slot'),
+      effect: 'page',
+      replayKey: tree?['scrollKey'] ?? tree?['key'] ?? 'page',
+      navigationDirection: direction as String,
+      duration: Duration(milliseconds: duration),
+      fillViewport: fillViewport,
+      child: child,
+    );
+  }
+
+  Widget? _retainedFooter;
+
+  Widget _pageFooter() {
+    final footer = tree?['footer'];
+    final animated = tree?['pageTransition'] is Map;
+    if (footer is! Map) {
+      return animated ? _footerPresence(false) : const SizedBox.shrink();
+    }
+    final child = _inlinePlanPreview != null
+        ? _inlineReviewFooter(_inlinePlanPreview!)
+        : safeNode(object(footer));
+    final message = tree?['footerMessage'];
+    final rendered = _pageTransition(
+      Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          8,
+          16,
+          12 + WorkspaceContentInsets.bottomOf(context),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (message is Map)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Semantics(
+                  liveRegion: true,
+                  child: safeNode(object(message)),
+                ),
+              ),
+            footer['type'] == 'messageComposer'
+                ? child
+                : FloatingSurface(
+                    padding: const EdgeInsets.all(12),
+                    child: child,
+                  ),
+          ],
+        ),
+      ),
+      slot: 'footer',
+    );
+    if (!animated) return rendered;
+    _retainedFooter = rendered;
+    return _footerPresence(true);
+  }
+
+  Widget _footerPresence(bool visible) => ScriptTransition(
+    key: const ValueKey('script-page-footer-presence'),
+    effect: 'slide',
+    visible: visible,
+    collapse: true,
+    duration: const Duration(milliseconds: 260),
+    child: AnimatedSize(
+      alignment: Alignment.bottomCenter,
+      duration: AppMotion.duration(context, AppMotion.disclosure),
+      curve: AppMotion.enter,
+      child: _retainedFooter ?? const SizedBox.shrink(),
+    ),
+  );
+
+  Widget _pageBody(Map<String, Object?> spec) {
+    final child = safeNode(spec);
+    if (spec['pageTransition'] == null) return child;
+    return AnimatedSize(
+      duration: AppMotion.duration(context, AppMotion.disclosure),
+      curve: AppMotion.enter,
+      alignment: Alignment.topCenter,
+      child: child,
+    );
+  }
+
   Widget pageContent() {
     final spec = tree!;
     final rootChildren = objects(spec['children']);
@@ -2880,111 +3203,116 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         });
       }
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final rawPanel = spec['floatingPanel'];
-        final panel = rawPanel is Map ? object(rawPanel) : null;
-        final bottom = WorkspaceContentInsets.bottomOf(context);
-        final top = ((panel?['top'] as num?) ?? 16)
-            .toDouble()
-            .clamp(0, constraints.maxHeight * .25)
-            .toDouble();
-        return Stack(
-          children: [
-            Positioned.fill(
-              child:
-                  spec['fillHeight'] == true ||
-                      spec['type'] == 'keyedList' ||
-                      spec['type'] == 'component' &&
-                          (spec['ref'] as String? ?? '').startsWith('ui.page.')
-                  ? Padding(
-                      padding: EdgeInsets.only(
-                        bottom:
-                            spec['underlapChrome'] == true ||
-                                spec['type'] == 'keyedList'
-                            ? 0
-                            : bottom,
+    return _pageTransition(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final rawPanel = spec['floatingPanel'];
+          final panel = rawPanel is Map ? object(rawPanel) : null;
+          final bottom = WorkspaceContentInsets.bottomOf(context);
+          final top = ((panel?['top'] as num?) ?? 16)
+              .toDouble()
+              .clamp(0, constraints.maxHeight * .25)
+              .toDouble();
+          return Stack(
+            children: [
+              Positioned.fill(
+                child:
+                    spec['fillHeight'] == true ||
+                        spec['type'] == 'keyedList' ||
+                        spec['type'] == 'component' &&
+                            (spec['ref'] as String? ?? '').startsWith(
+                              'ui.page.',
+                            )
+                    ? Padding(
+                        padding: EdgeInsets.only(
+                          bottom:
+                              spec['underlapChrome'] == true ||
+                                  spec['type'] == 'keyedList'
+                              ? 0
+                              : bottom,
+                        ),
+                        child: safeNode(spec),
+                      )
+                    : spec['type'] == 'column' &&
+                          spec['template'] == null &&
+                          rootChildren.length > 50
+                    ? ListView.builder(
+                        key: PageStorageKey(scrollKey),
+                        controller: controller,
+                        padding: EdgeInsets.fromLTRB(
+                          spec['edgeToEdge'] == true
+                              ? 0
+                              : spec['compact'] == true
+                              ? 16
+                              : 20,
+                          spec['edgeToEdge'] == true
+                              ? 0
+                              : spec['compact'] == true
+                              ? 8
+                              : 16,
+                          spec['edgeToEdge'] == true
+                              ? 0
+                              : spec['compact'] == true
+                              ? 16
+                              : 20,
+                          16 + bottom,
+                        ),
+                        itemCount: rootChildren.length,
+                        itemBuilder: (context, i) {
+                          final child = rootChildren[i];
+                          return Padding(
+                            key: child['key'] == null
+                                ? null
+                                : ValueKey(child['key']),
+                            padding: EdgeInsets.only(
+                              bottom: (spec['spacing'] as num? ?? 12)
+                                  .toDouble()
+                                  .clamp(0, 48),
+                            ),
+                            child: node(child, 1),
+                          );
+                        },
+                      )
+                    : SingleChildScrollView(
+                        key: PageStorageKey(scrollKey),
+                        controller: controller,
+                        padding: EdgeInsets.fromLTRB(
+                          spec['edgeToEdge'] == true
+                              ? 0
+                              : spec['compact'] == true
+                              ? 16
+                              : 20,
+                          spec['edgeToEdge'] == true
+                              ? 0
+                              : spec['compact'] == true
+                              ? 8
+                              : 16,
+                          spec['edgeToEdge'] == true
+                              ? 0
+                              : spec['compact'] == true
+                              ? 16
+                              : 20,
+                          16 + bottom,
+                        ),
+                        child: _pageBody(spec),
                       ),
-                      child: safeNode(spec),
-                    )
-                  : spec['type'] == 'column' &&
-                        spec['template'] == null &&
-                        rootChildren.length > 50
-                  ? ListView.builder(
-                      key: PageStorageKey(scrollKey),
-                      controller: controller,
-                      padding: EdgeInsets.fromLTRB(
-                        spec['edgeToEdge'] == true
-                            ? 0
-                            : spec['compact'] == true
-                            ? 16
-                            : 20,
-                        spec['edgeToEdge'] == true
-                            ? 0
-                            : spec['compact'] == true
-                            ? 8
-                            : 16,
-                        spec['edgeToEdge'] == true
-                            ? 0
-                            : spec['compact'] == true
-                            ? 16
-                            : 20,
-                        16 + bottom,
-                      ),
-                      itemCount: rootChildren.length,
-                      itemBuilder: (context, i) {
-                        final child = rootChildren[i];
-                        return Padding(
-                          key: child['key'] == null
-                              ? null
-                              : ValueKey(child['key']),
-                          padding: EdgeInsets.only(
-                            bottom: (spec['spacing'] as num? ?? 12)
-                                .toDouble()
-                                .clamp(0, 48),
-                          ),
-                          child: node(child, 1),
-                        );
-                      },
-                    )
-                  : SingleChildScrollView(
-                      key: PageStorageKey(scrollKey),
-                      controller: controller,
-                      padding: EdgeInsets.fromLTRB(
-                        spec['edgeToEdge'] == true
-                            ? 0
-                            : spec['compact'] == true
-                            ? 16
-                            : 20,
-                        spec['edgeToEdge'] == true
-                            ? 0
-                            : spec['compact'] == true
-                            ? 8
-                            : 16,
-                        spec['edgeToEdge'] == true
-                            ? 0
-                            : spec['compact'] == true
-                            ? 16
-                            : 20,
-                        16 + bottom,
-                      ),
-                      child: safeNode(spec),
-                    ),
-            ),
-            if (panel != null)
-              DraggableFloatingPanel(
-                key: ValueKey(('script-floating-panel', panel['key'])),
-                viewport: constraints.biggest,
-                bottomInset: bottom,
-                initialTop: top,
-                title: '${panel['title'] ?? ''}',
-                closeLabel: '${panel['closeLabel'] ?? '关闭面板'}',
-                onClose: busy ? null : () => _render(panel['closeEvent']),
-                child: safeNode(object(panel['child'])),
               ),
-          ],
-        );
-      },
+              if (panel != null)
+                DraggableFloatingPanel(
+                  key: ValueKey(('script-floating-panel', panel['key'])),
+                  viewport: constraints.biggest,
+                  bottomInset: bottom,
+                  initialTop: top,
+                  title: '${panel['title'] ?? ''}',
+                  closeLabel: '${panel['closeLabel'] ?? '关闭面板'}',
+                  onClose: busy ? null : () => _render(panel['closeEvent']),
+                  child: safeNode(object(panel['child'])),
+                ),
+            ],
+          );
+        },
+      ),
+      fillViewport: true,
     );
   }
 
@@ -3036,6 +3364,16 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   ),
                 ],
               ),
+            if (_formCacheError != null)
+              MaterialBanner(
+                content: Text(_formCacheError!),
+                actions: [
+                  TextButton(
+                    onPressed: _cacheFormValues,
+                    child: const Text('重试保存'),
+                  ),
+                ],
+              ),
             if (!widget.embedded && currentTree && tree?['header'] is Map)
               safeNode(object(tree!['header'])),
             if (!widget.embedded &&
@@ -3059,9 +3397,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               ),
             if (widget.embedded)
               Padding(
-                padding: const EdgeInsets.symmetric(
+                padding: EdgeInsets.symmetric(
                   horizontal: 20,
-                  vertical: 12,
+                  vertical: tree?['compact'] == true ? 4 : 12,
                 ),
                 child: Stack(
                   alignment: Alignment.topCenter,
@@ -3095,30 +3433,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   ],
                 ),
               ),
-            if (tree?['footer'] is Map)
-              Offstage(
-                offstage: !currentTree,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    8,
-                    16,
-                    12 + WorkspaceContentInsets.bottomOf(context),
-                  ),
-                  child: _inlinePlanPreview != null
-                      ? FloatingSurface(
-                          padding: const EdgeInsets.all(12),
-                          child: _inlineReviewFooter(_inlinePlanPreview!),
-                        )
-                      : tree!['footer'] is Map &&
-                            object(tree!['footer'])['type'] == 'messageComposer'
-                      ? safeNode(object(tree!['footer']))
-                      : FloatingSurface(
-                          padding: const EdgeInsets.all(12),
-                          child: safeNode(object(tree!['footer'])),
-                        ),
-                ),
-              ),
+            if (tree?['footer'] is Map || tree?['pageTransition'] is Map)
+              Offstage(offstage: !currentTree, child: _pageFooter()),
           ],
         );
         return IgnorePointer(

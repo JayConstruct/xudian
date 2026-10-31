@@ -675,7 +675,7 @@ void main() {
       await host.commit(taskActor, plan.id);
     }
     tree = object((await overview())['tree']);
-    expect(tree['summary'], '50+ 项待办');
+    expect(tree['summary'], '已加载 50 项待办 · 0 项已完成 · 还有更多任务');
     host.clockNow = () => DateTime.utc(2026, 10, 31, 6);
     tree = object((await overview())['tree']);
     expect(objects(tree['days']).map((day) => day['date']), [
@@ -701,7 +701,6 @@ void main() {
     expect(today.slots.single.isPublic, true);
     for (final id in [
       'app.views.today.overview.feed',
-      'app.schedule.today.feed',
       'app.views.today.tasks.feed',
     ]) {
       final entry = registry.ui.entries.singleWhere((entry) => entry.id == id);
@@ -718,7 +717,6 @@ void main() {
           );
     expect(entries.map((entry) => entry.id), [
       'app.views.today.overview.feed',
-      'app.schedule.today.feed',
       'app.views.today.tasks.feed',
     ]);
     host.interaction = (_, method, _) async =>
@@ -753,8 +751,8 @@ void main() {
       reason: 'Hidden quick input stays mounted so its draft survives',
     );
     final header = nodes(collapsed['tree'])
-        .singleWhere((node) => node['type'] == 'sectionHeader');
-    expect(header['title'], '待办事项');
+        .singleWhere((node) => node['key'] == 'feed:heading');
+    expect(header['title'], contains('项待办'));
     collapsed = object(
       await host.invokePage('app.views.today', 'render', {
         'context': {'pageId': 'app.views.today.tasks'},
@@ -802,7 +800,9 @@ void main() {
       }),
     );
     expect(
-      nodes(page['tree']).where((node) => node['type'] == 'taskItem'),
+      nodes(page['tree']).where(
+        (node) => node['type'] == 'taskItem' && node['completed'] != true,
+      ),
       isEmpty,
     );
     expect(

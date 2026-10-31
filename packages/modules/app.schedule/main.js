@@ -93,7 +93,7 @@ export async function queryTodayFeed({date:selectedDate}={}) {
       items.push({...item,timetableId:timetable.id,timetableName:timetable.name,timezone:timetable.timezone,startTime,endTime,
         // Compare course times relative to now so different timetable timezones
         // still sort chronologically, including when their civil dates differ.
-        startOffset,endOffset,isLocalToday:item.date===local.date});
+        startOffset,endOffset,...(now===null?{}:{startAt:new Date(now+startOffset*60000).toISOString(),endAt:new Date(now+endOffset*60000).toISOString()}),isLocalToday:item.date===local.date});
     }
   }
   items.sort((left,right)=>left.startOffset-right.startOffset||left.title.localeCompare(right.title)||left.timetableId.localeCompare(right.timetableId));

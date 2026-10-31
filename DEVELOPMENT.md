@@ -2,6 +2,8 @@
 
 从项目根目录执行以下命令。Linux / WSL 使用项目 SDK；Windows 使用本机 Flutter 与 Android Studio。平台配置见 [Windows Android](docs/WINDOWS_ANDROID_DEVELOPMENT.md)、[VPS / WSL](docs/MULTI_MACHINE_DEVELOPMENT.md) 和 [远程 Android 预览](docs/REMOTE_ANDROID_DEVELOPMENT.md)。
 
+当前工程采用 Flutter/Dart 宿主与 JavaScript/QuickJS 模块，源码继续位于 `client/` 和 `packages/`。UI 选稿及实现进度见 [设计入口](design/README.md)，构建和模拟器流程使用现有工程。
+
 ## 准备环境
 
 ```bash
@@ -20,7 +22,7 @@ cd ..
 
 提交源码、测试与固定夹具、依赖锁文件、平台资源、构建脚本、工作流及可复验文档。QuickJS vendor 和拾光 warehouse 是固定版本的运行源码；`app_database.g.dart`、默认模块资源及图标也由当前构建直接读取，不能只因可生成就排除。
 
-`.gitignore` 排除工具链、缓存、APK/AAB、构建输出、截图与完整本机验收产物、凭据及本机配置；`dist/` 与生成工具的 `output/` 整体忽略。设计草稿、提示词和中间稿归档到 `dist/design/`，用于文档的精选参考图单独放入 `docs/design/` 并提交。仓库边界检查会拒绝强制跟踪的 `output/` 文件。目录清单和清理保留规则见 [目录与提交清单](docs/REPOSITORY_LAYOUT.md)。索引对应的版本化不可变包保存在 `releases/modules/`，供干净检出的目录校验和发布工作流使用，保留规则见 [发布目录](releases/README.md)。没有当前索引引用的旧包不纳入该目录。
+`.gitignore` 排除工具链、缓存、APK/AAB、构建输出、截图与完整本机验收产物、凭据和本机配置。新风格原图直接放 `design/styles/`，页面原图直接放 `design/screens/ui-XX/`；同名完整提示词并列。开始前运行 `python3 scripts/design_artifacts.py new styles --brief '需求说明'` 或 `new ui-01 --brief '需求说明'`，批次清单与参考放命令返回的 `.batches/` 目录，详见 [归档规范](docs/DESIGN_ARTIFACTS.md)。design 入口和清单可以提交；原稿、提示词及批次不提交，历史 dist/design 保持旧格式。需要随文档保存的获选副本放 docs/design/selected/ 并附来源。目录边界见 [目录规范](docs/REPOSITORY_LAYOUT.md)，不可变模块包继续由 releases/modules/ 管理。
 
 验收文档保留日期、版本、摘要、步骤、失败原因和 CI 链接，机器绝对路径改为项目相对路径或示例路径；不提交用户业务数据、账号和密钥。提交前运行 `python3 scripts/check_repository.py`、`git status --short` 和 `git diff --check`；仓库检查拒绝本机产物、没有索引引用的发布包及未被预装清单引用的客户端包，同时校验预装包身份与内外摘要。新增忽略规则不会自动移除已经跟踪的文件。APK 通过 Actions 产物分发，公开模块通过 GitHub Releases 分发。
 
@@ -44,12 +46,15 @@ WSL 开始开发时运行 `scripts/start-emulator.sh`，启动 Windows 模拟器
 ```bash
 source scripts/dev-env.sh
 python3 scripts/check_repository.py
+python3 scripts/check_docs.py
 python3 scripts/module_host/check_architecture.py
 python3 -m unittest discover -s scripts/tests -v
 cd client
 flutter analyze --no-pub
 flutter test --no-pub --concurrency=2
 ```
+
+`check_docs.py` 使用 Git 跟踪与未忽略的新文件检查 Markdown 链接、图片和章节锚点，并核对 SDK 当前 API 与代码一致；不联网抓取外部地址。CI 默认跳过 `dist/`、`.cache/`、`build/`、`.dart_tool/` 和本机设计原稿等明确的产物链接；本机可加 `--check-local` 要求这些链接也存在，或用 `--json <报告路径>` 保存结果。
 
 按功能选择相关测试；涉及数据、生命周期、权限和依赖时扩大回归范围。网络冒烟另可运行 `dart test/openai_compatible_provider_network_smoke.dart`。测试结果和平台范围见 [验证记录](docs/VERIFICATION.md)，Widget 测试不代表真机帧率。
 
@@ -86,4 +91,4 @@ flutter pub get
 flutter build windows --release
 ```
 
-生成的程序和依赖资源须一起分发。安装包制作、系统凭据、导入、键盘和窗口缩放需在 Windows 验证。历史环境版本、远程验收及性能说明见 [开发记录归档](docs/archive/DEVELOPMENT_20261009.md)。
+生成的程序和依赖资源须一起分发。安装包制作、系统凭据、导入、键盘和窗口缩放需在 Windows 验证。历史环境版本、远程验收及性能说明见 [历史归档](docs/archive/README.md)。

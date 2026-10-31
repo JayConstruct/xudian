@@ -64,6 +64,7 @@ jobs:
       - name: Check production architecture and Python tooling
         run: |
           python3 scripts/check_repository.py
+          python3 scripts/check_docs.py
           python3 scripts/module_host/check_architecture.py
           python3 -m unittest discover -s scripts/tests -v
           python3 -m unittest discover -s scripts/module_catalog -p 'test_*.py' -v

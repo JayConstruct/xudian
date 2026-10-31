@@ -1,6 +1,6 @@
 # AI 助手
 
-核对日期：2026-10-18。当前生产实现为 `packages/modules/app.ai` 的 v3 脚本模块（1.5.0，最低宿主 API 1.31）；运行、授权及提交契约见 [模块宿主](MODULE_HOST.md) 和 [JavaScript SDK](MODULE_SDK.md)。
+生产实现为 `packages/modules/app.ai` 的 v3 脚本模块，版本与依赖范围以 [模块清单](../packages/modules/app.ai/module.json) 为准；运行、授权及提交契约见 [模块宿主](MODULE_HOST.md) 和 [JavaScript SDK](MODULE_SDK.md)。
 
 ## 入口与连接
 

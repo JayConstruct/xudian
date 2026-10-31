@@ -35,7 +35,7 @@
   },
   "sampling": [
     {
-      "localReport": "dist/verification/startup-20261014/before.json",
+      "localReport": "dist/verification/performance/startup-20261014/before.json",
       "mode": "proxy",
       "buildNumber": 103,
       "completedRuns": 20,
@@ -68,7 +68,7 @@
       "errors": []
     },
     {
-      "localReport": "dist/verification/startup-20261014/after.json",
+      "localReport": "dist/verification/performance/startup-20261014/after.json",
       "mode": "proxy",
       "buildNumber": 104,
       "completedRuns": 20,
@@ -101,7 +101,7 @@
       "errors": []
     },
     {
-      "localReport": "dist/verification/startup-20261014/after-restarted.json",
+      "localReport": "dist/verification/performance/startup-20261014/after-restarted.json",
       "mode": "proxyAfterEmulatorRestart",
       "buildNumber": 104,
       "completedRuns": 20,
@@ -141,7 +141,7 @@
       "errors": []
     },
     {
-      "localReport": "dist/verification/startup-20261014/after-ready-restarted.json",
+      "localReport": "dist/verification/performance/startup-20261014/after-ready-restarted.json",
       "mode": "waitForWorkspaceReadyAfterEmulatorRestart",
       "buildNumber": 104,
       "completedRuns": 20,
@@ -181,7 +181,7 @@
       "errors": []
     },
     {
-      "localReport": "dist/verification/startup-20261014/before-failed-attempt.json",
+      "localReport": "dist/verification/performance/startup-20261014/before-failed-attempt.json",
       "mode": "failedProxyAttempt",
       "buildNumber": 103,
       "completedRuns": 0,
@@ -219,7 +219,7 @@
       ]
     },
     {
-      "localReport": "dist/verification/startup-20261014/after-ready.json",
+      "localReport": "dist/verification/performance/startup-20261014/after-ready.json",
       "mode": "incompleteReadyAttempt",
       "buildNumber": 104,
       "completedRuns": 15,

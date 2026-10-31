@@ -66,4 +66,4 @@ flutter attach --debug -d DEVICE_SERIAL --app-id=dev.taskapp.task_app --no-dds -
 
 如果能列出设备但一直等待调试服务，检查是否安装并打开 debug 包，以及 8181 转发与 `--no-dds`。隧道或手机断开后恢复连接并重启 attach。脚本支持 `XUDIAN_ADB_PORT` 与 `XUDIAN_VM_SERVICE_PORT`，WSL 配置见 [VPS 与 WSL 开发配置](MULTI_MACHINE_DEVELOPMENT.md)。
 
-历史连接测量见 [开发记录](archive/DEVELOPMENT_20261009.md)。
+历史连接测量见 [开发记录](../DEVELOPMENT.md)。

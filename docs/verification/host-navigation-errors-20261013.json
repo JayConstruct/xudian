@@ -105,5 +105,5 @@
     "Automation route depth limit and installed-module detail/update UI differences were recovered without data reset",
     "No real model requests, school login, FPS or battery benchmark in this fix verification"
   ],
-  "artifactsRoot": "dist/verification/android-host-fixes-20261013"
+  "artifactsRoot": "dist/verification/platform/android-host-fixes-20261013"
 }

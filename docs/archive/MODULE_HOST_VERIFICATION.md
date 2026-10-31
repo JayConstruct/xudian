@@ -2,21 +2,21 @@
 
 # 模块宿主实施与验收记录
 
-日期：2026-10-07。交付文件及 SHA-256 见 [acceptance.json](../../dist/verification/acceptance.json)。本记录区分自动化检查、模拟器实际操作与尚未验证的平台，不以 Linux 测试替代其他平台。
+日期：2026-10-07。交付文件及 SHA-256 见 [acceptance.json](../../dist/verification/host/legacy-20261029/acceptance.json)。本记录区分自动化检查、模拟器实际操作与尚未验证的平台，不以 Linux 测试替代其他平台。
 
 2026-10-08 的公共 UI、无脚本线程界面包和 SQL 分页实现及新增验证见 [界面包验证记录](UI_PACK_VERIFICATION.md)；分布式模块目录协议、作者发布工具及本地验证命令见 [模块目录接入文档](../MODULE_CATALOG.md)。下文保留 2026-10-07 的历史结果与实施差异。
 
 ## 交付
 
-- [Android Release APK](../../client/build/app/outputs/flutter-apk/app-release-build17.apk)：本记录的 build 17，包含 Android x86_64、arm64 原生引擎。后续布局交付见 [课表布局记录](SCHEDULE_LAYOUT.md)。
-- [独立课表 1.0.0](../../dist/verification/app.schedule-1.0.0.xmodule)：客户端资源中不包含此包；原验收版单独保留，当前分发包版本见课表布局记录。
-- [课表验证更新 1.0.1](../../dist/verification/app.schedule-1.0.1.xmodule)：在原课表脚本上新增课程统计服务及页面文字，验证业务更新不需要重新构建客户端。
+- Android Release APK（当时的构建路径：`../../client/build/app/outputs/flutter-apk/app-release-build17.apk`，当前本机已无该文件）：本记录的 build 17，包含 Android x86_64、arm64 原生引擎。后续布局交付见 [课表布局记录](SCHEDULE_LAYOUT.md)。
+- [独立课表 1.0.0](../../dist/verification/fixtures/module-update/app.schedule-1.0.0.xmodule)：客户端资源中不包含此包；原验收版单独保留，当前分发包版本见课表布局记录。
+- [课表验证更新 1.0.1](../../dist/verification/fixtures/module-update/app.schedule-1.0.1.xmodule)：在原课表脚本上新增课程统计服务及页面文字，验证业务更新不需要重新构建客户端。
 - 其余业务包位于 [dist/modules](../../dist/modules)，包含任务、AI、今天、收件箱、项目、UI 示例和 UI 贡献。默认安装标记与用户卸载状态分别保存。
 - [宿主与恢复说明](../MODULE_HOST.md)、[模块 SDK](../MODULE_SDK.md)、[QuickJS 构建说明](../../packages/xquickjs/README.md)。
 
 ## 自动化检查
 
-`flutter analyze --no-pub` 无问题。`flutter test --no-pub --concurrency=1` 全部 **415 项通过**，包括原有行为基准及新生产链测试。测试原始输出保存在 [flutter-tests.txt](../../dist/verification/flutter-tests.txt)，分析与构建输出也保存在同一目录。
+`flutter analyze --no-pub` 无问题。`flutter test --no-pub --concurrency=1` 全部 **415 项通过**，包括原有行为基准及新生产链测试。测试原始输出保存在 [flutter-tests.txt](../../dist/verification/host/legacy-20261029/flutter-tests.txt)，分析与构建输出也保存在同一目录。
 
 新测试直接运行 QuickJS、本地 SQLite 与生产宿主组件，覆盖以下行为：
 
@@ -41,10 +41,10 @@
 
 1. 从旧数据库启动升级，备份后迁入新空间，原任务与项目继续可见。
 2. 从系统文件选择器导入独立课表包，在宿主来源审核后新增课表入口；导入示例课程，周视图显示课程。通过 Android 系统保存对话框导出 JSON 并核对引用与周次。
-3. 卸载任务后，课表仍显示课程，AI 仍可打开。[课表截图](../../dist/verification/android-schedule-without-tasks.png)、[AI 截图](../../dist/verification/android-ai-without-tasks.png)。
-4. 卸载全部业务包并重启，显示空宿主，设置、安装与恢复入口仍可用，不自动重装。[卸载截图](../../dist/verification/android-all-business-uninstalled.png)、[重启截图](../../dist/verification/android-empty-host-recovery.png)。
-5. 重新安装业务包，恢复保留的课表数据。[恢复截图](../../dist/verification/android-restored-schedule.png)。
-6. 在最终 build 17 上回退到课表 1.0.0，确认没有新增统计；导入 1.0.1 后出现“脚本更新新增统计：1 门课程”，强制停止并重启后仍保留。此过程 APK 文件及设备安装的 APK 摘要保持不变。[原版截图](../../dist/verification/android-schedule-original-final.png)、[更新截图](../../dist/verification/android-schedule-script-update.png)、[重启截图](../../dist/verification/android-schedule-update-restart.png)。
+3. 卸载任务后，课表仍显示课程，AI 仍可打开。[课表截图](../../dist/verification/platform/legacy-20261029/android-schedule-without-tasks.png)、[AI 截图](../../dist/verification/platform/legacy-20261029/android-ai-without-tasks.png)。
+4. 卸载全部业务包并重启，显示空宿主，设置、安装与恢复入口仍可用，不自动重装。[卸载截图](../../dist/verification/platform/legacy-20261029/android-all-business-uninstalled.png)、[重启截图](../../dist/verification/platform/legacy-20261029/android-empty-host-recovery.png)。
+5. 重新安装业务包，恢复保留的课表数据。[恢复截图](../../dist/verification/platform/legacy-20261029/android-restored-schedule.png)。
+6. 在最终 build 17 上回退到课表 1.0.0，确认没有新增统计；导入 1.0.1 后出现“脚本更新新增统计：1 门课程”，强制停止并重启后仍保留。此过程 APK 文件及设备安装的 APK 摘要保持不变。[原版截图](../../dist/verification/platform/legacy-20261029/android-schedule-original-final.png)、[更新截图](../../dist/verification/platform/legacy-20261029/android-schedule-script-update.png)、[重启截图](../../dist/verification/platform/legacy-20261029/android-schedule-update-restart.png)。
 
 第 6 项可用 `source scripts/dev-env.sh` 后运行 `python3 scripts/module_host/verify_emulator.py --record-update` 重现。需要设备已安装课表验证版、保留原版历史与一门课程，且下载目录有验证更新包；脚本会通过宿主确认界面回退/更新，不删除数据。前五项是本轮人工/界面脚本实际验收，截图保留了其执行时的版本；不声称已在每次后续宿主改动后重复全部场景。
 

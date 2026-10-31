@@ -39,5 +39,5 @@
     "Recording checks appearance and coherence, not measured FPS, GPU cost or latency",
     "Real ARM and Windows performance not measured"
   ],
-  "artifactsDirectory": "dist/verification/water-lens-20261013"
+  "artifactsDirectory": "dist/verification/ui/water-lens-20261013"
 }

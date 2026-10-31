@@ -151,7 +151,8 @@ void main() {
     final row = nodes(result['tree'])
         .singleWhere((node) => node['type'] == 'taskItem');
     expect(row['subtitle'], contains('今天 18:30截止'));
-    expect(row['subtitle'], contains('计划 17:00–18:00'));
+    expect(row['startTime'], '17:00');
+    expect(row['endTime'], '18:00');
     expect(row['subtitle'], isNot(contains('2026-10-21')));
     expect(row['subtitle'], isNot(contains('Asia/Shanghai')));
   });

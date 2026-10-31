@@ -21,7 +21,7 @@
 - JavaScript 兼容测试：19 项通过。
 - `python3 -m unittest discover -s scripts/module_catalog -p 'test_*.py'`：21 项通过。
 - 完整目录和作者包检查：10 个模块、22 个当前索引对应的包；当前 tag 仅选择拾光和课表的两个新包，包摘要、身份、清单及服务声明均通过校验。
-- 269 个上游适配项语法及源码摘要检查通过；320 像素窄屏、1.6 倍字体下层级页面无溢出。模拟器验收见 `dist/verification/shiguang-hierarchy-emulator.json` 和 `zhengfang-module-removal-emulator.json`。
+- 269 个上游适配项语法及源码摘要检查通过；320 像素窄屏、1.6 倍字体下层级页面无溢出。模拟器验收见 `dist/verification/shiguang/legacy-20261029/shiguang-hierarchy-emulator.json` 和 `zhengfang-module-removal-emulator.json`。
 
 七列适配需要客户端 build 34 或更新版本，建议 build 36；仅更新模块不会为早期客户端增加这一宿主能力。本 Release 提供 `.xmodule`，客户端源码在发布分支。真实学校账号尚未逐校验收，登录、校园网、学校网页和季节作息会影响导入；完整边界见 [拾光导入](../SHIGUANG_IMPORT.md)。
 

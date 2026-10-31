@@ -1,6 +1,8 @@
 # 序点
 
-面向 Android 与 Windows 的模块化个人任务管理 App，使用 Flutter/Dart、Riverpod、Drift/SQLite 和 QuickJS。当前生产入口采用 **v3 脚本模块宿主**：宿主提供导航、界面、数据和权限服务，业务通过独立 `.xmodule` 包运行。
+面向 Android 与 Windows 的模块化个人任务管理 App，使用 Flutter/Dart、Riverpod、Drift/SQLite 和 QuickJS。当前采用 **v3 脚本模块宿主**：宿主提供导航、界面、数据和权限服务，业务通过独立 `.xmodule` 包运行。
+
+UI 选稿、实现范围与页面设计顺序统一见 [设计入口](design/README.md)。
 
 源码仓库：[JayConstruct/xudian](https://github.com/JayConstruct/xudian)。
 
@@ -37,6 +39,7 @@ scripts/update-emulator.sh --dev
 
 | 想了解什么 | 入口 |
 | --- | --- |
+| 风格稿、页面稿与设计顺序 | [设计入口](design/README.md) |
 | 开发、测试、构建与模拟器更新 | [开发指南](DEVELOPMENT.md) |
 | 生产代码从哪里开始看 | [客户端说明](client/README.md) |
 | 当前架构与后续设计边界 | [架构](docs/DESIGN.md) |
@@ -47,15 +50,16 @@ scripts/update-emulator.sh --dev
 
 ```text
 client/             Flutter 宿主、Android/Windows 工程和测试
-packages/modules/   业务脚本模块与界面包
+packages/modules/   JavaScript 业务模块与界面包
 packages/schemas/   版本化 JSON 契约
 packages/catalog/   统一目录仓库内容
 packages/xquickjs/  固定版本 QuickJS 原生引擎
 module-index/       作者版本索引
 releases/modules/   索引引用的版本化不可变模块包
+design/             当前方案与 UI 清单；styles/ 放原图，screens/ 放页面稿
 docs/               当前专题说明；archive/ 保存历史
 scripts/            开发、验证、打包与发布工具
 assets/brand/       品牌资源
 ```
 
-`.tools/`、`.cache/` 和 `dist/` 为本机 SDK、缓存与生成产物，不提交。公开模块包及保留规则见 [发布目录](releases/README.md)，历史实现及验收记录从 [归档索引](docs/archive/README.md) 查看。
+`.tools/`、`.cache/`、`dist/` 及 design 中的原图/提示词/批次为本机材料，不提交。design 的入口、清单及顶层目录说明可以提交。公开模块包及保留规则见 [发布目录](releases/README.md)，历史记录从 [归档索引](docs/archive/README.md) 查看。

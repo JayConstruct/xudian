@@ -20,7 +20,7 @@
     "Next-day menu displays Return to today as its first item",
     "Selecting the item restores today; existing task and course data retained"
   ],
-  "artifactsDirectory": "dist/verification/today-menu-20261012",
+  "artifactsDirectory": "dist/verification/daily/today-menu-20261012",
   "limits": [
     "Only affected regression files rerun; no new FPS or latency measurement"
   ]

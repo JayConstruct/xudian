@@ -1,6 +1,6 @@
 # UI 加载性能
 
-本轮优化覆盖冷启动准备、日程页面读取与日期回访。源码宿主 API 为 1.23.0；日程 1.8.0 已同步到预装资源，课表 1.14.0 为独立候选包。更新 APK 不会自动替换已有安装的模块。线上目录、公开发布和设备安装版本需单独核对。
+本文说明已实现的启动准备、页面读取、缓存及展示加载机制。历史引入版本和测量结论见 [验证索引](VERIFICATION.md)；当前宿主能力以 [SDK](MODULE_SDK.md) 为准，模块版本以各 `module.json` 为准。更新 APK 不会自动升级已安装模块。
 
 ## 已实现
 
@@ -28,7 +28,7 @@
 
 展示缓存仅用于商店读取。实际安装和依赖解析继续从磁盘完整验证，不用展示缓存替代安装审核。
 
-这些是减少重复校验、查询和布局的结构改进。自动化回归与设备结果见 [验证记录](VERIFICATION.md)，不能据此换算真机帧率或提速百分比。新反馈和规划页面待办见 [体验优化待办](design/UX_PLATFORM_BACKLOG.md#2026-10-14-新反馈)。
+这些是减少重复校验、查询和布局的结构改进。自动化回归与设备结果见 [验证记录](VERIFICATION.md)，不能据此换算真机帧率或提速百分比。新反馈和规划页面待办见 [体验优化待办](design/UX_PLATFORM_BACKLOG.md#待实现与待测性能项)。
 
 ## 本地计时
 
@@ -69,4 +69,4 @@ node --experimental-vm-modules scripts/module_host/page_reads_performance_test.m
 
 核心真实 QuickJS／缓存／恢复回归位于 `page_read_performance_test.dart`、`module_startup_test.dart`、`app_shell_startup_test.dart`、`page_preparation_test.dart`、`collection_revision_test.dart`、`date_page_cache_test.dart` 和 `ui_pack_script_page_test.dart`。
 
-调用次数减少是可重复的结构证据，不能换算为真机提速百分比。全模块懒启动、日期统计聚合下推及动画/GPU 开销仍需结合真实采样决定；本轮没有改变既有日期统计语义或视觉效果。
+调用次数减少是可重复的结构证据，不能换算为真机提速百分比。全模块懒启动、日期统计聚合下推及动画/GPU 开销仍需结合真实采样决定；这些加载优化不改变业务日期统计语义。

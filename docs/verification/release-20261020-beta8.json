@@ -234,7 +234,7 @@
       ]
     }
   ],
-  "detailsDirectory": "dist/verification/release-20261020-beta8",
+  "detailsDirectory": "dist/verification/releases/release-20261020-beta8",
   "limitations": [
     "ARM physical device and Windows runtime are not verified.",
     "Emulator retains its existing local signing identity; public fixed-signature APKs were downloaded and verified without replacing that installation."

@@ -100,5 +100,5 @@
     "Existing installed modules still require explicit upgrade.",
     "Windows native build not verified."
   ],
-  "localEvidence": "dist/verification/releases-20261014/"
+  "localEvidence": "dist/verification/releases/releases-20261014/"
 }

@@ -102,5 +102,5 @@
     "Consecutive and overlapping half-hour batches verified in widget fixtures; emulator page checked using existing data",
     "No ARM physical-device or native Windows runtime acceptance"
   ],
-  "localEvidence": "dist/verification/release-20261022-beta14/"
+  "localEvidence": "dist/verification/releases/release-20261022-beta14/"
 }

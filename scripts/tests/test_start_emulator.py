@@ -21,6 +21,7 @@ class StartEmulatorTest(unittest.TestCase):
         scripts = self.root / 'scripts'
         scripts.mkdir()
         shutil.copyfile(SCRIPT, scripts / SCRIPT.name)
+        shutil.copyfile(SCRIPT.with_name('emulator-console.ps1'), scripts / 'emulator-console.ps1')
         (scripts / 'dev-env.sh').write_text('# Test toolchain is provided through PATH.\n')
         self.bin = self.root / 'bin'
         self.bin.mkdir()
@@ -35,6 +36,16 @@ import sys
 from pathlib import Path
 root = Path(os.environ['START_TEST_ROOT'])
 command = base64.b64decode(sys.argv[-1]).decode('utf-16le')
+if '# EMULATOR_CONSOLE' in command:
+    (root / 'console-calls').write_text(command)
+    mode = os.environ['START_TEST_MODE']
+    if mode in ('kill-failure', 'console-auth-failure', 'console-wrong-avd'):
+        print('Console target verification or authentication failed.', file=sys.stderr)
+        sys.exit(1)
+    if mode != 'console-keeps-running':
+        (root / 'killed').touch()
+    print('Console shutdown requested.')
+    sys.exit(0)
 if '# AVD_NAME_QUERY' in command:
     with (root / 'windows-name-calls').open('a') as log:
         log.write(command + '\\n')
@@ -58,13 +69,15 @@ from pathlib import Path
 root = Path(os.environ['START_TEST_ROOT'])
 mode = os.environ['START_TEST_MODE']
 args = sys.argv[1:]
+if mode == 'stdin-consuming':
+    sys.stdin.read()
 with (root / 'adb-calls').open('a') as log:
     log.write(' '.join(args) + '\\n')
 if 'devices' in args:
     if mode == 'devices-failure':
         sys.exit(1)
     print('List of devices attached')
-    if mode in ('ready', 'wrong-avd', 'offline', 'shutdown-timeout', 'kill-failure', 'name-failure', 'target-changed', 'console-name-empty', 'legacy-name', 'name-leading-blank', 'name-missing', 'windows-name'):
+    if mode in ('ready', 'wrong-avd', 'offline', 'shutdown-timeout', 'kill-failure', 'name-failure', 'target-changed', 'console-name-empty', 'legacy-name', 'name-leading-blank', 'name-missing', 'windows-name', 'stdin-consuming', 'console-ko', 'console-empty', 'console-auth-failure', 'console-wrong-avd', 'console-keeps-running'):
         if not (root / 'killed').exists() or mode == 'shutdown-timeout':
             print(os.environ.get('START_TEST_SERIAL', 'emulator-5554') + '\\t' + ('offline' if mode == 'offline' else 'device'))
 elif 'emu' in args:
@@ -80,6 +93,11 @@ elif 'emu' in args:
     elif args[-1] == 'kill':
         if mode == 'kill-failure':
             sys.exit(1)
+        if mode in ('console-ko', 'console-auth-failure', 'console-wrong-avd', 'console-keeps-running'):
+            print("KO: unknown command, try 'help'")
+            sys.exit(0)
+        if mode == 'console-empty':
+            sys.exit(0)
         (root / 'killed').touch()
 elif args[-2:] == ['am', 'get-current-user']:
     print(os.environ.get('START_TEST_ANDROID_USER', '10') + '\\r')
@@ -261,6 +279,58 @@ elif 'getprop' in args:
         self.assertIn("'-memory', '4096'", command)
         self.assertIn("'-vsync-rate', '165', '-no-snapshot'", command)
         self.assertIn('客体刷新率已核对：165 Hz', result.stdout)
+
+    def test_adb_cannot_consume_piped_confirmation(self):
+        result = self.run_script('--cold-boot', mode='stdin-consuming', answer='y\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / 'killed').exists())
+        self.assertTrue((self.root / 'launch').exists())
+
+    def test_explicit_yes_allows_authorized_noninteractive_cold_boot(self):
+        result = self.run_script('--cold-boot', '--yes', mode='ready')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('是否关闭并冷启动', result.stderr)
+        self.assertTrue((self.root / 'killed').exists())
+
+    def test_yes_still_refuses_a_different_target(self):
+        result = self.run_script('--cold-boot', '--yes', mode='wrong-avd')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('emu kill', (self.root / 'adb-calls').read_text())
+        self.assertFalse((self.root / 'console-calls').exists())
+
+    def test_yes_requires_cold_boot_and_dry_run_remains_read_only(self):
+        result = self.run_script('--yes')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / 'adb-calls').exists())
+        result = self.run_script('--cold-boot', '--yes', '--dry-run')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('--yes', result.stdout)
+        self.assertFalse((self.root / 'adb-calls').exists())
+
+    def test_zero_exit_ko_response_uses_verified_windows_console(self):
+        result = self.run_script('--cold-boot', '--yes', mode='console-ko')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / 'launch').exists())
+        self.assertIn('Windows 本机控制台', result.stdout)
+        command = (self.root / 'console-calls').read_text()
+        self.assertIn("-Port 5554 -ExpectedAvd 'Medium_Phone_API_37.0' -Shutdown", command)
+        self.assertLess(command.index("WriteLine('avd name')"), command.index("WriteLine('kill')"))
+        self.assertNotIn('Stop-Process', command)
+
+    def test_zero_exit_empty_response_requires_real_disappearance(self):
+        result = self.run_script('--cold-boot', '--yes', mode='console-empty')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / 'console-calls').exists())
+        self.assertTrue((self.root / 'launch').exists())
+
+    def test_console_failure_or_unclosed_device_never_launches_duplicate(self):
+        for mode in ('console-auth-failure', 'console-wrong-avd', 'console-keeps-running'):
+            with self.subTest(mode=mode):
+                result = self.run_script('--cold-boot', '--yes', '--timeout', '1', mode=mode)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue((self.root / 'console-calls').exists())
+                self.assertFalse((self.root / 'launch').exists())
+                self.assertNotIn('模拟器已就绪', result.stdout)
 
     def test_cold_boot_decline_default_and_eof_keep_running_device(self):
         for answer in ('n\n', 'NO\n', '\n', ''):

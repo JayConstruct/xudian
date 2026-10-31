@@ -255,7 +255,11 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
   };
 
   List<BoardItem> get _overlaps => widget.blocks.where((item) {
-    if (_draft == null || item['id'] == _draft!['id']) return false;
+    if (_draft == null ||
+        item['id'] == _draft!['id'] ||
+        item['occupiesTime'] == false) {
+      return false;
+    }
     final start = _date(item['start']), end = _date(item['end']);
     return start != null &&
         end != null &&
@@ -267,7 +271,10 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     var start = _start!;
     final occupied =
         widget.blocks
-            .where((item) => item['id'] != _draft!['id'])
+            .where(
+              (item) =>
+                  item['id'] != _draft!['id'] && item['occupiesTime'] != false,
+            )
             .where(
               (item) =>
                   _date(item['start']) != null && _date(item['end']) != null,
@@ -455,6 +462,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
       scheme.onSurface,
     );
     final edgeStatus = item['statusIndicator'] == 'edgeToCorner';
+    final appearance = PlannerCardAppearance.of(item);
     final selected = _draft?['id'] == item['id'];
     final start = selected ? _start : _date(item['start']);
     final end = selected ? _end : _date(item['end']);
@@ -479,7 +487,11 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
 
     Widget card = Semantics(
       label:
-          '${item['title']}，${candidate ? '待安排' : '${label(start!)}至${label(end!)}'}，${selected ? _minutes : _duration(item)}分钟${item['completed'] == true ? '，已完成' : ''}${item['readOnly'] == true ? '，来源只读' : ''}',
+          '${item['title']}，${candidate ? '待安排' : '${label(start!)}至${label(end!)}'}，${selected ? _minutes : _duration(item)}分钟${appearance.badgeText.isNotEmpty
+              ? '，${appearance.badgeText}'
+              : item['completed'] == true
+              ? '，已完成'
+              : ''}${item['readOnly'] == true ? '，来源只读' : ''}',
       child: Material(
         color: surface,
         borderRadius: BorderRadius.circular(9),
@@ -492,7 +504,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
               key: feedback ? null : ValueKey('planner-day-card:${item['id']}'),
               height: height,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              foregroundDecoration: selected
+              foregroundDecoration: selected && !appearance.dashed
                   ? BoxDecoration(
                       borderRadius: BorderRadius.circular(9),
                       border: Border.all(color: scheme.primary, width: 1.5),
@@ -514,7 +526,9 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.labelLarge?.copyWith(
                                   decoration:
-                                      item['completed'] == true && !edgeStatus
+                                      appearance.lineThrough ||
+                                          item['completed'] == true &&
+                                              !edgeStatus
                                       ? TextDecoration.lineThrough
                                       : null,
                                   color: foreground,
@@ -563,7 +577,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  if (edgeStatus)
+                  if (edgeStatus || appearance.decorated)
                     const SizedBox(width: 16)
                   else
                     Icon(
@@ -598,6 +612,23 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
           ),
         ),
         childWhenDragging: Opacity(opacity: .35, child: card),
+        child: card,
+      );
+    }
+    if (appearance.decorated) {
+      return PlannerCardDecoration(
+        key: ValueKey('planner-day-appearance:${item['id']}'),
+        appearance: appearance,
+        color: scheme.onSurfaceVariant,
+        surface: surface,
+        selectedColor: selected ? scheme.primary : null,
+        textStyle: theme.textTheme.labelSmall!,
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        // The list title occupies its first row. The reserved trailing icon
+        // column carries the mark without covering the title or duration.
+        full: false,
+        badgeSize: 16,
         child: card,
       );
     }

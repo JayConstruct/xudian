@@ -26,6 +26,6 @@ const report={moduleVersion:definition.manifest.version,snapshot,
     'Custom times must exactly match period boundaries. Seasonal/date-based combo schedules need adaptation.',
     'Sunday-start first-week Sunday predates the first Monday and cannot currently be represented; conversion rejects the whole input.'],
   package:{bytes:packageBytes.length,sha256:createHash('sha256').update(packageBytes).digest('hex')}};
-await mkdir(new URL('../../dist/verification/',import.meta.url),{recursive:true});
-await writeFile(new URL('../../dist/verification/shiguang-warehouse-compatibility.json',import.meta.url),JSON.stringify(report,null,2)+'\n');
+await mkdir(new URL('../../dist/verification/shiguang/warehouse/',import.meta.url),{recursive:true});
+await writeFile(new URL('../../dist/verification/shiguang/warehouse/shiguang-warehouse-compatibility.json',import.meta.url),JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify({schools:snapshot.schools,adapters:snapshot.adapters,syntaxPassed,maxCaptureBytes,package:report.package}));

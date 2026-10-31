@@ -40,9 +40,9 @@ UI 组合把模块提供的页面、入口和挂载位置分开，底栏与侧�
 
 只有 `sections` 支持 `inline: true`，定义此能力的模块需要 `hostApi: "^1.11.0"`。内联内容贡献返回普通自然高度 `column`，避免 `fillHeight`、`timeGrid`、`ui.page.*` 整页模板和独立纵向滚动节点。贡献入口仍可在布局设置中排序、隐藏或移动；挂载到普通槽位时恢复完整页面渲染。公开性、容量、上下文和循环检查继续适用。完整开发说明见 [SDK](MODULE_SDK.md)。
 
-API 1.16 将原“今天”入口改名为“每日”，原页面与 `daily` 槽 ID 不变。容器内贡献可读取 `context.selectedDate`，用该日查询自身内容；日期切换通过 render 返回 `runtimeContextPatch` 传递，不需要贡献依赖课表模块，也不写入导航或业务记录。局部上下文作用域与保护规则见 [每日日期上下文](MODULE_SDK.md#api-116-的每日日期上下文)。
+API 1.16 将原“今天”入口改名为“每日”，原页面与 `daily` 槽 ID 不变。容器内贡献可读取 `context.selectedDate`，用该日查询自身内容；日期切换通过 render 返回 `runtimeContextPatch` 传递，不需要贡献依赖课表模块，也不写入导航或业务记录。局部上下文作用域与保护规则见 [每日日期上下文](sdk/DATE_CONTEXT.md#api-116-的每日日期上下文)。
 
-API 1.17 将入口名调整为“日程”，并通过根页面 `headerMode: 'date'` 显示共享选中日期，底栏仍显示固定入口名。模块、页面与槽位标识保持不变；内联概览使用 `dateHeading: false` 避免重复日期。详见 [日期顶栏](MODULE_SDK.md#api-117-的日期顶栏)。
+API 1.17 将入口名调整为“日程”，并通过根页面 `headerMode: 'date'` 显示共享选中日期，底栏仍显示固定入口名。模块、页面与槽位标识保持不变；内联概览使用 `dateHeading: false` 避免重复日期。详见 [日期顶栏](sdk/DATE_CONTEXT.md#api-117-的日期顶栏)。
 
 ## 旧 v1/v2 source 与 Schema 兼容契约
 

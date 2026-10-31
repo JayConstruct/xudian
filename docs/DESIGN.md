@@ -1,6 +1,6 @@
 # 当前架构
 
-核对日期：2026-10-20。生产使用 v3 模块定义、格式 2 的 ZIP 包、宿主 API 1.31.0 和 Drift schema 2。使用能力见 [项目首页](../README.md)，具体协议分别由 [宿主](MODULE_HOST.md)、[SDK](MODULE_SDK.md) 和 Schema 定义。
+生产使用 v3 模块定义、格式 2 的 ZIP 包和 Drift schema 2。宿主 API 与能力兼容范围由 [SDK](MODULE_SDK.md) 维护。使用能力见 [项目首页](../README.md)，具体协议分别由 [宿主](MODULE_HOST.md)、[SDK](MODULE_SDK.md) 和 Schema 定义。
 
 ## 宿主与业务
 

@@ -21,6 +21,6 @@
     "Cold first visit prepares real content before sliding; it does not guarantee zero asynchronous work",
     "Android ARM and Windows performance not measured"
   ],
-  "artifactsDirectory": "dist/verification/instant-workspace-20261012",
+  "artifactsDirectory": "dist/verification/daily/instant-workspace-20261012",
   "additionalProductionNavigationTestPassed": 1
 }

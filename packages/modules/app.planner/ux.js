@@ -48,6 +48,7 @@ const completionCommand = (current, completed, zone, date, expectedUpdatedAt = c
   input: {id: current.id, completed, expectedUpdatedAt, ...(completed ? {actualCompletedOn: date, completedTimezone: zone} : {})},
 });
 async function setCompletion(current, completed, zone, expectedUpdatedAt = current.updatedAt, actualCompletedOn) {
+  if ((await query('task.state', {id: current.id})).cancelled) throw Error('任务已取消，请先恢复任务');
   const prepared = await services.prepare({moduleId: 'app.tasks', serviceId: 'task.setCompleted', majorVersion: 1}, {
     id: current.id, completed, expectedUpdatedAt,
     ...(completed ? {actualCompletedOn: actualCompletedOn || await clock.today(zone), completedTimezone: zone} : {}),
@@ -207,7 +208,13 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       state.startDate = event.startDate; state.days = event.visibleDays;
       await saveViewport(state);
     }
-    if (event?.type === 'board') { state.history = false; state.chooseAuto = false; delete state.autoPreview; }
+    if (event?.type === 'board') { state.history = false; state.cancelledView = false; state.chooseAuto = false; delete state.autoPreview; }
+    if (event?.type === 'cancelledTasks') state.cancelledView = true;
+    if (event?.type === 'restoreTask') {
+      if (await execute('task.setCancelled', {id: event.id, cancelled: false, expectedUpdatedAt: event.expectedUpdatedAt}, {
+        title: '恢复任务', message: '恢复后将按原来的安排继续执行。', confirmLabel: '恢复任务',
+      })) await ui.notify({message: '任务已恢复', kind: 'success'});
+    }
     if (event?.type === 'chooseAuto') { state.chooseAuto = true; delete state.autoPreview; }
     if (event?.type === 'occurrence') await panel('editor', {candidate: event.candidate});
     if (event?.type === 'onlyDeadline') { state.onlyDeadline = event.value ?? !state.onlyDeadline; state.candidateOffset = 0; }
@@ -263,6 +270,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   // Summary pages do not need current board positions or candidate projection.
   // Undo and apply still validate current tasks in their command services.
   if (!loadRange && state.history) return plannerPage(state, await historyContent(state));
+  if (!loadRange && state.cancelledView) return plannerPage(state, await cancelledContent(state, a));
   if (!loadRange && state.autoPreview) return plannerPage(state, previewContent(state));
   const boardInput = () => ({...(loadRange || {startDate: add(state.startDate, -7), days: 21}), candidateOffset: state.candidateOffset, candidateLimit, onlyDeadline: !!state.onlyDeadline});
   let data = await query('board.get', boardInput());
@@ -283,7 +291,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   if (event?.type === 'move' && !state.moveIntent) state.selected = state.selected.filter(id => id !== event.candidateId);
   const candidates = pending.filter(c => !state.onlyDeadline || c.task?.dueDate).map(c => ({
     id: c.taskId || c.id, colorKey: c.taskId || c.id, title: c.title, durationMinutes: c.estimatedMinutes || a.defaultMinutes,
-    preferredSummary: overdue(c.task) ? '已逾期' : summary(c.task) || duration(c.estimatedMinutes || a.defaultMinutes),
+    preferredSummary: overdue(c.task) ? '已逾期' : summary(c.task) || (c.task && c.task.estimatedMinutes == null ? '未设置耗时' : duration(c.estimatedMinutes || a.defaultMinutes)),
     deadlineSummary: summary(c.task), deadlineText: c.task?.dueDate ? '截止 ' + labelDeadline(c.task) : '', overdue: overdue(c.task),
     selected: state.selected.includes(c.id),
     selectEvent: {type: 'select', id: c.id},
@@ -294,17 +302,23 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   const blocks = [...data.scheduled, ...data.busy].map(t => ({
     id: t.taskId || t.id, colorKey: t.courseId || t.taskId || t.id,
     ...(t.courseId ? {courseId: t.courseId} : {}),
-    ...(typeof t.color === 'string' ? {color: t.color} : {}),
+    ...(t.cancelled ? {color: '#858B95'} : typeof t.color === 'string' ? {color: t.color} : {}),
     title: t.title, start: stamp(t.startDate, t.start), end: stamp(t.endDate, t.end),
     durationMinutes: (Date.parse(t.plannedEndAt || t.endAt || stamp(t.endDate, t.end) + 'Z') - Date.parse(t.plannedStartAt || t.startAt || stamp(t.startDate, t.start) + 'Z')) / 60000,
-    deadlineSummary: summary(t), deadlineText: t.dueDate ? '截止 ' + labelDeadline(t) : '', overdue: overdue(t),
-    completed: !!t.completedAt, fixed: !!t.locked, readOnly: !!t.readOnly, sourceLabel: t.completedAt ? '已完成' : t.sourceLabel,
-    ...(!t.readOnly ? {statusIndicator: 'edgeToCorner', actions: [{label: t.completedAt ? '重新打开' : '已完成', icon: t.completedAt ? 'undo' : 'check', event: {type: 'completeTask', id: t.taskId || t.id, expectedUpdatedAt: t.updatedAt}, command: completionCommand(t, !t.completedAt, a.timezone, today)}]} : {}),
+    deadlineSummary: summary(t), deadlineText: t.dueDate ? '截止 ' + labelDeadline(t) : '', overdue: !t.cancelled && overdue(t),
+    completed: !!t.completedAt, fixed: !t.cancelled && !!t.locked, readOnly: !!t.readOnly, sourceLabel: t.cancelled ? '已取消' : t.completedAt ? '已完成' : t.sourceLabel,
+    ...(!t.readOnly && !t.cancelled ? {statusIndicator: 'edgeToCorner', actions: [{label: t.completedAt ? '重新打开' : '已完成', icon: t.completedAt ? 'undo' : 'check', event: {type: 'completeTask', id: t.taskId || t.id, expectedUpdatedAt: t.updatedAt}, command: completionCommand(t, !t.completedAt, a.timezone, today)}]} : {}),
+    ...(t.cancelled ? {
+      appearance: {borderStyle: 'dashed', titleDecoration: 'lineThrough', cornerIcon: 'slash', badgeText: '已取消'},
+      selectionNote: '原安排已保留，此时段可重新安排', selectionLayout: 'inlineActions',
+      occupiesTime: false,
+      actions: [{label: '恢复任务', icon: 'undo', event: {type: 'restoreTask', id: t.taskId || t.id, expectedUpdatedAt: t.updatedAt}}],
+    } : {}),
     ...(typeof t.location === 'string' && t.location.trim() ? {location: t.location.trim()} : {}),
     ...(typeof t.teacher === 'string' && t.teacher.trim() ? {teacher: t.teacher.trim()} : {}),
     event: t.readOnly ? {type: 'source', title: t.title, source: t.sourceLabel} : {type: 'detail', id: t.taskId || t.id},
-    ...(!t.readOnly && !t.completedAt ? {editTimeEvent: {type: 'editTime', id: t.taskId || t.id}} : {}),
-    ...(!t.readOnly && !t.locked && !t.completedAt ? {moveEvent: {type: 'move', taskId: t.taskId || t.id, expectedTasks: {[t.taskId || t.id]: {revisionToken: t.revisionToken}}}} : {}),
+    ...(!t.readOnly && !t.completedAt && !t.cancelled ? {editTimeEvent: {type: 'editTime', id: t.taskId || t.id}} : {}),
+    ...(!t.readOnly && !t.locked && !t.completedAt && !t.cancelled ? {moveEvent: {type: 'move', taskId: t.taskId || t.id, expectedTasks: {[t.taskId || t.id]: {revisionToken: t.revisionToken}}}} : {}),
   }));
   if (event?.type === 'source') await ui.notify({message: `${event.title} · ${event.source}，请到来源修改`});
   const notices = [...data.warnings, ...data.conflicts];
@@ -354,13 +368,14 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
 }
 
 function plannerPage(state, content, displayHoursLabel = '') {
-  const alternate = state.history || state.autoPreview || state.chooseAuto;
-  return {state, header: {compact: true, title: state.history ? '操作历史' : state.autoPreview ? '安排预览' : state.chooseAuto ? '自动安排' : '任务规划',
+  const alternate = state.history || state.cancelledView || state.autoPreview || state.chooseAuto;
+  return {state, header: {compact: true, title: state.cancelledView ? '已取消任务' : state.history ? '操作历史' : state.autoPreview ? '安排预览' : state.chooseAuto ? '自动安排' : '任务规划',
     ...(!alternate ? {layout: 'plannerTimeline'} : {}),
     ...(alternate ? {backEvent: {type: 'board'}} : {}), actions: alternate ? [] : [
     {label: '新建', icon: 'add', presentation: 'inline', iconOnly: true, overflowOnly: true, event: {type: 'add'}},
     {label: '自动安排', icon: 'sparkles', presentation: 'menu', event: {type: 'chooseAuto'}},
     {label: '操作历史', icon: 'history', presentation: 'menu', event: {type: 'history'}},
+    {label: '已取消任务', icon: 'archive', presentation: 'menu', event: {type: 'cancelledTasks'}},
     {label: '视图与显示', icon: 'calendar', presentation: 'menu', separatorBefore: true, children: [
       {kind: 'choiceGrid', label: '显示列数', children: visibleDayCounts.map(days => ({label: `${days}列`, selected: state.days === days, event: {type: 'periodShortcut', days}}))},
       {label: '跳转日期…', icon: 'dateRange', event: {type: 'period'}},
@@ -377,6 +392,25 @@ function plannerPage(state, content, displayHoursLabel = '') {
     {label: '规划设置', icon: 'settings', presentation: 'menu', event: {type: 'tools', screen: 'settings'}},
   ]}, tree: alternate ? content : {type: 'column', key: 'planner', underlapChrome: true, fillHeight: true, spacing: 0, children: [content]}};
 
+}
+
+async function cancelledContent(state, a) {
+  const tasks = await query('task.cancelled.list');
+  const positions = await clock.toLocalMany(tasks.filter(t => t.plannedStartAt).flatMap(t => [
+    {utc: t.plannedStartAt, zone: a.timezone}, {utc: t.plannedEndAt, zone: a.timezone},
+  ]));
+  let index = 0;
+  return keyedList('planner:cancelled', [
+    {type: 'notice', text: tasks.length ? `${tasks.length} 项已取消 · 任务和原安排均已保留` : '暂无已取消的任务'},
+    ...(state.error ? [text(state.error)] : []),
+    ...tasks.map(t => {
+      const start = t.plannedStartAt ? positions[index++] : null, end = start ? positions[index++] : null;
+      return {type: 'card', key: t.id, children: [
+        row(t.title, start ? `已取消 · 原安排 ${start.date} ${start.time}—${end.date === start.date ? '' : end.date + ' '}${end.time}` : '已取消 · 尚未安排时间', {type: 'detail', id: t.id}),
+        button('恢复任务', {type: 'restoreTask', id: t.id, expectedUpdatedAt: t.updatedAt}, 'text'),
+      ]};
+    }),
+  ]);
 }
 
 async function historyContent(state) {
@@ -448,21 +482,33 @@ async function moveConfirmation(preview, zone, precise) {
 async function detail(state, event, context, forms, a) {
   const current = await task(context.taskId);
   if (!current || current.deletedAt) return {state, tree: text('任务已不可用，请关闭后刷新')};
+  const status = await query('task.state', {id: current.id});
+  const content = await query('task.content', {id: current.id});
   if (!state.original) {
     state.original = current;
+    state.originalLocation = content.location || '';
     state.step = context.step || null;
     state.description = !!current.notes;
     state.time = !!current.dueAt;
     const due = current.dueAt ? await clock.toLocal({utc: current.dueAt, zone: current.dueTimezone}) : null;
     const start = current.plannedStartAt ? await clock.toLocal({utc: current.plannedStartAt, zone: a.timezone}) : null;
     const end = current.plannedEndAt ? await clock.toLocal({utc: current.plannedEndAt, zone: a.timezone}) : null;
-    state.draft = {title: current.title, notes: current.notes || '', dueDate: current.dueDate, dueTime: due?.time || null,
-      estimatedMinutes: current.estimatedMinutes || a.defaultMinutes, locked: !!current.locked, scheduleScope: 'only',
+    state.draft = {title: current.title, notes: current.notes || '', location: content.location || '', dueDate: current.dueDate, dueTime: due?.time || null,
+      estimatedMinutes: current.estimatedMinutes ?? '', locked: !!current.locked, scheduleScope: 'only',
       startDate: start?.date || await clock.today(a.timezone), start: start?.time || '', endDate: end?.date || start?.date || await clock.today(a.timezone), end: end?.time || ''};
     state.originalDeadlineDraft = {dueDate: state.draft.dueDate, dueTime: state.draft.dueTime};
   }
   const d = draft(state, forms, event);
   try {
+    if (status.cancelled && ['saveDetail', 'restoreDeadline', 'schedule'].includes(event?.type)) throw Error('任务已取消，请先恢复任务');
+    if (event?.type === 'cancelTask' || event?.type === 'restoreTask') {
+      const cancelled = event.type === 'cancelTask';
+      if (await execute('task.setCancelled', {id: current.id, cancelled, expectedUpdatedAt: state.original.updatedAt}, {
+        title: cancelled ? '取消任务' : '恢复任务',
+        message: cancelled ? `取消“${current.title}”？\n任务和原安排会保留，取消后不再参与自动安排，可随时恢复。` : `恢复“${current.title}”？\n恢复后将按原来的安排继续执行。`,
+        confirmLabel: cancelled ? '确认取消任务' : '恢复任务',
+      })) { await ui.navigate('app.planner.home'); return savedPanel(state, cancelled ? '任务已取消，记录已保留' : '任务已恢复'); }
+    }
     if (event?.type === 'description') state.description = true;
     if (event?.type === 'time') state.time = true;
     if (event?.type === 'editTime') state.step = 'time';
@@ -483,8 +529,10 @@ async function detail(state, event, context, forms, a) {
       const originalDeadline = state.originalDeadlineDraft;
       const deadlineChanged = !originalDeadline || (d.dueDate || null) !== (originalDeadline.dueDate || null) || (d.dueTime || null) !== (originalDeadline.dueTime || null);
       const changes = {};
+      if ((d.location || '').trim() !== state.originalLocation) changes.location = (d.location || '').trim() || null;
       for (const key of ['title', 'notes', 'locked']) if ((d[key] ?? (key === 'locked' ? false : '')) !== (state.original[key] ?? (key === 'locked' ? false : ''))) changes[key] = d[key];
-      if (!state.original.plannedStartAt && Number(d.estimatedMinutes) !== Number(state.original.estimatedMinutes || a.defaultMinutes)) changes.estimatedMinutes = Number(d.estimatedMinutes);
+      const minutes = d.estimatedMinutes == null || d.estimatedMinutes === '' ? null : Number(d.estimatedMinutes);
+      if (!state.original.plannedStartAt && minutes !== (state.original.estimatedMinutes ?? null)) changes.estimatedMinutes = minutes;
       if (deadlineChanged) Object.assign(changes, await deadline(d, zone));
       const saved = await execute('task.update', {id: current.id, expectedUpdatedAt: state.original.updatedAt, expectedValues: state.original,
         changes});
@@ -505,11 +553,21 @@ async function detail(state, event, context, forms, a) {
   const labelDeadline = await localDeadlineLabels([current.initialDeadline, ...(current.deadlineHistory || []).flatMap(h => [h.before, h.after])], a.timezone);
   const command = completionCommand(current, !current.completedAt, a.timezone, await clock.today(a.timezone), state.original.updatedAt);
   const completion = current.completedAt ? await clock.toLocal({utc: current.completedAt, zone: current.completedTimezone || a.timezone}) : null;
-  const children = current.completedAt ? [
+  const cancelledAt = status.cancelledAt ? await clock.toLocal({utc: status.cancelledAt, zone: a.timezone}) : null;
+  const children = status.cancelled ? [
+    {type: 'sectionHeader', title: current.title},
+    {type: 'notice', text: `已取消 · ${cancelledAt.date} ${cancelledAt.time}`},
+    text('任务和原安排已保留，不再参与自动安排。'),
+    ...(current.notes ? [text(current.notes)] : []),
+    ...(content.location ? [text('地点：' + content.location)] : []),
+    ...(current.dueDate ? [text('截止：' + (await localDeadlineLabels([current], a.timezone))(current))] : []),
+    ...(current.plannedStartAt ? [text(`原安排：${d.startDate} ${d.start}—${d.endDate !== d.startDate ? d.endDate + ' ' : ''}${d.end}`)] : [text('尚未安排时间')]),
+  ] : current.completedAt ? [
     {type: 'sectionHeader', title: current.title},
     {type: 'notice', tone: 'success', text: `已完成 · ${completion.date} ${completion.time}`},
     ...(current.actualCompletedOn && current.actualCompletedOn !== completion.date ? [text('实际完成日期：' + current.actualCompletedOn)] : []),
     ...(current.notes ? [text(current.notes)] : []),
+    ...(content.location ? [text('地点：' + content.location)] : []),
     ...(current.dueDate ? [text('截止：' + (await localDeadlineLabels([current], a.timezone))(current))] : []),
     ...(current.plannedStartAt ? [text(`原安排：${d.startDate} ${d.start}—${d.endDate !== d.startDate ? d.endDate + ' ' : ''}${d.end}`)] : []),
     button('补记完成日期', {type: 'completionDate'}, 'text'),
@@ -524,6 +582,7 @@ async function detail(state, event, context, forms, a) {
   ] : [
     input('title', '任务简称', d.title),
     ...(state.description ? [input('notes', '详细描述（可留空）', d.notes, {multiline: true})] : [{type: 'row', children: [button('添加描述', {type: 'description'}, 'text')]}]),
+    input('location', '地点（可留空）', d.location),
     temporal('dueDate', '截止日期（可留空）', d.dueDate),
     ...(state.time ? [temporal('dueTime', '截止时间（可留空）', d.dueTime, 'timeInput')] : [button('＋ 添加具体时间', {type: 'time'})]),
     ...(adjusted ? [text(`已调整 · 初始截止 ${labelDeadline(current.initialDeadline)}`), button('恢复初始截止', {type: 'restoreDeadline'}),
@@ -531,11 +590,12 @@ async function detail(state, event, context, forms, a) {
     ...(current.plannedStartAt ? [row('安排起止时间', `${d.startDate} ${d.start}—${d.endDate !== d.startDate ? d.endDate + ' ' : ''}${d.end} · ${(Date.parse(current.plannedEndAt) - Date.parse(current.plannedStartAt)) / 60000}分钟`, {type: 'editTime'})] : [
       input('estimatedMinutes', '预计分钟', d.estimatedMinutes), row('精确安排', '设置开始与结束时间', {type: 'editTime'}),
     ]),
-    checkbox('locked', '固定时间', !!d.locked, {type: 'field', key: 'locked'}),
+    ...(current.plannedStartAt ? [checkbox('locked', '固定时间', !!d.locked, {type: 'field', key: 'locked'})] : []),
+    button('取消任务', {type: 'cancelTask'}, 'text'),
   ];
   if (state.error) children.push(text(state.error));
   return {state, header: {title: state.step === 'time' ? '编辑时间' : '任务详情', ...(state.step === 'time' ? {backEvent: {type: 'back'}} : {})}, tree: {type: 'column', key: 'planner:detail:' + current.id, children,
-    ...(current.completedAt ? {footer: fullWidthFooter({...button('重新打开任务', {type: 'complete'}), command})} : state.step === 'time' ? (!current.locked ? {footer: fullWidthFooter(button('应用安排', {type: 'schedule'}, 'filled'))} : {}) : {footer: fullWidthFooter({type: 'column', children: [{...button('标记已完成', {type: 'complete'}, 'filled'), command}, button('保存修改', {type: 'saveDetail'})]})}),
+    ...(status.cancelled ? {footer: fullWidthFooter(button('恢复任务', {type: 'restoreTask'}, 'filled'))} : current.completedAt ? {footer: fullWidthFooter({...button('重新打开任务', {type: 'complete'}), command})} : state.step === 'time' ? (!current.locked ? {footer: fullWidthFooter(button('应用安排', {type: 'schedule'}, 'filled'))} : {}) : {footer: fullWidthFooter({type: 'column', children: [{...button('标记已完成', {type: 'complete'}, 'filled'), command}, button('保存修改', {type: 'saveDetail'})]})}),
   }};
 }
 

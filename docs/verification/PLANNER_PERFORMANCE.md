@@ -32,7 +32,7 @@
 
 看板任务数据查询2次降到1次，UTC转换4次降到2次。历史与已有预览不再读取任务和投影看板时区。保留既有候选、完整规则展开、跨午夜占用和完成／归档／删除过滤语义。
 
-本机基线与日志保存在忽略目录 `dist/verification/planner-performance/`、`dist/verification/planner-performance-20261016/` 及 `.cache/planner-performance-*.log`。主要回归为 `client/test/planner_board_performance_test.dart`、`planner_board_test.dart`、`planner_ux_test.dart` 与 `planner_redesign_test.dart`。
+本机基线与日志保存在忽略目录 `dist/verification/planner/planner-performance/`、`dist/verification/planner/planner-performance-20261016/`。主要回归为 `client/test/planner_board_performance_test.dart`、`planner_board_test.dart`、`planner_ux_test.dart` 与 `planner_redesign_test.dart`。
 
 ## 设备采样的解释
 
@@ -56,7 +56,7 @@
 
 模拟器实际复验连续往返滚动、“程序设计”简称／实验楼B203／李老师依次收起与恢复；真实15:35结束时间仍贴占用边界。再次长按“资料归档”，默认5分钟移动至16:05，短横移进入精调至16:06，大横移至次日保留16:06–17:26，普通操作确认显示正确；取消并放弃后原10月17日16:00–17:20保持不变，待安排仍4项，底栏恢复。未提交验收任务变更。
 
-实际截图／XML／录屏位于 `dist/verification/planner-performance-20261016/`：`01-full-course`至`06-restored-multiline`覆盖长块滚动，`scroll-preview.mp4`为滚动片段，`11-final-five-minute`至`16-final-canceled-restored`覆盖拖动回归；`17-history`／`18-history-return`及`19-candidates-collapsed`／`20-candidates-expanded`覆盖历史返回与待安排折叠展开。模块详情实际SHA-256已与本机包对照，保存于`21-module-digest.png`与`installed-module.json`；最后返回规划首页。构建安装记录位于 `.cache/emulator-update/latest-success.json`，完整日志为 `.cache/planner-performance-update.log`。
+实际截图／XML／录屏位于 `dist/verification/planner/planner-performance-20261016/`：`01-full-course`至`06-restored-multiline`覆盖长块滚动，`scroll-preview.mp4`为滚动片段，`11-final-five-minute`至`16-final-canceled-restored`覆盖拖动回归；`17-history`／`18-history-return`及`19-candidates-collapsed`／`20-candidates-expanded`覆盖历史返回与待安排折叠展开。模块详情实际SHA-256已与本机包对照，保存于`21-module-digest.png`与`installed-module.json`；最后返回规划首页。构建及安装结果以本节版本、摘要和上述实际页面记录为准。
 
 ## 取消独立收起动画，直接随滚动裁切（2026-10-16）
 
@@ -68,4 +68,4 @@
 
 实际页面验证“程序设计”14:00–15:35：多行驻留、次要信息逐渐裁去、简称最后消失、反向恢复，真实15:35结束时间保持在块底边。保持同一手指位置暂停后，间隔400毫秒的表格区域像素摘要相同（比较物理坐标x140–1060、y929–2100，排除状态栏时钟），没有独立收起动画继续运行。该比较验证静止行为，不代表设备帧率或掉帧统计。最后返回默认9点视图，两个重叠任务的独立列、单行／两行简称和4项待安排保持正常；未提交任务或课程修改。
 
-本机材料：`dist/verification/planner-scroll-clip-20261016/` 内 `01-full-course.png`、`02-pinned-three-lines.png`、`03-stopped-immediate.png`／`04-stopped-later.png`、`05-title-clipped-last.png`、`06-reverse-restores-immediately.png`、`07-final-restored.png`、`stationary-comparison.json`、`scroll-preview.mp4`。完整检查与安装日志为 `.cache/planner-scroll-clip-update.log`，实际页面验收日志为 `.cache/planner-scroll-clip-device.log`。
+本机材料：`dist/verification/planner/planner-scroll-clip-20261016/` 内 `01-full-course.png`、`02-pinned-three-lines.png`、`03-stopped-immediate.png`／`04-stopped-later.png`、`05-title-clipped-last.png`、`06-reverse-restores-immediately.png`、`07-final-restored.png`、`stationary-comparison.json`、`scroll-preview.mp4`。

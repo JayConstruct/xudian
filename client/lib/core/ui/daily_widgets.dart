@@ -1,4 +1,6 @@
 import 'ui_icon.dart';
+import 'ui_icons.dart';
+import 'content_colors.dart';
 import 'temporal_input.dart';
 import 'daily_date_strip.dart';
 import 'date_reveal.dart';
@@ -31,6 +33,7 @@ Widget? dailyUiComponent(
       dateHeading: props['dateHeading'] != false,
       dateControls: props['dateControls'] != false,
       returnToToday: props['returnToToday'] != false,
+      compact: props['compact'] == true,
       onChanged: disabled || events['change'] == null
           ? null
           : (date) => events['change']!(date),
@@ -48,6 +51,7 @@ Widget? dailyUiComponent(
       onAction: disabled || events['press'] == null
           ? null
           : () => events['press']!(null),
+      compact: props['compact'] == true,
     ),
     'ui.agendaItem@1' => AgendaItem(
       title: '${props['title'] ?? ''}',
@@ -56,6 +60,10 @@ Widget? dailyUiComponent(
       endTime: '${props['endTime'] ?? ''}',
       color: props['color'] as String?,
       badge: props['badge'] as String?,
+      compact: props['compact'] == true,
+      hideTime: props['hideTime'] == true,
+      eyebrow: props['eyebrow'] as String?,
+      icon: props['icon'] as String?,
       onPressed: disabled || events['press'] == null
           ? null
           : () => events['press']!(null),
@@ -64,6 +72,11 @@ Widget? dailyUiComponent(
       title: '${props['title'] ?? ''}',
       subtitle: props['subtitle'] as String?,
       completed: props['completed'] == true,
+      compact: props['compact'] == true,
+      startTime: props['startTime'] as String?,
+      endTime: props['endTime'] as String?,
+      color: props['color'] as String?,
+      colorKey: props['colorKey'],
       onChanged: disabled || events['change'] == null
           ? null
           : (value) => events['change']!(value),
@@ -88,12 +101,14 @@ class DayOverview extends StatelessWidget {
     this.dateControls = true,
     this.returnToToday = true,
     this.days = const [],
+    this.compact = false,
   });
   final String date;
   final String? summary, selectedDate, todayDate;
   final ValueChanged<String>? onChanged;
   final bool dateHeading, dateControls;
   final bool returnToToday;
+  final bool compact;
   final List<Map<String, Object?>> days;
 
   Widget day(BuildContext context, Map<String, Object?> entry) {
@@ -162,8 +177,8 @@ class DayOverview extends StatelessWidget {
 
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 3),
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
+                padding: EdgeInsets.symmetric(
+                  vertical: compact ? 8 : 12,
                   horizontal: 2,
                 ),
                 decoration: BoxDecoration(
@@ -188,7 +203,21 @@ class DayOverview extends StatelessWidget {
                         color: foreground(),
                       ),
                     ),
-                    if (indicators.isNotEmpty) ...[
+                    if (compact) ...[
+                      const SizedBox(height: 7),
+                      Container(
+                        width: 4,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: selected
+                              ? theme.colorScheme.onPrimary.withValues(
+                                  alpha: .8,
+                                )
+                              : theme.colorScheme.outlineVariant,
+                        ),
+                      ),
+                    ] else if (indicators.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       for (final indicator in indicators)
                         Text(
@@ -304,7 +333,7 @@ class DayOverview extends StatelessWidget {
               ),
             ),
           ),
-        if (summary != null && summary!.isNotEmpty) ...[
+        if (!compact && summary != null && summary!.isNotEmpty) ...[
           const SizedBox(height: 18),
           Row(
             children: [
@@ -326,7 +355,7 @@ class DayOverview extends StatelessWidget {
           ),
         ],
         if (days.isNotEmpty) ...[
-          const SizedBox(height: 22),
+          SizedBox(height: compact ? 0 : 22),
           IgnorePointer(
             ignoring: reveal?.isTransitioning == true,
             child: ExcludeFocus(
@@ -392,7 +421,7 @@ class DayOverview extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 12),
+        SizedBox(height: compact ? 0 : 12),
       ],
     );
   }
@@ -466,11 +495,13 @@ class DailySectionHeader extends StatelessWidget {
     this.actionLabel,
     this.actionIcon,
     this.onAction,
+    this.compact = false,
   });
   final String title;
   final String? subtitle, actionLabel, actionIcon;
   final Object? count;
   final VoidCallback? onAction;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -480,17 +511,23 @@ class DailySectionHeader extends StatelessWidget {
         children: [
           TextSpan(
             text: title,
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style:
+                (compact
+                        ? theme.textTheme.titleSmall
+                        : theme.textTheme.titleLarge)
+                    ?.copyWith(fontWeight: FontWeight.w600),
           ),
           if (count != null)
             TextSpan(
               text: '  $count',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w400,
-              ),
+              style:
+                  (compact
+                          ? theme.textTheme.bodySmall
+                          : theme.textTheme.titleMedium)
+                      ?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w400,
+                      ),
             ),
         ],
       ),
@@ -506,7 +543,7 @@ class DailySectionHeader extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (actionIcon == 'add')
-                    const UiIcon(Icons.add_rounded, size: 22)
+                    UiIcon(Icons.add_rounded, size: 22, semanticLabel: actionLabel)
                   else ...[
                     Text(actionLabel!),
                     const SizedBox(width: 3),
@@ -554,10 +591,16 @@ class AgendaItem extends StatelessWidget {
     this.color,
     this.badge,
     this.onPressed,
+    this.compact = false,
+    this.hideTime = false,
+    this.eyebrow,
+    this.icon,
   });
   final String title, startTime, endTime;
   final String? subtitle, color, badge;
   final VoidCallback? onPressed;
+  final bool compact, hideTime;
+  final String? eyebrow, icon;
 
   Color accent(BuildContext context) {
     final digits = color?.replaceFirst('#', '');
@@ -572,6 +615,88 @@ class AgendaItem extends StatelessWidget {
     final theme = Theme.of(context);
     final tint = accent(context);
     final dark = theme.brightness == Brightness.dark;
+    if (compact) {
+      final surface = Material(
+        color: Color.alphaBlend(
+          tint.withValues(alpha: dark ? .18 : .09),
+          theme.colorScheme.surface,
+        ),
+        shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                Container(width: 3, color: tint),
+                const SizedBox(width: 12),
+                UiIcon(
+                  appIconData(icon ?? 'school'),
+                  size: 22,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (eyebrow?.isNotEmpty == true)
+                          Text(
+                            eyebrow!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        Text(
+                          title,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (subtitle?.isNotEmpty == true) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                        if (badge?.isNotEmpty == true) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            badge!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                if (onPressed != null)
+                  UiIcon(
+                    appIconData('right'),
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                const SizedBox(width: 10),
+              ],
+            ),
+          ),
+        ),
+      );
+      return hideTime
+          ? surface
+          : AgendaTimeLayout(
+              startTime: startTime,
+              endTime: endTime,
+              child: surface,
+            );
+    }
     final timeWidth = 54.0 * MediaQuery.textScalerOf(context).scale(16) / 16;
     final surface = Material(
       color: Color.alphaBlend(
@@ -698,6 +823,11 @@ class DailyTaskItem extends StatelessWidget {
     this.onChanged,
     this.onOpen,
     this.details,
+    this.compact = false,
+    this.startTime,
+    this.endTime,
+    this.color,
+    this.colorKey,
   });
   final String title;
   final bool completed;
@@ -705,10 +835,113 @@ class DailyTaskItem extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
   final VoidCallback? onOpen;
   final Widget? details;
+  final bool compact;
+  final String? startTime, endTime, color;
+  final Object? colorKey;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (compact) {
+      final colored = color != null || colorKey != null;
+      final tint = colored
+          ? ContentColors.accent(colorKey, color: color)
+          : theme.colorScheme.primary;
+      final background = colored && !completed
+          ? ContentColors.surface(tint, theme.colorScheme)
+          : Color.alphaBlend(
+              tint.withValues(alpha: completed ? .06 : 0),
+              theme.colorScheme.surface,
+            );
+      final foreground = colored && !completed
+          ? ContentColors.foreground(
+              tint,
+              background,
+              theme.colorScheme.onSurface,
+            )
+          : theme.colorScheme.onSurface;
+      final surface = Material(
+        color: background,
+        shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Checkbox(
+                    semanticLabel: completed ? '重新打开$title' : '完成$title',
+                    value: completed,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    side: BorderSide(
+                      color: theme.colorScheme.outline,
+                      width: 1.5,
+                    ),
+                    onChanged: onChanged == null
+                        ? null
+                        : (value) => onChanged!(value == true),
+                  ),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: onOpen,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 10, 12, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              title,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: completed
+                                    ? FontWeight.w400
+                                    : FontWeight.w600,
+                                color: completed
+                                    ? theme.colorScheme.onSurfaceVariant
+                                    : foreground,
+                                decoration: completed
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                            if (subtitle?.isNotEmpty == true) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitle!,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (details != null)
+              Padding(padding: const EdgeInsets.only(left: 48), child: details),
+          ],
+        ),
+      );
+      return startTime == null || endTime == null
+          ? surface
+          : AgendaTimeLayout(
+              startTime: startTime!,
+              endTime: endTime!,
+              child: surface,
+            );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -778,6 +1011,64 @@ class DailyTaskItem extends StatelessWidget {
           color: theme.colorScheme.outlineVariant.withValues(alpha: .35),
         ),
       ],
+    );
+  }
+}
+
+/// Optional time gutter shared by different module-provided agenda records.
+/// Narrow screens and large fonts place the time above the full-width content.
+class AgendaTimeLayout extends StatelessWidget {
+  const AgendaTimeLayout({
+    super.key,
+    required this.startTime,
+    required this.endTime,
+    required this.child,
+  });
+  final String startTime, endTime;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 280 * scale) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('$startTime – $endTime', style: theme.textTheme.bodySmall),
+              const SizedBox(height: 6),
+              child,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 46 * scale,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(startTime, style: theme.textTheme.labelMedium),
+                    Text(
+                      endTime,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: child),
+          ],
+        );
+      },
     );
   }
 }

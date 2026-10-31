@@ -26,5 +26,5 @@
     "ADB recording confirms appearance, not FPS or latency",
     "Actual cold query may still require asynchronous preparation"
   ],
-  "artifactsDirectory": "dist/verification/large-date-wave-20261012"
+  "artifactsDirectory": "dist/verification/ui/large-date-wave-20261012"
 }

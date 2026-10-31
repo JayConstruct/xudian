@@ -116,5 +116,5 @@
     "Emulator uses the current source built with existing local signing; CI APKs were anonymously downloaded and validated separately.",
     "ARM physical-device performance and Windows native builds were not validated."
   ],
-  "localEvidence": "dist/verification/release-20261017/"
+  "localEvidence": "dist/verification/releases/release-20261017/"
 }

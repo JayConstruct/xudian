@@ -25,18 +25,30 @@ function weekDays(today) {
 }
 async function overview(state,event,context) {
   const today=await clock.today(),selectedDate=validDate(event?.type==='selectDate'?event.value:context.selectedDate??today);
-  const days=weekDays(selectedDate),counts=await services.query(ref('task.dayCounts'),{dates:days.map(day=>day.date)});
+  const days=weekDays(selectedDate),counts=await services.query(ref('task.dayCounts'),{dates:days.map(day=>day.date),includeCompleted:true});
   const selected=counts.days.find(day=>day.date===selectedDate),pending=selected.loadedPending,completed=selected.loadedCompleted;
-  const summary=selected.hasMore?(selectedDate<today?`已加载 ${pending} 项待办 · ${completed} 项已完成 · 还有更多任务`:'50+ 项待办'):[`${pending} 项待办`,...(completed?[`${completed} 项已完成`]:[])].join(' · ');
-  return {state,runtimeContextPatch:{selectedDate},tree:{type:'dayOverview',key:'day-overview',date:selectedDate,todayDate:today,dateHeading:false,dateControls:false,summary,
+  const summary=selected.hasMore?`已加载 ${pending} 项待办 · ${completed} 项已完成 · 还有更多任务`:[`${pending} 项待办`,...(completed?[`${completed} 项已完成`]:[])].join(' · ');
+  return {state,runtimeContextPatch:{selectedDate},tree:{type:'dayOverview',key:'day-overview',date:selectedDate,todayDate:today,dateHeading:false,dateControls:false,compact:true,summary,
     days:days.map(day=>({...day,...counts.days.find(count=>count.date===day.date),isToday:day.date===today})),selectedDate,event:{type:'selectDate'}}};
+}
+const courseRef={moduleId:'app.schedule',serviceId:'schedule.query.todayFeed',majorVersion:1};
+async function courseFeed(date) {
+  const directory=await services.directory();
+  if(!directory.some(item=>item.moduleId===courseRef.moduleId&&item.id===courseRef.serviceId))return {available:false,items:[]};
+  try{return {available:true,...await services.query(courseRef,{date})};}
+  catch(error){return {available:true,items:[],error:String(error)};}
+}
+function courseNode(item) {
+  return {type:'agendaItem',compact:true,key:'course:'+item.timetableId+':'+item.occurrenceId,title:item.title,startTime:item.startTime,endTime:item.endTime,color:item.color||'#AE8558',icon:'school',
+    subtitle:[item.location||'未填地点',item.teacher].filter(Boolean).join(' · '),
+    event:{type:'openCourse',reference:{timetableId:item.timetableId,occurrenceId:item.occurrenceId,meetingId:item.meetingId||null,originalDate:item.originalDate,date:item.date}}};
 }
 const field=(key,label,value='',type='text',options)=>({key,label,value,type:['dueDate','plannedDate'].includes(key)?'date':type,required:['name','title'].includes(key),maxLength:key==='title'?300:120,...(options?{options}: {})});
 async function execute(id,input) { const plan=await services.prepare(ref(id),input); if(await ui.review(plan.planId)) return services.commit(plan.planId); }
 function shortDate(value,selectedDate) {
   return value.slice(0,4)===selectedDate.slice(0,4)?`${Number(value.slice(5,7))}/${Number(value.slice(8,10))}`:value;
 }
-async function plannedLabels(tasks,selectedDate) {
+async function plannedLabels(tasks,selectedDate,localTimes=new Map()) {
   const labels=tasks.map(task=>task.plannedDate&&`计划 ${task.plannedDate===selectedDate?'当天':shortDate(task.plannedDate,selectedDate)}`);
   const precise=tasks.flatMap((task,index)=>task.plannedStartAt&&task.plannedEndAt&&task.plannedTimezone?[{task,index}]:[]);
   // The host accepts up to 256 instants. Keep pagination bounded too: two
@@ -49,6 +61,7 @@ async function plannedLabels(tasks,selectedDate) {
     ]));
     batch.forEach(({task,index},i)=>{
       const start=local[i*2],end=local[i*2+1];
+      localTimes.set(task.id,[start,end]);
       const startDate=start.date===selectedDate?'':`${shortDate(start.date,selectedDate)} `;
       const endDate=end.date===start.date?'':`${shortDate(end.date,selectedDate)} `;
       labels[index]=`计划 ${startDate}${start.time}–${endDate}${end.time}`;
@@ -106,6 +119,8 @@ export async function render({state={},event,formValues={},context={}}) {
   if(context.pageId==='app.views.today.overview')return overview(state,event,context);
   const today=await clock.today(),selectedDate=validDate(context.selectedDate??today),review=context.pageId==='app.views.today.review';
   if(event?.type==='review')await ui.navigate('app.views.today.review');
+  if(event?.type==='viewSchedule')await ui.navigate('app.schedule.home');
+  if(event?.type==='openCourse')await ui.navigate('app.schedule.occurrence',event.reference);
   if(state.selectedDate!==selectedDate){state.taskLimit=50;state.selectedDate=selectedDate;}
   let clearQuick=false;
   if(event?.type==='toggleQuick')state.quickExpanded=!state.quickExpanded;
@@ -136,7 +151,7 @@ export async function render({state={},event,formValues={},context={}}) {
     // A presentation failure must not turn an already committed write into an
     // apparent command failure or invite a duplicate submission.
     if(result) {
-      if(event.value)feedback([event.task.id]);
+      feedback([],[event.task.id]);
       try {await ui.notify({message:event.value?'任务已完成':'任务已重新打开',kind:'success',duration:1800});}catch(_) {}
     }
   }
@@ -169,25 +184,46 @@ export async function render({state={},event,formValues={},context={}}) {
   } else {
     if(state.project) children.push({...button(`返回项目 · ${state.project.name}`,{type:'back'}),key:'feed:back'});
     const taskLimit=state.taskLimit||50;
-    const tasks=await services.query(ref('task.list'),{limit:Math.min(10000,taskLimit+1),view:VIEW==='projects'?'all':VIEW,date:selectedDate,...(projectId?{projectId}: {})});
+    const tasks=await services.query(ref('task.list'),{limit:Math.min(10000,taskLimit+1),view:VIEW==='projects'?'all':VIEW,date:selectedDate,includeCompleted:true,...(projectId?{projectId}: {})});
     const projects=await services.query(ref('project.list'),{}),projectNames=new Map(projects.map(project=>[project.id,project.name]));
     const hasMore=tasks.length>taskLimit;
-    children.push({...section(selectedDate<today?'当日任务':'待办事项',hasMore?`${taskLimit}+`:tasks.length,{label:'添加任务',icon:'add',event:{type:'toggleQuick'}}),key:'feed:heading'});
-    children.push({...button('完成记录与复盘',{type:'review'}),key:'feed:review'});
-    if(!tasks.length)children.push({...label(selectedDate===today?'暂无今天待办或逾期任务':`${selectedDate} 没有安排任务`),key:'feed:empty'});
-    const visibleTasks=tasks.slice(0,taskLimit),planLabels=await plannedLabels(visibleTasks,selectedDate),dueLabels=await deadlineLabels(visibleTasks,selectedDate,today),doneLabels=await completionLabels(visibleTasks);
-    const completionZone=visibleTasks.some(task=>!task.completedAt&&!task.plannedTimezone)?await completionTimezone():null;
-    for(const [index,task] of visibleTasks.entries()) {
+    // One status-independent page preserves ordering and pagination on completion.
+    const allTasks=tasks.slice(0,taskLimit);
+    const taskTimes=new Map();
+    const planLabels=await plannedLabels(allTasks,selectedDate,taskTimes),dueLabels=await deadlineLabels(allTasks,selectedDate,today);
+    const courses=await courseFeed(selectedDate);
+    const pending=allTasks.filter(task=>!task.completedAt),done=allTasks.filter(task=>!!task.completedAt);
+    children.push({type:'sectionHeader',key:'feed:heading',compact:true,title:`${pending.length}${hasMore?'+':''} 项待办${courses.error?' · 课程待加载':courses.available?` · ${courses.items.length} 节课程`:''}${done.length?` · ${done.length} 项已完成`:''}`,action:{label:'添加任务',icon:'add',event:{type:'toggleQuick'}}});
+    if(courses.error)children.push({...label('课程暂时无法加载，请到课表查看'),key:'feed:course-error'});
+    const now=Date.parse(await clock.now());
+    const focus=selectedDate===today?courses.items.find(item=>item.startOffset<=0&&item.endOffset>0)||courses.items.find(item=>item.startOffset>0):null;
+    if(focus)children.push({...courseNode(focus),key:'feed:next-course',hideTime:true,eyebrow:`${focus.startOffset<=0?'正在上课':'下一节课'}  ${focus.startTime} - ${focus.endTime}`,badge:focus.startOffset>0&&focus.startOffset<=60?`还有 ${Math.ceil(focus.startOffset)} 分钟`:undefined});
+    const timed=[];
+    for(const course of courses.items)timed.push({at:course.startAt?Date.parse(course.startAt):now+course.startOffset*60000,id:'course:'+course.timetableId+':'+course.occurrenceId,node:courseNode(course)});
+    const unscheduled=[],otherTasks=[];
+    const completionZone=allTasks.some(task=>!task.completedAt&&!task.plannedTimezone)?await completionTimezone():null;
+    for(const [index,task] of allTasks.entries()) {
       const fields=(task.fieldDefinitions||[]).map(field=>({type:'row',children:[
         label((field.label||field.id)+': '+(Array.isArray(task.fields[field.key])?task.fields[field.key].join('、'):(task.fields[field.key]??'未设置'))),
         ...(field.commands?.set?[button('修改字段',{type:'field',task,field}),button('清除字段',{type:'clearField',task,field})]:[]),
       ]}));
-      children.push({type:'taskItem',key:task.id,title:task.title,completed:task.completed,
-        subtitle:[doneLabels[index],dueLabels[index],planLabels[index],projectNames.get(task.projectId),task.priority&&`优先级 ${task.priority}`].filter(Boolean).join(' · '),
+      const times=task.plannedDate===selectedDate?taskTimes.get(task.id):null;
+      const node={type:'taskItem',key:task.id,title:task.title,completed:task.completed,compact:true,
+        ...(times?{startTime:times[0].time,endTime:(times[1].date!==times[0].date?'次日 ':'')+times[1].time,colorKey:task.id}:{}),
+        subtitle:[task.completedAt?'已完成':null,dueLabels[index],times?null:planLabels[index],task.estimatedMinutes&&`${task.estimatedMinutes}分钟`,projectNames.get(task.projectId),task.priority&&`优先级 ${task.priority}`].filter(Boolean).join(' · '),
         ...completionControl(task,completionZone),openEvent:{type:'edit',task},
         ...(fields.length?{children:[{type:'disclosure',key:'task-fields:'+task.id,text:'扩展字段',children:fields}]}: {}),
-      });
+      };
+      if(times)timed.push({at:Date.parse(task.plannedStartAt),id:task.id,node});
+      else if(task.plannedStartAt)otherTasks.push(node);
+      else unscheduled.push(node);
     }
+    timed.sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id));
+    children.push(...timed.map(item=>item.node));
+    if(unscheduled.length)children.push({type:'sectionHeader',key:'feed:pending-heading',title:'待安排',count:unscheduled.length,compact:true},...unscheduled);
+    if(!allTasks.length&&!courses.items.length)children.push({...label(selectedDate===today?'暂无今天待办或逾期任务':`${selectedDate} 没有安排任务`),key:'feed:empty'});
+    if(otherTasks.length)children.push({type:'sectionHeader',key:'feed:other-heading',title:'其他任务',count:otherTasks.length,compact:true},...otherTasks);
+    children.push({type:'row',key:'feed:links',children:[...(courses.available?[{...button('查看课表',{type:'viewSchedule'}),variant:'text'}]:[]),{...button('完成记录与复盘',{type:'review'}),variant:'text'}]});
     if(hasMore)children.push({...button('加载更多任务',{type:'moreTasks'}),key:'feed:more'});
     children.push({...label(tasks.length?'完成一项，就少一份牵挂。':selectedDate===today?'把今天想做的事记下来。':'把这一天想做的事记下来。'),key:'feed:hint'});
     const addCommand={ref:ref('task.create'),input:{title:{bind:['formValues','quickTitle']},projectId:projectId||null,...(VIEW==='daily'?{plannedDate:selectedDate}:{})}};
@@ -198,7 +234,9 @@ export async function render({state={},event,formValues={},context={}}) {
       {type:'input',key:'quickTitle',text:state.project?`添加到${state.project.name}…`:'添加任务…',event:{type:'add'},command:addCommand},
       {...button('添加',{type:'add'}),command:addCommand},
     ]}});
+    const quick=children.pop();
+    children.splice(1,0,quick);
   }
-  return {state,clearForms:clearQuick?['quickTitle']:[],tree:{type:'keyedList',key:'task-feed',scope,
-    feedbackKey:state.feedback?.key,removeKeys:state.feedback?.removeKeys||[],highlightKeys:state.feedback?.highlightKeys||[],duration:220,children}};
+  return {state,clearForms:clearQuick?['quickTitle']:[],tree:{type:'keyedList',key:'task-feed',compact:true,scope,
+    feedbackKey:state.feedback?.key,removeKeys:state.feedback?.removeKeys||[],highlightKeys:state.feedback?.highlightKeys||[],duration:220,spacing:8,children}};
 }

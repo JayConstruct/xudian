@@ -14,7 +14,7 @@ import time
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'dist/verification'
+OUT = ROOT / 'dist/verification/emulator'
 
 @dataclass(frozen=True)
 class UiSnapshot:
@@ -168,7 +168,7 @@ def main():
               'installedApkSha256Before': installed_before,
               'installedApkSha256After': installed_after,
               'scriptUpdateAndRestartVerified': args.record_update}
-    OUT.mkdir(exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     (OUT / 'android-final-update.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
 

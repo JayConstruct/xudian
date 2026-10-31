@@ -703,7 +703,7 @@ def main():
     parser.add_argument('--serial', default='emulator-5554')
     parser.add_argument('--adb-host', default='127.0.0.1')
     parser.add_argument('--adb-port', default='5037')
-    parser.add_argument('--output', type=Path, default=ROOT / 'dist/verification/fresh-install')
+    parser.add_argument('--output', type=Path, default=ROOT / 'dist/verification/installation/fresh-install')
     parser.add_argument('--expected-schedule-version', default='1.7.0')
     parser.add_argument('--expected-importer-version', default='1.4.0')
     resumes = parser.add_mutually_exclusive_group()

@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.planner",
     "name": "任务规划",
-    "version": "1.7.4",
-    "hostApi": "^1.40.0",
+    "version": "1.10.0",
+    "hostApi": "^1.43.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -169,6 +169,36 @@
     },
     {
       "id": "series",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "id": "taskStates",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": true
+      }
+    },
+    {
+      "id": "taskContent",
       "schema": {
         "type": "object",
         "properties": {
@@ -1016,7 +1046,10 @@
             ]
           },
           "estimatedMinutes": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 1
           },
           "priority": {
@@ -1026,6 +1059,31 @@
           },
           "locked": {
             "type": "boolean"
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 300
+          },
+          "plannedStartAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plannedEndAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plannedTimezone": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1070,7 +1128,10 @@
               ]
             },
             "estimatedMinutes": {
-              "type": "integer",
+              "type": [
+                "integer",
+                "null"
+              ],
               "minimum": 1
             },
             "priority": {
@@ -1080,6 +1141,31 @@
             },
             "locked": {
               "type": "boolean"
+            },
+            "location": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 300
+            },
+            "plannedStartAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "plannedEndAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "plannedTimezone": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -1131,7 +1217,10 @@
                 ]
               },
               "estimatedMinutes": {
-                "type": "integer",
+                "type": [
+                  "integer",
+                  "null"
+                ],
                 "minimum": 1
               },
               "priority": {
@@ -1141,6 +1230,13 @@
               },
               "locked": {
                 "type": "boolean"
+              },
+              "location": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 300
               }
             },
             "required": [],
@@ -1202,7 +1298,10 @@
                   ]
                 },
                 "estimatedMinutes": {
-                  "type": "integer",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
                   "minimum": 1
                 },
                 "priority": {
@@ -1212,6 +1311,13 @@
                 },
                 "locked": {
                   "type": "boolean"
+                },
+                "location": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 300
                 }
               },
               "required": [],
@@ -1605,6 +1711,13 @@
             "items": {
               "type": "object"
             }
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 300
           }
         },
         "required": [
@@ -1661,6 +1774,13 @@
               "items": {
                 "type": "object"
               }
+            },
+            "location": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 300
             }
           },
           "required": [
@@ -1844,6 +1964,91 @@
         },
         "required": [
           "taskId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "planner.task.state",
+      "major": 1,
+      "handler": "taskState",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "planner.task.cancelled.list",
+      "major": 1,
+      "handler": "cancelledTasksList",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "array"
+      }
+    },
+    {
+      "id": "planner.task.setCancelled",
+      "major": 1,
+      "handler": "taskSetCancelled",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "expectedUpdatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "cancelled"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "planner.task.content",
+      "major": 1,
+      "handler": "taskContent",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
         ],
         "additionalProperties": false
       },

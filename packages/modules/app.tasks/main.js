@@ -47,13 +47,15 @@ async function normalizePlan(value,changes) {
 }
 const unexpired=day=>({any:[{field:'executionExpiresOn',op:'isNull'},{field:'executionExpiresOn',op:'gte',value:day}]});
 const associated=(day,today)=>({any:[{field:'plannedDate',op:'eq',value:day},{field:'dueDate',op:day===today?'lte':'eq',value:day}]});
-function dailyFilter(day,today) {
+function dailyFilter(day,today,includeCompleted=false) {
   const pending={all:[{field:'completedAt',op:'isNull'},unexpired(day),associated(day,today)]};
+  if(includeCompleted)return {any:[pending,{all:[{field:'completedAt',op:'notNull'},{any:[{field:'plannedDate',op:'eq',value:day},{field:'dueDate',op:'eq',value:day},{field:'actualCompletedOn',op:'eq',value:day}]}]}]};
   if(day>=today)return pending;
   return {any:[pending,{all:[{field:'completedAt',op:'notNull'},{any:[associated(day,today),{field:'actualCompletedOn',op:'eq',value:day}]}]}]};
 }
-function dailyMember(task,day,today) {
+function dailyMember(task,day,today,includeCompleted=false) {
   const linked=task.plannedDate===day||(day===today?task.dueDate!=null&&task.dueDate<=day:task.dueDate===day);
+  if(includeCompleted&&task.completedAt)return task.plannedDate===day||task.dueDate===day||task.actualCompletedOn===day;
   return task.completedAt?day<today&&(linked||task.actualCompletedOn===day):linked&&(task.executionExpiresOn==null||task.executionExpiresOn>=day);
 }
 function priority(p) { if(!Number.isInteger(p)||p<0||p>3) throw new Error('优先级必须在0–3之间'); }
@@ -68,18 +70,18 @@ async function* taskPages(options) {
   }
 }
 // Paged filtered reads for the date strip; no task extensions or project lookups.
-export async function taskDayCounts({dates}) {
+export async function taskDayCounts({dates,includeCompleted=false}) {
   if(!Array.isArray(dates)||!dates.length||dates.length>7||new Set(dates).size!==dates.length)throw new Error('请选择1至7个不同日期');
   dates.forEach(date=>{if(date==null)throw new Error('日期不存在');validDate(date);});
   const today=await clock.today(),conditions=['deletedAt','archivedAt','parentTaskId'].map(field=>({field,op:'isNull'}));
-  conditions.push({any:dates.map(day=>dailyFilter(day,today))});
+  conditions.push({any:dates.map(day=>dailyFilter(day,today,includeCompleted))});
   const days=dates.map(date=>({date,pending:0,completed:0,overdue:0,loadedPending:0,loadedCompleted:0,hasMore:false,truncated:false}));
   // Stream sorted pages: only counters and the first 50 statuses per day remain
   // in memory, even when the collection exceeds the host's per-query limit.
   for await(const records of taskPages({filter:{all:conditions},sort:taskSort})) {
     for(const task of records)for(const day of days) {
       const date=day.date;
-      if(!dailyMember(task,date,today))continue;
+      if(!dailyMember(task,date,today,includeCompleted))continue;
       const loaded=day.pending+day.completed<50;
       if(task.completedAt){day.completed++;if(loaded)day.loadedCompleted++;}
       else {day.pending++;if(loaded)day.loadedPending++;}
@@ -89,7 +91,7 @@ export async function taskDayCounts({dates}) {
   }
   return {today,days};
 }
-export async function taskList({filter,projectId,view='all',today,date,query='',offset=0,limit=10000}={}) {
+export async function taskList({filter,projectId,view='all',today,date,query='',offset=0,limit=10000,includeCompleted=false}={}) {
   if(!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>10000) throw new Error('分页参数无效');
   const conditions=[];
   if(filter)conditions.push(filter);
@@ -104,7 +106,7 @@ export async function taskList({filter,projectId,view='all',today,date,query='',
   if(view==='inbox')conditions.push({field:'projectId',op:'isNull'});
   if(view==='today') {today=today||await clock.today();validDate(today);conditions.push(dailyFilter(today,today));}
   // Historical dates include associated tasks and their actual completion day.
-  if(view==='daily')conditions.push(dailyFilter(selectedDate,currentDate));
+  if(view==='daily')conditions.push(dailyFilter(selectedDate,currentDate,includeCompleted));
   const options={filter:{all:conditions},sort:view==='completed'?[{field:'completedAt',direction:'desc'},{field:'id',direction:'asc'}]:taskSort};
   let tasks;
   if(query) {

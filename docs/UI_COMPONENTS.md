@@ -103,7 +103,7 @@ ui.component('ui.button@1', {
 
 API 1.12 支持 UI 包向这些分类注册自己的公开组件。`ui.examples()` 发现所有已启用 UI 包明确注册的示例；安装、更新和停用提供者时目录立即刷新。示例页通过 `componentExample` 在局部使用提供者的真实实现，浏览示例不改变全局界面风格。
 
-值格式、事件和新节点见 [SDK API 1.7](MODULE_SDK.md#api-17-的选择控件与组件示例)。原始设计与验收历史见 [修改方案归档](archive/UI_EXAMPLES_PLAN.md)。
+值格式、事件和新节点见 [SDK API 1.7](sdk/COMPONENTS.md#api-17-的选择控件与组件示例)。原始设计与验收历史见 [修改方案归档](archive/UI_EXAMPLES_PLAN.md)。
 
 
 ## 注册组件示例与跨模块消费（API 1.12）
@@ -142,11 +142,11 @@ ui.component('example.ui.compact.outlineButton@1', {
 
 对于 `ui.button@1` 等系统引用，普通 `ui.component` 遵循当前界面选择。目录的 `componentExample` 专门展示所标明提供者的实现；声明依赖不会改变系统引用的全局选择。公共按钮的 `props.variant` 支持 `tonal`、`filled`、`outlined`、`text`，包 recipe 显式设置 variant 时使用该实现的样式。
 
-API 1.14 新增每日概览、分区标题、日程条目和待办条目四个公共组件及独立演示。通过公共引用调用可跟随当前界面包；日期条以真实日期标记当天，日程与待办传入模块数据与事件。详细属性见 [日程与待办呈现](MODULE_SDK.md#api-114-的日程与待办呈现)。
+API 1.14 新增每日概览、分区标题、日程条目和待办条目四个公共组件及独立演示。通过公共引用调用可跟随当前界面包；日期条以真实日期标记当天，日程与待办传入模块数据与事件。详细属性见 [日程与待办呈现](sdk/DATE_CONTEXT.md#api-114-的日程与待办呈现)。
 
-API 1.16 为 `ui.dayOverview@1` 增加可选 `change` 日期事件。默认实现支持日期条、前后日、中文日期选择器和回今天，事件值为 `YYYY-MM-DD` 字符串；无事件的旧调用与界面包保持兼容。日期与模块内容的联动使用容器局部运行时上下文，见 [每日日期上下文](MODULE_SDK.md#api-116-的每日日期上下文)。
+API 1.16 为 `ui.dayOverview@1` 增加可选 `change` 日期事件。默认实现支持日期条、前后日、中文日期选择器和回今天，事件值为 `YYYY-MM-DD` 字符串；无事件的旧调用与界面包保持兼容。日期与模块内容的联动使用容器局部运行时上下文，见 [每日日期上下文](sdk/DATE_CONTEXT.md#api-116-的每日日期上下文)。
 
-API 1.17 可通过 `dateHeading: false` 隐藏概览的重复完整日期，保留日期选择操作；默认值为 `true`。根页面 `headerMode: 'date'` 在工作区或详情顶栏显示共享选中日，继续使用公共顶栏与受保护菜单，见 [日期顶栏](MODULE_SDK.md#api-117-的日期顶栏)。
+API 1.17 可通过 `dateHeading: false` 隐藏概览的重复完整日期，保留日期选择操作；默认值为 `true`。根页面 `headerMode: 'date'` 在工作区或详情顶栏显示共享选中日，继续使用公共顶栏与受保护菜单，见 [日期顶栏](sdk/DATE_CONTEXT.md#api-117-的日期顶栏)。
 
 ## 日期概览与工作区组合（API 1.18）
 
@@ -171,11 +171,19 @@ ui.component('ui.dayOverview@1', {
 });
 ```
 
-`days` 的数量来自业务调用方，组件不会查询数据。日程以选中日为中心显示五日条，通过 `app.tasks/task.dayCounts@1` 一次取得各日统计；历史完成状态、今日逾期口径及读取上限见 [SDK 五日概览与待办统计](MODULE_SDK.md#五日概览与待办统计)。界面包可利用这些可选属性调整呈现，旧 recipe 仍可使用已有字段或 `base` 默认实现。
+`days` 的数量来自业务调用方，组件不会查询数据。日程以选中日为中心显示五日条，通过 `app.tasks/task.dayCounts@1` 一次取得各日统计；历史完成状态、今日逾期口径及读取上限见 [SDK 五日概览与待办统计](sdk/DATE_CONTEXT.md#五日概览与待办统计)。界面包可利用这些可选属性调整呈现，旧 recipe 仍可使用已有字段或 `base` 默认实现。
 
-日期根容器可显式选择 `initializesRuntimeContext: true`，先建立 `selectedDate` 再挂载分区；默认关闭，已有容器保持兼容。内联内容首次统一显示，刷新保留原子树、草稿和滚动位置，并提供一处更新进度提示。门控条件与错误处理见 [SDK 日期容器的初始上下文](MODULE_SDK.md#日期容器的初始上下文)。这些等待、输入状态和业务交互规则由宿主管理，界面包无需实现异步协调。
+日期根容器可显式选择 `initializesRuntimeContext: true`，先建立 `selectedDate` 再挂载分区；默认关闭，已有容器保持兼容。内联内容首次统一显示，刷新保留原子树、草稿和滚动位置，并提供一处更新进度提示。门控条件与错误处理见 [SDK 日期容器的初始上下文](sdk/DATE_CONTEXT.md#日期容器的初始上下文)。这些等待、输入状态和业务交互规则由宿主管理，界面包无需实现异步协调。
 
-`workspaceAssistant` 是模块贡献槽位，不是界面包组件引用。助手是否支持当前页，由活动根模块、有效内联 sections 内容模块及递归依赖中的工具服务决定；宿主选择首个适用助手并传入页面上下文。“更多”工作区不显示该入口。工具目录可见性不授予调用权限，详细注册方式见 [SDK 工作区助手入口](MODULE_SDK.md#工作区助手入口)。
+`workspaceAssistant` 是模块贡献槽位，不是界面包组件引用。助手是否支持当前页，由活动根模块、有效内联 sections 内容模块及递归依赖中的工具服务决定；宿主选择首个适用助手并传入页面上下文。“更多”工作区不显示该入口。工具目录可见性不授予调用权限，详细注册方式见 [SDK 工作区助手入口](sdk/DATE_CONTEXT.md#工作区助手入口)。
+
+## 紧凑日程组件（API 1.44）
+
+现有 `dayOverview`、`sectionHeader`、`agendaItem` 和 `taskItem` 支持可选 `compact: true`，省略时保持原样。紧凑日期条使用活动点保留日期数量的语义信息，汇总由模块另行呈现。`agendaItem` 的 `hideTime`、`eyebrow`、`icon` 可组合为焦点提示；`taskItem` 的 `startTime`、`endTime` 可显示时间列，`colorKey` 与规划看板使用相同稳定配色，`color` 可覆盖该颜色。时间列在窄屏和大字体下改为上方文本，任务复选框与正文分别执行原 `change`、`open` 事件。
+
+日程模块负责查询任务和可选的 `app.schedule/schedule.query.todayFeed@1`，按实际 UTC 时刻混排课程与当日精确计划任务；其他日期的计划保留在“其他待办”，无精确时刻的任务放在“待安排”，完成记录独立呈现。课表缺失或停用时任务仍可使用；查询失败显示课程加载提示。课程模块保留独立 `todayFeed` 页面和只读服务，旧独立课程分区不再默认挂到日程，避免重复展示。公开 `daily` 槽继续接受其他模块贡献，用户的导航编排与业务数据保留。
+
+上述配置需要 APK 更新与 `hostApi: "^1.44.0"`，不能仅更新 JavaScript 后使用旧宿主。
 
 ## 原生页面与默认实现（API 1.15）
 

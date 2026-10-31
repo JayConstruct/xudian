@@ -1,6 +1,6 @@
 # 课表
 
-当前源码模块 `app.schedule` 为 **1.14.0**，最低宿主 API 为 **1.22.0**，数据版本为 1。课表作为独立 `.xmodule` 安装，不随当前客户端默认资源启用。源码与本地候选包不代表商店或设备已更新；更新方式见 [模拟器更新](EMULATOR_UPDATE.md) 或 [模块商店](MODULE_CATALOG.md)。
+模块版本与宿主兼容范围以 [模块清单](../packages/modules/app.schedule/module.json) 为准，数据版本为 1。课表作为独立 `.xmodule` 安装，不随当前客户端默认资源启用。源码与本地候选包不代表商店或设备已更新；更新方式见 [模拟器更新](EMULATOR_UPDATE.md) 或 [模块商店](MODULE_CATALOG.md)。
 
 ## 浏览与导航
 

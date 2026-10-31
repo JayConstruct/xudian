@@ -8,7 +8,7 @@
 
 1.4.0 需要先更新到 build37 客户端（宿主 API 1.9.0），再安装拾光兼容包；课表需1.6.1或更高版本。正方、青果、URP、超星均从「通用系统导入」选择，无需另装正方模块。其他学校模块的公共接入协议见 [SHIGUANG_ADAPTER_API.md](../SHIGUANG_ADAPTER_API.md)。特殊作息和真实学校页面仍需按说明核对。
 
-当前客户端build36按ABI分别交付：[ARM64 APK](../../client/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk)、[x86_64 APK](../../client/build/app/outputs/flutter-apk/app-x86_64-release.apk)，包含对应ABI的Flutter与QuickJS引擎。修复仅升级依赖模块时复用依赖未激活的问题，完整最终图按依赖顺序启动；失败完整恢复原版本与数据。
+当前客户端build36按ABI分别交付：ARM64 APK（当时的构建路径：`../../client/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`，当前本机已无该文件）、[x86_64 APK](../../client/build/app/outputs/flutter-apk/app-x86_64-release.apk)，包含对应ABI的Flutter与QuickJS引擎。修复仅升级依赖模块时复用依赖未激活的问题，完整最终图按依赖顺序启动；失败完整恢复原版本与数据。
 
 Android 中填写教务登录网址并打开教务浏览器，在网页内登录，进入个人课表查询，选择学年学期并查询，再点击「执行采集」。默认脚本要求页面有 jQuery，支持上游的表格／列表视图选择器，并不适用于所有版本的正方页面。采集后选择新建或已有课表，确认名称、来源标识、第一教学周周一、周数、时区及每周起始日。来源标识使用稳定的「学校/账号别名/学年学期」，不要包含密码；重复导入同一来源保持一致，不同账号或学期使用不同标识。
 
@@ -26,7 +26,7 @@ Android 中填写教务登录网址并打开教务浏览器，在网页内登录
 
 选择另一学校、粘贴另一脚本或恢复默认脚本会清除旧草稿及来源配置。取消新采集或配置可保留此前草稿，页面会明确说明；不会把未完成的新采集视为已导入。
 
-学校目录来自上游固定提交 `c586957c077506a5182105ae3961ceff4d0223ce`。269项均通过脚本语法、桥接直接方法引用及浏览器脚本大小检查；成都银杏酒店管理学院和东北大学研究生的未修改脚本通过模拟数据执行测试。真实QuickJS验证目录分页、全部5个脚本分包及学校选择，320px屏宽和1.6倍字号验证界面。静态特征包含25项自定义时刻、5项组合作息标记，不能据此推算实际可用学校数量；尚未逐校使用真实网站或账号验收。审计见 [兼容性记录](../../dist/verification/shiguang-warehouse-compatibility.json)。
+学校目录来自上游固定提交 `c586957c077506a5182105ae3961ceff4d0223ce`。269项均通过脚本语法、桥接直接方法引用及浏览器脚本大小检查；成都银杏酒店管理学院和东北大学研究生的未修改脚本通过模拟数据执行测试。真实QuickJS验证目录分页、全部5个脚本分包及学校选择，320px屏宽和1.6倍字号验证界面。静态特征包含25项自定义时刻、5项组合作息标记，不能据此推算实际可用学校数量；尚未逐校使用真实网站或账号验收。审计见 [兼容性记录](../../dist/verification/shiguang/legacy-20261029/shiguang-warehouse-compatibility.json)。
 
 上游脚本及接口参考版本、作者与许可见 [UPSTREAM.md](../../packages/modules/app.import.shiguang/UPSTREAM.md) 和 [MIT 许可](../../packages/modules/app.import.shiguang/THIRD_PARTY_LICENSE.txt)。脚本不会自动从远端更新，升级使用新的有版本模块包。
 
@@ -44,16 +44,16 @@ flutter analyze --no-pub
 
 19项 JavaScript 测试和32项 Flutter 回归测试通过，静态分析无问题。覆盖真实 QuickJS 转换、跨模块公共桥接调用、学校模块交接与取消、来源调用身份、课表接收计划、兼容模块不能提交、重复导入更新周次、未保存预览、非法输入与不支持的作息。另有14项安装器回归测试通过，覆盖多级复用依赖、新版候选依赖及失败回滚；build36 Release三种ABI构建通过。当前模拟器复验：`source scripts/dev-env.sh` 后运行 `python3 scripts/module_host/verify_shiguang_catalog.py --install`，只更新兼容模块，使用本地模拟页面，不访问真实学校或账号，不保存采集课程。输入学校缩写和网址时使用英文键盘，避免拼音组合文本尚未提交。
 
-Android x86_64 模拟器已验证默认上游脚本在本地测试课表的 DOM 解析、单周展开、桥接返回配置流程及取消操作；测试页面只实现解析器所需的 jQuery 调用，不代表真实学校页面。截图见 [浏览器](../../dist/verification/android-shiguang-browser.png) 和 [采集后配置](../../dist/verification/android-shiguang-captured-config.png)，记录见 [shiguang-browser.json](../../dist/verification/shiguang-browser.json)。可追加 `--release` 在正式 APK 上复验。真实学校账号登录、ARM64 真机和 Windows 运行未验收。
+Android x86_64 模拟器已验证默认上游脚本在本地测试课表的 DOM 解析、单周展开、桥接返回配置流程及取消操作；测试页面只实现解析器所需的 jQuery 调用，不代表真实学校页面。截图见 [浏览器](../../dist/verification/platform/legacy-20261029/android-shiguang-browser.png) 和 [采集后配置](../../dist/verification/platform/legacy-20261029/android-shiguang-captured-config.png)，记录见 [shiguang-browser.json](../../dist/verification/shiguang/legacy-20261029/shiguang-browser.json)。可追加 `--release` 在正式 APK 上复验。真实学校账号登录、ARM64 真机和 Windows 运行未验收。
 
-build34 Release 已在同一模拟器复验：普通 HTTPS 网页 `https://example.com` 加载成功、网址输入保持原文、主页面 HTTP 404 和 `ERR_NAME_NOT_RESOLVED` 提示持续保留、失败页面禁用采集、后续成功加载恢复采集，并完成本地课表采集和取消。普通网页截图见 [public-page](../../dist/verification/android-shiguang-browser-public-page.png)，错误截图见 [dns-error](../../dist/verification/android-shiguang-browser-dns-error.png)。此次设备网络故障是模拟器 Wi-Fi 已开启但未连接；重新连接 AndroidWifi 后恢复域名解析。测试网络会对不存在的域名返回 fake-IP，故 DNS 错误用含空标签的 `xudian..invalid` 触发。复验命令：`python3 scripts/module_host/verify_shiguang_browser.py --install --release --public-url https://example.com`。
+build34 Release 已在同一模拟器复验：普通 HTTPS 网页 `https://example.com` 加载成功、网址输入保持原文、主页面 HTTP 404 和 `ERR_NAME_NOT_RESOLVED` 提示持续保留、失败页面禁用采集、后续成功加载恢复采集，并完成本地课表采集和取消。普通网页截图见 [public-page](../../dist/verification/platform/legacy-20261029/android-shiguang-browser-public-page.png)，错误截图见 [dns-error](../../dist/verification/platform/legacy-20261029/android-shiguang-browser-dns-error.png)。此次设备网络故障是模拟器 Wi-Fi 已开启但未连接；重新连接 AndroidWifi 后恢复域名解析。测试网络会对不存在的域名返回 fake-IP，故 DNS 错误用含空标签的 `xudian..invalid` 触发。复验命令：`python3 scripts/module_host/verify_shiguang_browser.py --install --release --public-url https://example.com`。
 
-1.2.0 已在build36模拟器完成模块升级、学校缩写搜索、网址回填及未修改YXHMC官方脚本采集，确认具名校验通过、返回学期配置、取消不保存。网页fetch仅返回本地模拟数据；原有课表界面与上次验收完全一致。取消后的键盘恢复导致自动检查一度看不到底部提示，关闭键盘后完成实机检查，复验工具已加入该处理。记录见 [模拟器验证](../../dist/verification/shiguang-warehouse-emulator.json)、[学校搜索截图](../../dist/verification/android-shiguang-school-search.png) 和 [取消状态截图](../../dist/verification/android-shiguang-warehouse-cancelled.png)。
+1.2.0 已在build36模拟器完成模块升级、学校缩写搜索、网址回填及未修改YXHMC官方脚本采集，确认具名校验通过、返回学期配置、取消不保存。网页fetch仅返回本地模拟数据；原有课表界面与上次验收完全一致。取消后的键盘恢复导致自动检查一度看不到底部提示，关闭键盘后完成实机检查，复验工具已加入该处理。记录见 [模拟器验证](../../dist/verification/shiguang/legacy-20261029/shiguang-warehouse-emulator.json)、[学校搜索截图](../../dist/verification/platform/legacy-20261029/android-shiguang-school-search.png) 和 [取消状态截图](../../dist/verification/platform/legacy-20261029/android-shiguang-warehouse-cancelled.png)。
 
 1.3.0 层级与归因验证：14项学校目录／页面测试通过（包含320px屏宽、1.6倍字体），与浏览器和课表导入联合回归共24项通过，JavaScript兼容测试19项通过。模拟器界面复验工具：`python3 scripts/module_host/verify_shiguang_hierarchy.py`，不执行浏览器脚本或写入课程。学校列表只展示学校名和分类／入口数量，详情显示该校各入口、说明、维护者和原始脚本Github地址；关于页的地址和完整许可均可长按复制。
 
-最终1.3.1统一使用宿主支持的图标，校内／WebVPN入口及首页选项对齐一致。已在原build36客户端中只更新模块，实机验证学校合并、详情说明、无结果通用入口、源码地址与致谢许可；最终首页及通用／关于页再次核对。记录见 [层级验证](../../dist/verification/shiguang-hierarchy-emulator.json)、[首页截图](../../dist/verification/android-shiguang-1.3-home.png)、[学校搜索](../../dist/verification/android-shiguang-1.3-schools.png) 和 [关于与致谢](../../dist/verification/android-shiguang-1.3-about.png)。
+最终1.3.1统一使用宿主支持的图标，校内／WebVPN入口及首页选项对齐一致。已在原build36客户端中只更新模块，实机验证学校合并、详情说明、无结果通用入口、源码地址与致谢许可；最终首页及通用／关于页再次核对。记录见 [层级验证](../../dist/verification/shiguang/legacy-20261029/shiguang-hierarchy-emulator.json)、[首页截图](../../dist/verification/platform/legacy-20261029/android-shiguang-1.3-home.png)、[学校搜索](../../dist/verification/platform/legacy-20261029/android-shiguang-1.3-schools.png) 和 [关于与致谢](../../dist/verification/platform/legacy-20261029/android-shiguang-1.3-about.png)。
 
 1.4.0 合并模块与 App 的返回操作：左上角箭头与 Android 系统返回均返回实际上一层，首页才退出模块。顶栏随学校列表、学校详情、通用系统、导入结果和关于与致谢变化，内容不再重复标题或返回按钮。学校搜索、分页、网址和未保存草稿保留；详情打开致谢后返回原详情。
 
-客户端 build37 与模块1.4.0一起验证：608 项 Flutter 测试、19 项 JavaScript 兼容测试及21 项发布工具测试通过，静态分析无问题，三个 Android ABI 的 release APK 构建通过。导航测试使用真实模块详情路由，覆盖320像素／1.6倍字体、顶栏及系统返回、搜索保留和原有课表记录不变。汇总见 [检查记录](../../dist/verification/shiguang-navigation-checks.json)。模拟器导航复验命令为 `python3 scripts/module_host/verify_shiguang_navigation.py`，不连接学校、不保存课程。
+客户端 build37 与模块1.4.0一起验证：608 项 Flutter 测试、19 项 JavaScript 兼容测试及21 项发布工具测试通过，静态分析无问题，三个 Android ABI 的 release APK 构建通过。导航测试使用真实模块详情路由，覆盖320像素／1.6倍字体、顶栏及系统返回、搜索保留和原有课表记录不变。汇总见 [检查记录](../../dist/verification/shiguang/legacy-20261029/shiguang-navigation-checks.json)。模拟器导航复验命令为 `python3 scripts/module_host/verify_shiguang_navigation.py`，不连接学校、不保存课程。

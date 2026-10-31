@@ -119,5 +119,5 @@
     "Public fixed-signature APKs verified separately; emulator retains its existing development signature and data",
     "No ARM physical-device or native Windows runtime acceptance"
   ],
-  "localEvidence": "dist/verification/release-20261022-beta16/"
+  "localEvidence": "dist/verification/releases/release-20261022-beta16/"
 }

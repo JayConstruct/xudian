@@ -1,6 +1,6 @@
 # 全局 Toast 规范
 
-Toast 是宿主统一的短暂操作反馈。原生页面使用 `AppToast.show`，脚本页面使用 `ui.notify`；两者共用顶部浮层、关闭与计时逻辑，通过 `ui.notification@1` 接入当前界面包。组件契约见 [公共 UI 与界面包](../UI_COMPONENTS.md)，脚本权限与参数校验见 [SDK](../MODULE_SDK.md#api-112-的-ui-偏好提示和过渡动画)。
+Toast 是宿主统一的短暂操作反馈。原生页面使用 `AppToast.show`，脚本页面使用 `ui.notify`；两者共用顶部浮层、关闭与计时逻辑，通过 `ui.notification@1` 接入当前界面包。组件契约见 [公共 UI 与界面包](../UI_COMPONENTS.md)，脚本权限与参数校验见 [SDK](../sdk/COMPONENTS.md#api-112-的-ui-偏好提示和过渡动画)。
 
 ## 场景与内容
 

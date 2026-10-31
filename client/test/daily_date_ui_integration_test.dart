@@ -63,16 +63,21 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 void _expectCourseSummary(int count) {
-  expect(find.byType(AgendaItem), findsOneWidget);
-  expect(find.text('全部课程（$count）'), findsOneWidget);
+  final rows = testerAgendaRows();
+  expect(rows.where((row) => !row.hideTime), hasLength(count));
 }
+
+Iterable<AgendaItem> testerAgendaRows() => find
+    .byType(AgendaItem)
+    .evaluate()
+    .map((element) => element.widget as AgendaItem);
 
 Future<void> _until(
   WidgetTester tester,
   bool Function() ready, {
   String? reason,
 }) async {
-  for (var frame = 0; frame < 100 && !ready(); frame++) {
+  for (var frame = 0; frame < 300 && !ready(); frame++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 10)),
     );
@@ -127,7 +132,7 @@ bool _hasPreparedDate(WidgetTester tester, ModuleHost host, String date) {
     final page = element.widget as ScriptPage;
     return page.embedded && page.pageContext['selectedDate'] is String;
   });
-  if (renderers.length < 3) return false;
+  if (renderers.length < 2) return false;
   return renderers.every((element) {
     final page = element.widget as ScriptPage;
     final dynamic state = (element as StatefulElement).state;
@@ -290,13 +295,6 @@ void main() {
       expect(find.text('今天的任务'), findsOneWidget);
       expect(find.text('明天的任务'), findsNothing);
       _expectCourseSummary(3);
-      await tester.tap(find.text('全部课程（3）'));
-      await _settle(tester);
-      expect(find.byType(AgendaItem), findsNWidgets(3));
-      await tester.ensureVisible(find.text('收起课程'));
-      await tester.tap(find.text('收起课程'));
-      await _settle(tester);
-      _expectCourseSummary(3);
       await tester.ensureVisible(find.byTooltip('添加任务'));
       await tester.tap(find.byTooltip('添加任务'));
       await _settle(tester);
@@ -376,8 +374,18 @@ void main() {
       expect(saved['updatedAt'], isNot(created['updatedAt']));
       expect(
         createdRow,
-        findsNothing,
-        reason: 'The selected future date only shows pending tasks after the saved completion.',
+        findsOneWidget,
+        reason: 'The completed task remains on its original planned date.',
+      );
+      expect(tester.widget<DailyTaskItem>(createdRow).completed, isTrue);
+      expect(
+        tester
+            .widget<Text>(
+              find.descendant(of: createdRow, matching: find.text('保留草稿并安排明天')),
+            )
+            .style
+            ?.decoration,
+        TextDecoration.lineThrough,
       );
       expect(find.text('明天的任务'), findsOneWidget);
       expect(
@@ -890,7 +898,10 @@ void main() {
         expect(find.text('今天的任务').hitTestable(), findsNothing);
         expect(find.byType(AgendaItem).hitTestable(), findsNothing);
         expect(find.text('今天的任务', skipOffstage: false), findsOneWidget);
-        expect(find.byType(AgendaItem, skipOffstage: false), findsOneWidget);
+        expect(
+          find.byType(AgendaItem, skipOffstage: false),
+          findsNWidgets(courseWidgets.length),
+        );
         expect(find.semantics.byLabel('今天的任务'), findsNothing);
       }
       // The header permits an ABA reversal while the wave's date band is inert.
@@ -992,12 +1003,13 @@ void main() {
       );
       await _until(
         tester,
-        () => find
-            .text('2026-10-13 没有安排任务', skipOffstage: false)
-            .evaluate()
-            .isNotEmpty,
-        reason: 'The task query should finish while the course query is held.',
+        () =>
+            DateRevealScope.read(tester.element(find.byType(DayOverview)))!
+                .isPreparing,
+        reason: 'The mixed agenda must wait while its course query is held.',
       );
+      await tester.pump();
+      await tester.pump();
       expect(strip.hitTestable(), findsNothing);
       expect(find.byTooltip('前一天').hitTestable(), findsOneWidget);
       expect(find.byTooltip('后一天').hitTestable(), findsOneWidget);
@@ -1052,7 +1064,8 @@ void main() {
       courseGate.complete();
       await _settle(tester);
       expect(find.text('今天的任务'), findsNothing);
-      expect(find.text('2026-10-13 没有安排任务'), findsOneWidget);
+      expect(find.byType(DailyTaskItem), findsNothing);
+      _expectCourseSummary(3);
       expect(
         tester.widget<DayOverview>(find.byType(DayOverview)).selectedDate,
         '2026-10-13',
@@ -1263,7 +1276,9 @@ void main() {
       await tester.tap(find.byTooltip('后一天'));
       await _until(
         tester,
-        () => find.text('明天的任务', skipOffstage: false).evaluate().isNotEmpty,
+        () =>
+            DateRevealScope.read(tester.element(find.byType(DayOverview)))!
+                .isPreparing,
       );
       final reveal = DateRevealScope.read(
         tester.element(find.byType(DayOverview)),

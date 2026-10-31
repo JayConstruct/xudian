@@ -94,5 +94,5 @@
     "Hosted runner timing varies; these are single cold/cache-hit observations",
     "No new app tag was published for this workflow-only validation; existing isolated signing tests passed"
   ],
-  "localEvidence": "dist/verification/ci-speed-20261022/"
+  "localEvidence": "dist/verification/host/ci-speed-20261022/"
 }

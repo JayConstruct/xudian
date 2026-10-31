@@ -1,3 +1,4 @@
+import {cancelledTaskIds} from './cancellation.js';
 import {services, clock} from '@xudian/sdk';
 import {add, canonical, intervalsOverlap} from './engine.js';
 
@@ -27,7 +28,7 @@ function fact(target, kind, occupied) {
     startAt: new Date(occupied.startAt).toISOString(), endAt: new Date(occupied.endAt).toISOString()};
 }
 async function overlaps(batch, availability) {
-  const restored = restoration(batch);
+  const restored = restoration(batch), cancelled = await cancelledTaskIds();
   if (!restored.length) return [];
   const finalPlans = batch.changes.map(change => planned(change.before)).filter(Boolean);
   const affected = new Set(batch.changes.map(change => change.taskId));
@@ -39,7 +40,7 @@ async function overlaps(batch, availability) {
     };
     for (const other of finalPlans) if (target.id !== other.id) addOverlap('task', other);
     const tasks = await services.query(taskRef('task.range'), {startAt: target.startAt, endAt: target.endAt});
-    for (const task of tasks) if (!affected.has(task.id)) addOverlap('task', planned(task));
+    for (const task of tasks) if (!affected.has(task.id) && !cancelled.has(task.id)) addOverlap('task', planned(task));
     // A course's civil date can lie on either side of the UTC date. Read the
     // same bounded inclusive ranges when capturing and checking a restoration.
     const from = add(target.startAt.slice(0, 10), -1), to = add(target.endAt.slice(0, 10), 1);

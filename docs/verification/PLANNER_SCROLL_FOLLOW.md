@@ -31,6 +31,6 @@
 
 两组共8个检查点均得到相同结果：表头及课程块的位移分别与手指累计位移完全一致，停手后位置不变，纵向坐标不变。反向移动无需重新按下，布局和现有任务、课程数据保留。验收结束恢复今天居中、调整关闭及浮层收起，并再次读取APK摘要，与本机构建一致。
 
-截图、界面节点和检查结果位于`dist/verification/planner-follow-20261020/`，汇总为`acceptance.json`。安装报告为`.cache/emulator-update/latest-success.json`；日志为`.cache/planner-held-gesture-before.log`、`.cache/planner-held-gesture-after.log`、`.cache/planner-follow-emulator-update.log`、`.cache/planner-follow-ux-retest.log`、`.cache/planner-follow-emulator-final.log`和`.cache/planner-held-follow-ui.log`。当前源码输入指纹与安装构建一致。
+截图、界面节点和检查结果位于`dist/verification/planner/planner-follow-20261020/`，汇总为`acceptance.json`。验收时已核对源码输入指纹与安装构建一致，后续发布证据见上方 beta.10 记录。
 
 本次证明了上述按住、停手和反向拖动场景的位置跟随，不将Widget测试或静态截图宣称为真实设备帧率测试。ARM真机、Windows及其他可能的渲染卡顿尚未验证。

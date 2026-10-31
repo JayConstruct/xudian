@@ -26,18 +26,7 @@ Android 检查工作流支持 `v*` tag 触发。正式版使用 `vMAJOR.MINOR.PA
 
 为使去重在计划阶段命中，发布时先在待推送提交上创建对应版本标签，再同时推送 main 和标签，例如 `git push --atomic origin main refs/tags/v0.2.0-beta.14`（替换为实际版本）。已经先行启动的 main 检查会继续执行。
 
-在 GitHub 的 `Settings → Environments` 创建 `android-release`，在该 Environment 中配置四个 secrets：
-
-- `ANDROID_KEYSTORE_BASE64`：固定 keystore 的 Base64 内容。
-- `ANDROID_KEYSTORE_PASSWORD`：keystore 密码。
-- `ANDROID_KEY_ALIAS`：签名别名。
-- `ANDROID_KEY_PASSWORD`：签名密钥密码。
-
-同一 Environment 还需配置变量 `ANDROID_SIGNING_CERT_SHA256`，填入这把密钥的公开证书 SHA-256 指纹（64 位十六进制，也接受冒号分隔和大写）。每个 ABI 签名后都必须验证签名有效且指纹匹配；缺少配置、密钥解码／签名失败或指纹不符时停止发布，不回退临时签名。
-
-编译、依赖和测试任务不读取任何签名 secrets，生成的 tag 候选包仅供后续签名。独立 GitHub 托管 runner 的签名任务不检出仓库、不执行应用、Gradle 或测试代码，只运行 Android 官方签名工具。密钥以仅当前用户可读写的权限临时解码，密码通过环境变量传入工具，步骤退出时删除密钥；只上传明确列出的已签名 APK、摘要和源码提交号。工作流 Action 使用完整提交 SHA 固定。分支／PR 构建仍为开发签名，不能作为固定签名更新包分发。
-
-私钥生成、Environment 的 tag 限制、备份与泄露预防见 [Android 签名保管](ANDROID_SIGNING.md)。本机发布构建仍可设置 `XUDIAN_KEYSTORE_PATH`、`XUDIAN_KEYSTORE_PASSWORD`、`XUDIAN_KEY_ALIAS`、`XUDIAN_KEY_PASSWORD` 环境变量；普通本机开发构建继续使用开发签名。已有开发签名安装不会自动转换为固定签名。
+签名 Environment、secrets、公开证书指纹、隔离 runner 及本机 `XUDIAN_KEYSTORE_*` 配置统一见 [Android 签名保管](ANDROID_SIGNING.md)。签名配置缺失或验证失败会停止发布，不回退开发签名；普通分支／PR 构建仍为开发签名，不能作为固定证书更新包分发。
 
 正式发布步骤（示例）：将 `client/pubspec.yaml` 的语义版本改为 `0.2.0`，提交并合入主分支，确认 Environment 的签名 secrets 和指纹已配置，再创建和推送 `v0.2.0` tag。tag 触发流程后，安装 `0.1.x` 的用户即可查到正式更新；能否覆盖仍取决于原安装签名。测试版则先将版本改为如 `0.2.0-beta.1`，提交后推送同名 `v0.2.0-beta.1` 标签；只有签名验证和发布任务成功并附带安装包，才算完成发布。
 

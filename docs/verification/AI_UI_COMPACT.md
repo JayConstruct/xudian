@@ -17,4 +17,4 @@ AI 对话采用宿主主题的14px正文、12px辅助文字、紧凑消息间距
 
 模拟器实际打开并检查最终聊天、两处设置入口、模型连接、连接编辑后取消、模式选择后取消、两层系统返回及设置返回后的草稿。重启后核对原有模型及历史仍在，临时验收草稿已移除，没有发送聊天或清空既有记录。模拟器当前使用浮动输入法，已核对输入和发送启用；未在设备上覆盖底部停靠全键盘状态，临时输入法显示设置已恢复。
 
-最终更新日志 `.cache/ai-ui-emulator-final-update.log`、统一结果 `.cache/emulator-update/latest-success.json`；页面截图、XML及汇总位于 `dist/verification/ai-ui-20261018/`，最终聊天为 `19-final-restarted-chat.png`，设置为 `11-final-settings-from-chat.png`、`17-final-settings-from-app.png`，连接为 `12-final-connection.png`。这些本机产物不纳入提交。
+页面截图、XML及汇总位于 `dist/verification/ai/ai-ui-20261018/`，最终聊天为 `19-final-restarted-chat.png`，设置为 `11-final-settings-from-chat.png`、`17-final-settings-from-app.png`，连接为 `12-final-connection.png`。这些本机产物不纳入提交。

@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-29",
+  "scope": "本机 dist 目录、图片设计稿存储规则及产物输出路径",
+  "movedFiles": 4830,
+  "archivedRepositoryCheckouts": 1,
+  "designFilesArchived": 69,
+  "designTopics": 13,
+  "removedDownloadChunks": 305,
+  "removedDuplicateDeliveryZips": 1,
+  "redundantBytesFreed": 457140904,
+  "retainedApks": 99,
+  "integrity": {
+    "migratedFilesChecked": 4830,
+    "contentOrMtimeErrors": [],
+    "runtimeAndPublishedFilesChecked": 398,
+    "runtimeOrPublishedChanges": [],
+    "priorTestEditsPreserved": true,
+    "allPlannedDeletionsAbsent": true
+  },
+  "candidateSnapshot": {
+    "module": "app.planner",
+    "packageVersion": "1.7.2",
+    "sourceVersion": "1.9.1",
+    "repackedOrInstalled": false
+  },
+  "checks": {
+    "pythonTests": 241,
+    "flutterIconTests": 5,
+    "designStorageCliChecks": 29,
+    "historicalDesignBatches": 13,
+    "warehouseStaticAdapters": 269,
+    "repositoryBoundaries": "passed",
+    "plannerFixturePackaging": "passed",
+    "scheduleVerificationUpdatePackaging": "passed; identical bytes",
+    "actualIconPreviewOutput": "passed",
+    "gitDiffCheck": "passed",
+    "markdownLinks": 402
+  },
+  "emulator": {
+    "status": "passed",
+    "installedApkUnchanged": true,
+    "installedApkSha256": "02c8bd8460addca862b2a42818715404852ce39ce157ebb6bba43fbdf9dadf39",
+    "versionCode": 4212,
+    "screenshot": "dist/verification/emulator/directory-output-20261029.png",
+    "xml": "dist/verification/emulator/directory-output-20261029.xml",
+    "screenshotSha256": "fe221ffe10e6f1108dd387d6919dad334a38c96aeef5505f02ff043e0d2e1b60",
+    "installedOrUpdated": false,
+    "scope": "Actual Emulator.record output path only",
+    "openedPage": "任务规划",
+    "functionalReleaseAcceptance": false
+  },
+  "runtimeArtifactsChanged": false,
+  "newAppOrModuleRelease": false,
+  "detailsDirectory": "dist/verification/repository/dist-organization-20261029",
+  "designPolicy": "docs/DESIGN_ARTIFACTS.md",
+  "recovery": "plan.json records source/destination/digests and byte ranges; ZIP members retained, rebuilt ZIP digest may differ"
+}

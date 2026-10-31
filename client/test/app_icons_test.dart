@@ -193,7 +193,8 @@ void main() {
   );
 
   test('produce a reviewable vector contact sheet', () async {
-    const width = 600, height = 450;
+    const width = 600;
+    final height = ((AppGlyph.values.length + 7) ~/ 8) * 86;
     final fontFile = File('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
     final hasLabelFont = await fontFile.exists();
     if (hasLabelFont) {
@@ -234,7 +235,7 @@ void main() {
     }
     final picture = recorder.endRecording();
     final raster = await picture.toImage(width, height);
-    final output = File('../dist/verification/app-icons-preview.png');
+    final output = File('../dist/verification/ui/app-icons/current-preview.png');
     output.parent.createSync(recursive: true);
     output.writeAsBytesSync(
       (await raster.toByteData(format: ui.ImageByteFormat.png))!.buffer

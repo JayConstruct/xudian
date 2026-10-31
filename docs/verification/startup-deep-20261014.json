@@ -59,7 +59,7 @@
     {
       "name": "baseline-ready",
       "conditions": "build104 regular release, retained existing device state; 10 trials",
-      "localReport": "dist/verification/startup-deep-20261014/baseline-ready.json",
+      "localReport": "dist/verification/performance/startup-deep-20261014/baseline-ready.json",
       "complete": true,
       "requestedRuns": 10,
       "completedRuns": 10,
@@ -99,7 +99,7 @@
     {
       "name": "baseline-diagnostic-ready",
       "conditions": "build105 diagnostic, validation before full phase capture",
-      "localReport": "dist/verification/startup-deep-20261014/baseline-diagnostic-ready.json",
+      "localReport": "dist/verification/performance/startup-deep-20261014/baseline-diagnostic-ready.json",
       "complete": true,
       "requestedRuns": 5,
       "completedRuns": 5,
@@ -139,7 +139,7 @@
     {
       "name": "baseline-phases",
       "conditions": "build105 diagnostic baseline; 10 trials",
-      "localReport": "dist/verification/startup-deep-20261014/baseline-phases.json",
+      "localReport": "dist/verification/performance/startup-deep-20261014/baseline-phases.json",
       "complete": true,
       "requestedRuns": 10,
       "completedRuns": 10,
@@ -747,7 +747,7 @@
     {
       "name": "candidate-phases",
       "conditions": "build106 diagnostic exploratory; Flutter full tests concurrently running",
-      "localReport": "dist/verification/startup-deep-20261014/candidate-phases.json",
+      "localReport": "dist/verification/performance/startup-deep-20261014/candidate-phases.json",
       "complete": true,
       "requestedRuns": 10,
       "completedRuns": 10,
@@ -1371,7 +1371,7 @@
     {
       "name": "candidate-phases-idle",
       "conditions": "build106 diagnostic after Flutter full suite; Python tools briefly running during the group",
-      "localReport": "dist/verification/startup-deep-20261014/candidate-phases-idle.json",
+      "localReport": "dist/verification/performance/startup-deep-20261014/candidate-phases-idle.json",
       "complete": true,
       "requestedRuns": 10,
       "completedRuns": 10,
@@ -1995,7 +1995,7 @@
     {
       "name": "candidate-phases-repeat20",
       "conditions": "build106 diagnostic exploratory; final APK compilation overlapped this group",
-      "localReport": "dist/verification/startup-deep-20261014/candidate-phases-repeat20.json",
+      "localReport": "dist/verification/performance/startup-deep-20261014/candidate-phases-repeat20.json",
       "complete": true,
       "requestedRuns": 20,
       "completedRuns": 20,
@@ -2619,7 +2619,7 @@
     {
       "name": "final-ready20",
       "conditions": "build107 regular release; incomplete because emulator exited at trial11",
-      "localReport": "dist/verification/startup-deep-20261014/final-ready20.json",
+      "localReport": "dist/verification/performance/startup-deep-20261014/final-ready20.json",
       "complete": false,
       "requestedRuns": 20,
       "completedRuns": 10,
@@ -2671,7 +2671,7 @@
     {
       "name": "final-ready10-restarted",
       "conditions": "build107 regular release after emulator restart and one uncounted first launch; no concurrent build/test",
-      "localReport": "dist/verification/startup-deep-20261014/final-ready10-restarted.json",
+      "localReport": "dist/verification/performance/startup-deep-20261014/final-ready10-restarted.json",
       "complete": true,
       "requestedRuns": 10,
       "completedRuns": 10,

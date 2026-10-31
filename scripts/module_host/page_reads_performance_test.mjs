@@ -22,11 +22,12 @@ function local({utc,zone}) {
   const values=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(utc)).map(part=>[part.type,part.value]));
   return {date:`${values.year}-${values.month}-${values.day}`,time:`${values.hour}:${values.minute}`};
 }
-const legacyLabels=`async function plannedLabels(tasks,selectedDate) {
+const legacyLabels=`async function plannedLabels(tasks,selectedDate,localTimes=new Map()) {
   const labels=[];
   for(const task of tasks) {
     if(task.plannedStartAt&&task.plannedEndAt&&task.plannedTimezone) {
       const start=await clock.toLocal({utc:task.plannedStartAt,zone:task.plannedTimezone}),end=await clock.toLocal({utc:task.plannedEndAt,zone:task.plannedTimezone});
+      localTimes.set(task.id,[start,end]);
       const startDate=start.date===selectedDate?'':\`\${shortDate(start.date,selectedDate)} \`;
       const endDate=end.date===start.date?'':\`\${shortDate(end.date,selectedDate)} \`;
       labels.push(\`计划 \${startDate}\${start.time}–\${endDate}\${end.time}\`);
@@ -36,13 +37,15 @@ const legacyLabels=`async function plannedLabels(tasks,selectedDate) {
 }
 `;
 for(const count of [0,50,129,10000]) {
-  const tasks=Array.from({length:count},(_,index)=>({id:'task-'+index,title:'任务 '+index,plannedStartAt:'2026-11-01T05:30:00Z',plannedEndAt:'2026-11-01T06:30:00Z',plannedTimezone:index%2?'Asia/Shanghai':'America/New_York'}));
+  const tasks=Array.from({length:count},(_,index)=>({id:'task-'+index,title:'任务 '+index,plannedDate:'2026-11-01',plannedStartAt:'2026-11-01T05:30:00Z',plannedEndAt:'2026-11-01T06:30:00Z',plannedTimezone:index%2?'Asia/Shanghai':'America/New_York'}));
   if(count<10000)tasks.push({id:'date-only',title:'按日安排',plannedDate:'2026-11-01'});
   async function render(legacy) {
     const batches=[],calls=[];
     const module=await moduleFor('app.views.today',async(method,args)=>{
       calls.push(method);
       if(method==='clock.today')return '2026-11-01';
+      if(method==='clock.now')return '2026-11-01T12:00:00Z';
+      if(method==='services.directory')return [];
       if(method==='clock.systemTimezone')return {zone:'Asia/Shanghai',source:'system'};
       if(method==='services.query')return args.ref.serviceId==='task.list'?tasks:[];
       if(method==='clock.toLocal')return local(args);
@@ -52,7 +55,7 @@ for(const count of [0,50,129,10000]) {
         return args.items.map(local);
       }
       throw Error('Unexpected request '+method);
-    },source=>legacy?source.replace(/async function plannedLabels\(tasks,selectedDate\) \{[\s\S]*?(?=async function deadlineLabels)/,legacyLabels):source);
+    },source=>legacy?source.replace(/async function plannedLabels\(tasks,selectedDate(?:,localTimes=new Map\(\))?\) \{[\s\S]*?(?=async function deadlineLabels)/,legacyLabels):source);
     return {result:clone(await module.render({context:{pageId:'app.views.today.tasks',selectedDate:'2026-11-01'},state:{selectedDate:'2026-11-01',taskLimit:10000}})),batches,calls};
   }
   const current=await render(false),legacy=await render(true);

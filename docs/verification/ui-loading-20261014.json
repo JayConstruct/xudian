@@ -89,15 +89,15 @@
     "No device installation, Git commit, remote catalog update or release"
   ],
   "logs": {
-    "flutter-core.log": "dist/verification/ui-loading-20261014/flutter-core.log",
-    "flutter-startup-layout.log": "dist/verification/ui-loading-20261014/flutter-startup-layout.log",
-    "flutter-host-initial.log": "dist/verification/ui-loading-20261014/flutter-host-initial.log",
-    "flutter-bundle-final.log": "dist/verification/ui-loading-20261014/flutter-bundle-final.log",
-    "flutter-preparation-final.log": "dist/verification/ui-loading-20261014/flutter-preparation-final.log",
-    "python.log": "dist/verification/ui-loading-20261014/python.log",
-    "node.log": "dist/verification/ui-loading-20261014/node.log",
-    "analyze.log": "dist/verification/ui-loading-20261014/analyze.log",
-    "build-arm64.log": "dist/verification/ui-loading-20261014/build-arm64.log",
-    "flutter-initial-integration.log": "dist/verification/ui-loading-20261014/flutter-initial-integration.log"
+    "flutter-core.log": "dist/verification/performance/ui-loading-20261014/flutter-core.log",
+    "flutter-startup-layout.log": "dist/verification/performance/ui-loading-20261014/flutter-startup-layout.log",
+    "flutter-host-initial.log": "dist/verification/performance/ui-loading-20261014/flutter-host-initial.log",
+    "flutter-bundle-final.log": "dist/verification/performance/ui-loading-20261014/flutter-bundle-final.log",
+    "flutter-preparation-final.log": "dist/verification/performance/ui-loading-20261014/flutter-preparation-final.log",
+    "python.log": "dist/verification/performance/ui-loading-20261014/python.log",
+    "node.log": "dist/verification/performance/ui-loading-20261014/node.log",
+    "analyze.log": "dist/verification/performance/ui-loading-20261014/analyze.log",
+    "build-arm64.log": "dist/verification/performance/ui-loading-20261014/build-arm64.log",
+    "flutter-initial-integration.log": "dist/verification/performance/ui-loading-20261014/flutter-initial-integration.log"
   }
 }

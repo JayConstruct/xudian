@@ -45,10 +45,21 @@ class RepositoryTest(unittest.TestCase):
         for name in ['client/build/app.apk', 'delivery.apk', '.env.production',
                      'client/android/local.properties', 'dist/report.json', 'user.sqlite',
                      'output/imagegen/draft.png', 'output/imagegen/draft.prompt.txt',
-                     'output/imagegen/draft.proposal.md']:
+                     'output/imagegen/draft.proposal.md',
+                     'design/styles/draft.png', 'design/styles/draft.prompt.txt',
+                     'design/styles/.batches/20261029-230000-000001/manifest.json',
+                     'design/screens/ui-01/page.png']:
             with self.subTest(name=name):
                 errors = repository.check_repository(self.root, self.tracked + [name])
                 self.assertTrue(any('Local-only file' in error for error in errors))
+
+    def test_source_and_design_guides_are_not_local_artifacts(self):
+        for name in ['client/README.md', 'client/lib/app/app_shell.dart',
+                     'packages/modules/app.planner/main.js',
+                     'packages/modules/app.planner/module.json', 'design/PLAN.md',
+                     'design/styles/README.md', 'design/screens/README.md']:
+            with self.subTest(name=name):
+                self.assertFalse(repository.local_only(name))
 
     def test_ignored_unversioned_bundle_is_detected_before_apk_build(self):
         (self.bundle.parent / 'app.test.xmodule').write_bytes(self.bundle.read_bytes())

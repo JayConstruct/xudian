@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.schedule",
     "name": "大学课表",
-    "version": "1.16.4",
+    "version": "1.16.5",
     "hostApi": "^1.34.0",
     "dataVersion": 1,
     "permissions": [
@@ -259,16 +259,7 @@
       "id": "app.schedule.todayFeed",
       "title": "每日课程",
       "icon": "calendar",
-      "handler": "renderTodayFeed",
-      "entry": {
-        "id": "app.schedule.today.feed",
-        "label": "每日课程",
-        "placement": "page",
-        "targetPageId": "app.views.today.home",
-        "slotId": "daily",
-        "content": true,
-        "order": 0
-      }
+      "handler": "renderTodayFeed"
     }
   ],
   "services": [

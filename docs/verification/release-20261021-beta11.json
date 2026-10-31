@@ -128,5 +128,5 @@
     "ARM device FPS and Windows native runtime not measured",
     "Remaining UI audit backlog not included"
   ],
-  "localEvidence": "dist/verification/release-20261021-beta11/"
+  "localEvidence": "dist/verification/releases/release-20261021-beta11/"
 }

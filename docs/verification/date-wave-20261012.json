@@ -46,5 +46,5 @@
     "Recording and adb screenshots verify appearance, not frame latency or FPS",
     "Android ARM and Windows runtime/performance not measured"
   ],
-  "artifactsDirectory": "dist/verification/date-wave-20261012"
+  "artifactsDirectory": "dist/verification/ui/date-wave-20261012"
 }

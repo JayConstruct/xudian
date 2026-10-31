@@ -346,7 +346,7 @@ void main() {
   );
 
   test(
-    'skip or cancellation cannot remove fixed generated task occupancy',
+    'skip cannot remove a fixed task; cancellation retains the generated task',
     () async {
       await run('availability.save', {
         'availability': {
@@ -377,7 +377,7 @@ void main() {
         'id': task['id'],
         'changes': {'locked': true},
       });
-      for (final status in ['skipped', 'cancelled']) {
+      for (final status in ['skipped']) {
         await expectLater(
           run('occurrence.update', {
             'id': 'fixed-rule:once',
@@ -386,6 +386,14 @@ void main() {
           throwsStateError,
         );
       }
+      await run('occurrence.update', {
+        'id': 'fixed-rule:once',
+        'changes': {'status': 'cancelled'},
+      });
+      expect(
+        object(await query('task.state', {'id': task['id']}))['cancelled'],
+        true,
+      );
       expect((await raw(task['id']))['locked'], true);
       expect((await raw(task['id']))['plannedStartAt'], task['plannedStartAt']);
     },
@@ -1171,7 +1179,12 @@ void main() {
         ),
         hasLength(50),
       );
-      final fixed = await create('固定', {'locked': true});
+      final fixed = await create('固定', {
+        'locked': true,
+        'plannedStartAt': '2026-10-11T10:00:00Z',
+        'plannedEndAt': '2026-10-11T10:30:00Z',
+        'plannedTimezone': 'Asia/Shanghai',
+      });
       await expectLater(
         preview({
           'taskId': fixed['id'],

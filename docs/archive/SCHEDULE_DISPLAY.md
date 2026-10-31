@@ -14,6 +14,6 @@
 
 1.6.3验证：54项课表、宿主、导入和布局回归测试全部通过，覆盖默认隐藏周末、切换预览、保存/审核/重启、按课表保存、外部修改冲突，以及320、420、1200宽度下五列／七列无横向溢出和1.6倍字体。静态分析和生产架构检查通过。
 
-已在 `emulator-5554` 覆盖安装客户端build34（Android versionCode 4034）和课表1.6.3，实际验证五天默认显示、七天完整显示、开关保存和应用重启后保留。原有课程及51的行高保持，验收结束恢复五天显示。安装摘要见 [schedule-weekends-install.json](../../dist/verification/schedule-weekends-install.json)，[七天截图](../../dist/verification/android-schedule-weekends-saved.png)和[最终五天截图](../../dist/verification/android-schedule-weekdays-final.png)。
+已在 `emulator-5554` 覆盖安装客户端build34（Android versionCode 4034）和课表1.6.3，实际验证五天默认显示、七天完整显示、开关保存和应用重启后保留。原有课程及51的行高保持，验收结束恢复五天显示。安装摘要见 [schedule-weekends-install.json](../../dist/verification/schedule/legacy-20261029/schedule-weekends-install.json)，[七天截图](../../dist/verification/platform/legacy-20261029/android-schedule-weekends-saved.png)和[最终五天截图](../../dist/verification/platform/legacy-20261029/android-schedule-weekdays-final.png)。
 
-历史1.5.0验收：已在 `emulator-5554` 覆盖安装客户端build26和课表1.5.0，实际验证了精细调整、关闭/重新打开、设置入口和重启，未改写已有912的高度。安装记录见 [schedule-floating-install.json](../../dist/verification/schedule-floating-install.json)，[悬浮面板截图](../../dist/verification/android-schedule-floating-height.png)与[手动关闭截图](../../dist/verification/android-schedule-floating-closed.png)。
+历史1.5.0验收：已在 `emulator-5554` 覆盖安装客户端build26和课表1.5.0，实际验证了精细调整、关闭/重新打开、设置入口和重启，未改写已有912的高度。安装记录见 [schedule-floating-install.json](../../dist/verification/schedule/legacy-20261029/schedule-floating-install.json)，[悬浮面板截图](../../dist/verification/platform/legacy-20261029/android-schedule-floating-height.png)与[手动关闭截图](../../dist/verification/platform/legacy-20261029/android-schedule-floating-closed.png)。

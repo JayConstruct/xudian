@@ -122,4 +122,4 @@ WSL 2 的 NAT 地址可能在重启后变化；使用实际可达的 SSH 地址�
 
 并行调试需要不同设备/模拟器，或不同应用 ID 的开发 flavor；当前项目未配置独立 flavor。同一应用的热重载只使用当前会话编译的源码，无法将两个工作区的修改自动合并到手机。
 
-SDK、连接和旧安装来源的日期记录见 [环境历史](archive/MULTI_MACHINE_DEVELOPMENT_20261009.md)。日常模拟器构建、模块导入及热重载优先使用 [更新脚本](EMULATOR_UPDATE.md)。
+SDK、连接和旧安装来源的日期记录见 [环境历史](MULTI_MACHINE_DEVELOPMENT.md)。日常模拟器构建、模块导入及热重载优先使用 [更新脚本](EMULATOR_UPDATE.md)。

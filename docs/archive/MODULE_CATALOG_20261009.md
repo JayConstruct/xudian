@@ -39,11 +39,11 @@
 ```bash
 python3 scripts/module_catalog/publish.py --tag modules-2026-10-08
 python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json \
-  --index-dir module-index --package-dir dist/module-releases
+  --index-dir module-index --package-dir dist/archive/modules/module-releases
 python3 -m unittest discover -s scripts/module_catalog -p 'test_*.py'
 ```
 
-输出为 `dist/module-releases/<id>-<version>.xmodule` 和 `module-index/<id>.json`。首批索引发布在源码仓库的 `module-catalog` 分支，保留原 `main` 分支不变；Release tag 指向这份可复现 APK 的源码快照。其他作者可以选择自己的稳定分支。作者仓库可以不同：在目录中登记自己的仓库，然后传入 `--repository Author/repo --modules <source-dir> --catalog <catalog.json> --index-dir <index-dir> --output <release-dir>`。
+输出为 `dist/archive/modules/module-releases/<id>-<version>.xmodule` 和 `module-index/<id>.json`。首批索引发布在源码仓库的 `module-catalog` 分支，保留原 `main` 分支不变；Release tag 指向这份可复现 APK 的源码快照。其他作者可以选择自己的稳定分支。作者仓库可以不同：在目录中登记自己的仓库，然后传入 `--repository Author/repo --modules <source-dir> --catalog <catalog.json> --index-dir <index-dir> --output <release-dir>`。
 
 已有旧版包可通过重复 `--archive-dir <历史包目录>` 收录。工具逐字节保留旧包，采用其原始清单和服务声明生成索引，不将新作者说明写回旧包。首批交付包含 11 个模块的新版本和原来的 11 个历史包，共 22 个资产；正方通用为 1.0.1、拾光兼容为 1.1.1、课表为 1.6.2。原 `dist/modules/` 旧资产在首批发布准备中保持原字节。
 

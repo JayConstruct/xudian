@@ -174,7 +174,7 @@ void main() {
             command('task.setCompleted', {'id': 'task-000', 'completed': true}),
       );
       await settle(tester);
-      expect(find.byType(DailyTaskItem), findsNWidgets(51));
+      expect(find.byType(DailyTaskItem), findsNWidgets(52));
       expect(tester.element(find.byType(TextField)), same(original));
       expect(field.controller!.value, value);
       expect(field.focusNode!.hasFocus, true);
@@ -258,7 +258,7 @@ void main() {
             .widget<ScriptKeyedList>(find.byType(ScriptKeyedList))
             .items
             .length,
-        53,
+        54,
       );
       expect(find.byType(ListView), findsOneWidget);
       expect(
@@ -294,7 +294,8 @@ void main() {
       );
       expect(tester.element(find.byType(DailyTaskItem)), same(original));
       final list = tester.widget<ScriptKeyedList>(find.byType(ScriptKeyedList));
-      final row = find.byKey(ValueKey((list.scope, list.removeKeys.single)));
+      expect(list.removeKeys, isEmpty);
+      final row = find.byKey(ValueKey((list.scope, list.highlightKeys.single)));
       expect(
         tester
             .widget<FadeTransition>(
@@ -404,7 +405,11 @@ void main() {
       await settle(tester);
       expect(reviews, isEmpty);
       expect(notifications, 1);
-      expect(find.byType(DailyTaskItem), findsNothing);
+      expect(find.byType(DailyTaskItem), findsOneWidget);
+      expect(
+        tester.widget<DailyTaskItem>(find.byType(DailyTaskItem)).completed,
+        true,
+      );
       expect(find.byType(MaterialBanner), findsNothing);
       expect(
         object(await store.get(tasks, 'tasks', id))['completedAt'],
@@ -416,7 +421,7 @@ void main() {
   );
 
   testWidgets(
-    'native completion exits after commit and survives its store refresh',
+    'native completion stays in place and survives its store refresh',
     (tester) async {
       await tester.runAsync(
         () => command('task.create', {
@@ -441,21 +446,14 @@ void main() {
             null,
       );
       expect(tester.element(find.byType(DailyTaskItem)), same(original));
+      final list = tester.widget<ScriptKeyedList>(find.byType(ScriptKeyedList));
+      expect(list.removeKeys, isEmpty);
+      expect(list.highlightKeys, hasLength(1));
       expect(reviews, 0);
-      final ignores = tester.widgetList<IgnorePointer>(
-        find.ancestor(
-          of: find.byType(DailyTaskItem),
-          matching: find.byType(IgnorePointer),
-        ),
+      expect(
+        tester.widget<DailyTaskItem>(find.byType(DailyTaskItem)).completed,
+        true,
       );
-      expect(ignores.any((widget) => widget.ignoring), true);
-      final semantics = tester.widgetList<ExcludeSemantics>(
-        find.ancestor(
-          of: find.byType(DailyTaskItem),
-          matching: find.byType(ExcludeSemantics),
-        ),
-      );
-      expect(semantics.any((widget) => widget.excluding), true);
       await tester.runAsync(
         () => command('task.create', {
           'title': '触发刷新',
@@ -470,9 +468,9 @@ void main() {
         same(original),
       );
       await tester.pump(const Duration(milliseconds: 141));
-      expect(find.text('提交后退出'), findsNothing);
+      expect(find.text('提交后退出'), findsOneWidget);
       await settle(tester);
-      expect(find.byType(DailyTaskItem), findsOneWidget);
+      expect(find.byType(DailyTaskItem), findsNWidgets(2));
       expect(find.byType(MaterialBanner), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     },

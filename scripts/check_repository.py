@@ -25,6 +25,9 @@ LOCAL_SUFFIXES = {
 def local_only(name):
     path = PurePosixPath(name)
     return (bool(LOCAL_DIRECTORIES.intersection(path.parts))
+            or (len(path.parts) >= 3 and path.parts[:2] in {
+                ('design', 'styles'), ('design', 'screens')}
+                and path.parts[2:] != ('README.md',))
             or path.parts[0] in {'dist', 'tmp', 'coverage', 'output'}
             or path.suffix in LOCAL_SUFFIXES
             or path.name in {'local.properties', 'key.properties', '.DS_Store', 'Thumbs.db'}

@@ -16,9 +16,11 @@
 
 ## 方案与旧状态
 
-[初始设计](INITIAL_DESIGN.md) · [早期交接](PROJECT_HANDOFF_20261003.md) · [旧项目首页](PROJECT_OVERVIEW_20261009.md) · [旧客户端说明](CLIENT_OVERVIEW_20261009.md) · [旧开发环境](DEVELOPMENT_20261009.md) · [多机环境记录](MULTI_MACHINE_DEVELOPMENT_20261009.md)
+[初始设计](INITIAL_DESIGN.md) · [早期交接](PROJECT_HANDOFF_20261003.md)
 
 [旧 AI 方案](AI_ASSISTANT_20261006.md) · [旧视觉规则](UI_DESIGN_SYSTEM_20261002.md) · [旧页面组合协议](UI_COMPOSITION_V2.md) · [UI 示例调研](UI_EXAMPLES_RESEARCH.md) · [UI 示例实施方案](UI_EXAMPLES_PLAN.md)
+
+[规划初始模块与服务](PLANNER_20261013.md) 保留 2026-10-13 的版本、服务和验收边界；当前需求见 [规划交互](../design/PLANNER_UX_REDESIGN.md)。
 
 ## 发布与验收
 

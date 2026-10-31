@@ -31,7 +31,7 @@
 ```bash
 python3 scripts/module_host/verify_fresh_install.py \
   --apk client/build/app/outputs/flutter-apk/app-x86_64-release.apk \
-  --output dist/verification/fresh-install
+  --output dist/verification/installation/fresh-install
 ```
 
 在已有模拟器中使用隔离 Android 用户时，先创建并切换该用户，再给脚本传入 `--user <ID>`。Android 用户共享 APK 二进制；保留其他用户数据的验收须使用相同 APK 和签名，或使用独立模拟器。脚本拒绝目标用户已安装 App 的情况，不清数据、不卸载。报告和截图记录首次安装、依赖审核、启用状态、重启与模块入口。采集失败且模块尚未安装时，可使用相同 APK、用户和输出目录加 `--resume`，脚本核验原首装证据及当前 APK 后继续，不重新安装或清数据。

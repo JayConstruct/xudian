@@ -16,7 +16,7 @@
 - 表头改为惰性构建，表头与表格保持同步。横滑保留起始移动距离，降低短快划门槛，并提供较轻的惯性与四分之一列慢划吸附；竖向浏览和长按任务拖动保留。
 - 未启用新timeline契约的旧模块保留事件式加载路径。
 
-接口说明见[模块SDK](../MODULE_SDK.md#api-136-动态日期窗口)。
+接口说明见[模块SDK](../sdk/PLANNER.md#api-136-动态日期窗口)。
 
 ## 检查与测试
 
@@ -48,4 +48,4 @@
 5. 默认、过去、未来及循环后日期表头均保持物理坐标`y=423–507`，返回今天按钮出现不增加高度。日期跳转弹窗可打开和取消，任务长按移出表格取消不提交业务变更。
 6. 验收结束返回今天，调整关闭、浮层关闭；再次读取已安装APK摘要，与构建产物一致。
 
-截图、界面节点和验收JSON位于`dist/verification/planner-dynamic-20261020/`，短划记录位于其`short-swipes/`子目录。完整日志为`.cache/planner-dynamic-emulator-update.log`、`.cache/planner-dynamic-regression.log`、`.cache/planner-dynamic-engine-tests.log`、`.cache/planner-dynamic-short-swipes.log`及`.cache/planner-dynamic-long-ui.log`。本机产物不提交；ARM真机及Windows运行效果尚未验证。
+截图、界面节点和验收JSON位于`dist/verification/planner/planner-dynamic-20261020/`，短划记录位于其`short-swipes/`子目录。本机产物不提交；ARM真机及Windows运行效果尚未验证。

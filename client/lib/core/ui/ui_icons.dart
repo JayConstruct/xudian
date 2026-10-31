@@ -43,6 +43,12 @@ enum AppGlyph {
   eye,
   download,
   upload,
+  location,
+  hourglass,
+  lock,
+  description,
+  repeat,
+  priority,
 }
 
 IconData? appIconData(Object? name) => switch (name) {
@@ -85,6 +91,12 @@ IconData? appIconData(Object? name) => switch (name) {
   'eye' => Icons.visibility_outlined,
   'download' => Icons.download_outlined,
   'upload' => Icons.upload_outlined,
+  'location' => Icons.place_outlined,
+  'hourglass' || 'duration' => Icons.hourglass_empty,
+  'lock' => Icons.lock_outline,
+  'description' || 'notes' => Icons.description_outlined,
+  'repeat' => Icons.repeat,
+  'priority' || 'flag' => Icons.flag_outlined,
   _ => null,
 };
 
@@ -304,6 +316,12 @@ AppGlyph? _glyph(IconData icon) {
   ].contains(icon)) {
     return AppGlyph.upload;
   }
+  if (icon == Icons.place_outlined) return AppGlyph.location;
+  if (icon == Icons.hourglass_empty) return AppGlyph.hourglass;
+  if (icon == Icons.lock_outline) return AppGlyph.lock;
+  if (icon == Icons.description_outlined) return AppGlyph.description;
+  if (icon == Icons.repeat) return AppGlyph.repeat;
+  if (icon == Icons.flag_outlined) return AppGlyph.priority;
   return null;
 }
 
@@ -661,6 +679,44 @@ class AppIconPainter extends CustomPainter {
         route([7, 8, 12, 3, 17, 8]);
         line(12, 3, 12, 16);
         route([4, 16, 4, 21, 20, 21, 20, 16]);
+      case AppGlyph.location:
+        final path = Path()
+          ..moveTo(12, 21)
+          ..cubicTo(9, 17.5, 5, 13, 5, 9)
+          ..cubicTo(5, 5, 8, 3, 12, 3)
+          ..cubicTo(16, 3, 19, 5, 19, 9)
+          ..cubicTo(19, 13, 15, 17.5, 12, 21)
+          ..close();
+        canvas.drawPath(path, ink);
+        circle(12, 9, 2.5);
+      case AppGlyph.hourglass:
+        line(6, 3, 18, 3);
+        line(6, 21, 18, 21);
+        route([6, 3, 6, 7, 11, 12, 6, 17, 6, 21]);
+        route([18, 3, 18, 7, 13, 12, 18, 17, 18, 21]);
+      case AppGlyph.lock:
+        box(5, 10, 14, 11, 2);
+        final shackle = Path()
+          ..moveTo(8, 10)
+          ..lineTo(8, 7)
+          ..cubicTo(8, 1.7, 16, 1.7, 16, 7)
+          ..lineTo(16, 10);
+        canvas.drawPath(shackle, ink);
+        dot(12, 15, 1);
+        line(12, 16, 12, 18);
+      case AppGlyph.description:
+        box(4, 3, 16, 18, 2);
+        line(8, 8, 16, 8);
+        line(8, 12, 16, 12);
+        line(8, 16, 13, 16);
+      case AppGlyph.repeat:
+        route([4, 10, 4, 5, 20, 5]);
+        route([17, 2, 20, 5, 17, 8]);
+        route([20, 14, 20, 19, 4, 19]);
+        route([7, 16, 4, 19, 7, 22]);
+      case AppGlyph.priority:
+        line(5, 3, 5, 21);
+        route([5, 4, 19, 4, 17, 8, 19, 12, 5, 12]);
     }
     canvas.restore();
   }

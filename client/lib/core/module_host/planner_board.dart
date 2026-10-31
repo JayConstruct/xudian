@@ -14,6 +14,7 @@ import '../ui/content_colors.dart';
 import '../ui/ui_motion.dart';
 import 'planner_timeline_window.dart';
 import 'planner_status_indicator.dart';
+import 'planner_card_appearance.dart';
 
 part 'planner_day_sheet.dart';
 
@@ -1821,6 +1822,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     final start = _date(item['start']), end = _date(item['end']);
     final scheduled = start != null && end != null;
     final edgeStatus = item['statusIndicator'] == 'edgeToCorner';
+    final appearance = PlannerCardAppearance.of(item);
     final compactCandidate =
         _timeline && !scheduled && item['_candidateList'] != true;
     final subtitle = _summary(item);
@@ -1873,7 +1875,9 @@ class _PlannerBoardState extends State<PlannerBoard>
             maxLines: full ? titleLines : 1,
             overflow: TextOverflow.ellipsis,
             style: textTheme.labelMedium?.copyWith(
-              decoration: item['completed'] == true && !edgeStatus
+              decoration:
+                  appearance.lineThrough ||
+                      item['completed'] == true && !edgeStatus
                   ? TextDecoration.lineThrough
                   : null,
               fontWeight: FontWeight.w600,
@@ -1896,7 +1900,11 @@ class _PlannerBoardState extends State<PlannerBoard>
     );
     Widget card = Semantics(
       label:
-          '${item['title'] ?? ''}，${scheduled ? '${_full(start)}至${_full(end)}' : subtitle}${item['completed'] == true ? '，已完成' : ''}${item['readOnly'] == true ? '，来源只读' : ''}${item['fixed'] == true ? '，固定时间' : ''}',
+          '${item['title'] ?? ''}，${scheduled ? '${_full(start)}至${_full(end)}' : subtitle}${appearance.badgeText.isNotEmpty
+              ? '，${appearance.badgeText}'
+              : item['completed'] == true
+              ? '，已完成'
+              : ''}${item['readOnly'] == true ? '，来源只读' : ''}${item['fixed'] == true ? '，固定时间' : ''}',
       child: Material(
         elevation:
             scheduled &&
@@ -1929,9 +1937,10 @@ class _PlannerBoardState extends State<PlannerBoard>
               foregroundDecoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(9),
                 border:
-                    _selectedItem?['id'] == item['id'] ||
-                        item['selected'] == true ||
-                        widget.selectedIds.contains(item['id'])
+                    !appearance.dashed &&
+                        (_selectedItem?['id'] == item['id'] ||
+                            item['selected'] == true ||
+                            widget.selectedIds.contains(item['id']))
                     ? Border.all(
                         color: scheme.primary,
                         width: scheduled ? 2 : 1.5,
@@ -2233,44 +2242,84 @@ class _PlannerBoardState extends State<PlannerBoard>
     if (_selectedItem?['id'] == item['id']) card = _selectionRegion(card);
     // Keep the animation outside conditional drag/selection wrappers: completing
     // a task removes its drag source but must preserve the marker's State.
-    if (edgeStatus && scheduled && item['_resident'] != true) {
+    if ((edgeStatus || appearance.decorated) &&
+        scheduled &&
+        item['_resident'] != true) {
       double? leadingLabelWidth;
       if (full) {
-        final time = TextPainter(
-          text: TextSpan(
-            text: _edgeTime(item, true),
-            style: textTheme.labelSmall?.copyWith(fontSize: 10),
-          ),
-          textScaler: scaler,
-          textDirection: Directionality.of(context),
-        )..layout();
-        leadingLabelWidth = time.width + (titleLines > 1 ? 2 : 3) + 2;
-        time.dispose();
+        for (final label in [
+          _edgeTime(item, true),
+          if (appearance.decorated) _edgeTime(item, false),
+        ]) {
+          final time = TextPainter(
+            text: TextSpan(
+              text: label,
+              style: textTheme.labelSmall?.copyWith(fontSize: 10),
+            ),
+            textScaler: scaler,
+            textDirection: Directionality.of(context),
+          )..layout();
+          leadingLabelWidth = math.max(
+            leadingLabelWidth ?? 0,
+            time.width + (titleLines > 1 ? 2 : 3) + 2,
+          );
+          time.dispose();
+        }
       }
-      card = PlannerStatusIndicator(
-        key: ValueKey('planner-status:${sourceSegment ?? item['id']}'),
-        completed: item['completed'] == true,
-        railWidth: titleLines > 1 ? 2 : 3,
-        leadingLabelWidth: leadingLabelWidth,
-        color: ContentColors.foreground(
-          accent,
-          _surface(item),
-          scheme.onSurface,
-        ),
-        // Tiny labels have no start-time row. Use their bottom padding rather
-        // than covering the title or making its line shorter.
-        badgeSize: full
-            ? math.min(16, timeHeight + 1)
-            : math.min(
-                16,
-                math.max(
-                  titleLines > 1 ? 2 : 3,
-                  height - titleHeight - (two ? timeHeight : 0) - 8,
+      if (appearance.decorated) {
+        card = PlannerCardDecoration(
+          key: ValueKey('planner-appearance:${sourceSegment ?? item['id']}'),
+          appearance: appearance,
+          color: scheme.onSurfaceVariant,
+          surface: _surface(item),
+          selectedColor:
+              _selectedItem?['id'] == item['id'] ||
+                  item['selected'] == true ||
+                  widget.selectedIds.contains(item['id'])
+              ? scheme.primary
+              : null,
+          leadingLabelWidth: leadingLabelWidth ?? 0,
+          textStyle: textTheme.labelSmall!,
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          full: full,
+          badgeSize: full
+              ? math.min(16, timeHeight + 1)
+              : math.min(
+                  16,
+                  math.max(
+                    0,
+                    height - titleHeight - (two ? timeHeight : 0) - 8,
+                  ),
                 ),
-              ),
-        badgeAtBottom: !full,
-        child: card,
-      );
+          child: card,
+        );
+      } else {
+        card = PlannerStatusIndicator(
+          key: ValueKey('planner-status:${sourceSegment ?? item['id']}'),
+          completed: item['completed'] == true,
+          railWidth: titleLines > 1 ? 2 : 3,
+          leadingLabelWidth: leadingLabelWidth,
+          color: ContentColors.foreground(
+            accent,
+            _surface(item),
+            scheme.onSurface,
+          ),
+          // Tiny labels have no start-time row. Use their bottom padding rather
+          // than covering the title or making its line shorter.
+          badgeSize: full
+              ? math.min(16, timeHeight + 1)
+              : math.min(
+                  16,
+                  math.max(
+                    titleLines > 1 ? 2 : 3,
+                    height - titleHeight - (two ? timeHeight : 0) - 8,
+                  ),
+                ),
+          badgeAtBottom: !full,
+          child: card,
+        );
+      }
     }
     return card;
   }
@@ -3141,6 +3190,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     final daily = _dailyOccupancy.putIfAbsent((date, next), () {
       final result = <(Object?, DateTime, DateTime)>[];
       for (final block in _blocks) {
+        if (block['occupiesTime'] == false) continue;
         final a = _date(block['start']), b = _date(block['end']);
         if (a != null && b != null && a.isBefore(next) && b.isAfter(date)) {
           result.add((block['id'], a, b));
@@ -3281,6 +3331,38 @@ class _PlannerBoardState extends State<PlannerBoard>
         sourceLabel != null &&
         sourceLabel.isNotEmpty &&
         (item['readOnly'] == true || sourceLabel != '任务');
+    final appearance = PlannerCardAppearance.of(item);
+    final inlineActions =
+        item['selectionLayout'] == 'inlineActions' && actions.length == 1;
+    Widget actionButton(Map action, {bool inline = false}) {
+      final VoidCallback? onPressed =
+          !widget.enabled || action['disabled'] == true
+          ? null
+          : () {
+              if (widget.onCommandAction != null && action['command'] is Map) {
+                widget.onCommandAction!(action['event'], action['command']);
+              } else {
+                widget.onEvent(action['event']);
+              }
+            };
+      if (inline) {
+        return FilledButton(
+          onPressed: onPressed,
+          child: Text(action['label'] as String),
+        );
+      }
+      return FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(switch (action['icon']) {
+          'check' => Icons.check_circle_outline,
+          'undo' => Icons.undo,
+          'history' => Icons.history,
+          _ => Icons.play_arrow_outlined,
+        }, size: 18),
+        label: Text(action['label'] as String),
+      );
+    }
+
     return _selectionRegion(
       FrostedToolbarSurface(
         key: const ValueKey('planner-selection-panel'),
@@ -3300,6 +3382,24 @@ class _PlannerBoardState extends State<PlannerBoard>
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
+                  if (appearance.badgeText.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scheme.onSurfaceVariant.withValues(alpha: .06),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: scheme.outlineVariant),
+                      ),
+                      child: Text(
+                        appearance.badgeText,
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
                   IconButton(
                     onPressed: () => setState(() => _selectedItem = null),
                     icon: const Icon(Icons.close),
@@ -3326,7 +3426,16 @@ class _PlannerBoardState extends State<PlannerBoard>
                     ),
                   ),
                 ),
-              if (showSource) Text(sourceLabel),
+              if (showSource && sourceLabel != appearance.badgeText)
+                Text(sourceLabel),
+              if ('${item['selectionNote'] ?? ''}'.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '${item['selectionNote']}',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                ),
               if (fallbackGaps.isNotEmpty)
                 Wrap(
                   spacing: 12,
@@ -3339,42 +3448,23 @@ class _PlannerBoardState extends State<PlannerBoard>
                   ],
                 ),
               const SizedBox(height: 8),
-              if (actions.isNotEmpty)
+              if (actions.isNotEmpty && !inlineActions)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      for (final action in actions)
-                        FilledButton.icon(
-                          onPressed:
-                              !widget.enabled || action['disabled'] == true
-                              ? null
-                              : () {
-                                  if (widget.onCommandAction != null &&
-                                      action['command'] is Map) {
-                                    widget.onCommandAction!(
-                                      action['event'],
-                                      action['command'],
-                                    );
-                                  } else {
-                                    widget.onEvent(action['event']);
-                                  }
-                                },
-                          icon: Icon(switch (action['icon']) {
-                            'check' => Icons.check_circle_outline,
-                            'undo' => Icons.undo,
-                            'history' => Icons.history,
-                            _ => Icons.play_arrow_outlined,
-                          }, size: 18),
-                          label: Text(action['label'] as String),
-                        ),
+                      for (final action in actions) actionButton(action),
                     ],
                   ),
                 ),
               Row(
                 children: [
+                  if (inlineActions && actions.isNotEmpty) ...[
+                    Expanded(child: actionButton(actions.first, inline: true)),
+                    const SizedBox(width: 8),
+                  ],
                   if (edit is Map && _movable(item)) ...[
                     Expanded(
                       child: FilledButton.icon(
@@ -5449,8 +5539,10 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
     final theme = Theme.of(context);
     final scaler = MediaQuery.textScalerOf(context);
     final edgeStatus = item['statusIndicator'] == 'edgeToCorner';
+    final appearance = PlannerCardAppearance.of(item);
     final titleStyle = theme.textTheme.labelMedium!.copyWith(
-      decoration: item['completed'] == true && !edgeStatus
+      decoration:
+          appearance.lineThrough || item['completed'] == true && !edgeStatus
           ? TextDecoration.lineThrough
           : null,
       fontWeight: FontWeight.w600,

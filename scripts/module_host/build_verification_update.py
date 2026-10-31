@@ -11,7 +11,7 @@ def main():
         target = pathlib.Path(folder)
         # Preserve the exact source of the original acceptance demonstration.
         # The current development package has a newer page layout/API range.
-        with zipfile.ZipFile(ROOT / 'dist/verification/app.schedule-1.0.0.xmodule') as original:
+        with zipfile.ZipFile(ROOT / 'dist/verification/fixtures/module-update/app.schedule-1.0.0.xmodule') as original:
             for name in original.namelist():
                 if name != 'package.json':
                     destination = target / name
@@ -29,7 +29,7 @@ def main():
         script = script.replace("  if(!t) { children.push", "  children.push(text('脚本更新新增统计：'+(await statistics({timetableId:t?.id})).courses+' 门课程'));\n  if(!t) { children.push")
         script += "\nexport async function statistics({timetableId}) { const courses=await data.query('courses');return {courses:courses.filter(c=>c.timetableId===timetableId).length};}\n"
         (target / 'main.js').write_text(script)
-        destination = ROOT / 'dist/verification/app.schedule-1.0.1.xmodule'
+        destination = ROOT / 'dist/verification/fixtures/module-update/app.schedule-1.0.1.xmodule'
         print(pack(target, destination), destination)
 
 if __name__ == '__main__':

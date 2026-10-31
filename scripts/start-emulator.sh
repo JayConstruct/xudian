@@ -16,6 +16,7 @@ usage() {
                   仅新启动生效，不限制 Windows 进程总内存
   --refresh-rate HZ 客体刷新率（30～240 的整数），新启动时冷启动；复用时核对
   --cold-boot      冷启动；已运行时询问，输入 y 后关闭并重启，不清除数据
+  --yes           与 --cold-boot 配合，明确确认关闭目标设备，供已授权的自动化调用
   --lock-refresh-rate 同时设置 Android 最高/最低刷新率，须指定 --refresh-rate
                   保存原值恢复脚本；设置持续生效，实际帧率仍需测量
   --timeout SEC    等待启动的秒数（默认 180）
@@ -34,6 +35,7 @@ port=5554
 memory=2048
 refresh_rate=''
 cold_boot=false
+assume_yes=false
 lock_refresh_rate=false
 boot_timeout=180
 dry_run=false
@@ -42,6 +44,7 @@ while (( $# )); do
     --help) usage; exit 0 ;;
     --dry-run) dry_run=true; shift ;;
     --cold-boot) cold_boot=true; shift ;;
+    --yes) assume_yes=true; shift ;;
     --lock-refresh-rate) lock_refresh_rate=true; shift ;;
     --avd|--emulator|--port|--memory|--refresh-rate|--timeout)
       (( $# >= 2 )) && [[ -n "$2" && "$2" != --* ]] || fail "$1 缺少参数。"
@@ -57,6 +60,7 @@ while (( $# )); do
     *) fail "未知参数：$1；使用 --help 查看用法。" ;;
   esac
 done
+if "$assume_yes" && ! "$cold_boot"; then fail '--yes 只能与 --cold-boot 一起使用。'; fi
 [[ "$avd" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || fail 'AVD 名称只允许字母、数字、下划线、点和连字符。'
 [[ "$port" =~ ^[0-9]{4}$ ]] || fail '模拟器端口必须为 5554～5682 的偶数。'
 port=$((10#$port))
@@ -92,6 +96,7 @@ echo "AVD：$avd；设备：$serial；ADB：$adb_host:$adb_port；超时：${boo
 echo "客体 RAM 上限：${memory} MB（仅新启动生效；Windows 进程总内存另含图形等开销）。"
 if "$dry_run"; then
   if "$cold_boot"; then echo "冷启动：若 $serial 已运行，询问是否关闭；确认后自动关闭并重新启动，不清除应用和数据。"; fi
+  if "$assume_yes"; then echo '已通过 --yes 明确确认关闭目标设备；仍核对 AVD 与端口。'; fi
   printf 'Windows 启动命令：%s' "$emulator"
   printf ' %s' "${launch_arguments[@]}"
   printf '\n'
@@ -111,7 +116,8 @@ mkdir -p "$start_root/.cache/emulator-start"
 exec 9>"$start_root/.cache/emulator-start/$port.lock"
 flock -n 9 || fail "另一个启动流程正在等待 $serial，请稍后重试。"
 adb_command=(adb -H "$adb_host" -P "$adb_port")
-probe() { timeout "$probe_timeout" "${adb_command[@]}" "$@" 2>/dev/null; }
+# adb shell can consume piped confirmations before the script reads them.
+probe() { timeout "$probe_timeout" "${adb_command[@]}" "$@" </dev/null 2>/dev/null; }
 read_avd_name() {
   local property value avd_deadline="${1:-}" probe_timeout="$probe_timeout"
   # adb emu commands can exit successfully without returning console output.
@@ -148,7 +154,7 @@ if ($names.Count -eq 1 -and $names[0] -ne '__unknown__') {{ Write-Output $names[
 print(base64.b64encode(command.encode('utf-16le')).decode('ascii'))
 PY
   )" || return 1
-  value="$(timeout 10 powershell.exe -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand "$encoded" 9>&- 2>/dev/null)" || return 1
+  value="$(timeout 10 powershell.exe -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand "$encoded" </dev/null 9>&- 2>/dev/null)" || return 1
   value="${value//$'\r'/}"
   [[ "$value" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || return 1
   printf '%s\n' "$value"
@@ -171,7 +177,7 @@ if "$cold_boot" && [[ -n "$state" ]]; then
     [[ "$actual_avd" == "$avd" ]] || fail "$serial 的 AVD 为 ${actual_avd:-未知}，期望 $avd；不会关闭设备。"
   }
   verify_target_avd
-  while true; do
+  while ! "$assume_yes"; do
     printf '%s' "$serial（$avd）已运行，是否关闭并冷启动？[y/N] " >&2
     if ! IFS= read -r answer; then
       echo '未收到确认，已取消冷启动。' >&2
@@ -183,17 +189,46 @@ if "$cold_boot" && [[ -n "$state" ]]; then
       *) echo '请输入 y（关闭并冷启动）或 n（取消）。' >&2 ;;
     esac
   done
+  if "$assume_yes"; then echo "已通过 --yes 确认关闭 $serial（$avd）。"; fi
   # Recheck after the user answers in case the device changed while waiting.
   verify_target_avd
   echo "关闭 $serial（$avd），准备冷启动…"
-  probe -s "$serial" emu kill || fail "无法关闭 $serial；请手动退出后重试。"
   shutdown_deadline=$((SECONDS + boot_timeout))
+  console_fallback=false
+  shutdown_reply="$(probe -s "$serial" emu kill)" || console_fallback=true
+  if [[ "${shutdown_reply^^}" == *KO:* || "${shutdown_reply^^}" == *ERROR:* ]]; then
+    console_fallback=true
+  fi
+  # An empty successful adb emu response is not evidence of a shutdown. Give it
+  # a short grace period, then use the authenticated Windows loopback console.
+  empty_reply_deadline=$((SECONDS + 3))
   while [[ -n "$state" ]]; do
     probe_timeout=$((shutdown_deadline - SECONDS))
     (( probe_timeout > 0 )) || fail "等待 $serial 退出超过 ${boot_timeout}s；不会启动重复进程。"
     (( probe_timeout <= 5 )) || probe_timeout=5
     devices="$(probe devices -l)" || fail '等待退出时 ADB 查询失败；不会启动重复进程。'
     state="$(awk -v serial="$serial" '$1 == serial { print $2; exit }' <<< "$devices")"
+    if [[ -n "$state" ]] && { "$console_fallback" || { [[ -z "${shutdown_reply//[$'\r\n ']/}" ]] && (( SECONDS >= empty_reply_deadline )); }; }; then
+      echo 'ADB 控制台未确认关闭，改用 Windows 本机控制台核对目标后关闭…'
+      # Authenticate and verify the console's AVD too; never close a process by
+      # name, force-kill it, or substitute an Android reboot for a cold boot.
+      encoded_shutdown="$(python3 - "$start_root/scripts/emulator-console.ps1" "$port" "$avd" <<'PY'
+import base64
+from pathlib import Path
+import sys
+
+script, port, avd = sys.argv[1:]
+command = '& {\n' + Path(script).read_text() + f"\n}} -Port {port} -ExpectedAvd '{avd}' -Shutdown\n"
+print(base64.b64encode(command.encode('utf-16le')).decode('ascii'))
+PY
+      )" || fail '无法准备 Windows 控制台关闭命令；不会启动重复进程。'
+      shutdown_remaining=$((shutdown_deadline - SECONDS))
+      (( shutdown_remaining > 0 )) || fail "等待 $serial 退出超过 ${boot_timeout}s。"
+      (( shutdown_remaining <= 20 )) || shutdown_remaining=20
+      timeout "$shutdown_remaining" powershell.exe -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand "$encoded_shutdown" </dev/null 9>&- || fail 'Windows 控制台无法安全关闭目标；未强制终止进程，请检查控制台认证与 AVD。'
+      console_fallback=false
+      shutdown_reply='Windows console shutdown requested'
+    fi
     if [[ -n "$state" ]]; then sleep 1; fi
   done
   probe_timeout=5
@@ -247,7 +282,7 @@ print(base64.b64encode(command.encode('utf-16le')).decode('ascii'))
 PY
   )"
   echo '启动 Windows 模拟器…'
-  powershell.exe -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand "$encoded_command" 9>&- || fail 'Windows 模拟器启动失败；若沙箱阻止 Windows 互操作，请在沙箱外运行同一脚本。'
+  powershell.exe -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand "$encoded_command" </dev/null 9>&- || fail 'Windows 模拟器启动失败；若沙箱阻止 Windows 互操作，请在沙箱外运行同一脚本。'
 else
   echo "复用已连接的 $serial（$state），等待 Android 启动…"
 fi

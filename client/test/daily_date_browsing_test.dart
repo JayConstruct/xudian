@@ -128,7 +128,7 @@ void main() {
       await task('逾期', due: '2026-10-07');
       await task('今天计划和到期', planned: '2026-10-10', due: '2026-10-10');
       await task('明天待办', planned: '2026-10-11');
-      await task('未来已完成不计入', planned: '2026-10-11', completed: true);
+      await task('未来计划保留完成状态', planned: '2026-10-11', completed: true);
       final before = await recordSnapshot();
       final result = await page('overview');
       final tree = object(result['tree']);
@@ -141,7 +141,7 @@ void main() {
       expect(day('2026-10-10')['overdue'], 1);
       expect(day('2026-10-10')['isToday'], true);
       expect(day('2026-10-11')['pending'], 1);
-      expect(day('2026-10-11')['completed'], 0);
+      expect(day('2026-10-11')['completed'], 1);
       expect(tree['dateControls'], false);
       expect(await recordSnapshot(), before);
       final selected = object(
@@ -486,19 +486,29 @@ void main() {
       }),
     );
     final compact = nodes(current['tree'])
-        .where((node) => node['type'] == 'agendaItem').toList();
+        .where((node) => node['type'] == 'agendaItem')
+        .toList();
     expect(compact, hasLength(1));
     expect(compact.single['title'], '高等数学');
-    final expand = nodes(current['tree']).singleWhere((node) => node['text'] == '全部课程（4）');
-    current = object(await host.invokePage('app.schedule', 'renderTodayFeed', {
-      'context': {'selectedDate': '2026-10-11'},
-      'state': current['state'], 'event': expand['event'],
-    }));
+    final expand = nodes(current['tree'])
+        .singleWhere((node) => node['text'] == '全部课程（4）');
+    current = object(
+      await host.invokePage('app.schedule', 'renderTodayFeed', {
+        'context': {'selectedDate': '2026-10-11'},
+        'state': current['state'],
+        'event': expand['event'],
+      }),
+    );
     final rows = nodes(current['tree'])
         .where((node) => node['type'] == 'agendaItem')
         .toList();
     expect(rows, hasLength(4));
-    expect(rows.map((node) => node['title']), ['高等数学', '程序设计', '大学英语', '纽约周日课程']);
+    expect(rows.map((node) => node['title']), [
+      '高等数学',
+      '程序设计',
+      '大学英语',
+      '纽约周日课程',
+    ]);
     expect(
       rows.singleWhere((n) => n['title'] == '高等数学')['subtitle'],
       contains('调课教室'),
@@ -530,12 +540,19 @@ void main() {
       hasLength(1),
     );
     expect(object(future['state'])['coursesExpanded'], false);
-    final futureExpand = nodes(future['tree']).singleWhere((node) => node['text'] == '全部课程（3）');
-    future = object(await host.invokePage('app.schedule', 'renderTodayFeed', {
-      'context': {'selectedDate': '2026-10-12'},
-      'state': future['state'], 'event': futureExpand['event'],
-    }));
-    expect(nodes(future['tree']).where((node) => node['type'] == 'agendaItem'), hasLength(3));
+    final futureExpand = nodes(future['tree'])
+        .singleWhere((node) => node['text'] == '全部课程（3）');
+    future = object(
+      await host.invokePage('app.schedule', 'renderTodayFeed', {
+        'context': {'selectedDate': '2026-10-12'},
+        'state': future['state'],
+        'event': futureExpand['event'],
+      }),
+    );
+    expect(
+      nodes(future['tree']).where((node) => node['type'] == 'agendaItem'),
+      hasLength(3),
+    );
     expect(nodes(future['tree']).any((n) => n['badge'] == '即将开始'), false);
     final outOfTerm = object(
       await host.invokePage('app.schedule', 'renderTodayFeed', {

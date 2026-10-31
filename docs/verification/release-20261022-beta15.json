@@ -59,7 +59,7 @@
     "enterMilliseconds": 260,
     "leaveMilliseconds": 180,
     "reducedMotionAndInterruptedExit": "passed in widget tests",
-    "emulatorRecording": "dist/verification/planner-day-motion/day-sheet-motion.mp4",
+    "emulatorRecording": "dist/verification/planner/planner-day-motion/day-sheet-motion.mp4",
     "recordingBuild": 192
   },
   "publicRelease": {
@@ -114,5 +114,5 @@
     "Public fixed-signature APKs verified separately; emulator retains its existing development signature and data",
     "No ARM physical-device or native Windows runtime acceptance"
   ],
-  "localEvidence": "dist/verification/release-20261022-beta15/"
+  "localEvidence": "dist/verification/releases/release-20261022-beta15/"
 }

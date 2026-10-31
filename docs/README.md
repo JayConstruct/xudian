@@ -1,47 +1,50 @@
 # 文档导航
 
-当前说明按用途维护；版本号、测试数量和截图记录在 [验证记录](VERIFICATION.md) 与 [历史归档](archive/README.md)。
+先按当前任务选择入口。现行规则由专题维护，发布版本、测试数量与平台覆盖见 [验证索引](VERIFICATION.md)，历史方案见 [归档](archive/README.md)。
 
-## 使用与界面
+## 使用 App
 
-| 文档 | 内容 |
+| 要做什么 | 入口 |
 | --- | --- |
-| [首次安装](INSTALLATION.md) | Android APK、模块商店与依赖安装 |
-| [App 更新](APP_UPDATES.md) | GitHub 版本检查、更新说明与正式签名发布 |
-| [课表](SCHEDULE.md) | 当前课表、教学周、显示设置、课程与导入 |
-| [拾光导入](SHIGUANG_IMPORT.md) | 学校搜索、通用系统、采集流程、兼容范围与致谢 |
-| [设置层级](SETTINGS_HIERARCHY.md) | 分类首页、二级页与模块入口 |
-| [界面规则](UI_DESIGN_SYSTEM.md) | 共用视觉、顶栏、菜单、适配与反馈 |
-| [UI 规则核对](design/UI_RULES_AUDIT.md) | 规则冲突、公共实现依据与验收覆盖边界 |
-| [全局 Toast](design/TOAST.md) | 短暂反馈的 UI、动画、去重、调用与示例验收 |
-| [实际数据审核](design/DATA_CHANGE_REVIEW.md) | 冻结计划的增改删摘要、记录对比、批量与回退规则 |
-| [时区与显示诊断](design/TIMEZONE_DISPLAY.md) | 新课表时区默认、旧课表保留规则、显示诊断与设备基线 |
-| [体验优化与跨平台待办](design/UX_PLATFORM_BACKLOG.md) | 真机反馈、已完善记录、剩余任务与设备验收范围 |
-| [AI 助手](AI_ASSISTANT.md) | 当前服务工具、审核、记录与操作边界 |
+| 安装 App 和功能模块 | [首次安装](INSTALLATION.md) |
+| 创建任务、按日浏览、安排与撤销 | [任务、日程与规划](TASKS_AND_PLANNING.md) |
+| 配置课表和导入课程 | [课表](SCHEDULE.md) · [拾光导入](SHIGUANG_IMPORT.md) |
+| 配置 AI 和管理对话 | [AI 助手](AI_ASSISTANT.md) |
+| 查找设置或检查更新 | [设置层级](SETTINGS_HIERARCHY.md) · [App 更新](APP_UPDATES.md) |
 
-## 开发与发布
+## 开发模块
 
-| 文档 | 内容 |
+| 要做什么 | 入口 |
 | --- | --- |
-| [开发指南](../DEVELOPMENT.md) | 日常命令、检查、构建、数据库生成 |
-| [目录与提交清单](REPOSITORY_LAYOUT.md) | 源码、本机缓存、设计草稿与清理保留规则 |
-| [Android 签名保管](ANDROID_SIGNING.md) | 固定签名、GitHub Secrets、指纹及密钥备份 |
-| [客户端入口](../client/README.md) | 生产代码路径与数据流 |
-| [UI 加载性能](UI_LOADING_PERFORMANCE.md) | 启动、缓存、批量读取、计时与真机验收 |
-| [冷启动采样与验收](STARTUP_PERFORMANCE.md) | 启动代理指标、首页就绪、采样脚本与比较口径 |
-| [冷启动与 UI 优化路线](design/STARTUP_UI_ROADMAP.md) | 下一轮优先级、启动基线、候选优化与设计规则统一 |
-| [架构](DESIGN.md) | 宿主、业务与数据边界 |
-| [模拟器更新](EMULATOR_UPDATE.md) | 热重载、缓存、模块导入和可选提交 |
-| [模块宿主](MODULE_HOST.md) | 包验证、运行权限、事务、迁移与恢复 |
-| [JavaScript SDK](MODULE_SDK.md) | 服务、页面、节点及最低 API 要求 |
-| [公共 UI 与界面包](UI_COMPONENTS.md) | 组件契约、无脚本风格包和性能边界 |
-| [入口与页面组合](UI_COMPOSITION.md) | 布局、槽位与旧 v1/v2 source 兼容规则 |
-| [拾光适配接口](SHIGUANG_ADAPTER_API.md) | 学校模块公共桥接及导入协议 |
-| [模块目录与作者发布](MODULE_CATALOG.md) | 索引、依赖、Release 和不可变发布 |
-| [发布目录](../releases/README.md) | 索引引用的原始模块包与本机产物的保留规则 |
+| 编写第一个脚本模块、查最低 API | [SDK 快速开始与能力索引](MODULE_SDK.md) |
+| 查数据、页面、交互和平台接口 | SDK 内按功能链接到 `sdk/` 各专题 |
+| 定义公共控件或无脚本界面包 | [公共 UI 与界面包](UI_COMPONENTS.md) |
+| 贡献入口、嵌套页面和传递上下文 | [页面组合](UI_COMPOSITION.md) |
+| 编写学校适配模块 | [拾光适配接口](SHIGUANG_ADAPTER_API.md) |
+| 打包、收录与发布模块 | [模块目录与作者发布](MODULE_CATALOG.md) · [不可变发布包](../releases/README.md) |
 
-## 平台与交接
+## 维护宿主
 
-[Windows Android](WINDOWS_ANDROID_DEVELOPMENT.md) · [VPS / WSL](MULTI_MACHINE_DEVELOPMENT.md) · [远程 Android 预览](REMOTE_ANDROID_DEVELOPMENT.md) · [项目交接](../PROJECT_HANDOFF.md) · [验证记录](VERIFICATION.md) · [历史归档](archive/README.md)
+| 要做什么 | 入口 |
+| --- | --- |
+| 配置环境、运行检查与构建 | [开发指南](../DEVELOPMENT.md) |
+| 找生产入口与架构边界 | [客户端说明](../client/README.md) · [架构](DESIGN.md) · [模块宿主](MODULE_HOST.md) |
+| 更新模拟器中的 APK 或模块 | [模拟器更新](EMULATOR_UPDATE.md) |
+| 管理目录、提交范围和缓存 | [目录规范](REPOSITORY_LAYOUT.md) |
+| 发布 Android App 与保管签名 | [App 发布](APP_UPDATES.md#发布-android-更新) · [签名保管](ANDROID_SIGNING.md) |
+| 分析页面加载或冷启动 | [UI 加载性能](UI_LOADING_PERFORMANCE.md) · [启动采样](STARTUP_PERFORMANCE.md) |
+| 开发其他设备环境 | [Windows Android](WINDOWS_ANDROID_DEVELOPMENT.md) · [VPS／WSL](MULTI_MACHINE_DEVELOPMENT.md) · [远程预览](REMOTE_ANDROID_DEVELOPMENT.md) |
 
-维护时，一项能力只在所属专题说明；首页和交接引用该专题。标明现有能力、兼容协议和后续目标，避免把历史构建号写作当前安装要求。SDK、Schema、许可与上游作者说明保持完整。
+## 设计、待办与验收
+
+| 要做什么 | 入口 |
+| --- | --- |
+| 查看决策与下一步任务 | [项目交接](../PROJECT_HANDOFF.md) · [统一待办](BACKLOG.md) |
+| 查看选稿、实现范围与页面顺序 | [设计入口](../design/README.md) · [页面清单](../design/PLAN.md) |
+| 保存原图、提示词与批次 | [设计稿规范](DESIGN_ARTIFACTS.md) |
+| 修改公共 UI 或具体交互 | [界面规则](UI_DESIGN_SYSTEM.md) · [Toast](design/TOAST.md) · [数据审核](design/DATA_CHANGE_REVIEW.md) |
+| 核对规划需求或持续生成规则 | [规划交互](design/PLANNER_UX_REDESIGN.md) · [任务新建](design/TASK_CREATION.md) |
+| 查性能排查入口、平台及视觉验收条件 | [体验与平台细则](design/UX_PLATFORM_BACKLOG.md) · [时区与显示诊断](design/TIMEZONE_DISPLAY.md) |
+| 查历史运行结果 | [验证索引](VERIFICATION.md) · [历史归档](archive/README.md) |
+
+一项能力只维护一份规则；当前宿主 API 由 SDK 标明并与代码检查，模块版本来自 `module.json`。任务状态只在统一待办更新，专题保留规则和验收条件。详细日志、截图与设备快照保存在本机，公开文档的链接检查自动在 CI 运行。

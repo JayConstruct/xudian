@@ -42,7 +42,7 @@
   "publicApksVerified": true,
   "releasePublished": true,
   "ciVerified": true,
-  "detailsDirectory": "dist/verification/release-20261020-beta7",
+  "detailsDirectory": "dist/verification/releases/release-20261020-beta7",
   "limitations": [
     "ARM physical device and Windows runtime are not verified.",
     "First fixed certificate release may require reinstalling historical temporary-signature builds."

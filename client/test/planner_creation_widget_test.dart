@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,6 +14,7 @@ import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/script_app_module.dart';
 import 'package:task_app/core/module_host/script_page.dart';
+import 'package:task_app/core/module_host/ui_preferences.dart';
 import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
 import 'package:task_app/core/ui/module_detail_page.dart';
@@ -129,6 +131,20 @@ void main() {
     await settle(tester);
   }
 
+  Future<void> openAdd(WidgetTester tester) =>
+      tapVisible(tester, find.text('添加内容或规则'));
+
+  Future<void> openTemplates(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('页面菜单'));
+    await settle(tester);
+    await tapVisible(tester, find.text('从模板新建'));
+  }
+
+  Future<void> openMultiple(WidgetTester tester) async {
+    await openAdd(tester);
+    await tapVisible(tester, find.text('多次任务'));
+  }
+
   void expectNoErrors(WidgetTester tester) {
     expect(find.textContaining('模块界面无效'), findsNothing);
     expect(find.textContaining('不支持的组件'), findsNothing);
@@ -143,38 +159,385 @@ void main() {
     expect(bounds.width, greaterThan(280));
   }
 
+  Future<void> showEchoPage(WidgetTester tester, {bool cache = false}) async {
+    await tester.runAsync(
+      () async => host.install(
+        await ScriptPackage.verify(
+          await ScriptPackage.build(
+            {
+              'formatVersion': 3,
+              'manifest': {
+                'id': 'test.form-echo',
+                'version': '1.0.0',
+                'hostApi': '^1.43.0',
+                'dataVersion': 1,
+                'permissions': ['ui'],
+              },
+              'entryPoint': 'main.js',
+              'collections': [],
+              'pages': [],
+              'services': [],
+            },
+            {
+              'main.js':
+                  '''
+import {ui} from '@xudian/sdk';
+export async function render(input) {
+  const event = input.event || {};
+  let text = input.formValues?.name || '';
+  if (event.type === 'echo' && typeof event.value === 'string') text = event.value;
+  if (event.type === 'replace') text = event.text;
+  if (event.type === 'delayedReplace') {
+    await ui.dialog({title: '等待回写', fields: []});
+    text = event.text;
+  }
+  if (event.type === 'clearCache') await ui.preferences.set('echo.input.v1', null);
+  const button = (label, text, type = 'replace') => ({type: 'button', text: label, event: {type, text}});
+  return {replaceForms: {name: text}, tree: {type: 'column',
+    formCache: ${cache ? "{preferenceKey:'echo.input.v1',fields:['name']}" : 'null'}, children: [
+    {type: 'input', key: 'name', text: '名称', value: text, onChangeEvent: {type: 'echo'}},
+    {type: 'input', key: 'uncached', text: '不缓存字段'},
+    button('替换后缀', '开始zhongwen资料已更新'),
+    button('替换拼音', '开始中文资料已更新'),
+    button('缩短文本', '阅读'),
+    button('延迟替换', '异步返回的文本', 'delayedReplace'),
+    button('保存并清空缓存', '', 'clearCache'),
+  ]}};
+}
+''',
+            },
+          ),
+          allowUnsignedLocal: true,
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWith((_) async => db),
+          moduleHostProvider.overrideWith((_) async => host),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ScriptPage(
+              host: host,
+              moduleId: 'test.form-echo',
+              handler: 'render',
+            ),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+  }
+
+  testWidgets('planner form echoes preserve caret and Chinese composition', (
+    tester,
+  ) async {
+    await showPanel(tester);
+    await tester.showKeyboard(input('任务名称'));
+    const editing = TextEditingValue(
+      text: '先阅读zhongwen资料',
+      selection: TextSelection.collapsed(offset: 7),
+      composing: TextRange(start: 3, end: 11),
+    );
+    tester.testTextInput.updateEditingValue(editing);
+    final controller = tester.widget<TextField>(input('任务名称')).controller!;
+    var notifications = 0;
+    void changed() => notifications++;
+    controller.addListener(changed);
+    await settle(tester);
+    expect(controller.value, editing);
+    expect(
+      notifications,
+      0,
+      reason: 'An equal echo must not rewrite the IME value.',
+    );
+    controller.removeListener(changed);
+    expectNoErrors(tester);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
-    'narrow large-text batch, rule and template pages retain the draft and visible footer',
+    'opted-in form cache saves the latest input before debounce and disposal',
+    (tester) async {
+      await showEchoPage(tester, cache: true);
+      await tester.enterText(input('不缓存字段'), '不应持久化的值');
+      await tester.showKeyboard(input('名称'));
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(text: '尚未完成'),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(text: '最后150ms的新输入'),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      final saved = await tester.runAsync(
+        () =>
+            ModuleUiPreferences(store)
+                .get(host.instances['test.form-echo']!.actor, 'echo.input.v1'),
+      );
+      expect(saved, {'name': '最后150ms的新输入'});
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'form cache failures stay visible and a later successful edit clears them',
+    (tester) async {
+      await showEchoPage(tester, cache: true);
+      await tester.enterText(input('名称'), '字' * 5000);
+      await settle(tester);
+      expect(find.text('草稿未保存，请保留当前页面并重试。'), findsOneWidget);
+      expect(find.textContaining('模块界面无效'), findsNothing);
+      await tester.enterText(input('名称'), '已恢复保存');
+      await settle(tester);
+      expect(find.text('草稿未保存，请保留当前页面并重试。'), findsNothing);
+      final saved = await tester.runAsync(
+        () =>
+            ModuleUiPreferences(store)
+                .get(host.instances['test.form-echo']!.actor, 'echo.input.v1'),
+      );
+      expect(saved, {'name': '已恢复保存'});
+      expectNoErrors(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'module cache clearing waits for all earlier native form writes',
+    (tester) async {
+      await showEchoPage(tester, cache: true);
+      await tester.showKeyboard(input('名称'));
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(text: '旧输入'),
+      );
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(text: '保存前的新输入'),
+      );
+      await tester.tap(find.text('保存并清空缓存'));
+      await settle(tester);
+      final saved = await tester.runAsync(
+        () =>
+            ModuleUiPreferences(store)
+                .get(host.instances['test.form-echo']!.actor, 'echo.input.v1'),
+      );
+      expect(saved, isNull);
+      expectNoErrors(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('waiting for native cache does not rebase an older field echo', (
+    tester,
+  ) async {
+    await showEchoPage(tester, cache: true);
+    late Completer<void> gate;
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    late Future<void> lock;
+    await tester.runAsync(() async {
+      gate = Completer<void>();
+      final entered = Completer<void>();
+      lock = db.transaction(() async {
+        entered.complete();
+        await gate.future;
+      });
+      await entered.future;
+    });
+    await tester.enterText(input('名称'), '旧字段');
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.enterText(input('名称'), '后输入的新字段');
+    final controller = tester.widget<TextField>(input('名称')).controller!;
+    final echoed = <String>[];
+    void changed() => echoed.add(controller.text);
+    controller.addListener(changed);
+    gate.complete();
+    await tester.runAsync(() => lock);
+    await settle(tester);
+    controller.removeListener(changed);
+    expect(echoed, isNot(contains('旧字段')));
+    expect(controller.text, '后输入的新字段');
+    expectNoErrors(tester);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'changed form echoes retain valid ranges and clamp shorter text',
+    (tester) async {
+      await showEchoPage(tester);
+      await tester.showKeyboard(input('名称'));
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '开始zhongwen结束',
+          selection: TextSelection(
+            baseOffset: 8,
+            extentOffset: 4,
+            isDirectional: true,
+          ),
+          composing: TextRange(start: 2, end: 10),
+        ),
+      );
+      await settle(tester);
+      final controller = tester.widget<TextField>(input('名称')).controller!;
+      await tester.tap(find.text('替换后缀'));
+      await settle(tester);
+      expect(controller.text, '开始zhongwen资料已更新');
+      expect(
+        controller.selection,
+        const TextSelection(
+          baseOffset: 8,
+          extentOffset: 4,
+          isDirectional: true,
+        ),
+      );
+      expect(controller.value.composing, const TextRange(start: 2, end: 10));
+      await tester.tap(find.text('替换拼音'));
+      await settle(tester);
+      expect(controller.text, '开始中文资料已更新');
+      expect(controller.value.composing, TextRange.empty);
+      await tester.tap(find.text('缩短文本'));
+      await settle(tester);
+      expect(controller.text, '阅读');
+      expect(
+        controller.selection,
+        const TextSelection(
+          baseOffset: 2,
+          extentOffset: 2,
+          isDirectional: true,
+        ),
+      );
+      expectNoErrors(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('delayed form replacement keeps a newer local edit', (
+    tester,
+  ) async {
+    await showEchoPage(tester);
+    await tester.enterText(input('名称'), '原草稿');
+    await settle(tester);
+    final dialog = Completer<void>();
+    addTearDown(() {
+      if (!dialog.isCompleted) dialog.complete();
+    });
+    var awaitingDialog = false;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.dialog') {
+        awaitingDialog = true;
+        await dialog.future;
+      }
+      return null;
+    };
+    await tester.tap(find.text('延迟替换'));
+    await settle(tester);
+    expect(awaitingDialog, isTrue);
+    await tester.showKeyboard(input('名称'));
+    const newer = TextEditingValue(
+      text: '用户继续输入的新草稿',
+      selection: TextSelection.collapsed(offset: 4),
+      composing: TextRange(start: 2, end: 6),
+    );
+    tester.testTextInput.updateEditingValue(newer);
+    dialog.complete();
+    await settle(tester);
+    expect(tester.widget<TextField>(input('名称')).controller!.value, newer);
+    expectNoErrors(tester);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'narrow large-text unified pages retain title, staged location and footer',
     (tester) async {
       await showPanel(tester);
       await tester.enterText(input('任务名称'), '窄屏阅读草稿');
       await settle(tester);
-      await tapVisible(tester, find.text('批量'));
-      expectFooter(tester, '预览安排');
+      expectFooter(tester, '创建任务');
+      expect(find.text('单次'), findsNothing);
+      expect(find.text('批量'), findsNothing);
+      expect(find.text('＋ 添加描述'), findsNothing);
       expectNoErrors(tester);
+      await openAdd(tester);
+      expect(find.text('添加内容或规则'), findsOneWidget);
+      await tapVisible(tester, find.text('地点'));
+      await tester.enterText(input('地点'), '图书馆302');
+      await settle(tester);
+      expectFooter(tester, '保存地点');
+      await tester.tap(find.widgetWithText(FilledButton, '保存地点'));
+      await settle(tester);
+      expectFooter(tester, '创建任务');
+      expect(find.textContaining('图书馆302'), findsOneWidget);
+      expectNoErrors(tester);
+      await openAdd(tester);
+      await tapVisible(tester, find.text('描述'));
+      await tester.enterText(input('详细描述'), '未保存的描述');
+      await settle(tester);
+      await tester.tap(find.byType(BackButton));
+      await settle(tester);
+      expect(find.text('添加内容或规则'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await settle(tester);
+      expectFooter(tester, '创建任务');
+      expect(find.text('未保存的描述'), findsNothing);
+      expect(find.textContaining('图书馆302'), findsOneWidget);
+      await tester.ensureVisible(input('任务名称'));
+      expect(
+        tester.widget<TextField>(input('任务名称')).controller!.text,
+        '窄屏阅读草稿',
+      );
+      expectNoErrors(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
-      await tapVisible(tester, find.text('3项 · 编辑'));
-      expect(find.text('任务规则'), findsOneWidget);
-      expectFooter(tester, '应用3项规则');
+  testWidgets(
+    'scheduled range and fixed switch stay editable in a narrow large-text child page',
+    (tester) async {
+      await showPanel(tester);
+      await tester.enterText(input('任务名称'), '固定时间草稿');
+      await settle(tester);
+      await openAdd(tester);
+      await tapVisible(tester, find.text('起止时间'));
+      expectFooter(tester, '保存时间');
+      await tapVisible(tester, find.text('固定时间'));
+      expectNoErrors(tester);
+      await tester.tap(find.widgetWithText(FilledButton, '保存时间'));
+      await settle(tester);
+      expectFooter(tester, '创建任务');
+      expect(find.textContaining('已固定'), findsOneWidget);
+      await tapVisible(tester, find.text('起止时间'));
+      await tapVisible(tester, find.text('固定时间'));
+      await tester.tap(find.byType(BackButton));
+      await settle(tester);
+      expect(
+        find.textContaining('已固定'),
+        findsOneWidget,
+        reason: 'Back must discard an un-applied change to the fixed switch.',
+      );
+      expectFooter(tester, '创建任务');
+      expectNoErrors(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'narrow large-text multiple setup is deeper and template navigation retains its rules',
+    (tester) async {
+      await showPanel(tester);
+      await tester.enterText(input('任务名称'), '窄屏多次草稿');
+      await settle(tester);
+      await openMultiple(tester);
+      expectFooter(tester, '保存多次设置');
       await tester.ensureVisible(input('最少（天）'));
       await tester.enterText(input('最少（天）'), '5');
       await settle(tester);
-      expectNoErrors(tester);
-      expect(
-        find.widgetWithText(FilledButton, '应用3项规则'),
-        findsOneWidget,
-        reason: tester
-            .widgetList<Text>(find.byType(Text))
-            .map((w) => w.data)
-            .join(' | '),
-      );
-      await tester.tap(find.widgetWithText(FilledButton, '应用3项规则'));
+      await tester.tap(find.widgetWithText(FilledButton, '保存多次设置'));
       await settle(tester);
-      expect(find.text('5～6天'), findsOneWidget);
+      expect(find.textContaining('5～6天'), findsOneWidget);
       expectFooter(tester, '预览安排');
       expectNoErrors(tester);
-
-      await tapVisible(tester, find.text('从模板新建'));
+      await openTemplates(tester);
       expect(find.text('选择模板'), findsOneWidget);
       final templateRows = tester.widgetList<ListTile>(find.byType(ListTile));
       expect(templateRows.length, 4);
@@ -183,16 +546,15 @@ void main() {
         tester.widget<TextField>(input('搜索模板')).decoration!.prefixIcon,
         isNull,
       );
-      expectNoErrors(tester);
       await tester.tap(find.byType(BackButton));
       await settle(tester);
       expectFooter(tester, '预览安排');
       await tester.ensureVisible(input('任务名称'));
       expect(
         tester.widget<TextField>(input('任务名称')).controller!.text,
-        '窄屏阅读草稿',
+        '窄屏多次草稿',
       );
-      expect(find.text('5～6天'), findsOneWidget);
+      expect(find.textContaining('5～6天'), findsOneWidget);
       expectNoErrors(tester);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -221,7 +583,7 @@ void main() {
       expect(find.text('已保存到我的模板'), findsOneWidget);
       expectNoErrors(tester);
 
-      await tapVisible(tester, find.text('从模板新建'));
+      await openTemplates(tester);
       expect(find.text('管理').hitTestable(), findsOneWidget);
       await tester.tap(find.text('管理'));
       await settle(tester);
@@ -240,14 +602,14 @@ void main() {
       await showPanel(tester);
       await tester.enterText(input('任务名称'), '套用前的草稿');
       await settle(tester);
-      await tapVisible(tester, find.text('从模板新建'));
+      await openTemplates(tester);
       await tapVisible(tester, find.text('阅读论文'));
       expectFooter(tester, '预览安排');
       await tester.ensureVisible(input('任务名称'));
       expect(tester.widget<TextField>(input('任务名称')).controller!.text, '阅读论文');
       await tester.enterText(input('任务名称'), '模板后的修改');
       await settle(tester);
-      expect(find.text('3项 · 编辑'), findsOneWidget);
+      expect(find.text('多次任务'), findsOneWidget);
       expect(
         tester.widget<TextField>(input('任务名称')).controller!.text,
         '模板后的修改',
@@ -280,7 +642,9 @@ void main() {
       await showPanel(tester);
       await tester.enterText(input('任务名称'), '一次确认的批量任务');
       await settle(tester);
-      await tapVisible(tester, find.text('批量'));
+      await openMultiple(tester);
+      await tester.tap(find.widgetWithText(FilledButton, '保存多次设置'));
+      await settle(tester);
       await tester.tap(find.widgetWithText(FilledButton, '预览安排'));
       await settle(tester);
       expect(find.text('预览安排'), findsOneWidget);

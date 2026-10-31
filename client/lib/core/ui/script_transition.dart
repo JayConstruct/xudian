@@ -11,6 +11,7 @@ class ScriptTransition extends StatefulWidget {
     this.visible = true,
     this.replayKey,
     this.navigationDirection,
+    this.fillViewport = false,
     Duration? duration,
     this.collapse = false,
   }) : assert(navigationDirection == null || visible && !collapse),
@@ -27,6 +28,7 @@ class ScriptTransition extends StatefulWidget {
 
   /// Page navigation retains the outgoing view until push/pop motion finishes.
   final String? navigationDirection;
+  final bool fillViewport;
   final Duration duration;
   final bool collapse;
 
@@ -102,6 +104,7 @@ class _ScriptTransitionState extends State<ScriptTransition>
       return _ScriptPageExchange(
         pageKey: widget.replayKey,
         direction: widget.navigationDirection!,
+        fillViewport: widget.fillViewport,
         duration: widget.duration,
         child: widget.child,
       );
@@ -159,11 +162,13 @@ class _ScriptPageExchange extends StatefulWidget {
   const _ScriptPageExchange({
     required this.pageKey,
     required this.direction,
+    required this.fillViewport,
     required this.duration,
     required this.child,
   });
   final Object? pageKey;
   final String direction;
+  final bool fillViewport;
   final Duration duration;
   final Widget child;
   @override
@@ -261,7 +266,7 @@ class _ScriptPageExchangeState extends State<_ScriptPageExchange>
 
   @override
   Widget build(BuildContext context) => Stack(
-    fit: StackFit.passthrough,
+    fit: widget.fillViewport ? StackFit.expand : StackFit.passthrough,
     children: [
       if (!back && outgoing != null) _outgoing(animate: false),
       _page(
@@ -276,12 +281,19 @@ class _ScriptPageExchangeState extends State<_ScriptPageExchange>
 
   Widget _outgoing({required bool animate}) => Positioned.fill(
     child: ClipRect(
-      child: OverflowBox(
-        alignment: Alignment.topCenter,
-        minHeight: 0,
-        maxHeight: double.infinity,
-        child: _page(outgoing!, outgoingKey, active: false, animate: animate),
-      ),
+      child: widget.fillViewport
+          ? _page(outgoing!, outgoingKey, active: false, animate: animate)
+          : OverflowBox(
+              alignment: Alignment.topCenter,
+              minHeight: 0,
+              maxHeight: double.infinity,
+              child: _page(
+                outgoing!,
+                outgoingKey,
+                active: false,
+                animate: animate,
+              ),
+            ),
     ),
   );
 

@@ -1,6 +1,6 @@
 # 序点 Flutter 客户端
 
-生产入口为 `main.dart → XudianApp → AppShell → moduleHostProvider`。原生注册受保护的模块管理界面；任务、视图、AI 和组件示例运行 v3 JavaScript 模块。宿主 API 当前为 **1.25.0**，模块包格式为 `packageFormat: 2`，定义为 `formatVersion: 3`。
+生产入口为 `main.dart → XudianApp → AppShell → moduleHostProvider`。原生注册受保护的模块管理界面；任务、视图、AI 和组件示例运行 v3 JavaScript 模块。宿主 API 与最低能力要求统一见 [SDK](../docs/MODULE_SDK.md)；模块包格式为 `packageFormat: 2`，定义为 `formatVersion: 3`。
 
 ## 代码入口
 
@@ -34,4 +34,4 @@
 
 在 Android Studio 打开本目录，启动文件选择 `lib/main.dart`。环境、测试和构建命令统一见 [开发指南](../DEVELOPMENT.md)；宿主限制见 [模块宿主](../docs/MODULE_HOST.md)，开发契约见 [SDK](../docs/MODULE_SDK.md)。
 
-当前能力与边界见 [项目首页](../README.md)，旧架构说明及验证历史见 [客户端历史](../docs/archive/CLIENT_OVERVIEW_20261009.md)。
+当前能力与边界见 [项目首页](../README.md)，历史运行与平台范围见 [验证索引](../docs/VERIFICATION.md)。

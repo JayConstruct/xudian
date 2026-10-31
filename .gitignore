@@ -44,6 +44,12 @@ build/
 /dist/
 /output/
 
+# Shallow UI originals and batch records stay local; directory guides are tracked.
+/design/styles/*
+!/design/styles/README.md
+/design/screens/*
+!/design/screens/README.md
+
 # Only catalog-pinned client bundles and immutable release snapshots are tracked.
 *.xmodule
 !client/assets/modules/*-*.xmodule

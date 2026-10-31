@@ -35,5 +35,5 @@
     "Only module-declared queried dates and counts are shown; first query still performs asynchronous work",
     "Android ARM and Windows runtime and performance not measured"
   ],
-  "artifactsDirectory": "dist/verification/date-motion-20261012"
+  "artifactsDirectory": "dist/verification/ui/date-motion-20261012"
 }

@@ -105,5 +105,5 @@
     "Foreground/resume/start rolling replenishment; no operating-system background daemon promised",
     "ARM device FPS and Windows native runtime not measured"
   ],
-  "localEvidence": "dist/verification/release-20261021-beta12/"
+  "localEvidence": "dist/verification/releases/release-20261021-beta12/"
 }

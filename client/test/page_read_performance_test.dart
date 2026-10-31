@@ -76,7 +76,8 @@ void main() {
             .map(object)
             .toList();
         expect(rows, hasLength(50));
-        expect(rows.every((row) => row['subtitle'] == '计划 01:30–01:30'), isTrue);
+        expect(rows.every((row) => row['startTime'] == '01:30'), isTrue);
+        expect(rows.every((row) => row['endTime'] == '01:30'), isTrue);
         final bridges = samples.where((sample) => sample.name == 'page.bridge');
         expect(bridges.where((sample) => sample.arguments['method'] == 'clock.toLocalMany'), hasLength(1));
         expect(bridges.where((sample) => sample.arguments['method'] == 'clock.toLocal'), isEmpty);
@@ -111,6 +112,10 @@ void main() {
         switch (method) {
           case 'clock.today':
             return '2026-11-01';
+          case 'clock.now':
+            return '2026-11-01T12:00:00Z';
+          case 'services.directory':
+            return [];
           case 'clock.systemTimezone':
             return {'zone': 'Asia/Shanghai', 'source': 'system'};
           case 'services.query':
@@ -137,13 +142,17 @@ void main() {
           .map(object)
           .toList();
       expect(rows, hasLength(tasks.length));
+      final rowsById = {for (final row in rows) row['key']: row};
+      expect(rowsById.keys, containsAll(tasks.map((task) => task['id'])));
       for (var index = 0; index < count; index++) {
         final task = tasks[index];
+        final row = rowsById[task['id']]!;
         final start = clockToLocal({'utc': task['plannedStartAt'], 'zone': task['plannedTimezone']});
         final end = clockToLocal({'utc': task['plannedEndAt'], 'zone': task['plannedTimezone']});
         expect(start['date'], '2026-11-01');
         expect(end['date'], start['date']);
-        expect(rows[index]['subtitle'], '计划 ${start['time']}–${end['time']}');
+        expect(row['startTime'], start['time']);
+        expect(row['endTime'], end['time']);
       }
       expect(rows.last['subtitle'], '计划 当天');
       expect(singleCalls, 0);

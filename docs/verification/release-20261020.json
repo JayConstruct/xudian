@@ -199,5 +199,5 @@
     "This final UI check opened configuration export without exporting or enabling secrets and sent no AI messages.",
     "ARM physical-device performance, Windows native builds and actual model service calls were not validated by this final release check."
   ],
-  "localEvidence": "dist/verification/release-20261019-beta6/"
+  "localEvidence": "dist/verification/releases/release-20261019-beta6/"
 }

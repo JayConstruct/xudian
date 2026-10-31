@@ -60,10 +60,10 @@ python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json --online
 ```bash
 python3 scripts/module_catalog/release.py --repository JayConstruct/xudian \
   --tag modules-NEW_RELEASE --expected-count EXPECTED_COUNT \
-  --stage-dir dist/module-release-assets
+  --stage-dir dist/releases/modules/modules-NEW_RELEASE
 ```
 
-同一准备目录只用于一个 tag；存在额外文件或同名不同字节时，工具拒绝写入或覆盖。重复准备会复用字节完全一致的包。完成审阅后可执行上面的普通发布命令，或传入 `--package-dir dist/module-release-assets` 发布已准备的资产。
+同一准备目录只用于一个 tag；存在额外文件或同名不同字节时，工具拒绝写入或覆盖。重复准备会复用字节完全一致的包。完成审阅后可执行上面的普通发布命令，或传入 `--package-dir dist/releases/modules/modules-NEW_RELEASE` 发布已准备的资产。
 
 不要使用 `gh release upload --clobber` 覆盖已发布版本。Release tag 也不可重新指向另一份代码。已存在的版本重新运行工具时会复用原下载 URL，保留原 tag。
 

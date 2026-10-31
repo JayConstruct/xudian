@@ -16,7 +16,7 @@
       "buildNumber": 117,
       "dataCleared": false,
       "android": "15",
-      "apkArtifact": "dist/verification/arm-ux-20261013/apks/app-arm64-v8a-build117.apk",
+      "apkArtifact": "dist/verification/platform/arm-ux-20261013/apks/app-arm64-v8a-build117.apk",
       "systemSettings": {
         "screenPixels": {
           "physical": {
@@ -153,7 +153,7 @@
         "systemSettingChanged": false,
         "reason": "Android ROM rejected ADB settings write with exit 255; verification continued on emulator and narrow-screen automated regression."
       },
-      "evidenceDirectory": "dist/verification/arm-ux-20261013/phone"
+      "evidenceDirectory": "dist/verification/platform/arm-ux-20261013/phone"
     },
     {
       "kind": "emulator",
@@ -164,7 +164,7 @@
       "buildNumber": 117,
       "dataCleared": false,
       "android": "17",
-      "apkArtifact": "dist/verification/arm-ux-20261013/apks/app-x86_64-build117.apk",
+      "apkArtifact": "dist/verification/platform/arm-ux-20261013/apks/app-x86_64-build117.apk",
       "systemSettings": {
         "screenPixels": {
           "physical": {
@@ -247,7 +247,7 @@
         "restored": true,
         "restoredFontScale": "1.0"
       },
-      "evidenceDirectory": "dist/verification/arm-ux-20261013/emulator"
+      "evidenceDirectory": "dist/verification/platform/arm-ux-20261013/emulator"
     }
   ],
   "displayFinding": {
@@ -345,6 +345,6 @@
     "Windows native build and timezone runtime",
     "School login, real AI and frame/battery performance"
   ],
-  "artifactRoot": "dist/verification/arm-ux-20261013",
+  "artifactRoot": "dist/verification/platform/arm-ux-20261013",
   "privacy": "Public summary omits device serials and business record names/IDs. Detailed screenshots and XML are local artifacts."
 }

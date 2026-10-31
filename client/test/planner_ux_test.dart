@@ -615,34 +615,33 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  test(
-    'quick-add requests a compact panel and preserves expanded fields',
-    () async {
-      final presentations = <Map<String, Object?>>[];
-      host.interaction = (_, method, arguments) async {
-        if (method == 'ui.panel') {
-          presentations.add(object(arguments['presentation']));
-        }
-        return true;
-      };
-      await page(event: {'type': 'add'});
-      expect(presentations.single['heightFactor'], .94);
-      var result = await page(pageId: 'app.planner.quickAdd');
-      expect(object(result['tree'])['compact'], isTrue);
-      expect(object(result['tree'])['spacing'], 8);
-      result = await page(
-        pageId: 'app.planner.quickAdd',
-        state: object(result['state']),
-        forms: {'title': '保留草稿'},
-        event: {'type': 'description'},
-      );
-      expect(object(object(result['state'])['draft'])['title'], '保留草稿');
-      expect(
-        nodes(result['tree']).any((node) => node['key'] == 'notes'),
-        isTrue,
-      );
-    },
-  );
+  test('quick-add requests a compact panel and preserves title through the unified content editor', () async {
+    final presentations = <Map<String, Object?>>[];
+    host.interaction = (_, method, arguments) async {
+      if (method == 'ui.panel') {
+        presentations.add(object(arguments['presentation']));
+      }
+      return true;
+    };
+    await page(event: {'type': 'add'});
+    expect(presentations.single['heightFactor'], .94);
+    var result = await page(pageId: 'app.planner.quickAdd');
+    expect(object(result['tree'])['compact'], isTrue);
+    expect(object(result['tree'])['spacing'], 8);
+    result = await page(
+      pageId: 'app.planner.quickAdd',
+      state: object(result['state']),
+      forms: {'title': '保留草稿'},
+      event: {'type': 'openAdd'},
+    );
+    result = await page(
+      pageId: 'app.planner.quickAdd',
+      state: object(result['state']),
+      event: {'type': 'editContent', 'key': 'notes'},
+    );
+    expect(object(object(result['state'])['draft'])['title'], '保留草稿');
+    expect(nodes(result['tree']).any((node) => node['key'] == 'notes'), isTrue);
+  });
 
   testWidgets('quick-add save button fills the panel width', (tester) async {
     await tester.binding.setSurfaceSize(const Size(400, 800));
@@ -666,7 +665,7 @@ void main() {
       ),
     );
     await settlePlanner(tester);
-    final save = find.widgetWithText(FilledButton, '保存任务');
+    final save = find.widgetWithText(FilledButton, '创建任务');
     expect(save, findsOneWidget);
     final panelWidth = tester
         .getSize(find.byKey(const ValueKey('quick-add-panel')))
@@ -709,11 +708,11 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '窄屏草稿');
       await settlePlanner(tester);
       expect(
-        find.widgetWithText(FilledButton, '保存任务').hitTestable(),
+        find.widgetWithText(FilledButton, '创建任务').hitTestable(),
         findsOneWidget,
       );
-      await tester.ensureVisible(find.text('添加规则'));
-      expect(find.text('添加规则').hitTestable(), findsOneWidget);
+      await tester.ensureVisible(find.text('添加内容或规则'));
+      expect(find.text('添加内容或规则').hitTestable(), findsOneWidget);
       expect(
         tester.widget<TextField>(find.byType(TextField).first).controller!.text,
         '窄屏草稿',
@@ -757,7 +756,7 @@ void main() {
         actions
             .where((a) => a['presentation'] == 'menu')
             .map((a) => a['label']),
-        ['自动安排', '操作历史', '视图与显示', '待安排筛选', '规划规则', '规划设置'],
+        ['自动安排', '操作历史', '已取消任务', '视图与显示', '待安排筛选', '规划规则', '规划设置'],
       );
       final view = actions.singleWhere((a) => a['label'] == '视图与显示');
       final choices = nodes(view).singleWhere((n) => n['kind'] == 'choiceGrid');
@@ -1162,48 +1161,51 @@ void main() {
     },
   );
 
-  test(
-    'quick add preserves the draft through rules and saves without scheduling',
-    () async {
-      final interactions = <String>[];
-      host.interaction = (_, method, args) async {
-        interactions.add(method);
-        return method == 'ui.review';
-      };
-      final initial = await page(pageId: 'app.planner.quickAdd');
-      expect(nodes(initial['tree']).where((n) => n['key'] == 'notes'), isEmpty);
-      var next = await page(
-        pageId: 'app.planner.quickAdd',
-        state: object(initial['state']),
-        forms: {'title': '普通任务', 'notes': '保存完整描述\n第二行'},
-        event: {'type': 'rules'},
-      );
-      expect(object(object(next['state'])['draft'])['title'], '普通任务');
-      next = await page(
-        pageId: 'app.planner.quickAdd',
-        state: object(next['state']),
-        forms: {'estimatedMinutes': '45'},
-        event: {'type': 'back'},
-      );
-      expect(object(object(next['state'])['draft'])['notes'], '保存完整描述\n第二行');
-      final saved = await page(
-        pageId: 'app.planner.quickAdd',
-        state: object(next['state']),
-        event: {'type': 'save'},
-      );
-      expect(object(saved['state'])['error'], isNull);
-      final raw = (await host.query(
-        actor(),
-        const ServiceRef('app.tasks', 'task.list', 1),
-        {'view': 'raw'},
-      ) as List).map(object).single;
-      expect(raw['notes'], '保存完整描述\n第二行');
-      expect(raw['estimatedMinutes'], 45);
-      expect(raw['dueDate'], isNull);
-      expect(raw['plannedStartAt'], isNull);
-      expect(interactions, containsAllInOrder(['ui.review', 'ui.navigate']));
-    },
-  );
+  test('quick add preserves applied content through unified selector and saves duration without scheduling', () async {
+    final interactions = <String>[];
+    host.interaction = (_, method, args) async {
+      interactions.add(method);
+      return method == 'ui.review';
+    };
+    Future<Map<String, Object?>> step(
+      Map<String, Object?> p,
+      Map<String, Object?> event, [
+      Map<String, Object?> forms = const {},
+    ]) => page(
+      pageId: 'app.planner.quickAdd',
+      state: object(p['state']),
+      event: event,
+      forms: forms,
+    );
+    var next = await page(pageId: 'app.planner.quickAdd');
+    expect(nodes(next['tree']).where((n) => n['key'] == 'notes'), isEmpty);
+    next = await step(next, {'type': 'openAdd'}, {'title': '普通任务'});
+    next = await step(next, {'type': 'editContent', 'key': 'notes'});
+    next = await step(next, {'type': 'applyContent'}, {'notes': '保存完整描述\n第二行'});
+    next = await step(next, {'type': 'openAdd'});
+    next = await step(next, {'type': 'editContent', 'key': 'duration'});
+    next = await step(
+      next,
+      {'type': 'applyContent'},
+      {'estimatedMinutes': '45'},
+    );
+    next = await step(next, {'type': 'openAdd'});
+    next = await step(next, {'type': 'back'});
+    expect(object(object(next['state'])['draft'])['title'], '普通任务');
+    expect(object(object(next['state'])['draft'])['notes'], '保存完整描述\n第二行');
+    final saved = await step(next, {'type': 'save'});
+    expect(object(saved['state'])['error'], isNull);
+    final raw = (await host.query(
+      actor(),
+      const ServiceRef('app.tasks', 'task.list', 1),
+      {'view': 'raw'},
+    ) as List).map(object).single;
+    expect(raw['notes'], '保存完整描述\n第二行');
+    expect(raw['estimatedMinutes'], 45);
+    expect(raw['dueDate'], isNull);
+    expect(raw['plannedStartAt'], isNull);
+    expect(interactions, containsAllInOrder(['ui.review', 'ui.navigate']));
+  });
 
   test(
     'deadline candidate filter leaves all scheduled occupancy visible',

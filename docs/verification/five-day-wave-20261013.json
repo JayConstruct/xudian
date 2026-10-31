@@ -29,5 +29,5 @@
     "Only affected tests rerun; no new FPS or latency measurement",
     "Waiting plus reveal intentionally blocks band input; the header provides continuous navigation"
   ],
-  "artifactsDirectory": "dist/verification/five-day-wave-20261013"
+  "artifactsDirectory": "dist/verification/ui/five-day-wave-20261013"
 }

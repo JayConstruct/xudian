@@ -42,7 +42,7 @@ Flutter 页面通过 `UiComponent(ref, fallback, props, slots, events)` 使用�
 
 工作区顶栏右侧的统一「页面菜单」由宿主在标题模板外绘制，包含页面操作、顶部模块入口、设置和界面风格与恢复。标题模板保留 `actions` 空槽位以兼容已有界面包，菜单不会被自定义顶栏隐藏或重复渲染。
 
-统一菜单验证：124项菜单、顶栏、布局和课表回归测试通过，静态分析无问题；320／1280宽度及1.6倍字体覆盖全部模块入口与宿主设置访问。build35已在Android模拟器验证普通页面和课表共用单按钮、设置／界面恢复／AI模块入口及课表显示操作。记录见 [workspace-single-menu-install.json](../../dist/verification/workspace-single-menu-install.json)，[课表菜单截图](../../dist/verification/android-workspace-single-menu-schedule-open.png)。
+统一菜单验证：124项菜单、顶栏、布局和课表回归测试通过，静态分析无问题；320／1280宽度及1.6倍字体覆盖全部模块入口与宿主设置访问。build35已在Android模拟器验证普通页面和课表共用单按钮、设置／界面恢复／AI模块入口及课表显示操作。记录见 [workspace-single-menu-install.json](../../dist/verification/ui/legacy-20261029/workspace-single-menu-install.json)，[课表菜单截图](../../dist/verification/platform/legacy-20261029/android-workspace-single-menu-schedule-open.png)。
 
 脚本页面使用纯构造函数：
 
@@ -100,4 +100,4 @@ ui.component('ui.button@1', {
 
 生产 UI 示例为 `packages/modules/app.ui.examples` 的 1.1.1 脚本包：17 张独立卡片、静态组件搜索、分类选中态、响应式单／双列、局部与全部重置、当前值和展开说明。分类栏横向滚动，避免窄屏大字下占满视口；内容区共用一个纵向滚动区域。所有示例使用本地模拟数据。宿主日期表单和脚本控件共用选择器；旧表单空日期保持空字符串。
 
-值格式、事件和新节点见 [SDK API 1.7](../MODULE_SDK.md#api-17-的选择控件与组件示例)。原始设计与验收历史见 [修改方案归档](UI_EXAMPLES_PLAN.md)。
+值格式、事件和新节点见 [SDK API 1.7](../sdk/COMPONENTS.md#api-17-的选择控件与组件示例)。原始设计与验收历史见 [修改方案归档](UI_EXAMPLES_PLAN.md)。

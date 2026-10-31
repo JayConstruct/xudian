@@ -25,6 +25,6 @@
 | armeabi-v7a | 21877887 | `1fb1bcc0d820f5fa7b33c32f8fb68da72b55becfad3f80aa70b65e8ee1937e29` |
 | x86_64 | 25872106 | `828697a151d84cb4bcf0cc4a2571c9e869e0ee94490ebf412c6f9b7f21e8646b` |
 
-构建命令为 `flutter build apk --release --split-per-abi --build-number 29 --no-pub`。本地交付目录 `dist/module-catalog-delivery/` 保存 APK、分析和测试日志、构建日志及 `verification.json`。
+构建命令为 `flutter build apk --release --split-per-abi --build-number 29 --no-pub`。本地交付目录 `dist/archive/deliveries/module-catalog-delivery/` 保存 APK、分析和测试日志、构建日志及 `verification.json`。
 
 远程发布采用先上传并重新下载校验 Release 资产、再匿名验证作者索引和全部包、最后上线目录的顺序。后续版本必须追加资产和索引，不能移动 tag 或覆盖已发布包；摘要校验不等于签名认证。

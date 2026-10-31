@@ -9,7 +9,7 @@
 - 公共组件、五类页面模板与导航契约；声明式 UI 包的安装、停用、更新与回退。
 - 设置 → 界面风格：全局选择、模块专属选择、模拟预览与恢复默认。审核、凭据和恢复控件保留内置 UI。
 - [紧凑示例包](../../dist/modules/example.ui.compact.xmodule)：可导入，或从模块管理的“恢复随客户端发布的模块”安装 `example.ui.compact`；安装后在界面风格中预览、选择并保存。
-- [Android 调试 APK](../../client/build/app/outputs/flutter-apk/app-debug.apk)：使用 `android-x64` 目标和 build number 6 构建。APK 的 8 项模块资源与当前分发包摘要一致，包含非默认安装的示例 UI 包，不包含独立课表包。
+- Android 调试 APK（当时的构建路径：`../../client/build/app/outputs/flutter-apk/app-debug.apk`，当前本机已无该文件）：使用 `android-x64` 目标和 build number 6 构建。APK 的 8 项模块资源与当前分发包摘要一致，包含非默认安装的示例 UI 包，不包含独立课表包。
 
 原有安装的业务包不会自动升级。任务视图的分页与公共列表模板使用此次分发的任务／视图 1.1.0；更新时先安装任务包，再安装视图包，宿主沿用已有业务数据。
 
@@ -17,7 +17,7 @@
 
 `flutter analyze --no-pub` 无问题；`flutter test --no-pub` **502 项全部通过**；生产架构检查通过，覆盖从入口可达的 58 个 Dart 文件。Android 调试构建成功。
 
-原始输出和产物摘要保存在 [验证目录](../../dist/verification/ui-packs/verification.json)：[测试](../../dist/verification/ui-packs/flutter-tests.txt)、[静态分析](../../dist/verification/ui-packs/flutter-analyze.txt)、[架构](../../dist/verification/ui-packs/architecture.txt)、[构建](../../dist/verification/ui-packs/android-build.txt)。
+原始输出和产物摘要保存在 [验证目录](../../dist/verification/ui/ui-packs/verification.json)：[测试](../../dist/verification/ui/ui-packs/flutter-tests.txt)、[静态分析](../../dist/verification/ui/ui-packs/flutter-analyze.txt)、[架构](../../dist/verification/ui/ui-packs/architecture.txt)、[构建](../../dist/verification/ui/ui-packs/android-build.txt)。
 
 | 范围 | 已验证行为 |
 | --- | --- |

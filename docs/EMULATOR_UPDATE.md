@@ -29,6 +29,9 @@ scripts/start-emulator.sh --cold-boot
 scripts/start-emulator.sh --cold-boot --refresh-rate 120
 scripts/start-emulator.sh --cold-boot --refresh-rate 165
 
+# 已明确授权的自动化调用：跳过交互确认，仍核对目标 AVD 和端口
+scripts/start-emulator.sh --cold-boot --yes
+
 # 可选：同时锁定 Android 最高/最低刷新率，避免系统策略仍限制为 60Hz
 scripts/start-emulator.sh --cold-boot --refresh-rate 165 --lock-refresh-rate
 
@@ -39,7 +42,13 @@ scripts/start-emulator.sh --cold-boot --refresh-rate 120 --lock-refresh-rate --d
 scripts/start-emulator.sh --refresh-rate 120
 ```
 
-`--cold-boot` 不清除应用或用户数据：目标设备已运行时，核对 AVD 后询问“是否关闭并冷启动？[y/N]”。输入 `y` 或 `yes`（不区分大小写），脚本再次核对目标，通过 `adb emu kill` 关闭该设备，等待 ADB 和 Windows 目标进程退出，然后自动启动。输入 `n`、`no` 或直接回车则取消，保留原模拟器；输入结束（EOF）时也不会关闭。目标未运行时直接启动，无需确认。若目标 offline、无法核对名称、名称不符、ADB 查询失败、关闭失败或退出超时，停止操作；无法通过 ADB 核对和关闭的 Windows 进程需手动关闭。脚本只关闭经核对并确认的目标设备。不带刷新率时使用 `-no-snapshot-load`，只跳过快照加载，退出仍允许保存 Quick Boot 快照。`--timeout` 分别限制退出等待和 Android 启动等待。
+`--cold-boot` 不清除应用或用户数据：目标设备已运行时，核对 AVD 后询问“是否关闭并冷启动？[y/N]”。输入 `y` 或 `yes`（不区分大小写），脚本再次核对目标后尝试 `adb emu kill`。ADB 查询和 PowerShell 子进程的标准输入与确认输入隔离，管道传入的确认不会被提前读走。已明确授权的自动化可使用 `--cold-boot --yes`；`--yes` 不能单独使用，也不跳过目标核对。输入 `n`、`no` 或直接回车则取消；未传 `--yes` 时，输入结束（EOF）也不会关闭。目标未运行时直接启动，无需确认。
+
+脚本同时检查关闭命令的响应与设备是否实际消失：`KO:`/`ERROR:` 即使退出码为零也不算关闭成功；空响应会先观察最多三秒。ADB 关闭失败或空响应后设备仍在时，通过 [Windows 本机控制台后备实现](../scripts/emulator-console.ps1) 连接目标 console 端口，在进程内使用 Windows 用户已有控制台认证，再查询 `avd name`，仅名称与已确认目标一致时发送 `kill`。认证信息不出现在命令参数或日志中。该路径依据 [Android 官方控制台协议](https://developer.android.com/studio/run/emulator-console)，不强制终止 Windows 进程，也不以 Android 内部重启替代冷启动。
+
+只有 ADB 中目标设备消失、Windows 中目标旧进程退出后才重新启动。若目标 offline、无法核对名称、名称不符、ADB 查询失败、控制台认证/目标核对失败、关闭失败或退出超时，停止操作；无法安全关闭时保留诊断错误，不启动重复进程。不带刷新率时使用 `-no-snapshot-load`，只跳过快照加载，退出仍允许保存 Quick Boot 快照。`--timeout` 分别限制关闭阶段和 Android 启动等待；后备控制台调用受关闭阶段剩余时间限制。
+
+2026-10-30 已通过真实冷启动、管道取消及复用检查，并核对新旧进程、启动标识和应用数据，详见 [冷启动验证记录](verification/EMULATOR_COLD_BOOT.md)。
 
 `--refresh-rate` 接受 30～240 Hz 的整数，包括 120 和 165；指定时新进程附加 `-vsync-rate HZ -no-snapshot`，不修改 AVD 配置、不加载或保存 Quick Boot 快照。此参数只改变 Android 客体的刷新节拍，保持原有分辨率和清晰度；主机显示器当前刷新率会限制窗口实际呈现，测量 120 / 165fps 时应使用至少对应刷新率的主机屏幕。未加 `--cold-boot` 时，已运行设备仅核对 `ro.boot.qemu.vsync`，不匹配或无法读取时会报错，提示强制冷启动。未指定参数时保留原有启动和复用行为。
 

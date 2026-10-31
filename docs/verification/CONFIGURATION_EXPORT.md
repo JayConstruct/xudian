@@ -24,4 +24,4 @@
 
 手动开启密钥后再次成功保存，核对 `includesSecrets: true` 和 `secrets` 对象；当前模拟器安全存储为空，真实非空密钥及安全存储异常场景由测试夹具覆盖。验收后将开关恢复默认关闭。
 
-详细记录、导出文件与页面截图保存在被忽略的 `dist/verification/configuration-export/`，完整结果为其中的 `summary.json`；构建记录位于 `.cache/emulator-update/`。本机数据、验收产物与凭据不纳入源码。
+详细记录、导出文件与页面截图保存在被忽略的 `dist/verification/settings/configuration-export/`，完整结果为其中的 `summary.json`；构建记录位于 `.cache/emulator-update/`。本机数据、验收产物与凭据不纳入源码。

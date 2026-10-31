@@ -137,7 +137,7 @@ def main():
     parser.add_argument('--start-date', default='2026-10-15',
                         help='First visible day; defaults to the v4 proposal date')
     parser.add_argument('--output', type=Path,
-                        default=ROOT / 'dist/verification/planner-fixture')
+                        default=ROOT / 'dist/verification/planner/planner-fixture')
     args = parser.parse_args()
     values = fixtures(args.start_date)
     source = args.output / 'source'

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_host/planner_board.dart';
+import 'package:task_app/core/module_host/planner_card_appearance.dart';
 
 const _days = [
   {'date': '2026-10-22', 'label': '10/22'},
@@ -119,6 +120,52 @@ Future<void> _drop(WidgetTester tester, int index) async {
 }
 
 void main() {
+  testWidgets(
+    'retained nonblocking card keeps its status in day view and leaves the original time available',
+    (tester) async {
+      final events = <Object?>[];
+      final cancelled = <String, Object?>{
+        ..._task('已取消示例', '2026-10-22T09:00:00', '2026-10-22T10:00:00'),
+        'occupiesTime': false,
+        'appearance': {
+          'borderStyle': 'dashed',
+          'titleDecoration': 'lineThrough',
+          'cornerIcon': 'slash',
+          'badgeText': '已取消',
+        },
+      }..remove('moveEvent');
+      await _mount(
+        tester,
+        blocks: [cancelled],
+        onEvent: events.add,
+        onPreview: (_) async => {'valid': true, 'conflicts': []},
+      );
+      await _open(tester);
+      final card = _key('planner-day-card:已取消示例');
+      final title = find.descendant(of: card, matching: find.text('已取消示例'));
+      expect(
+        tester.widget<Text>(title).style!.decoration,
+        TextDecoration.lineThrough,
+      );
+      expect(
+        find.byKey(const ValueKey('planner-day-appearance:已取消示例')),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(of: card, matching: find.byType(PlannerCardDecoration)),
+        findsOneWidget,
+      );
+      await tester.tap(title);
+      await tester.pumpAndSettle();
+      expect(events.single, {'type': 'detail', 'id': '已取消示例'});
+      await tester.tap(_key('planner-day-card:整理笔记'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('与「已取消示例」时间重叠'), findsNothing);
+      expect(find.text('确认安排'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   double opacity(WidgetTester tester) =>
       tester.widget<FadeTransition>(_key('planner-day-fade')).opacity.value;
 

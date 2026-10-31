@@ -152,5 +152,5 @@
     "No ARM physical-device or Windows native installation verified.",
     "No device FPS benchmark, long dragging acceptance or full planner redesign completion claimed."
   ],
-  "localEvidence": "dist/verification/release-20261015/"
+  "localEvidence": "dist/verification/releases/release-20261015/"
 }

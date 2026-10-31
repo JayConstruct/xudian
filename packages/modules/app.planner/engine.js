@@ -47,11 +47,12 @@ export function taskCandidate(t,a,r){
   times:[{start:'00:00',end:'23:59'}],startDate:r.startDate,endDate:dueDate||r.endDate,
   dueDate,requiresSelection:!dueDate,planningEndDate:r.endDate};
 }
+export function taskLocation(value){if(value==null)return null;if(typeof value!=='string'||value.length>300)throw Error('地点最多300字');return value.trim()||null;}
 export function intervalsOverlap(a,b){return Date.parse(a.startAt)<Date.parse(b.endAt)&&Date.parse(b.startAt)<Date.parse(a.endAt);}
 
 // Creation drafts deliberately contain relative rules, never historical task IDs.
 export function creationDraft(value,today,timezone){
- const rules=value.rules||{},interval=rules.interval||{minDays:4,maxDays:6};
+ const rules=value.rules||{},interval=rules.interval||{minDays:4,maxDays:6},location=taskLocation(value.location);
  if(Object.keys(rules).some(k=>!['interval','weekdays','timeWindow','optional','weekly','repeat'].includes(k)))throw Error('包含尚未支持的规则，请移除后重试');
  if(rules.weekly||rules.repeat||rules.optional)throw Error('此批量入口暂不支持该重复规则，请使用间隔规则');
  const minDays=integer(interval.minDays,1,366,'最小间隔'),maxDays=integer(interval.maxDays,minDays,366,'最大间隔');
@@ -59,7 +60,7 @@ export function creationDraft(value,today,timezone){
  if(value.days!==undefined&&value.days!==30)throw Error('滚动规划窗口固定为未来30天');
  if(value.autoExtend!==undefined&&typeof value.autoExtend!=='boolean')throw Error('持续补齐需为开关');
  if(value.notes!==undefined&&(typeof value.notes!=='string'||value.notes.length>10000))throw Error('任务描述最多10000字');
- return {title:v.title,notes:value.notes||'',estimatedMinutes:v.estimatedMinutes,priority:v.priority,timezone:v.timezone,firstDate:v.startDate,days:30,autoExtend:value.autoExtend!==false,rules:{interval:{minDays,maxDays},weekdays:v.weekdays,timeWindow:v.times[0]}};
+ return {title:v.title,notes:value.notes||'',...(location?{location}:{}),estimatedMinutes:v.estimatedMinutes,priority:v.priority,timezone:v.timezone,firstDate:v.startDate,days:30,autoExtend:value.autoExtend!==false,rules:{interval:{minDays,maxDays},weekdays:v.weekdays,timeWindow:v.times[0]}};
 }
 
 export function arrangeCreation(draft,{seriesId='draft',startDate,endDate,records=[],tasks=[],a,busy=[],adjustments=[]}){
@@ -83,7 +84,7 @@ export function arrangeCreation(draft,{seriesId='draft',startDate,endDate,record
   if(from<startDate)from=startDate;
   if(to<startDate){to=add(startDate,max-min);warnings.push('上次安排距今已超出最大间隔；保留原任务，从今天继续规划');}
   if(from>endDate)break;if(to>endDate)to=endDate;
-  const id=seriesId+':batch:'+sequence,override=fixedSnapshots?.[id]||adjustments.find(x=>x.id===id),c={id,seriesId,sequence,index:sequence+1,ruleId:null,kind:previous?'interval':'once',title:draft.title,notes:draft.notes,estimatedMinutes:draft.estimatedMinutes,priority:draft.priority,timezone:draft.timezone,optional:false,weekdays:draft.rules.weekdays,times:[draft.rules.timeWindow],startDate:from,endDate:to,windowStart:from,windowEnd:to,maxGapDays:max,earlyDays:max-min};
+  const id=seriesId+':batch:'+sequence,override=fixedSnapshots?.[id]||adjustments.find(x=>x.id===id),c={id,seriesId,sequence,index:sequence+1,ruleId:null,kind:previous?'interval':'once',title:draft.title,notes:draft.notes,...(draft.location?{location:draft.location}:{}),estimatedMinutes:draft.estimatedMinutes,priority:draft.priority,timezone:draft.timezone,optional:false,weekdays:draft.rules.weekdays,times:[draft.rules.timeWindow],startDate:from,endDate:to,windowStart:from,windowEnd:to,maxGapDays:max,earlyDays:max-min};
   if(override&&minute(override.end)-minute(override.start)!==draft.estimatedMinutes){unassigned.push({...c,reason:'调整时长与任务耗时不同，请修改结束时间'});break;}
   const planned=arrange([c],effective,{startDate,endDate},occupied,override?{[id]:override}:{});
   if(!planned.assigned.length){unassigned.push({...c,reason:planned.unassigned[0]?.reason||'此窗口没有可用时间'});break;}

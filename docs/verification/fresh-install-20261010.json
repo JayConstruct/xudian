@@ -250,5 +250,5 @@
       "scope": "Final source CI validation; the fresh installation above used the locally built build53 APK and retains its original source commit and APK digest."
     }
   },
-  "artifactLocation": "Screenshots, XML and the original failed attempt report are local under dist/verification/fresh-install-user11; they are excluded from Git. This exported report uses a repository-relative APK path and summarizes the failure without the local command."
+  "artifactLocation": "Screenshots, XML and the original failed attempt report are local under dist/verification/installation/fresh-install-user11; they are excluded from Git. This exported report uses a repository-relative APK path and summarizes the failure without the local command."
 }

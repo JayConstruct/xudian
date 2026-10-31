@@ -46,6 +46,7 @@ import '../features/settings/ui_layout_page.dart';
 import '../features/settings/app_preferences.dart';
 import 'host_platform_bridge.dart';
 import 'design_system.dart';
+import 'app_motion.dart';
 import 'app_toast.dart';
 import 'mobile_bottom_dock.dart';
 import 'frosted_toolbar_surface.dart';
@@ -400,7 +401,12 @@ class _AppShellState extends ConsumerState<AppShell> {
                 isScrollControlled: true,
                 useSafeArea: true,
                 showDragHandle: adaptive,
-                builder: (panelContext) => Padding(
+                builder: (panelContext) => AnimatedPadding(
+                  duration: AppMotion.duration(
+                    panelContext,
+                    const Duration(milliseconds: 180),
+                  ),
+                  curve: AppMotion.enter,
                   padding: EdgeInsets.only(
                     bottom: MediaQuery.viewInsetsOf(panelContext).bottom,
                   ),
