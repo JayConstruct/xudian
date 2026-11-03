@@ -173,6 +173,38 @@ void main() {
     expect((await offline.loadIndex(item)).versions, hasLength(1));
   });
 
+  test(
+    'metadata deadline cancels stalled requests and preserves caches',
+    () async {
+      await fixture.add(await makePackage('test.cached'));
+      final catalog = await fixture.client.loadCatalog();
+      final item = catalog.modules['test.cached']!;
+      await fixture.client.loadIndex(item);
+      var cancelled = 0;
+      final stalled = ModuleCatalogClient(
+        cacheDirectory: directory,
+        metadataTimeout: const Duration(milliseconds: 50),
+        transport: (uri, {cancellation, onProgress, required maximumBytes}) {
+          cancellation!.listen(() => cancelled++);
+          return Completer<List<int>>().future;
+        },
+      );
+      addTearDown(stalled.dispose);
+      final watch = Stopwatch()..start();
+      expect((await stalled.loadCatalog()).modules.keys, ['test.cached']);
+      expect((await stalled.loadIndex(item)).versions, hasLength(1));
+      await expectLater(
+        stalled.loadCatalog(allowCacheFallback: false),
+        throwsA(isA<TimeoutException>()),
+      );
+      expect(cancelled, 3);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+      expect((await stalled.loadCatalog(offline: true)).modules.keys, [
+        'test.cached',
+      ]);
+    },
+  );
+
   test('optional query does not fetch a missing provider', () async {
     await fixture.add(
       await makePackage(

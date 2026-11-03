@@ -319,10 +319,18 @@ void main() {
       expect(find.text('2026-10-15'), findsNothing);
       await tester.tap(find.byTooltip('选择开始日期'));
       await tester.pumpAndSettle();
+      // Clearing the range reopens the current month, which can differ from
+      // the October fixture above.
+      final reopened = tester.widget<DatePickerDialog>(
+        find.byType(DatePickerDialog),
+      );
+      final selectedDate = formatInputDate(
+        DateTime(reopened.initialDate!.year, reopened.initialDate!.month, 15),
+      );
       await tester.tap(find.text('15').last);
       await tester.tap(find.text('确定'));
       await tester.pumpAndSettle();
-      expect(value, {'start': '2026-10-15', 'end': '2026-10-15'});
+      expect(value, {'start': selectedDate, 'end': selectedDate});
     },
   );
 

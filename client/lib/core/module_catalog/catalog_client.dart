@@ -97,6 +97,7 @@ class ModuleCatalogClient {
     Map<String, String> preinstalledDigests = const {},
     Set<String> excludedModuleIds = const {},
     this.networkRetries = 2,
+    this.metadataTimeout = const Duration(seconds: 10),
   }) : repository = normalizeRepository(repository),
        preinstalledDigests = Map.unmodifiable(preinstalledDigests),
        excludedModuleIds = Set.unmodifiable(excludedModuleIds),
@@ -111,6 +112,10 @@ class ModuleCatalogClient {
   final Map<String, String> preinstalledDigests;
   final Set<String> excludedModuleIds;
   final int networkRetries;
+
+  /// Total metadata budget, including connection waits and retries. Package
+  /// downloads retain their separate progress and cancellation behavior.
+  final Duration metadataTimeout;
   final CatalogTransport? _transport;
   bool loadedFromCache = false;
   final HttpClient _http = HttpClient()
@@ -332,8 +337,20 @@ class ModuleCatalogClient {
       if (!await cache.exists()) throw StateError('离线缓存中缺少目录或版本索引：$url');
       bytes = await cache.readAsBytes();
     } else {
+      final cancellation = DownloadCancellation();
       try {
-        bytes = await _retry(url, maximumBytes: 4 * 1024 * 1024);
+        bytes =
+            await _retry(
+              url,
+              maximumBytes: 4 * 1024 * 1024,
+              cancellation: cancellation,
+            ).timeout(
+              metadataTimeout,
+              onTimeout: () {
+                cancellation.cancel();
+                throw TimeoutException('读取模块目录或版本索引超时', metadataTimeout);
+              },
+            );
       } catch (error) {
         if (!allowCacheFallback ||
             !_networkError(error) ||

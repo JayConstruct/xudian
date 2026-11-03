@@ -293,7 +293,7 @@ void main() {
   );
 
   testWidgets(
-    'slow refresh does not reuse an old same-ID repository index from details',
+    'cached details stay responsive while refresh changes the repository',
     (tester) async {
       late AppDatabase db;
       late CollectionStore store;
@@ -302,7 +302,6 @@ void main() {
       late Fixture previous, updated;
       late ModuleCatalogClient client;
       final catalogGate = Completer<void>();
-      final staleIndexGate = Completer<void>();
       var catalogRequests = 0, oldIndexRequests = 0, newIndexRequests = 0;
       await tester.runAsync(() async {
         directory = await Directory.systemTemp.createTemp(
@@ -336,7 +335,6 @@ void main() {
                   source = catalogRequests == 1 ? previous : updated;
                 } else if (url.pathSegments.first == 'Alice') {
                   oldIndexRequests++;
-                  if (oldIndexRequests > 1) await staleIndexGate.future;
                   source = previous;
                 } else {
                   newIndexRequests++;
@@ -353,7 +351,6 @@ void main() {
       });
       addTearDown(() async {
         if (!catalogGate.isCompleted) catalogGate.complete();
-        if (!staleIndexGate.isCompleted) staleIndexGate.complete();
         await tester.pumpWidget(const SizedBox.shrink());
         client.dispose();
         previous.client.dispose();
@@ -380,21 +377,12 @@ void main() {
       // The old card remains available while the new catalog is delayed.
       await tester.tap(find.text('test.shared'));
       await tester.pump();
-      expect(find.text('正在读取模块详情…'), findsOneWidget);
-      final watch = Stopwatch()..start();
-      while (oldIndexRequests < 2 &&
-          watch.elapsed < const Duration(seconds: 8)) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 15)),
-        );
-        await tester.pump(const Duration(milliseconds: 20));
-      }
-      expect(oldIndexRequests, 2);
+      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      expect(oldIndexRequests, 1);
       catalogGate.complete();
-      // The fresh repository must resolve while the old detail index is pending.
+      // The fresh repository must replace the cached version for this same ID.
       await waitForCatalog(tester, find.text('可安装 · 2.0.0'));
       expect(newIndexRequests, 1);
-      staleIndexGate.complete();
       await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('可安装 · 2.0.0'), findsOneWidget);
@@ -404,6 +392,99 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('版本：2.0.0 · 可安装'), findsOneWidget);
       expect(newIndexRequests, 1);
+      await _closeDetail(tester);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'cached storefront and details load before the network then show fresh versions',
+    (tester) async {
+      late AppDatabase db;
+      late CollectionStore store;
+      late ModuleHost host;
+      late Directory directory;
+      late Fixture fixture;
+      late ModuleCatalogClient client;
+      final gate = Completer<void>();
+      var requests = 0;
+      await tester.runAsync(() async {
+        directory = await Directory.systemTemp.createTemp(
+          'catalog-cache-first-',
+        );
+        db = AppDatabase(NativeDatabase.memory());
+        store = CollectionStore(db);
+        host = ModuleHost(
+          store: store,
+          directory: Directory('${directory.path}/host'),
+        );
+        await host.initialize();
+        fixture = Fixture(Directory('${directory.path}/cache'));
+        await fixture.add(await makePackage('test.cached'));
+        await fixture.release('test.cached');
+        await fixture.add(await makePackage('test.cached', version: '2.0.0'));
+        client = ModuleCatalogClient(
+          cacheDirectory: fixture.directory,
+          transport:
+              (url, {cancellation, onProgress, required maximumBytes}) async {
+                requests++;
+                await gate.future;
+                return fixture.fetch(
+                  url,
+                  cancellation: cancellation,
+                  onProgress: onProgress,
+                  maximumBytes: maximumBytes,
+                );
+              },
+        );
+      });
+      addTearDown(() async {
+        if (!gate.isCompleted) gate.complete();
+        await tester.pumpWidget(const SizedBox.shrink());
+        client.dispose();
+        fixture.client.dispose();
+        await tester.runAsync(() async {
+          await host.close();
+          await store.close();
+          await db.close();
+          await directory.delete(recursive: true);
+        });
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            moduleCatalogClientProvider.overrideWith((_) async => client),
+          ],
+          child: MaterialApp(home: ModuleCatalogPage(host: host)),
+        ),
+      );
+      await waitForCatalog(tester, find.text('可安装 · 1.0.0'));
+      expect(gate.isCompleted, isFalse);
+      expect(requests, lessThanOrEqualTo(1));
+      expect(find.textContaining('正在浏览缓存'), findsNothing);
+      Future<void> closeWhileRefreshing() async {
+        await tester.tap(find.widgetWithText(TextButton, '关闭'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(AlertDialog), findsNothing);
+      }
+
+      await tester.tap(find.text('test.cached'));
+      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await closeWhileRefreshing();
+      // A second opening must also use the available version index immediately.
+      await tester.tap(find.text('test.cached'));
+      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await closeWhileRefreshing();
+      gate.complete();
+      await _finishIo(tester);
+      expect(find.text('可安装 · 2.0.0'), findsOneWidget);
+      expect(requests, 2);
+      await tester.tap(find.text('test.cached'));
+      await waitForCatalog(tester, find.text('版本：2.0.0 · 可安装'));
+      await tester.pump(const Duration(milliseconds: 300));
       await _closeDetail(tester);
       expect(tester.takeException(), isNull);
     },

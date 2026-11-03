@@ -521,28 +521,61 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     });
   }
 
-  Future<void> loadIndexes(ModuleCatalog result, int generation) async {
+  void recordIndex(String id, ModuleVersionIndex index) {
+    loadedIndexes[id] = index;
+    latestVersions.remove(id);
+    final latest = index.versions
+        .where(
+          (version) =>
+              !Version.parse(version.version).isPreRelease &&
+              VersionConstraint.parse(version.manifest['hostApi'] as String)
+                  .allows(hostApiVersion),
+        )
+        .firstOrNull;
+    if (latest != null) latestVersions[id] = latest;
+    indexFailures.remove(id);
+  }
+
+  void showCatalog(ModuleCatalog result) {
+    // Cached versions belong to a specific source, never just a module ID.
+    for (final id in loadedIndexes.keys.toList()) {
+      final before = catalog?.modules[id];
+      final after = result.modules[id];
+      if (before == null ||
+          after == null ||
+          before.repository != after.repository ||
+          before.indexUrl != after.indexUrl) {
+        loadedIndexes.remove(id);
+        latestVersions.remove(id);
+      }
+    }
+    indexFailures.clear();
+    catalog = result;
+    if (!result.modules.values.any((item) => item.category == category)) {
+      category = '全部分类';
+    }
+  }
+
+  Future<void> loadIndexes(
+    ModuleCatalog result,
+    int generation, {
+    ModuleCatalogClient? cachedClient,
+  }) async {
     final pending = result.modules.values.iterator;
     Future<void> worker() async {
       while (mounted && generation == loadGeneration && pending.moveNext()) {
         final item = pending.current;
         try {
-          final index = await indexFor(item);
+          final index = cachedClient == null
+              ? await indexFor(item)
+              : await cachedClient.loadIndex(item, offline: true);
           if (!_isCurrentIndex(item, generation)) return;
-          loadedIndexes[item.id] = index;
-          final latest = index.versions
-              .where(
-                (version) =>
-                    !Version.parse(version.version).isPreRelease &&
-                    VersionConstraint.parse(
-                      version.manifest['hostApi'] as String,
-                    ).allows(hostApiVersion),
-              )
-              .firstOrNull;
-          if (latest != null) latestVersions[item.id] = latest;
+          recordIndex(item.id, index);
         } catch (error) {
           if (!_isCurrentIndex(item, generation)) return;
-          indexFailures[item.id] = '$error';
+          // A cache miss must not make a module unavailable while the fresh
+          // index is still to be requested.
+          if (cachedClient == null) indexFailures[item.id] = '$error';
         }
         // Coalesce indexes completing together into one update per frame.
         _scheduleIndexRebuild();
@@ -558,9 +591,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     if (!mounted) return;
     final generation = ++loadGeneration;
     indexes.clear();
-    loadedIndexes.clear();
     indexFailures.clear();
-    latestVersions.clear();
     setState(() {
       loading = true;
       failure = null;
@@ -568,45 +599,41 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     try {
       final results = await Future.wait<Object>([
         _installed(widget.host, verified: installations, reuseVerified: true),
-        () async {
-          final client = await ref.read(moduleCatalogClientProvider.future);
-          return (client, await client.loadCatalog(offline: offline));
-        }(),
+        ref.read(moduleCatalogClientProvider.future),
       ]);
       final current = results[0] as Map<String, InstalledCatalogModule>;
-      final (client, result) =
-          results[1] as (ModuleCatalogClient, ModuleCatalog);
+      final client = results[1] as ModuleCatalogClient;
       if (!mounted || generation != loadGeneration) return;
       setState(() {
-        catalog = result;
         repository = client.repository;
         installations = current;
-        if (client.loadedFromCache) offline = true;
-        if (!result.modules.values.any((item) => item.category == category)) {
-          category = '全部分类';
-        }
       });
+      if (!offline) {
+        try {
+          final cached = await client.loadCatalog(offline: true);
+          if (!mounted || generation != loadGeneration) return;
+          setState(() => showCatalog(cached));
+          await loadIndexes(cached, generation, cachedClient: client);
+        } catch (_) {
+          // Missing or invalid caches are replaced by the online result.
+        }
+      }
+      if (!mounted || generation != loadGeneration) return;
+      final result = await client.loadCatalog(
+        offline: offline,
+        allowCacheFallback: false,
+      );
+      if (!mounted || generation != loadGeneration) return;
+      setState(() => showCatalog(result));
       await loadIndexes(result, generation);
     } catch (error) {
       if (!mounted || generation != loadGeneration) return;
       setState(() => failure = '$error');
-      if (!offline) {
+      if (!offline && catalog != null) {
+        setState(() => offline = true);
         try {
-          final client = await ref.read(moduleCatalogClientProvider.future);
-          final cached = await client.loadCatalog(offline: true);
-          final current = await _installed(
-            widget.host,
-            verified: installations,
-            reuseVerified: true,
-          );
           if (!mounted || generation != loadGeneration) return;
-          setState(() {
-            catalog = cached;
-            repository = client.repository;
-            installations = current;
-            offline = true;
-          });
-          await loadIndexes(cached, generation);
+          await loadIndexes(catalog!, generation);
         } catch (_) {
           // The original network error remains visible.
         }
@@ -750,7 +777,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     }
     final item = catalog?.modules[id];
     if (item == null) throw StateError('目录未收录模块：$id');
-    final index = await indexFor(item);
+    final index = loadedIndexes[id] ?? await indexFor(item);
     final versions = index.versions
         .where(
           (version) =>
