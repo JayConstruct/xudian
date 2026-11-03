@@ -8,6 +8,7 @@
 
 | 发布批次 | 证据 |
 | --- | --- |
+| 2026-11-03 · beta.20，日程规划与模块商店缓存 | [版本、摘要、检查与设备范围](verification/release-20261103-beta20.json) |
 | 2026-10-23 · beta.18，任务完成状态 | [版本、摘要、检查与设备范围](verification/release-20261023-beta18.json) |
 | 2026-10-22 · beta.16，全屏当日任务视图 | [版本、摘要、检查与设备范围](verification/release-20261022-beta16.json) |
 | 2026-10-22 · beta.15，当日任务清单 | [版本、摘要、检查与设备范围](verification/release-20261022-beta15.json) |
