@@ -24,6 +24,12 @@ create no polling timers; host replies and subscription events use the same noti
 path. Two workers still execute their own ESM initialization and retain separate globals;
 activation and transaction semantics are unchanged.
 
+The host loads the two independent engines concurrently and waits for both before
+publishing an activated module. A failed request is never replayed. On the next
+operation, the host replaces a closed engine, reloads its ESM, and removes the old
+workflow's subscriptions. Disabling or stopping a module prevents recovery. A
+closed worker retains its original exception so later calls preserve the cause.
+
 Closing first marks the Dart worker closed, interrupts native execution and joins/destroys
 the native worker, then closes the listener. Joining guarantees native code cannot call
 the closed trampoline. Closing the listener port discards already queued notifications;

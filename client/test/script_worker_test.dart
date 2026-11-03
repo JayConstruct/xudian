@@ -5,6 +5,51 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xquickjs/xquickjs.dart';
 
 void main() {
+  test(
+    'a closed worker retains its original failure for later callers',
+    () async {
+      final worker = JavaScriptWorker({
+        'main.js': 'export function value(){return 42;}',
+      }, host: (_, _) async => null);
+      await worker.load('main.js');
+      final failure = StateError('Execution interrupted');
+      worker.close(failure);
+      await expectLater(worker.invoke('value', {}), throwsA(same(failure)));
+      worker.close();
+      await expectLater(worker.invoke('value', {}), throwsA(same(failure)));
+    },
+  );
+
+  test('a host timeout retains its cause and ignores late replies', () async {
+    final reply = Completer<Object?>();
+    final requested = Completer<void>();
+    final worker = JavaScriptWorker(
+      {
+        'main.js': "import {clock} from '@xudian/sdk'; export async function wait(){return clock.now();}",
+      },
+      host: (_, _) {
+        requested.complete();
+        return reply.future;
+      },
+    );
+    addTearDown(worker.close);
+    await worker.load('main.js');
+    final pending = worker.invoke(
+      'wait',
+      {},
+      timeout: const Duration(milliseconds: 100),
+    );
+    final failed = expectLater(pending, throwsA(isA<TimeoutException>()));
+    await requested.future;
+    await failed;
+    expect(worker.closed, isTrue);
+    reply.complete('late');
+    await expectLater(
+      worker.invoke('wait', {}),
+      throwsA(isA<TimeoutException>()),
+    );
+  });
+
   test('native output notifications create no idle polling timers', () async {
     var timers = 0;
     late JavaScriptWorker worker;

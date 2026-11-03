@@ -92,6 +92,7 @@ class JavaScriptWorker {
   final _pending = <int, Completer<Object?>>{};
   int _sequence = 0;
   bool _closed = false;
+  Object? _closeError;
   bool get closed => _closed;
 
   Future<Object?> load(String entryPoint) => _request('load', entryPoint);
@@ -109,7 +110,7 @@ class JavaScriptWorker {
     Object? payload, {
     Duration? timeout = const Duration(seconds: 10),
   }) async {
-    if (_closed) throw StateError('JavaScript worker is closed');
+    if (_closed) throw _closeError ?? StateError('JavaScript worker is closed');
     final id = ++_sequence;
     final completer = Completer<Object?>();
     _pending[id] = completer;
@@ -120,8 +121,8 @@ class JavaScriptWorker {
       return await (timeout == null
           ? completer.future
           : completer.future.timeout(timeout));
-    } on TimeoutException {
-      close();
+    } on TimeoutException catch (error) {
+      close(error);
       rethrow;
     } finally {
       _pending.remove(id);
@@ -190,6 +191,7 @@ class JavaScriptWorker {
   void close([Object? error]) {
     if (_closed) return;
     _closed = true;
+    _closeError = error;
     _cancel(_handle);
     for (final completer in _pending.values) {
       if (!completer.isCompleted)

@@ -86,7 +86,11 @@ class ScriptInstance {
       (throw StateError('UI packs do not have JavaScript workers'));
   set workflow(JavaScriptWorker value) => _workflow = value;
   bool get hasWorkers => _worker != null && _workflow != null;
+  bool _workersStopped = false;
+  Future<JavaScriptWorker>? _loadingWorker, _loadingWorkflow;
+  late Future<JavaScriptWorker> Function() _readyWorker;
   void closeWorkers() {
+    _workersStopped = true;
     pageWorkflow.close();
     _worker?.close();
     _workflow?.close();
@@ -114,10 +118,12 @@ class ScriptInstance {
   }) {
     final completer = Completer<Object?>();
     tail = tail.then((_) async {
-      session = snapshot;
       try {
+        // Reload only before a new operation. A failed command is never replayed.
+        final current = await _readyWorker();
+        session = snapshot;
         completer.complete(
-          await worker.invoke(
+          await current.invoke(
             handler,
             input,
             timeout: computation ? const Duration(seconds: 10) : null,
@@ -595,45 +601,97 @@ class ModuleHost {
       if (publish) instances[package.id] = instance;
       return instance;
     }
-    JavaScriptWorker? computation, workflow;
+    instance._readyWorker = () => _readyScriptWorker(instance);
     try {
-      computation = JavaScriptWorker(
-        package.scripts,
-        ownerZone: _workerZone,
-        memoryLimit: 32 * 1024 * 1024,
-        host: (method, args) => (_installBatchZone ?? _workerZone).run(
-          () => _bridge(instance, method, object(args ?? {})),
-        ),
-      );
-      workflow = JavaScriptWorker(
-        package.scripts,
-        ownerZone: _workerZone,
-        memoryLimit: 32 * 1024 * 1024,
-        host: (method, args) => (_installBatchZone ?? _workerZone).run(
-          () => _bridge(instance, method, object(args ?? {}), workflow: true),
-        ),
-      );
-      instance.worker = computation;
-      instance.workflow = workflow;
-      await UiLoadTrace.run(
-        'host.worker.load',
-        () => instance.worker.load(package.definition['entryPoint'] as String),
-        arguments: {'moduleId': package.id, 'worker': 'computation'},
-      );
-      await UiLoadTrace.run(
-        'host.worker.load',
-        () =>
-            instance.workflow.load(package.definition['entryPoint'] as String),
-        arguments: {'moduleId': package.id, 'worker': 'workflow'},
-      );
+      // Both engines still initialize their own ESM and globals. Load them in
+      // parallel, while keeping activation ordered after module dependencies.
+      await Future.wait([
+        _readyScriptWorker(instance),
+        _readyScriptWorker(instance, workflow: true),
+      ]);
     } catch (error) {
-      computation?.close();
-      workflow?.close();
+      instance.closeWorkers();
       store.deactivate(package.id);
       rethrow;
     }
     if (publish) instances[package.id] = instance;
     return instance;
+  }
+
+  Future<JavaScriptWorker> _readyScriptWorker(
+    ScriptInstance instance, {
+    bool workflow = false,
+  }) async {
+    if (_closed || instance._workersStopped) {
+      throw StateError('Module stopped');
+    }
+    final loading = workflow
+        ? instance._loadingWorkflow
+        : instance._loadingWorker;
+    if (loading != null) return loading;
+    final current = workflow ? instance._workflow : instance._worker;
+    if (current != null && !current.closed) return current;
+    final next = _loadScriptWorker(instance, workflow: workflow);
+    if (workflow) {
+      instance._loadingWorkflow = next;
+    } else {
+      instance._loadingWorker = next;
+    }
+    try {
+      return await next;
+    } finally {
+      if (workflow) {
+        instance._loadingWorkflow = null;
+      } else {
+        instance._loadingWorker = null;
+      }
+    }
+  }
+
+  Future<JavaScriptWorker> _loadScriptWorker(
+    ScriptInstance instance, {
+    required bool workflow,
+  }) async {
+    if (workflow && instance._workflow != null) {
+      // Listeners belong to the old ESM globals. Do not leave subscriptions
+      // delivering into the replacement engine or accumulating after failures.
+      final subscriptions = instance.subscriptions.values.toList();
+      instance.subscriptions.clear();
+      await Future.wait(
+        subscriptions.map((subscription) => subscription.cancel()),
+      );
+    }
+    if (_closed || instance._workersStopped) throw StateError('Module stopped');
+    final worker = JavaScriptWorker(
+      instance.package.scripts,
+      ownerZone: _workerZone,
+      memoryLimit: 32 * 1024 * 1024,
+      host: (method, args) => (_installBatchZone ?? _workerZone).run(
+        () => _bridge(instance, method, object(args ?? {}), workflow: workflow),
+      ),
+    );
+    if (workflow) {
+      instance.workflow = worker;
+    } else {
+      instance.worker = worker;
+    }
+    try {
+      await UiLoadTrace.run(
+        'host.worker.load',
+        () => worker.load(instance.package.definition['entryPoint'] as String),
+        arguments: {
+          'moduleId': instance.package.id,
+          'worker': workflow ? 'workflow' : 'computation',
+        },
+      );
+      if (_closed || instance._workersStopped) {
+        throw StateError('Module stopped');
+      }
+      return worker;
+    } catch (_) {
+      worker.close();
+      rethrow;
+    }
   }
 
   Future<Map<String, ScriptPackage>> installedPackages() async => {
@@ -1731,6 +1789,11 @@ class ModuleHost {
                 !identical(instance, instances[moduleId])) {
               return null;
             }
+            final worker = await _readyScriptWorker(instance, workflow: true);
+            if (shouldRun?.call() == false ||
+                !identical(instance, instances[moduleId])) {
+              return null;
+            }
             final reads = onReads == null ? null : <String>{};
             instance.pageReads = reads;
             instance.pagePreparation = readOnly;
@@ -1745,7 +1808,7 @@ class ModuleHost {
             instance._pageReplayability = replayability;
             final value = await UiLoadTrace.run(
               'page.execute',
-              () => instance.workflow.invoke(handler, input, timeout: null),
+              () => worker.invoke(handler, input, timeout: null),
               arguments: arguments,
             );
             if (reads != null) onReads!(Set.unmodifiable(reads));
@@ -1783,7 +1846,8 @@ class ModuleHost {
         return false;
       }
     });
-    return instance.workflow.invoke(handler, {});
+    final worker = await _readyScriptWorker(instance, workflow: true);
+    return worker.invoke(handler, {});
   }
 
   Future<Object?> _bridge(
