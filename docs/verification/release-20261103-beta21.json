@@ -1,0 +1,175 @@
+{
+  "date": "2026-11-03",
+  "status": "published-and-verified",
+  "sourceCommit": "a7dfa1faa6edc80ab18612a0997eadd5604b7382",
+  "workerRecoveryCommit": "aa56659dcdd067baffc60fcfe4fd9ae0a5b0df54",
+  "appTag": "v0.2.0-beta.21",
+  "moduleTag": "modules-20261103-batch-planning",
+  "checks": {
+    "localFlutterRelated": 100,
+    "pythonTooling": 296,
+    "moduleCatalog": 36,
+    "analyze": "passed",
+    "architecture": "passed",
+    "repository": "passed",
+    "docs": "passed",
+    "nodeParityAndPackageFixtures": "passed",
+    "fullFlutterCI": {
+      "passed": 1846,
+      "failed": 0,
+      "shards": [
+        {
+          "name": "tests (0)",
+          "jobId": 125880492104,
+          "passed": 622
+        },
+        {
+          "name": "tests (1)",
+          "jobId": 125880492271,
+          "passed": 602
+        },
+        {
+          "name": "tests (2)",
+          "jobId": 125880492361,
+          "passed": 622
+        }
+      ],
+      "runId": 41625124382,
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/41625124382"
+    },
+    "mainCI": {
+      "runId": 41625124585,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/41625124585",
+      "sameCommitTagDelegationVerified": true
+    },
+    "moduleCI": {
+      "runId": 41625124087,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/41625124087"
+    }
+  },
+  "emulator": {
+    "versionName": "0.2.0-beta.21",
+    "versionCode": 4226,
+    "apkSha256": "e9e06c8838acd29b431920d58e43f1fb9f760b14c649312ebbde9e040431be65",
+    "installedApkSha256": "e9e06c8838acd29b431920d58e43f1fb9f760b14c649312ebbde9e040431be65",
+    "sourceFingerprint": "8d61b86db0923b14d9c6fb5957a75bc2831da1aff7930837b3a18a71c51fd6fd",
+    "buildNumber": 226,
+    "sameSignatureDataPreservingUpgrade": true,
+    "appDataCleared": false,
+    "installedPlanner": {
+      "id": "app.planner",
+      "name": "任务规划",
+      "version": "1.12.0",
+      "sha256": "0116cb7de01adb1ddf240a7c057b30faf36b1c48b85c09a34c74f6dd6e612e68",
+      "installedSha256": "0116cb7de01adb1ddf240a7c057b30faf36b1c48b85c09a34c74f6dd6e612e68"
+    }
+  },
+  "deviceAcceptance": {
+    "readonlyReleasePass": true,
+    "steps": [
+      {
+        "name": "批量入口关闭返回重开",
+        "seconds": 27.483
+      },
+      {
+        "name": "新建与优先时间控件打开取消重开",
+        "seconds": 87.884
+      },
+      {
+        "name": "已结束批次及取消实例只读历史",
+        "seconds": 51.985
+      },
+      {
+        "name": "App冷启动及历史保持",
+        "seconds": 76.586
+      },
+      {
+        "name": "模块实际版本摘要读取",
+        "seconds": 62.308
+      }
+    ],
+    "earlierFunctionalEvidence": [
+      "docs/verification/BATCH_TASK_MANAGEMENT.md",
+      "docs/verification/PREFERRED_TASK_TIME.md"
+    ],
+    "catalogOnlineOfflineColdStartPassed": true,
+    "fixtureTaskMutationsDuringReleaseAcceptance": false
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.21",
+    "sourceCommit": "a7dfa1faa6edc80ab18612a0997eadd5604b7382",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.21",
+    "publishedAt": "2026-11-03T11:17:14Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 160,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "name": "app-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "version": "0.2.0-beta.21",
+        "versionCode": 1160,
+        "sha256": "7567390abfcb77d9cd1cfb399e1c6fdf9fb99cacd8f48a6543eaa0de6451583e",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "version": "0.2.0-beta.21",
+        "versionCode": 2160,
+        "sha256": "52f8192eab6f4f1427aba5e9de69adceac8cce5dadff11cb7100355a43ceb763",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "app-x86_64-release.apk",
+        "abi": "x86_64",
+        "version": "0.2.0-beta.21",
+        "versionCode": 4160,
+        "sha256": "fca4813a49dab11c1a993597384b08ec5e7b64aa1623b4f74e3c55d0d71a9b52",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false
+  },
+  "publicModule": {
+    "completed": true,
+    "tag": "modules-20261103-batch-planning",
+    "sourceCommit": "a7dfa1faa6edc80ab18612a0997eadd5604b7382",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261103-batch-planning",
+    "publishedAt": "2026-11-03T11:09:10Z",
+    "anonymousDownloadVerified": true,
+    "moduleId": "app.planner",
+    "version": "1.12.0",
+    "bytes": 73525,
+    "sha256": "0116cb7de01adb1ddf240a7c057b30faf36b1c48b85c09a34c74f6dd6e612e68",
+    "hostApi": "^1.45.0",
+    "signature": null,
+    "sameBytesAsVerifiedLocalPackage": true
+  },
+  "publicIndexes": {
+    "branch": "module-catalog",
+    "sourceCommit": "a7dfa1faa6edc80ab18612a0997eadd5604b7382",
+    "allNineIndexesIdentical": true,
+    "anonymousDownloadVerified": true
+  },
+  "localCertificateSha256": "1cb124c4981ae2cb98d2ce101bc1ba8c563ac90db1c5d5029de9590c0479a7b3",
+  "limitations": [
+    "Public fixed-signature APKs were downloaded and verified separately; emulator retains its existing development signature and app data.",
+    "No ARM physical-device or native Windows runtime acceptance.",
+    "Older planning module versions do not fully understand preferred-time configuration or batch-cancellation history; rollback requires an appropriate pre-upgrade snapshot."
+  ],
+  "localEvidence": "dist/verification/releases/beta21/"
+}
