@@ -64,6 +64,8 @@ flutter test --no-pub --concurrency=2
 
 ## 客户端构建与分享
 
+提交与公开发布按 [发布流程](docs/RELEASE_WORKFLOW.md) 执行，复用固定验收脚本并避免本地与 CI 重复全量回归。
+
 在 `client/` 执行：
 
 ```bash

@@ -148,9 +148,16 @@ scripts/update-emulator.sh \
 
 scripts/update-emulator.sh --full-tests
 scripts/update-emulator.sh --force
+
+# 一条命令完成更新和模块商店页面验收
+scripts/update-emulator.sh --verify-catalog --catalog-offline \
+  --test test/module_catalog_test.dart \
+  --test test/module_catalog_performance_test.dart
 ```
 
 `--test` 可重复，用于替换自动选择；`--full-tests` 执行全部 Flutter 测试，不能与 `--test` 同用。显式测试参数保证本次重新执行测试。`--force` 忽略检查和构建缓存；仅更新模块时仍按所选测试范围运行。
+
+`--verify-catalog` 在安装版本和摘要核对后，继续完成商店详情、搜索、筛选、返回／重开及 App 进程冷启动；`--catalog-offline` 加验离线缓存和恢复在线，需与前者同用。页面验收未通过不提交、不更新整轮成功报告。二者不能与 `--modules-only` 同用；详细流程见 [发布流程](RELEASE_WORKFLOW.md)。
 
 ## 更新并提交指定文件
 

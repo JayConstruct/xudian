@@ -122,6 +122,86 @@ class AndroidPlanTest(unittest.TestCase):
             ci.wait_for_checks(123, 'Owner/repo', SHA, timeout=0)
 
 
+class AffectedChecksTest(unittest.TestCase):
+    def baseline(self):
+        return {'workflow_runs': [{'id': 1, 'event': 'push', 'status': 'completed',
+            'conclusion': 'success', 'head_branch': 'main', 'head_sha': OTHER}]}
+
+    def comparison(self, files):
+        return {'status': 'ahead', 'base_commit': {'sha': OTHER},
+                'merge_base_commit': {'sha': OTHER},
+                'files': [{'filename': name, 'status': 'modified'} for name in files]}
+
+    def mode(self, data, **kwargs):
+        def load(path):
+            return self.baseline() if '/actions/' in path else data
+        return ci.affected_mode(kwargs.get('event', 'push'),
+                                kwargs.get('ref', 'refs/heads/main'), SHA,
+                                'Owner/repo', load)
+
+    def test_tools_and_docs_keep_tool_checks_without_flutter_or_apk(self):
+        self.assertEqual(self.mode(self.comparison([
+            'AGENTS.md', 'docs/RELEASE_WORKFLOW.md', 'docs/verification/release.json',
+            'docs/design/selected/example.png',
+            'scripts/module_host/verify_catalog.py', 'scripts/tests/test_catalog_acceptance.py'])), 'tools')
+
+    def test_dart_tests_and_independent_modules_keep_full_flutter_without_apk(self):
+        for name in ['client/test/example_test.dart', 'packages/modules/app.tasks/main.js',
+                     'module-index/app.tasks.json', 'releases/modules/app.tasks-1.7.0.xmodule']:
+            with self.subTest(name=name):
+                self.assertEqual(self.mode(self.comparison([name, 'docs/note.md'])), 'tests')
+
+    def test_runtime_build_tools_unknown_paths_and_tags_always_build(self):
+        for name in ['client/lib/app.dart', 'client/assets/modules/a.xmodule',
+                     'client/pubspec.yaml', 'client/android/app/build.gradle.kts',
+                     'packages/xquickjs/lib/xquickjs.dart', 'new-runtime/input.js',
+                     '.github/workflows/android.yml', 'scripts/update_emulator.py',
+                     'scripts/plan_android_ci.py']:
+            with self.subTest(name=name):
+                self.assertEqual(self.mode(self.comparison([name])), 'full')
+        for event, ref in [('push', 'refs/tags/v0.2.0-beta.20'),
+                           ('pull_request', 'refs/pull/1/merge'),
+                           ('workflow_dispatch', 'refs/heads/main')]:
+            self.assertEqual(self.mode(self.comparison(['docs/note.md']), event=event, ref=ref), 'full')
+
+    def test_runtime_renamed_to_a_document_still_requires_a_build(self):
+        data = self.comparison(['docs/removed.md'])
+        data['files'][0].update(status='renamed', previous_filename='client/lib/old.dart')
+        self.assertEqual(self.mode(data), 'full')
+
+    def test_incomplete_divergent_or_unavailable_comparisons_keep_full_checks(self):
+        self.assertEqual(self.mode(self.comparison([])), 'full')
+        self.assertEqual(self.mode(self.comparison(['docs/a.md'] * 300)), 'full')
+        self.assertEqual(self.mode({}), 'full')
+        for field in ['base_commit', 'merge_base_commit']:
+            data = self.comparison(['docs/a.md']);data[field]['sha'] = SHA
+            self.assertEqual(self.mode(data), 'full')
+        data = self.comparison(['docs/a.md']);data['status'] = 'diverged'
+        self.assertEqual(self.mode(data), 'full')
+        with patch.object(ci, 'github_json', side_effect=OSError('network')) as load:
+            self.assertEqual(ci.affected_mode('push', 'refs/heads/main', SHA,
+                'Owner/repo', load), 'full')
+
+    def test_failed_or_missing_baseline_cannot_make_a_later_docs_push_green(self):
+        for conclusion in ['failure', 'cancelled', 'skipped']:
+            data = self.baseline();data['workflow_runs'][0]['conclusion'] = conclusion
+            load = unittest.mock.Mock(return_value=data)
+            self.assertEqual(ci.affected_mode('push', 'refs/heads/main', SHA,
+                'Owner/repo', load), 'full')
+            self.assertEqual(load.call_count, 1)
+        self.assertEqual(ci.affected_mode('push', 'refs/heads/main', SHA,
+            'Owner/repo', lambda _: {'workflow_runs': []}), 'full')
+
+    def test_comparison_includes_unverified_runtime_changes_before_the_latest_push(self):
+        calls = []
+        def load(path):
+            calls.append(path)
+            return self.baseline() if '/actions/' in path else self.comparison(
+                ['docs/latest.md', 'client/lib/earlier-unverified.dart'])
+        self.assertEqual(ci.affected_mode('push', 'refs/heads/main', SHA, 'Owner/repo', load), 'full')
+        self.assertIn(OTHER + '...' + SHA, calls[-1])
+
+
 class AndroidWorkflowGateTest(unittest.TestCase):
     def run_gate(self, **overrides):
         gate = workflow_job('android').split('        run: |\n', 1)[1]
@@ -135,6 +215,7 @@ class AndroidWorkflowGateTest(unittest.TestCase):
                 'assert sys.argv[1:]==["--wait-for-run","123"]\n'
                 'sys.exit(int(os.environ.get("WAIT_EXIT", "0")))\n')
             env = dict(os.environ, PLAN_RESULT='success', RUN_ANDROID='true',
+                       VALIDATION_MODE='full',
                        CHECKS_RESULT='success', TESTS_RESULT='success',
                        BUILD_RESULT='success', DELEGATE_RUN='123')
             env.update(overrides)
@@ -150,7 +231,7 @@ class AndroidWorkflowGateTest(unittest.TestCase):
         self.assertNotEqual(self.run_gate(RUN_ANDROID=''), 0)
 
     def test_shared_gate_propagates_tag_failure(self):
-        env = dict(RUN_ANDROID='false', CHECKS_RESULT='skipped',
+        env = dict(RUN_ANDROID='false', VALIDATION_MODE='delegate', CHECKS_RESULT='skipped',
                    TESTS_RESULT='skipped', BUILD_RESULT='skipped')
         self.assertEqual(self.run_gate(**env), 0)
         self.assertEqual(self.run_gate(**env, WAIT_EXIT='7'), 7)
@@ -159,7 +240,9 @@ class AndroidWorkflowGateTest(unittest.TestCase):
         for name in ['checks', 'tests', 'build']:
             body = workflow_job(name)
             self.assertIn('needs: plan', body)
-            self.assertIn("if: needs.plan.outputs.run_android == 'true'", body)
+        self.assertIn("if: needs.plan.outputs.run_android == 'true'", workflow_job('checks'))
+        self.assertIn("if: needs.plan.outputs.run_flutter == 'true'", workflow_job('tests'))
+        self.assertIn("if: needs.plan.outputs.run_apk == 'true'", workflow_job('build'))
         tests = workflow_job('tests')
         self.assertIn('shard: [0, 1, 2]', tests)
         self.assertIn('--total-shards=3', tests)
@@ -167,6 +250,22 @@ class AndroidWorkflowGateTest(unittest.TestCase):
         self.assertIn('needs: [plan, checks, tests, build]', workflow_job('android'))
         self.assertIn('if: always()', workflow_job('android'))
         self.assertIn('needs: android', workflow_job('sign'))
+
+    def test_tools_gate_requires_checks_and_both_expensive_jobs_to_be_skipped(self):
+        env = dict(VALIDATION_MODE='tools', TESTS_RESULT='skipped', BUILD_RESULT='skipped')
+        self.assertEqual(self.run_gate(**env), 0)
+        self.assertNotEqual(self.run_gate(**env, CHECKS_RESULT='failure'), 0)
+        for field in ['TESTS_RESULT', 'BUILD_RESULT']:
+            for result in ['failure', 'cancelled', 'success']:
+                self.assertNotEqual(self.run_gate(**{**env, field: result}), 0)
+
+    def test_test_only_gate_cannot_skip_or_ignore_a_failed_flutter_shard(self):
+        self.assertEqual(self.run_gate(VALIDATION_MODE='tests', BUILD_RESULT='skipped'), 0)
+        for result in ['failure', 'cancelled', 'skipped']:
+            self.assertNotEqual(self.run_gate(VALIDATION_MODE='tests',
+                BUILD_RESULT='skipped', TESTS_RESULT=result), 0)
+        self.assertNotEqual(self.run_gate(VALIDATION_MODE='unknown'), 0)
+        self.assertNotEqual(self.run_gate(VALIDATION_MODE='delegate'), 0)
 
 
 if __name__ == '__main__':

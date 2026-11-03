@@ -25,6 +25,9 @@ jobs:
     outputs:
       run_android: ${{ steps.plan.outputs.run_android }}
       delegate_run: ${{ steps.plan.outputs.delegate_run }}
+      validation_mode: ${{ steps.plan.outputs.validation_mode }}
+      run_flutter: ${{ steps.plan.outputs.run_flutter }}
+      run_apk: ${{ steps.plan.outputs.run_apk }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -54,11 +57,13 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 scripts/validate_app_release.py "$RELEASE_TAG"
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: needs.plan.outputs.run_flutter == 'true'
         with:
           flutter-version: '3.47.5'
           channel: stable
           cache: true
       - name: Resolve locked dependencies
+        if: needs.plan.outputs.run_flutter == 'true'
         working-directory: client
         run: flutter pub get --enforce-lockfile
       - name: Check production architecture and Python tooling
@@ -71,6 +76,7 @@ jobs:
           python3 scripts/module_catalog/catalog.py packages/catalog/catalog.json --index-dir module-index --package-dir releases/modules
           python3 scripts/module_host/build_packages.py
       - name: Analyze Flutter client
+        if: needs.plan.outputs.run_flutter == 'true'
         working-directory: client
         run: flutter analyze --no-pub
       - name: Check script result parity and bridge call counts
@@ -78,7 +84,7 @@ jobs:
 
   tests:
     needs: plan
-    if: needs.plan.outputs.run_android == 'true'
+    if: needs.plan.outputs.run_flutter == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -109,7 +115,7 @@ jobs:
 
   build:
     needs: plan
-    if: needs.plan.outputs.run_android == 'true'
+    if: needs.plan.outputs.run_apk == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -176,6 +182,7 @@ jobs:
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           RUN_ANDROID: ${{ needs.plan.outputs.run_android }}
+          VALIDATION_MODE: ${{ needs.plan.outputs.validation_mode }}
           DELEGATE_RUN: ${{ needs.plan.outputs.delegate_run }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
@@ -185,6 +192,7 @@ jobs:
           set -euo pipefail
           test "$PLAN_RESULT" = success
           if [ "$RUN_ANDROID" = false ]; then
+            test "$VALIDATION_MODE" = delegate
             test "$CHECKS_RESULT" = skipped
             test "$TESTS_RESULT" = skipped
             test "$BUILD_RESULT" = skipped
@@ -192,8 +200,21 @@ jobs:
           else
             test "$RUN_ANDROID" = true
             test "$CHECKS_RESULT" = success
-            test "$TESTS_RESULT" = success
-            test "$BUILD_RESULT" = success
+            case "$VALIDATION_MODE" in
+              full)
+                test "$TESTS_RESULT" = success
+                test "$BUILD_RESULT" = success
+                ;;
+              tests)
+                test "$TESTS_RESULT" = success
+                test "$BUILD_RESULT" = skipped
+                ;;
+              tools)
+                test "$TESTS_RESULT" = skipped
+                test "$BUILD_RESULT" = skipped
+                ;;
+              *) exit 1 ;;
+            esac
           fi
 
   sign:

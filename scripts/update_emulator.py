@@ -86,6 +86,8 @@ def parser():
     p.add_argument('--module', action='append', default=[], metavar='MODULE_ID', help='同时更新指定独立模块，可重复')
     p.add_argument('--modules-only', action='store_true', help='只检查并更新指定模块，不构建或安装APK')
     p.add_argument('--force', action='store_true', help='忽略检查/构建缓存并重新执行')
+    p.add_argument('--verify-catalog', action='store_true', help='更新后验证商店导航、详情、搜索、筛选和应用冷启动')
+    p.add_argument('--catalog-offline', action='store_true', help='配合 --verify-catalog 加验离线缓存与恢复在线')
     return p
 
 
@@ -106,6 +108,10 @@ def main(argv=None):
         p.error('--modules-only 需要 --module，且不能与 --dev 或 --build-number 同用')
     if args.no_attach and not args.dev:
         p.error('--no-attach 需要 --dev')
+    if args.catalog_offline and not args.verify_catalog:
+        p.error('--catalog-offline 需要 --verify-catalog')
+    if args.verify_catalog and args.modules_only:
+        p.error('--verify-catalog 用于 APK 更新验收，不能与 --modules-only 同用')
     for module in args.module:
         if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]*', module) or not (ROOT / 'packages/modules' / module / 'module.json').is_file():
             p.error(f'模块不存在或ID无效：{module}')
@@ -132,6 +138,8 @@ def main(argv=None):
         print('测试：' + ('全部测试' if tests is None else ', '.join(tests)))
         if args.dev and not args.no_attach:
             print('启动后 flutter attach，按 r 热重载、R 热重启、q 退出。')
+        if args.verify_catalog:
+            print('安装核对后：商店页面验收、应用冷启动' + ('、离线缓存与恢复在线' if args.catalog_offline else ''))
         if args.commit:
             print('最后提交：' + args.commit + '\n文件：' + ', '.join(paths))
         print('不推送 GitHub。')
@@ -264,6 +272,31 @@ def main(argv=None):
                 report['stepSeconds'][phase] = round(time.monotonic() - start, 3)
                 report['steps'].append(phase)
                 report['modulePackagesUpdated'] = True
+            if args.verify_catalog:
+                # This is installation evidence, not a successful UI report.
+                # latest-success remains untouched until acceptance passes.
+                build_report = output / 'catalog-installation.json'
+                build_report.write_text(json.dumps({
+                    'completed': True, 'sourceFingerprint': source_digest,
+                    'installedVersionCode': report['installedVersionCode'],
+                    'installedApkSha256': report['installedApkSha256'],
+                }, indent=2) + '\n')
+                acceptance_dir = output / 'catalog-acceptance' / datetime.datetime.now(
+                    datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
+                command = ['python3', str(ROOT / 'scripts/module_host/verify_catalog.py'),
+                           '--serial', args.serial, '--adb-host', args.adb_host,
+                           '--adb-port', str(args.adb_port), '--cold-start',
+                           '--build-report', str(build_report), '--output', str(acceptance_dir)]
+                if args.catalog_offline:
+                    command.append('--offline')
+                perform('商店页面验收', command, timeout=300)
+                acceptance = json.loads((acceptance_dir / 'results.json').read_text())
+                if acceptance.get('completed') is not True:
+                    raise ValueError('商店页面验收未完成，不提交更新')
+                report['catalogAcceptance'] = {
+                    'completed': True, 'seconds': acceptance['seconds'],
+                    'report': str((acceptance_dir / 'results.json').relative_to(ROOT)),
+                }
             if args.commit:
                 phase = 'Git 提交'
                 report['commit'] = commit_files(args.commit, paths)

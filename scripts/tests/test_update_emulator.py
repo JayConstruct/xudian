@@ -98,7 +98,7 @@ class UpdateEmulatorTest(unittest.TestCase):
     def test_installed_digest_mismatch_prevents_commit(self):
         self.exercise_failure('digest')
 
-    def test_unchanged_verified_apk_skips_checks_build_and_install(self):
+    def cached_update(self, arguments=(), *, catalog_failure=False):
         for test in update.DEFAULT_TESTS:
             path = self.root / 'client' / test
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -135,16 +135,61 @@ class UpdateEmulatorTest(unittest.TestCase):
                 return 'Status: ok'
             if command == ['python3', str(self.root / 'scripts/check_repository.py')]:
                 return ''
+            if command[:2] == ['python3', str(self.root / 'scripts/module_host/verify_catalog.py')]:
+                self.assertFalse((output / 'latest-success.json').exists())
+                installation = json.loads((output / 'catalog-installation.json').read_text())
+                self.assertEqual(installation['installedApkSha256'], digest)
+                self.assertIn('--cold-start', command)
+                if catalog_failure:
+                    raise subprocess.CalledProcessError(1, command)
+                target = Path(command[command.index('--output') + 1])
+                target.mkdir(parents=True)
+                (target / 'results.json').write_text(json.dumps({'completed': True, 'seconds': 1.25}))
+                return ''
+            if command[:4] == ['git', '--literal-pathspecs', 'diff', '--check']:
+                return ''
+            if command == ['git', 'var', 'GIT_AUTHOR_IDENT']:
+                return 'Test <test@example.invalid>'
             raise AssertionError('Unexpected repeated work: ' + str(command))
 
         with patch.object(update, 'ROOT', self.root), patch.object(update, 'run', fake_run):
-            self.assertEqual(update.main([]), 0)
+            if catalog_failure:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    update.main(list(arguments))
+            else:
+                self.assertEqual(update.main(list(arguments)), 0)
+        return output, calls
+
+    def test_unchanged_verified_apk_skips_checks_build_and_install(self):
+        output, calls = self.cached_update()
         report = json.loads((output / 'latest-success.json').read_text())
         self.assertTrue(report['reusedBuild'])
         self.assertTrue(report['reusedChecks'])
         self.assertTrue(report['skippedInstall'])
         self.assertIn(['python3', str(self.root / 'scripts/check_repository.py')], calls)
         self.assertFalse(any('flutter' in command or 'install' in command for command in calls))
+
+    def test_single_command_reuses_apk_then_requires_catalog_acceptance(self):
+        output, calls = self.cached_update(['--verify-catalog', '--catalog-offline'])
+        report = json.loads((output / 'latest-success.json').read_text())
+        self.assertTrue(report['catalogAcceptance']['completed'])
+        self.assertTrue(report['reusedBuild'])
+        command = next(c for c in calls if 'verify_catalog.py' in ' '.join(c))
+        self.assertIn('--offline', command)
+        self.assertFalse(any('flutter' in command or 'install' in command for command in calls))
+
+    def test_catalog_failure_prevents_success_and_commit(self):
+        output, calls = self.cached_update(
+            ['--verify-catalog', '--commit', 'test', '--path', 'selected.txt'], catalog_failure=True)
+        self.assertFalse((output / 'latest-success.json').exists())
+        report = json.loads((output / 'latest-attempt.json').read_text())
+        self.assertFalse(report['completed'])
+        self.assertEqual(report['failedStep'], '商店页面验收')
+        self.assertFalse(any('commit' in command for command in calls))
+
+    def test_offline_acceptance_requires_catalog_acceptance_flag(self):
+        with self.assertRaises(SystemExit):
+            update.main(['--catalog-offline', '--dry-run'])
 
 
 if __name__ == '__main__':
