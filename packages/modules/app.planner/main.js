@@ -56,7 +56,7 @@ async function alreadyApplied(key,request,kind){const receipt=await data.get('re
 async function historyWrites(batch){const prior=(await all('batches')).filter(b=>b.id!==batch.id).sort((a,b)=>(b.sequence||0)-(a.sequence||0)||b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id));batch.sequence=Math.max(0,...prior.map(b=>b.sequence||0))+1;const receipts=[];for(const b of [batch,...prior.slice(49)])if(b.request)receipts.push(write('receipts',{id:b.id,kind:b.kind||'plan',request:oldRequest(b),createdAt:b.createdAt}));return [write('batches',batch),...receipts,...prior.slice(49).map(b=>({collection:'batches',id:b.id,value:null}))];}
 export async function batchApply({batchKey,preview}){if(typeof batchKey!=='string'||!batchKey||batchKey.length>200)throw Error('缺少批次键');const request=planRequest(preview),previous=await alreadyApplied(batchKey,request,'plan');if(previous)return previous;if(preview?.schemaVersion!==1)throw Error('方案版本无效');const fresh=await planPreview(preview.input);if(fresh.basis!==preview.basis||canonical(fresh.assigned)!==canonical(preview.assigned)||canonical(fresh.unassigned)!==canonical(preview.unassigned))throw Error('预览依据已变化，请重新生成');if(!fresh.confirmable||!fresh.assigned.length)throw Error('当前方案不可确认');const writes=[],changes=[];for(const c of fresh.assigned){const before=c.taskId?await task('task.get',{id:c.taskId}):null;const fields={plannedStartAt:c.plannedStartAt,plannedEndAt:c.plannedEndAt,plannedTimezone:c.plannedTimezone,estimatedMinutes:c.estimatedMinutes,priority:c.priority,locked:!!c.locked,executionExpiresOn:['daily','weekly'].includes(c.kind)||c.optional?c.endDate:null};let after;if(before){await prepare('task.updateFields',{id:before.id,expectedUpdatedAt:before.updatedAt,changes:fields});after=await task('task.get',{id:before.id});}else{const created=await prepare('task.create',{title:c.title,...fields});after=await task('task.get',{id:created.id});}const oldOccurrence=await data.get('occurrences',c.id),occurrence={...c,taskId:after.id,status:'confirmed',createdByPlanner:!!c.createdByPlanner||!before};for(const k of ['task','localStart','localEnd','plannedStartAt','plannedEndAt','plannedTimezone'])delete occurrence[k];const standalone=!c.ruleId&&c.planningEndDate&&!oldOccurrence;if(!standalone)writes.push(write('occurrences',occurrence));changes.push({taskId:after.id,before,after,...(standalone?{}:{occurrenceId:c.id,beforeOccurrence:oldOccurrence,afterOccurrence:occurrence})});}
  const batch={id:batchKey,createdAt:await clock.now(),request,changes,undone:false};writes.push(...await historyWrites(batch));return result(writes,{id:batchKey,applied:changes.length,unassigned:fresh.unassigned.length});}
-export async function batchUndo({id}){const batch=await data.get('batches',id);if(!batch)throw Error('批次不存在');if(batch.undone)return result([],{id,alreadyUndone:true});for(const c of batch.changes){if(canonical(await task('task.get',{id:c.taskId}))!==canonical(c.after)||(c.occurrenceId&&canonical(await data.get('occurrences',c.occurrenceId))!==canonical(c.afterOccurrence))||('afterContent' in c&&canonical(await data.get('taskContent',c.taskId))!==canonical(c.afterContent)))throw Error('撤销已停止：任务或实例已被后续修改或完成');}for(const c of batch.seriesChanges||[])if(canonical(await data.get('series',c.id))!==canonical(c.after))throw Error('持续规划已变更，不能撤销旧批次');await validateUndoOccupancy(batch,await availabilityGet());const writes=(batch.seriesChanges||[]).map(c=>({collection:'series',id:c.id,value:c.before}));for(const c of batch.changes){await prepare('task.restore',{id:c.taskId,expected:c.after,value:c.before});if(c.occurrenceId)writes.push({collection:'occurrences',id:c.occurrenceId,value:c.beforeOccurrence});if('beforeContent' in c)writes.push({collection:'taskContent',id:c.taskId,value:c.beforeContent});}writes.push(write('batches',{...batch,undone:true,undoneAt:await clock.now()}));return result(writes,{id,restored:batch.changes.length});}
+export async function batchUndo({id}){const batch=await data.get('batches',id);if(!batch)throw Error('批次不存在');if(batch.undone)return result([],{id,alreadyUndone:true});for(const c of batch.changes){if(canonical(await task('task.get',{id:c.taskId}))!==canonical(c.after)||(c.occurrenceId&&canonical(await data.get('occurrences',c.occurrenceId))!==canonical(c.afterOccurrence))||('afterContent' in c&&canonical(await data.get('taskContent',c.taskId))!==canonical(c.afterContent)))throw Error('撤销已停止：任务或实例已被后续修改或完成');}for(const c of batch.seriesChanges||[])if(canonical(await data.get('series',c.id))!==canonical(c.after))throw Error('持续规划已变更，不能撤销旧批次');for(const c of batch.taskStateChanges||[])if(canonical(await data.get('taskStates',c.id))!==canonical(c.after))throw Error('取消状态已被后续修改，不能撤销旧批次');await validateUndoOccupancy(batch,await availabilityGet());const writes=[...(batch.seriesChanges||[]).map(c=>({collection:'series',id:c.id,value:c.before})),...(batch.taskStateChanges||[]).map(c=>({collection:'taskStates',id:c.id,value:c.before}))];for(const c of batch.changes){await prepare('task.restore',{id:c.taskId,expected:c.after,value:c.before});if(c.occurrenceId)writes.push({collection:'occurrences',id:c.occurrenceId,value:c.beforeOccurrence});if('beforeContent' in c)writes.push({collection:'taskContent',id:c.taskId,value:c.beforeContent});}writes.push(write('batches',{...batch,undone:true,undoneAt:await clock.now()}));return result(writes,{id,restored:batch.changes.length});}
 
 // Board display has no effect on availability, deadlines, or operation validation.
 const boardFields=['id','title','priority','dueDate','dueAt','dueTimezone','plannedDate','plannedStartAt','plannedEndAt','plannedTimezone','estimatedMinutes','locked','updatedAt','completedAt','actualCompletedOn','completedTimezone'];
@@ -254,15 +254,15 @@ export async function rollingPreview(){
  return {schemaVersion:1,plans,assignedCount:plans.reduce((n,p)=>n+(p.preview.conflicts.length?0:p.preview.assigned.length),0),blocked:plans.filter(p=>p.preview.conflicts.length||p.preview.unassigned.length).map(p=>({seriesId:p.seriesId,title:p.preview.input.title,reasons:[...p.preview.conflicts,...p.preview.unassigned.map(c=>c.reason)]}))};
 }
 async function safeSeriesPlan(series,reserved=[]){try{return await creationPlan(series.draft,{seriesId:series.id,series,reserved});}catch(error){const today=await clock.today();return {schemaVersion:1,input:series.draft,startDate:today,endDate:add(today,29),assigned:[],unassigned:[],conflicts:[String(error)],warnings:[],confirmable:false,basis:canonical(series)};}}
-async function applyRollingPlans(preview,key,request){
+async function applyRollingPlans(preview,key,request,kind='rolling'){
  const writes=[],changes=[],seriesChanges=[],blocked=[];
  for(const plan of preview.plans){const before=await data.get('series',plan.seriesId);if(!before||before.status!=='active'||before.draft.autoExtend===false)throw Error('持续规划规则已改变');
   const p=plan.preview,reasons=[...p.conflicts,...p.unassigned.map(c=>c.reason)],assigned=p.conflicts.length?[]:p.assigned;
   const applied=await createSeriesTasks(before,assigned);writes.push(...applied.writes);changes.push(...applied.changes);
   const after={...before,lastAttemptDate:p.startDate,windowThrough:reasons.length?before.windowThrough:p.endDate,blocked:reasons};if(canonical(after)!==canonical(before)){writes.push(write('series',after));seriesChanges.push({id:before.id,before,after});}if(reasons.length)blocked.push({seriesId:before.id,reasons});
  }
- if(!writes.length)return result([],{id:key,applied:0,blocked,skipped:true});
- const batch={id:key,kind:'rolling',request,createdAt:await clock.now(),undone:false,changes,seriesChanges};
+ if(!writes.length)return result([write('receipts',{id:key,kind,request,createdAt:await clock.now()})],{id:key,applied:0,blocked,skipped:true});
+ const batch={id:key,kind,request,createdAt:await clock.now(),undone:false,changes,seriesChanges};
  return result([...writes,...await historyWrites(batch)],{id:key,applied:changes.length,blocked});
 }
 export async function rollingApply({operationKey,preview}){
@@ -288,4 +288,82 @@ export async function cancelledTasksList(){
  return (await taskRows()).filter(t=>states.has(t.id)&&!t.deletedAt&&!t.archivedAt)
   .map(t=>({...boardTask(t),cancelledAt:states.get(t.id).cancelledAt}))
   .sort((a,b)=>b.cancelledAt.localeCompare(a.cancelledAt)||a.title.localeCompare(b.title)||a.id.localeCompare(b.id));
+}
+
+// A batch-management entry is a series, never a grouping by task title or an
+// operation-history batch. Completed and manually adjusted tasks remain facts.
+async function requireSeries(id) {
+ if(typeof id!=='string'||!id)throw Error('缺少批次');
+ const value=await data.get('series',id);if(!value)throw Error('批次已不存在，请返回列表刷新');return value;
+}
+const seriesStatusValue=s=>s.status==='active'&&s.draft.autoExtend===false?'paused':s.status;
+function checkSeriesRevision(s,expected){if(typeof expected!=='string'||expected!==canonical(s))throw Error('批次已变更，请刷新后重试');}
+function seriesOperationKey(key){if(typeof key!=='string'||!key||key.length>160)throw Error('缺少有效操作键');}
+async function seriesSummary(s,records,tasks,cancelled,now) {
+ const byTask=new Map(tasks.map(t=>[t.id,t])),rows=[],timezone=s.draft.timezone;
+ const source=records.filter(o=>o.seriesId===s.id&&byTask.has(o.taskId)).map(o=>({o,t:byTask.get(o.taskId)})).filter(({t})=>!t.deletedAt&&!t.archivedAt);
+ for(let offset=0;offset<source.length;offset+=128){
+  const chunk=source.slice(offset,offset+128),scheduled=chunk.filter(({t})=>t.plannedStartAt&&t.plannedEndAt),positions=await localPositions(scheduled.map(({t})=>({startAt:t.plannedStartAt,endAt:t.plannedEndAt})),timezone),byId=new Map(scheduled.map(({t},i)=>[t.id,positions[i]]));
+  for(const {o,t} of chunk){const p=byId.get(t.id),status=cancelled.has(t.id)?'cancelled':t.completedAt?'completed':'pending';rows.push({taskId:t.id,occurrenceId:o.id,sequence:o.sequence,title:t.title,date:p?.startDate||o.date||null,start:p?.start||null,end:p?.end||null,endDate:p?.endDate||null,status,manual:!!o.manualAdjusted||!!p&&(p.startDate!==o.date||p.start!==o.start||p.end!==o.end),locked:!!t.locked,updatedAt:t.updatedAt,completedAt:t.completedAt||null,plannedStartAt:t.plannedStartAt||null});}
+ }
+ rows.sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999')||(a.start||'').localeCompare(b.start||'')||a.sequence-b.sequence||a.taskId.localeCompare(b.taskId));
+ const next=rows.find(r=>r.status==='pending'&&r.plannedStartAt&&r.plannedStartAt>=now)||null;
+ return {id:s.id,title:s.draft.title,status:seriesStatusValue(s),draft:s.draft,revision:canonical(s),createdAt:s.createdAt,windowThrough:s.windowThrough,blocked:s.blocked||[],blockedCount:(s.blocked||[]).length,completedCount:rows.filter(r=>r.status==='completed').length,pendingCount:rows.filter(r=>r.status==='pending').length,cancelledCount:rows.filter(r=>r.status==='cancelled').length,next,timezone,rows};
+}
+export async function seriesList({search='',status='all'}={}) {
+ if(typeof search!=='string'||search.length>300)throw Error('搜索内容最多300字');if(!['all','active','paused','ended'].includes(status))throw Error('批次筛选无效');
+ const [series,records,tasks,cancelled,now]=await Promise.all([all('series'),all('occurrences'),taskRows(),cancelledTaskIds(),clock.now()]),counts={all:series.length,active:0,paused:0,ended:0},items=[];
+ for(const s of series){const state=seriesStatusValue(s);counts[state]=(counts[state]||0)+1;if(status!=='all'&&state!==status||!s.draft.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))continue;const item=await seriesSummary(s,records,tasks,cancelled,now);delete item.rows;items.push(item);}
+ items.sort((a,b)=>Number(a.status==='ended')-Number(b.status==='ended')||Number(a.status==='paused')-Number(b.status==='paused')||b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id));
+ return {items,counts};
+}
+export async function seriesGet({id}) {
+ const s=await requireSeries(id),[records,tasks,cancelled,now]=await Promise.all([all('occurrences'),taskRows(),cancelledTaskIds(),clock.now()]);
+ return {...await seriesSummary(s,records,tasks,cancelled,now),today:await clock.today(s.draft.timezone)};
+}
+async function seriesHistory(kind,key,request,before,after) {
+ const batch={id:key,kind,request,createdAt:await clock.now(),undone:false,changes:[],seriesChanges:[{id:before.id,before,after}]};
+ return result([write('series',after),...await historyWrites(batch)],{id:key,seriesId:before.id,status:seriesStatusValue(after),revision:canonical(after)});
+}
+export async function seriesStatus({id,status,expectedRevision,operationKey}) {
+ seriesOperationKey(operationKey);if(!['active','paused','ended'].includes(status))throw Error('批次状态无效');
+ const request=canonical({id,status,expectedRevision}),old=await alreadyApplied(operationKey,request,'series-status');if(old)return old;
+ const before=await requireSeries(id);checkSeriesRevision(before,expectedRevision);
+ if(before.status==='ended'&&status!=='ended')throw Error('已结束的批次不能恢复，请新建批量任务');
+ if(seriesStatusValue(before)===status)return result([write('receipts',{id:operationKey,kind:'series-status',request,createdAt:await clock.now()})],{seriesId:id,status,revision:canonical(before),unchanged:true});
+ const now=await clock.now(),after={...before,status,updatedAt:now,...(status==='active'?{draft:{...before.draft,autoExtend:true},lastAttemptDate:null}:{}),...(status==='ended'?{endedAt:now}:{})};
+ return seriesHistory('series-status',operationKey,request,before,after);
+}
+export async function seriesUpdatePreview({id,changes,expectedRevision}) {
+ const before=await requireSeries(id);checkSeriesRevision(before,expectedRevision);if(before.status==='ended')throw Error('已结束的批次不能编辑规则');
+ if(!changes||Array.isArray(changes)||typeof changes!=='object'||!Object.keys(changes).length||Object.keys(changes).some(k=>!['title','notes','location','estimatedMinutes','priority','rules'].includes(k)))throw Error('批次修改字段无效');
+ const today=await clock.today(before.draft.timezone),draft=creationDraft({...before.draft,...changes},today,before.draft.timezone),fields=Object.keys(changes).filter(k=>canonical(before.draft[k])!==canonical(draft[k]));
+ return {schemaVersion:1,input:{id,changes,expectedRevision},basis:canonical(before),draft,changes:fields.map(field=>({field,before:before.draft[field]??null,after:draft[field]??null})),affectedExisting:0,confirmable:fields.length>0,summary:'仅影响后续生成的任务，已生成任务及完成记录保留'};
+}
+export async function seriesUpdateApply({operationKey,preview}) {
+ seriesOperationKey(operationKey);const request=canonical({update:preview?.input}),old=await alreadyApplied(operationKey,request,'series-edit');if(old)return old;
+ if(preview?.schemaVersion!==1)throw Error('规则预览版本无效');const fresh=await seriesUpdatePreview(preview.input);
+ if(canonical(fresh)!==canonical(preview))throw Error('规则预览已变化，请重新预览');if(!fresh.confirmable)throw Error('规则没有变化');
+ const before=await requireSeries(fresh.input.id),after={...before,draft:fresh.draft,blocked:[],lastAttemptDate:null,updatedAt:await clock.now()};
+ return seriesHistory('series-edit',operationKey,request,before,after);
+}
+export async function seriesRetryPreview({id}) {
+ const series=await requireSeries(id);if(seriesStatusValue(series)!=='active')throw Error('请先恢复批次，再补齐任务');const preview=await safeSeriesPlan(series,[]);
+ return {schemaVersion:1,id,basis:canonical(series),plans:[{seriesId:id,preview}],assignedCount:preview.conflicts.length?0:preview.assigned.length,blocked:preview.conflicts.length||preview.unassigned.length?[{seriesId:id,title:series.draft.title,reasons:[...preview.conflicts,...preview.unassigned.map(c=>c.reason)]}]:[]};
+}
+export async function seriesRetryApply({operationKey,preview}) {
+ seriesOperationKey(operationKey);const request=canonical({retry:preview}),old=await alreadyApplied(operationKey,request,'series-retry');if(old)return old;
+ if(preview?.schemaVersion!==1)throw Error('补齐预览版本无效');const fresh=await seriesRetryPreview({id:preview.id});if(canonical(fresh)!==canonical(preview))throw Error('补齐依据已变化，请重新预览');
+ return applyRollingPlans(fresh,operationKey,request,'series-retry');
+}
+export async function seriesTasksCancel({id,taskIds,expectedTasks,operationKey}) {
+ seriesOperationKey(operationKey);if(!Array.isArray(taskIds)||!taskIds.length||taskIds.length>200||new Set(taskIds).size!==taskIds.length||taskIds.some(t=>typeof t!=='string'))throw Error('请选择1至200个不同任务');
+ if(!expectedTasks||typeof expectedTasks!=='object'||Array.isArray(expectedTasks))throw Error('缺少任务版本，请重新选择');
+ const request=canonical({id,taskIds,expectedTasks}),old=await alreadyApplied(operationKey,request,'series-cancel');if(old)return old;
+ await requireSeries(id);const records=(await all('occurrences')).filter(o=>o.seriesId===id),cancelled=await cancelledTaskIds(),selected=[];
+ for(const taskId of taskIds){if(!records.some(o=>o.taskId===taskId))throw Error('所选任务不属于此批次');const before=await task('task.get',{id:taskId});if(!before||before.deletedAt||before.archivedAt||before.completedAt||cancelled.has(taskId))throw Error('所选任务状态已变化，请重新选择');if(typeof expectedTasks[taskId]!=='string'||expectedTasks[taskId]!==before.updatedAt)throw Error('所选任务已修改，请重新选择');selected.push(before);}
+ const writes=[],changes=[],taskStateChanges=[];
+ for(const before of selected){const previous=await data.get('taskStates',before.id),cancel=await taskSetCancelled({id:before.id,cancelled:true,expectedUpdatedAt:before.updatedAt});writes.push(...cancel.writes);const after=await task('task.get',{id:before.id});changes.push({taskId:before.id,before,after});taskStateChanges.push({id:before.id,before:previous,after:cancel.writes[0].value});}
+ const batch={id:operationKey,kind:'series-cancel',request,createdAt:await clock.now(),undone:false,changes,taskStateChanges};batch.undoOccupancy=await captureUndoOccupancy(batch,await availabilityGet());
+ return result([...writes,...await historyWrites(batch)],{id:operationKey,seriesId:id,cancelled:changes.length});
 }

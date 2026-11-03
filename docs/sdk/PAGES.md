@@ -4,6 +4,19 @@
 
 ## 页面
 
+宿主 API `^1.45.0` 增加通用内容布局配置，业务字段、分组、文案和事件继续由模块声明：
+
+- `icon {icon,size?:20,tone?:'accent',surface?:false,surfaceSize?:40,label?}` 显示共享矢量图标，可添加柔和底色。`badge {text,tone?,icon?}` 显示可换行状态文字；`tone` 支持 `accent`、`success`、`warning`、`muted`，沿用浅色与深色主题。共享图标增加 `book`、`clipboard`、`fitness`、`layers`。
+- `card {variant:'outlined',padding?:14,event?,disabled?,children}` 提供细边框、连续圆角与可点击内容卡片；普通卡片声明 `event` 也可点击。`padding` 为 0～48 的逻辑像素。外部间距由父布局控制。
+- `row.layout:'flex'` 的子节点可声明 `flex:1` 填充分配空间或 `width:70` 固定宽度；省略时使用内容自然宽度。`row.spacing` 为 0～48（默认8），`crossAxisAlignment:'start'` 顶部对齐，默认居中。普通 `row` 仍为可换行布局。`column.crossAxisAlignment:'start'` 取消横向拉伸，`trailingSpacing:false` 省略最后一项下方留白。
+- `text.style` 增加 `headline`（24px粗体）、`body`、`caption`；`weight:'bold'|'semibold'`、`color:'primary'|'muted'`、`align:'center'|'end'` 可独立配置，文字继续适配系统字号。`maxLines` 支持1～10的整数，`overflow:'ellipsis'` 可将长标题在设定行数内省略，无障碍标签仍保留完整原文；省略配置时继续自然换行。`divider.height` 可配置分隔行总高度。
+- `input.presentation:'search'` 将 `text` 显示为搜索占位而非浮动字段标签，其余输入、清空、防抖与草稿能力不变。`button.icon` 可显示共享图标。
+- `tabs {variant:'pills'|'underline',items:[{label,event}],selectedIndex,scrollable?}` 提供紧凑状态筛选与下划线页签；每项保留48px操作区域与选中语义，`scrollable:true` 横向滚动，大字号或窄屏也自动允许横向滚动。
+- 根节点 `footerStyle:'flat'` 让既有固定 `footer` 采用整宽内容底色、16px水平边距与顶部细分隔；省略时保留浮动底栏。`footerMessage` 仍单独位于按钮上方。双按钮可用 `row.layout:'flex'` 与各子按钮 `flex:1` 等宽呈现。普通根布局继续采用20px水平、16px顶端边距。
+- 全屏子路由的 `header.compact:true` 使用20px粗体标题、48px返回区及8px标题间距。`header.backIcon:'chevron'` 将返回图标替换为共享左箭头，继续优先处理 `backEvent`，无内部返回时退出当前路由；省略时保持原顶栏呈现，面板样式不变。
+
+使用这些配置须更新 APK 并声明 `hostApi:'^1.45.0'`，独立模块不能向旧宿主发送不支持的布局节点。
+
 宿主 API `^1.37.0` 提供 `segmented {items:[{label,event}],selectedIndex}`、
 `formSection {title,action?:{text,event},children}`、`notice {text,tone}`、
 `choiceCard {title,subtitle,selected,event}`。`card.tone` 支持 `soft`／`selected`，

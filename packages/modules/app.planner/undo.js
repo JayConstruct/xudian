@@ -20,7 +20,8 @@ function restoration(batch) {
   return batch.changes.map(change => {
     const before = planned(change.before);
     const after = change.after === undefined ? {startAt: change.fields?.plannedStartAt, endAt: change.fields?.plannedEndAt} : planned(change.after);
-    return before && !samePosition(before, after) ? before : null;
+    const reactivates = (batch.taskStateChanges || []).some(state => state.id === change.taskId && state.after?.cancelledAt && !state.before?.cancelledAt);
+    return before && (reactivates || !samePosition(before, after)) ? before : null;
   }).filter(Boolean);
 }
 function fact(target, kind, occupied) {

@@ -235,7 +235,17 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                           ? ''
                           : widget.title ?? page?.title ?? '页面不可用'),
                   titleMaxLines: page?.headerMode == 'date' ? 3 : 1,
-                  leading: hasInternalBack
+                  compactHeader: spec?['compact'] == true,
+                  leading: spec?['backIcon'] == 'chevron'
+                      ? IconButton(
+                          tooltip: MaterialLocalizations.of(context)
+                              .backButtonTooltip,
+                          onPressed: hasInternalBack
+                              ? _back
+                              : () => Navigator.maybePop(context),
+                          icon: const UiIcon(Icons.chevron_left),
+                        )
+                      : hasInternalBack
                       ? BackButton(onPressed: _back)
                       : null,
                   actions: _actions(context, lease, spec),

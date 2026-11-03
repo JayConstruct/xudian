@@ -141,6 +141,7 @@ class WorkspaceHeaderController extends ChangeNotifier {
                   (spec['leading'] as Map)['label'] is! String)) ||
           (spec['titleEvent'] != null && spec['titleEvent'] is! Map) ||
           (spec['backEvent'] != null && spec['backEvent'] is! Map) ||
+          (spec['backIcon'] != null && spec['backIcon'] != 'chevron') ||
           (spec['actions'] != null &&
               !validWorkspaceHeaderActions(spec['actions']))) {
         throw const FormatException('Invalid workspace header');

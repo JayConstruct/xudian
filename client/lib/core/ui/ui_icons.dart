@@ -49,6 +49,10 @@ enum AppGlyph {
   description,
   repeat,
   priority,
+  book,
+  clipboard,
+  fitness,
+  layers,
 }
 
 IconData? appIconData(Object? name) => switch (name) {
@@ -97,6 +101,10 @@ IconData? appIconData(Object? name) => switch (name) {
   'description' || 'notes' => Icons.description_outlined,
   'repeat' => Icons.repeat,
   'priority' || 'flag' => Icons.flag_outlined,
+  'book' => Icons.menu_book_outlined,
+  'clipboard' => Icons.content_paste_outlined,
+  'fitness' => Icons.fitness_center_outlined,
+  'layers' => Icons.layers_outlined,
   _ => null,
 };
 
@@ -322,6 +330,10 @@ AppGlyph? _glyph(IconData icon) {
   if (icon == Icons.description_outlined) return AppGlyph.description;
   if (icon == Icons.repeat) return AppGlyph.repeat;
   if (icon == Icons.flag_outlined) return AppGlyph.priority;
+  if (icon == Icons.menu_book_outlined) return AppGlyph.book;
+  if (icon == Icons.content_paste_outlined) return AppGlyph.clipboard;
+  if (icon == Icons.fitness_center_outlined) return AppGlyph.fitness;
+  if (icon == Icons.layers_outlined) return AppGlyph.layers;
   return null;
 }
 
@@ -717,6 +729,45 @@ class AppIconPainter extends CustomPainter {
       case AppGlyph.priority:
         line(5, 3, 5, 21);
         route([5, 4, 19, 4, 17, 8, 19, 12, 5, 12]);
+      case AppGlyph.book:
+        route([
+          12,
+          6,
+          9,
+          4,
+          3,
+          4,
+          3,
+          19,
+          9,
+          19,
+          12,
+          21,
+          15,
+          19,
+          21,
+          19,
+          21,
+          4,
+          15,
+          4,
+          12,
+          6,
+        ]);
+        line(12, 6, 12, 21);
+      case AppGlyph.clipboard:
+        route([8, 5, 5, 5, 5, 21, 19, 21, 19, 5, 16, 5]);
+        box(8, 3, 8, 4, 1);
+      case AppGlyph.fitness:
+        box(3, 7, 4, 10, 1);
+        box(17, 7, 4, 10, 1);
+        line(7, 12, 17, 12);
+        line(2, 10, 2, 14);
+        line(22, 10, 22, 14);
+      case AppGlyph.layers:
+        route([12, 3, 22, 9, 12, 15, 2, 9], close: true);
+        route([2, 13, 12, 19, 22, 13]);
+        route([2, 17, 12, 22, 22, 17]);
     }
     canvas.restore();
   }

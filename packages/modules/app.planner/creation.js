@@ -9,18 +9,16 @@ const tile = (title, subtitle, event, extra = {}) => ({type: 'listTile', title, 
 const section = (title, children, action) => ({type: 'formSection', title, children, ...(action ? {action} : {})});
 const notice = (text, tone = 'info') => ({type: 'notice', text, tone});
 const field = (key, text, value, extra = {}) => ({type: 'input', key, text, value: value ?? '', onChangeEvent: {type: 'field', key}, ...extra});
-const dateField = (key, text, value, type = 'dateInput') => ({type, key, text, value: value || null, clearable: key === 'dueDate' || key === 'dueTime', event: {type: 'field', key}});
+const dateField = (key, text, value, type = 'dateInput') => ({type, key, text, value: value || null, clearable: key === 'dueDate' || key === 'dueTime' || key === 'preferredTime', event: {type: 'field', key}});
 const numberField = (key, text, value, min = 1, max = 365) => field(key, text, value, {inputMode: 'number', integer: true, min, max});
 const segmented = (key, labels, value, eventType) => ({type: 'segmented', key, selectedIndex: value, items: labels.map((label, index) => ({label, event: {type: eventType, index}}))});
 const footer = (text, event, disabled = false) => ({type: 'column', spacing: 0, children: [b(text, event, 'filled', {disabled})]});
 const copy = value => JSON.parse(JSON.stringify(value));
 const templateKey = 'creation.templates.v1';
-const draftKey = 'creation.draft.v1';
-const inputCacheKey = 'creation.input.v1';
 const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-const knownFields = ['mode', 'title', 'notes', 'dueDate', 'dueTime', 'estimatedMinutes', 'firstDate', 'days', 'autoRenew', 'intervalEnabled', 'minDays', 'maxDays', 'weekdaysEnabled', 'weekdays', 'windowEnabled', 'windowStart', 'windowEnd', 'priorityEnabled', 'priority', 'repeatKind', 'scheduleEnabled', 'durationEnabled', 'deadlineEnabled', 'notesEnabled', 'locationEnabled', 'startDate', 'start', 'endDate', 'end', 'locked', 'location'];
+const knownFields = ['mode', 'title', 'notes', 'dueDate', 'dueTime', 'estimatedMinutes', 'firstDate', 'days', 'autoRenew', 'intervalEnabled', 'minDays', 'maxDays', 'weekdaysEnabled', 'weekdays', 'windowEnabled', 'windowStart', 'windowEnd', 'preferredTime', 'priorityEnabled', 'priority', 'repeatKind', 'scheduleEnabled', 'durationEnabled', 'deadlineEnabled', 'notesEnabled', 'locationEnabled', 'startDate', 'start', 'endDate', 'end', 'locked', 'location'];
 const contentFields = {schedule: ['startDate', 'start', 'endDate', 'end', 'locked'], duration: ['estimatedMinutes'], deadline: ['dueDate', 'dueTime'], notes: ['notes'], location: ['location'], priority: ['priority']};
-const multipleFields = ['estimatedMinutes', 'firstDate', 'intervalEnabled', 'repeatKind', 'minDays', 'maxDays', 'weekdaysEnabled', 'weekdays', 'windowEnabled', 'windowStart', 'windowEnd', 'priorityEnabled', 'priority'];
+const multipleFields = ['estimatedMinutes', 'firstDate', 'intervalEnabled', 'repeatKind', 'minDays', 'maxDays', 'weekdaysEnabled', 'weekdays', 'windowEnabled', 'windowStart', 'windowEnd', 'preferredTime', 'priorityEnabled', 'priority'];
 const singleTimeFields = ['scheduleEnabled', 'durationEnabled', 'deadlineEnabled', 'startDate', 'start', 'endDate', 'end', 'locked', 'estimatedMinutes', 'dueDate', 'dueTime'];
 const adjustFields = ['adjustDate', 'adjustStart', 'adjustEnd', 'adjustScope'];
 const dateLabel = date => `${Number(date.slice(5, 7))}月${Number(date.slice(8))}日`;
@@ -31,7 +29,7 @@ function defaults(a, today) {
     scheduleEnabled: false, durationEnabled: false, deadlineEnabled: false, notesEnabled: false, locationEnabled: false,
     startDate: null, start: null, endDate: null, end: null, locked: false, location: '',
     firstDate: today, days: 30, autoRenew: true, intervalEnabled: true, minDays: 4, maxDays: 6,
-    repeatKind: 'interval', weekdaysEnabled: true, weekdays: [...allDays], windowEnabled: true, windowStart: '18:00', windowEnd: '22:00', priorityEnabled: false, priority: 0};
+    repeatKind: 'interval', weekdaysEnabled: true, weekdays: [...allDays], windowEnabled: true, windowStart: '18:00', windowEnd: '22:00', preferredTime: null, priorityEnabled: false, priority: 0};
 }
 function hasDraftContent(d) {
   return !!(String(d.title || '').trim() || contentItems(d).length || d.dueTime);
@@ -39,6 +37,13 @@ function hasDraftContent(d) {
 function validateRepeat(d) {
   if (!d.intervalEnabled || !['daily', 'interval'].includes(d.repeatKind)) throw Error('多次任务需要一种重复方式，请选择每天一次或自定义间隔');
   if (d.repeatKind === 'interval' && (!Number.isInteger(Number(d.minDays)) || !Number.isInteger(Number(d.maxDays)) || Number(d.minDays) < 1 || Number(d.maxDays) < Number(d.minDays) || Number(d.maxDays) > 366)) throw Error('最大间隔必须大于或等于最小间隔，且至少1天，最多366天');
+}
+function validatePreferred(d) {
+  if (!d.preferredTime) return;
+  const start = minute(d.windowEnabled ? d.windowStart : '00:00');
+  const end = minute(d.windowEnabled ? d.windowEnd : '23:59');
+  const preferred = minute(d.preferredTime);
+  if (preferred < start || preferred + Number(d.estimatedMinutes) > end) throw Error('优先时间点需在允许时段内，且能完整放下本次任务');
 }
 function dailyWeekdayNotice(d) {
   return d.repeatKind === 'daily' && d.weekdaysEnabled && (d.weekdays || []).length < 7
@@ -54,6 +59,7 @@ function ruleItems(d) {
     ...(d.mode === 'batch' && d.intervalEnabled ? [{id: 'interval', title: d.repeatKind === 'daily' ? '每日安排' : '间隔安排', subtitle: d.repeatKind === 'daily' ? '每天一次' : `${d.minDays}～${d.maxDays}天`}] : []),
     ...(d.weekdaysEnabled ? [{id: 'weekdays', title: '允许星期', subtitle: weekLabel(d.weekdays)}] : []),
     ...(d.windowEnabled ? [{id: 'window', title: '允许时段', subtitle: `${d.windowStart}～${d.windowEnd}`}] : []),
+    ...(d.mode === 'batch' && d.preferredTime ? [{id: 'preferred', title: '优先时间点', subtitle: d.preferredTime}] : []),
     ...(d.priorityEnabled ? [{id: 'priority', title: '优先级', subtitle: ['普通', '较高', '高', '最高'][Number(d.priority)] || '普通'}] : []),
   ];
 }
@@ -69,7 +75,8 @@ function creationInput(d, zone, adjustments) {
   return {title: d.title.trim(), notes: d.notes || '', location: d.location || null, estimatedMinutes, priority: d.priorityEnabled ? Number(d.priority) : 0, timezone: zone, firstDate: d.firstDate, days: 30,
     rules: {interval: {minDays: d.repeatKind === 'daily' ? 1 : Number(d.minDays), maxDays: d.repeatKind === 'daily' ? 1 : Number(d.maxDays)},
       weekdays: d.weekdaysEnabled ? (d.weekdays || []).map(Number) : allDays,
-      timeWindow: d.windowEnabled ? {start: d.windowStart, end: d.windowEnd} : {start: '00:00', end: '23:59'}}, adjustments: adjustments || []};
+      timeWindow: d.windowEnabled ? {start: d.windowStart, end: d.windowEnd} : {start: '00:00', end: '23:59'},
+      ...(d.preferredTime ? {preferredTime: d.preferredTime} : {})}, adjustments: adjustments || []};
 }
 function builtins(a, today) {
   const base = defaults(a, today);
@@ -127,7 +134,7 @@ function contentItems(d) {
     ...(d.notes ? [{key: 'notes', title: '描述', icon: 'description', value: d.notes.length > 120 ? d.notes.slice(0, 120) + '…' : d.notes}] : []),
     ...(d.location ? [{key: 'location', title: '地点', icon: 'location', value: d.location}] : []),
     ...(d.priorityEnabled ? [{key: 'priority', title: '优先级', icon: 'priority', value: ['普通', '较高', '高', '最高'][Number(d.priority)] || '普通'}] : []),
-    ...(d.mode === 'batch' ? ruleItems(d).filter(x => x.id === 'weekdays' || x.id === 'window').map(x => ({key: x.id, title: x.title, value: x.subtitle, icon: 'calendar'})) : []),
+    ...(d.mode === 'batch' ? ruleItems(d).filter(x => ['weekdays', 'window', 'preferred'].includes(x.id)).map(x => ({key: x.id, title: x.title, value: x.subtitle, icon: 'calendar'})) : []),
   ];
 }
 function removeContent(d, key, state) {
@@ -139,11 +146,15 @@ function removeContent(d, key, state) {
   if (key === 'priority') Object.assign(d, {priorityEnabled: false, priority: 0});
   if (key === 'weekdays') d.weekdaysEnabled = false;
   if (key === 'window') d.windowEnabled = false;
+  if (key === 'preferred') d.preferredTime = null;
   if (key === 'multiple') Object.assign(d, {mode: 'once'}, state.singleTime || {durationEnabled: true});
 }
 
-export async function renderCreation(state, event, forms, a) {
+export async function renderCreation(state, event, forms, a, options = {}) {
   state = {...state};
+  state.batchOnly = options.batchMode === true;
+  const draftKey = options.embedded ? 'batch.creation.draft.v1' : 'creation.draft.v1';
+  const inputCacheKey = options.embedded ? 'batch.creation.input.v1' : 'creation.input.v1';
   const today = await clock.today(a.timezone);
   const previousPage = (state.step || 'create') + (state.contentKey || '');
   if (!state.draft) {
@@ -163,6 +174,10 @@ export async function renderCreation(state, event, forms, a) {
     }
   }
   state.draft = {...defaults(a, today), ...state.draft};
+  if (options.batchMode && !state.batchEntryConfigured) {
+    Object.assign(state.draft, {mode: 'batch', scheduleEnabled: false, durationEnabled: true, deadlineEnabled: false, locked: false, dueDate: null, dueTime: null});
+    state.batchEntryConfigured = true;
+  }
   const d = state.draft;
   state.step ||= 'create';
   state.adjustments ||= [];
@@ -248,7 +263,10 @@ export async function renderCreation(state, event, forms, a) {
       }
       state.step = 'create'; delete state.contentDraft; delete state.contentKey; invalidate(); clear(knownFields);
     }
-    if (event?.type === 'removeContent') { removeContent(d, event.key, state); invalidate(); clear(knownFields); }
+    if (event?.type === 'removeContent') {
+      if (state.batchOnly && event.key === 'multiple') throw Error('批量任务必须保留重复规则');
+      removeContent(d, event.key, state); invalidate(); clear(knownFields);
+    }
     if (event?.type === 'openMultiple') {
       state.multiDraft = {...copy(d), mode: 'batch', estimatedMinutes: Number(d.estimatedMinutes) || a.defaultMinutes || 30};
       state.multiReturn = state.step === 'addContent' ? 'addContent' : 'create'; state.step = 'multiple';
@@ -259,6 +277,7 @@ export async function renderCreation(state, event, forms, a) {
       validDuration(md.estimatedMinutes); day(md.firstDate);
       if (md.firstDate < today) throw Error('首次日期不能早于今天');
       validateRepeat(md);
+      validatePreferred(md);
       if (d.mode !== 'batch') state.singleTime = Object.fromEntries(singleTimeFields.map(k => [k, d[k]]));
       for (const key of multipleFields) d[key] = md[key];
       Object.assign(d, {mode: 'batch', scheduleEnabled: false, durationEnabled: true, deadlineEnabled: false, locked: false, dueDate: null, dueTime: null});
@@ -293,6 +312,9 @@ export async function renderCreation(state, event, forms, a) {
       if (replace) {
         await ui.preferences.set(inputCacheKey, null);
         state.draft = {...defaults(a, today), ...copy(template.draft), firstDate: today, dueDate: null, dueTime: null};
+        if (state.batchOnly && template.draft.mode !== 'batch') {
+          for (const key of multipleFields.filter(key => key !== 'estimatedMinutes')) state.draft[key] = d[key];
+        }
         Object.assign(state.draft, {scheduleEnabled: false, startDate: null, start: null, endDate: null, end: null, locked: false, deadlineEnabled: false});
         delete state.singleTime;
         delete state.restoredDraft;
@@ -326,6 +348,7 @@ export async function renderCreation(state, event, forms, a) {
     if (event?.type === 'ruleCategory') state.ruleCategory = event.index;
     if (event?.type === 'configureRule') state.ruleEditing = state.ruleEditing === event.id ? null : event.id;
     if (event?.type === 'removeRule') {
+      if (event.id === 'preferred') state.ruleDraft.preferredTime = null;
       if (event.id === 'interval') throw Error('多次任务必须保留一种重复方式；可在添加其他规则中更换每天一次或自定义间隔。');
       const key = {interval: 'intervalEnabled', weekdays: 'weekdaysEnabled', window: 'windowEnabled', priority: 'priorityEnabled'}[event.id];
       if (key) state.ruleDraft[key] = false;
@@ -335,11 +358,13 @@ export async function renderCreation(state, event, forms, a) {
       if (event.id === 'daily' || event.id === 'interval') {
         if (rd.intervalEnabled && rd.repeatKind !== event.id) {
           const answer = await ui.dialog({title: '更换重复方式', fields: [{key: 'replace', label: `改用${event.id === 'daily' ? '每日安排' : '间隔安排'}，替换当前重复规则`, type: 'boolean', value: false}]});
-          if (!answer?.replace) return build(state, a, today, clearForms);
+          if (!answer?.replace) return build(state, a, today, clearForms, inputCacheKey);
         }
         rd.intervalEnabled = true; rd.repeatKind = event.id;
         if (event.id === 'interval' && Number(rd.maxDays) === 1) { rd.minDays = 4; rd.maxDays = 6; }
         state.ruleEditing = 'interval'; clear(['minDays', 'maxDays']);
+      } else if (event.id === 'preferred') {
+        rd.preferredTime = rd.windowEnabled ? rd.windowStart : '20:00'; state.ruleEditing = 'preferred'; clear(['preferredTime']);
       } else {
         rd[{weekdays: 'weekdaysEnabled', window: 'windowEnabled', priority: 'priorityEnabled'}[event.id]] = true;
         state.ruleEditing = event.id;
@@ -350,6 +375,7 @@ export async function renderCreation(state, event, forms, a) {
       if (rd.mode === 'batch') validateRepeat(rd);
       if (rd.weekdaysEnabled && !(rd.weekdays || []).length) throw Error('至少选择一个允许星期');
       if (rd.windowEnabled && rd.windowStart >= rd.windowEnd) throw Error('允许时段的结束需晚于开始');
+      validatePreferred(rd);
       if (state.ruleReturn === 'multiple') { state.multiDraft = copy(rd); state.step = 'multiple'; }
       else { state.draft = copy(rd); state.step = 'create'; invalidate(); }
       clear(knownFields); delete state.ruleDraft; delete state.ruleEditing;
@@ -394,13 +420,13 @@ export async function renderCreation(state, event, forms, a) {
     }
     if (event?.type === 'save' && d.mode === 'once') {
       const saved = await saveOnce(d, a.timezone);
-      if (saved) { await ui.preferences.set(draftKey, null); await ui.preferences.set(inputCacheKey, null); await ui.navigate('app.planner.home'); return {state: {}, clearForms: knownFields, tree: t('任务已保存')}; }
+      if (saved) { await ui.preferences.set(draftKey, null); await ui.preferences.set(inputCacheKey, null); if (!options.embedded) await ui.navigate('app.planner.home'); return {state: {}, ...(options.embedded ? {completed: true} : {}), clearForms: knownFields, tree: t('任务已保存')}; }
     }
     if (event?.type === 'confirmCreation' && state.preview) {
       if (!state.preview.confirmable || state.preview.unassigned.length) throw Error('请先处理未安排任务，再确认生成');
       if (!state.creationPlanId) await freezePreview();
       const saved = await ui.review(state.creationPlanId) ? await services.commit(state.creationPlanId) : null;
-      if (saved) { await ui.preferences.set(draftKey, null); await ui.preferences.set(inputCacheKey, null); await ui.navigate('app.planner.home'); return {state: {}, clearForms: [...knownFields, ...adjustFields], tree: t('批量任务已创建，将持续补齐未来30天')}; }
+      if (saved) { await ui.preferences.set(draftKey, null); await ui.preferences.set(inputCacheKey, null); if (!options.embedded) await ui.navigate('app.planner.home'); return {state: {}, ...(options.embedded ? {completed: true} : {}), clearForms: [...knownFields, ...adjustFields], tree: t('批量任务已创建，将持续补齐未来30天')}; }
     }
     delete state.error;
   } catch (e) { state.error = String(e); }
@@ -408,6 +434,7 @@ export async function renderCreation(state, event, forms, a) {
     try { state.contentMinutes = (await scheduleBounds(state.contentDraft, a.timezone)).minutes; }
     catch (_) { state.contentMinutes = null; }
   }
+  if (state.batchOnly) Object.assign(state.draft, {mode: 'batch', scheduleEnabled: false, durationEnabled: true, deadlineEnabled: false, locked: false, dueDate: null, dueTime: null});
   const currentPage = state.step + (state.contentKey || '');
   if (currentPage !== previousPage) state.pageDirection = ['back', 'applyContent', 'applyMultiple', 'applyRules', 'applySettings', 'applyAdjustment', 'useTemplate', 'clearDraft'].includes(event?.type) ? 'back' : 'forward';
   const savedDraft = hasDraftContent(state.draft) ? {draft: state.draft, ...(state.draft.mode === 'batch' && state.singleTime ? {singleTime: state.singleTime} : {})} : null;
@@ -419,10 +446,10 @@ export async function renderCreation(state, event, forms, a) {
       delete state.draftSaveFailed;
     } catch (_) { state.draftSaveFailed = true; }
   } else delete state.draftSaveFailed;
-  return build(state, a, today, clearForms);
+  return build(state, a, today, clearForms, inputCacheKey);
 }
 
-function build(state, a, today, clearForms) {
+function build(state, a, today, clearForms, inputCacheKey) {
   const d = state.draft;
   let title = '新建任务', children = [], action, footerNode;
   if (state.step === 'addContent') {
@@ -477,6 +504,8 @@ function build(state, a, today, clearForms) {
       ...dailyWeekdayNotice(md),
       numberField('estimatedMinutes', '预计分钟', md.estimatedMinutes, 1, 1439),
       dateField('firstDate', '首次安排日期', md.firstDate),
+      dateField('preferredTime', '优先时间点（可选）', md.preferredTime, 'timeInput'),
+      t('先尝试优先时间；有冲突时，在当天允许时段内选择最接近的空位。清空后按原规则安排。', 'muted'),
       tile('安排规则', [md.weekdaysEnabled ? weekLabel(md.weekdays) : '不限星期', md.windowEnabled ? `${md.windowStart}—${md.windowEnd}` : '不限时段'].join(' · '), {type: 'rules'}, {icon: 'calendar'}),
       notice('保存设置后可预览未来30天的安排，再确认创建。'),
       ...(d.scheduleEnabled || d.dueDate ? [t('多次任务按规则分别安排，当前单次起止和截止会暂存；移除多次设置可恢复。', 'muted')] : []),
@@ -509,7 +538,7 @@ function build(state, a, today, clearForms) {
             ...(rd.repeatKind !== 'interval' || !rd.intervalEnabled ? [tile('间隔安排', rd.intervalEnabled ? '与每日安排二选一 · 点击更换' : '设置相邻两次任务的最小和最大间隔', {type: 'addRule', id: 'interval'}, {trailing: rd.intervalEnabled ? '更换' : '添加', trailingAccent: true})] : []),
             ...(rd.repeatKind !== 'daily' || !rd.intervalEnabled ? [tile('每日安排', rd.intervalEnabled ? '与间隔安排二选一 · 点击更换' : '每天安排一次', {type: 'addRule', id: 'daily'}, {trailing: rd.intervalEnabled ? '更换' : '添加', trailingAccent: true})] : []),
           ].filter(x => !state.ruleSearch || (x.title + x.subtitle).includes(state.ruleSearch)) : []),
-          ...[{id: 'weekdays', title: '允许星期', subtitle: '仅在选定的星期安排', enabled: rd.weekdaysEnabled, group: 2}, {id: 'window', title: '允许时段', subtitle: '限定每日可安排时间', enabled: rd.windowEnabled, group: 2}, {id: 'priority', title: '优先级', subtitle: '安排时优先考虑', enabled: rd.priorityEnabled, group: 3}].filter(x => !x.enabled && matches(x, x.group)).map(x => tile(x.title, x.subtitle, {type: 'addRule', id: x.id}, {trailing: '添加', trailingAccent: true})),
+          ...[{id: 'weekdays', title: '允许星期', subtitle: '仅在选定的星期安排', enabled: rd.weekdaysEnabled, group: 2}, {id: 'window', title: '允许时段', subtitle: '限定每日可安排时间', enabled: rd.windowEnabled, group: 2}, {id: 'priority', title: '优先级', subtitle: '安排时优先考虑', enabled: rd.priorityEnabled, group: 3}, {id: 'preferred', title: '优先时间点', subtitle: '先尝试指定时间，冲突时就近安排', enabled: !!rd.preferredTime, group: 2}].filter(x => !x.enabled && matches(x, x.group)).map(x => tile(x.title, x.subtitle, {type: 'addRule', id: x.id}, {trailing: '添加', trailingAccent: true})),
         ]),
       ])];
     footerNode = footer(rd.mode === 'once' ? '应用设置' : `应用${selected.length}项规则`, {type: 'applyRules'});
@@ -521,7 +550,7 @@ function build(state, a, today, clearForms) {
   } else if (state.step === 'preview') {
     title = '预览安排'; const p = state.preview;
     const unassigned = p.unassigned || [];
-    children = [{type: 'card', tone: 'soft', children: [t(d.title, 'title'), t(`每次${d.estimatedMinutes}分钟 · ${d.repeatKind === 'daily' ? '每天一次' : '间隔' + d.minDays + '～' + d.maxDays + '天'}`), tile(`${dateLabel(p.startDate)}—${dateLabel(p.endDate)}`, null, null, {trailing: '未来30天', trailingAccent: true})]},
+    children = [{type: 'card', tone: 'soft', children: [t(d.title, 'title'), ...(d.preferredTime ? [t('优先时间点 ' + d.preferredTime), t('冲突时在允许时段内就近安排', 'muted')] : []), t(`每次${d.estimatedMinutes}分钟 · ${d.repeatKind === 'daily' ? '每天一次' : '间隔' + d.minDays + '～' + d.maxDays + '天'}`), tile(`${dateLabel(p.startDate)}—${dateLabel(p.endDate)}`, null, null, {trailing: '未来30天', trailingAccent: true})]},
       {type: 'card', tone: 'soft', children: [t(`可安排 ${p.assigned.length} 次     未安排 ${unassigned.length} 次`, 'heading')]},
       ...(p.conflicts || []).map(x => notice(x, 'warning')), ...(p.warnings || []).map(x => notice(x)),
       ...(unassigned.length ? [notice(`还需处理${unassigned.length}次安排`, 'warning'), section('未安排', unassigned.map(item => ({type: 'card', children: [t(`第${item.index}次 · ${d.title}`, 'heading'), t(`可安排日期：${dateLabel(item.windowStart)}—${dateLabel(item.windowEnd)}`), notice(item.reason, 'warning'), b('调整允许时段与规则', {type: 'rules'})]})))] : []),
@@ -540,7 +569,7 @@ function build(state, a, today, clearForms) {
     const min = d.repeatKind === 'daily' ? 1 : Number(d.minDays), max = d.repeatKind === 'daily' ? 1 : Number(d.maxDays);
     const valid = [before, after].filter(x => x !== null).every(x => x >= min && x <= max);
     const following = entries.slice(at + 1);
-    children = [{type: 'card', tone: 'soft', children: [t(d.title, 'title'), t(`本次原定 ${dateLabel(original.date)} ${original.start}—${original.end}`, 'muted')]},
+    children = [{type: 'card', tone: 'soft', children: [t(d.title, 'title'), ...(d.preferredTime ? [t('优先时间点 ' + d.preferredTime), t('冲突时在允许时段内就近安排', 'muted')] : []), t(`本次原定 ${dateLabel(original.date)} ${original.start}—${original.end}`, 'muted')]},
       {type: 'card', children: [dateField('adjustDate', '日期', state.adjustDate), {type: 'row', layout: 'flex', children: [{...dateField('adjustStart', '开始', state.adjustStart, 'timeInput'), flex: 1}, {...dateField('adjustEnd', '结束', state.adjustEnd, 'timeInput'), flex: 1}]}, t(`原耗时${d.estimatedMinutes}分钟`, 'muted')]},
       section('调整范围', [
         {type: 'choiceCard', title: '仅本次', subtitle: '其他任务日期保持不变', selected: state.adjustScope === 'only', event: {type: 'adjustScope', index: 0}},
@@ -558,9 +587,9 @@ function build(state, a, today, clearForms) {
       ...(state.restoredDraft && hasDraftContent(d) ? [notice('已恢复上次未完成的草稿')] : []),
       ...(d.mode === 'batch' ? dailyWeekdayNotice(d) : []),
       ...(items.length ? [section(`已添加 · ${items.length}项`, items.flatMap((item, index) => {
-        const event = item.key === 'multiple' ? {type: 'openMultiple'} : ['weekdays', 'window'].includes(item.key) ? {type: 'rules'} : {type: 'editContent', key: item.key};
+        const event = item.key === 'multiple' ? {type: 'openMultiple'} : ['weekdays', 'window', 'preferred'].includes(item.key) ? {type: 'rules'} : {type: 'editContent', key: item.key};
         return [...(index ? [{type: 'divider'}] : []), tile(item.title, item.value, event, {icon: item.icon,
-          ...(item.removable === false ? {} : {trailingAction: {icon: 'close', label: '移除' + item.title, event: {type: 'removeContent', key: item.key}}}),
+          ...(item.removable === false || state.batchOnly && item.key === 'multiple' ? {} : {trailingAction: {icon: 'close', label: '移除' + item.title, event: {type: 'removeContent', key: item.key}}}),
         })];
       }))] : []),
       {type: 'card', children: [tile('添加内容或规则', null, {type: 'openAdd'}, {icon: 'add'})]},
@@ -586,6 +615,7 @@ function build(state, a, today, clearForms) {
 }
 
 function ruleConfiguration(d, id) {
+  if (id === 'preferred') return [dateField('preferredTime', '优先时间点（可选）', d.preferredTime, 'timeInput'), t('必须在允许时段内完整放下本次任务；冲突时就近安排，不固定已有任务。', 'muted')];
   if (id === 'interval') return d.repeatKind === 'daily' ? [t('每天安排一次；若当天无法安排，预览会明确显示。', 'muted')] : [{type: 'row', layout: 'flex', children: [{...numberField('minDays', '最少（天）', d.minDays), flex: 1}, {...numberField('maxDays', '最多（天）', d.maxDays), flex: 1}]}, t('相邻两次任务的日期间隔', 'muted')];
   if (id === 'weekdays') return [{type: 'multiSelect', key: 'weekdays', text: '选择允许星期', value: d.weekdays, items: weekdays.map((label, index) => ({label, value: index + 1})), event: {type: 'field', key: 'weekdays'}}];
   if (id === 'window') return [{type: 'row', layout: 'flex', children: [{...dateField('windowStart', '开始', d.windowStart, 'timeInput'), flex: 1}, {...dateField('windowEnd', '结束', d.windowEnd, 'timeInput'), flex: 1}]}];

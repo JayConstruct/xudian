@@ -756,7 +756,7 @@ void main() {
         actions
             .where((a) => a['presentation'] == 'menu')
             .map((a) => a['label']),
-        ['自动安排', '操作历史', '已取消任务', '视图与显示', '待安排筛选', '规划规则', '规划设置'],
+        ['自动安排', '批量任务', '操作历史', '已取消任务', '视图与显示', '待安排筛选', '规划规则', '规划设置'],
       );
       final view = actions.singleWhere((a) => a['label'] == '视图与显示');
       final choices = nodes(view).singleWhere((n) => n['kind'] == 'choiceGrid');

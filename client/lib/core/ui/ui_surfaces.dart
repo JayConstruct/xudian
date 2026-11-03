@@ -39,6 +39,7 @@ class DetailPage extends StatelessWidget {
     this.leading,
     this.actions,
     this.titleMaxLines = 1,
+    this.compactHeader = false,
   });
 
   final String title;
@@ -46,6 +47,7 @@ class DetailPage extends StatelessWidget {
   final Widget? leading;
   final List<Widget>? actions;
   final int titleMaxLines;
+  final bool compactHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -80,8 +82,14 @@ class DetailPage extends StatelessWidget {
             title,
             maxLines: titleMaxLines,
             overflow: TextOverflow.ellipsis,
+            style: compactHeader
+                ? Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontSize: 20, fontWeight: FontWeight.w700)
+                : null,
           ),
           leading: leading,
+          leadingWidth: compactHeader ? 48 : null,
+          titleSpacing: compactHeader ? 8 : null,
           actions: actions,
           centerTitle: false,
         ),

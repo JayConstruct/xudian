@@ -27,12 +27,25 @@ export function expand(rules,records,tasks,range,today){const result=[],byKey=ne
  for(const o of records)if(!result.some(x=>x.id===o.id)&&o.startDate<=range.endDate&&o.endDate>=range.startDate){const t=byTask.get(o.taskId);const c=taskFields({...o,status:o.status||'pending',outdated:true},t);if(c.endDate<today&&!['completed','skipped','cancelled'].includes(c.status))c.status=['daily','weekly'].includes(c.kind)||c.optional?'missed':'overdue';result.push(c);}
  if(result.length>200)throw Error('候选超过200项，请缩小范围');return result.sort((a,b)=>a.startDate.localeCompare(b.startDate)||a.id.localeCompare(b.id));}
 export function availability(value){const a={timezone:'Asia/Shanghai',bufferMinutes:10,defaultMinutes:30,weekly:{},exceptions:{},busy:[],...value};integer(a.bufferMinutes,0,180,'缓冲');integer(a.defaultMinutes,1,1439,'默认耗时');for(const k of Object.keys(a.weekly)){integer(Number(k),1,7,'星期');a.weekly[k]=slots(a.weekly[k]);}for(const [d,s] of Object.entries(a.exceptions)){day(d);a.exceptions[d]=slots(s);}if(a.busy.length>500)throw Error('忙碌时段过多');for(const b of a.busy){day(b.date);slots([b]);}return a;}
+// Rank only the times within a date. The existing date preference, interval
+// windows, manual overrides and locked positions remain authoritative.
+function preferredStart(c,available,occupied,date,buffer){
+ const preferred=minute(c.preferredTime),starts=new Set();
+ for(const allowed of c.times)for(const slot of available){
+  const start=Math.max(minute(allowed.start),minute(slot.start)),end=Math.min(minute(allowed.end),minute(slot.end));
+  if(preferred>=start&&preferred+c.estimatedMinutes<=end)starts.add(preferred);
+  for(let m=Math.ceil(start/5)*5;m+c.estimatedMinutes<=end;m+=5)starts.add(m);
+ }
+ return [...starts].sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred)||a-b)
+  .find(m=>!occupied.some(b=>b.date===date&&(!c.taskId||b.id!==c.taskId)&&m<b.end+buffer&&m+c.estimatedMinutes+buffer>b.start));
+}
 export function arrange(candidates,a,range,busy,overrides={}){const assigned=[],unassigned=[],occupied=busy.map(x=>({...x})),loads={},buffer=a.bufferMinutes;const sorted=[...candidates].sort((x,y)=>Number(!x.locked)-Number(!y.locked)||Number(x.optional)-Number(y.optional)||x.endDate.localeCompare(y.endDate)||(Date.parse(x.endDate)-Date.parse(x.startDate))-(Date.parse(y.endDate)-Date.parse(y.startDate))||y.priority-x.priority||x.id.localeCompare(y.id));
  const ordered=[],byId=new Map(sorted.map(c=>[c.id,c])),visited=new Set();const visit=c=>{if(visited.has(c.id))return;visited.add(c.id);if(c.previousId&&byId.has(c.previousId))visit(byId.get(c.previousId));ordered.push(c);};sorted.forEach(visit);
  for(const original of ordered){let c={...original};if(c.previousId){const previous=assigned.find(x=>x.id===c.previousId)||(c.previousScheduledDate?{date:day(c.previousScheduledDate)}:null);if(!previous){unassigned.push({...c,reason:'前一次尚未安排，无法推演预计窗口'});continue;}const oldGap=c.earlyDays;c.endDate=add(previous.date,c.maxGapDays);c.startDate=add(c.endDate,-oldGap);if(c.ruleEndDate&&c.endDate>c.ruleEndDate)c.endDate=c.ruleEndDate;if(c.effectiveUntil&&c.endDate>c.effectiveUntil)c.endDate=c.effectiveUntil;if(c.task?.dueDate&&c.task.dueDate<c.endDate)c.endDate=c.task.dueDate;const oldDate=c.date||c.task?.plannedDate;if(c.task&&!c.task.completedAt&&oldDate&&(oldDate<c.startDate||oldDate>c.endDate)){c.recalibrationConflict=true;c.previousWindow=c.previousWindow||{startDate:original.startDate,endDate:original.endDate};}}
  const override=overrides[c.id],fixed=c.locked&&c.task?{date:c.localDate||c.task.plannedDate,start:c.localStart,end:c.localEnd}:override;
  let dates=[];for(let d=c.startDate>range.startDate?c.startDate:range.startDate;d<=c.endDate&&d<=range.endDate;d=add(d,1))if(c.weekdays.includes(weekday(d)))dates.push(d);dates.sort((x,y)=>c.kind==='interval'?y.localeCompare(x):(loads[x]||0)-(loads[y]||0)||x.localeCompare(y));let chosen;
  for(const d of dates){if(fixed&&fixed.date!==d)continue;if(c.reservedDates?.includes(d))continue;if(c.kind==='weekly'&&assigned.some(x=>x.ruleId===c.ruleId&&x.week===c.week&&x.date===d)||c.optional&&c.ruleId&&assigned.some(x=>x.ruleId===c.ruleId&&x.date===d))continue;const available=a.exceptions[d]??a.weekly[weekday(d)]??[];
+ if(!fixed&&c.preferredTime!=null){const m=preferredStart(c,available,occupied,d,buffer);if(m!==undefined){chosen={...c,date:d,start:time(m),end:time(m+c.estimatedMinutes),priority:c.priority,locked:c.locked??false};break;}continue;}
  for(const allowed of c.times)for(const slot of available){const start=Math.max(minute(allowed.start),minute(slot.start)),end=Math.min(minute(allowed.end),minute(slot.end));for(let m=fixed?minute(fixed.start):Math.ceil(start/5)*5;m+c.estimatedMinutes<=end;m+=5){const finish=fixed?minute(fixed.end):m+c.estimatedMinutes;if(fixed&&(m<start||finish>end||finish<=m||finish-m!==c.estimatedMinutes))break;const blocked=occupied.some(b=>b.date===d&&(!c.taskId||b.id!==c.taskId)&&m<b.end+buffer&&finish+buffer>b.start);if(!blocked){chosen={...c,date:d,start:time(m),end:time(finish),priority:override?.priority??c.priority,locked:override?.locked??c.locked??false};break;}if(fixed)break;}if(chosen)break;}if(chosen)break;}
  if(chosen){assigned.push(chosen);occupied.push({date:chosen.date,start:minute(chosen.start),end:minute(chosen.end)});loads[chosen.date]=(loads[chosen.date]||0)+c.estimatedMinutes;}else unassigned.push({...c,reason:c.endDate<range.startDate?'已超期；原最晚日期保留，请明确修改窗口':fixed?'指定或锁定时段与窗口、可用时间或已有占用冲突':'当前未找到可行安排；可调整耗时、可用时段或允许窗口'});}
  return {assigned,unassigned};}
@@ -53,14 +66,15 @@ export function intervalsOverlap(a,b){return Date.parse(a.startAt)<Date.parse(b.
 // Creation drafts deliberately contain relative rules, never historical task IDs.
 export function creationDraft(value,today,timezone){
  const rules=value.rules||{},interval=rules.interval||{minDays:4,maxDays:6},location=taskLocation(value.location);
- if(Object.keys(rules).some(k=>!['interval','weekdays','timeWindow','optional','weekly','repeat'].includes(k)))throw Error('包含尚未支持的规则，请移除后重试');
+ if(Object.keys(rules).some(k=>!['interval','weekdays','timeWindow','preferredTime','optional','weekly','repeat'].includes(k)))throw Error('包含尚未支持的规则，请移除后重试');
  if(rules.weekly||rules.repeat||rules.optional)throw Error('此批量入口暂不支持该重复规则，请使用间隔规则');
  const minDays=integer(interval.minDays,1,366,'最小间隔'),maxDays=integer(interval.maxDays,minDays,366,'最大间隔');
  const v=rule({title:value.title,kind:'interval',startDate:value.firstDate||today,timezone:value.timezone||timezone,estimatedMinutes:value.estimatedMinutes??30,priority:value.priority??0,maxGapDays:maxDays,earlyDays:maxDays-minDays,firstDeadline:value.firstDate||today,weekdays:rules.weekdays||[1,2,3,4,5,6,7],times:[rules.timeWindow||{start:'09:00',end:'21:00'}]});
+ if(rules.preferredTime!=null){const preferred=minute(rules.preferredTime);if(preferred<minute(v.times[0].start)||preferred+v.estimatedMinutes>minute(v.times[0].end))throw Error('优先时间点需位于允许时段内，且能完整安排每次任务');}
  if(value.days!==undefined&&value.days!==30)throw Error('滚动规划窗口固定为未来30天');
  if(value.autoExtend!==undefined&&typeof value.autoExtend!=='boolean')throw Error('持续补齐需为开关');
  if(value.notes!==undefined&&(typeof value.notes!=='string'||value.notes.length>10000))throw Error('任务描述最多10000字');
- return {title:v.title,notes:value.notes||'',...(location?{location}:{}),estimatedMinutes:v.estimatedMinutes,priority:v.priority,timezone:v.timezone,firstDate:v.startDate,days:30,autoExtend:value.autoExtend!==false,rules:{interval:{minDays,maxDays},weekdays:v.weekdays,timeWindow:v.times[0]}};
+ return {title:v.title,notes:value.notes||'',...(location?{location}:{}),estimatedMinutes:v.estimatedMinutes,priority:v.priority,timezone:v.timezone,firstDate:v.startDate,days:30,autoExtend:value.autoExtend!==false,rules:{interval:{minDays,maxDays},weekdays:v.weekdays,timeWindow:v.times[0],...(rules.preferredTime!=null?{preferredTime:rules.preferredTime}:{})}};
 }
 
 export function arrangeCreation(draft,{seriesId='draft',startDate,endDate,records=[],tasks=[],a,busy=[],adjustments=[]}){
@@ -84,7 +98,7 @@ export function arrangeCreation(draft,{seriesId='draft',startDate,endDate,record
   if(from<startDate)from=startDate;
   if(to<startDate){to=add(startDate,max-min);warnings.push('上次安排距今已超出最大间隔；保留原任务，从今天继续规划');}
   if(from>endDate)break;if(to>endDate)to=endDate;
-  const id=seriesId+':batch:'+sequence,override=fixedSnapshots?.[id]||adjustments.find(x=>x.id===id),c={id,seriesId,sequence,index:sequence+1,ruleId:null,kind:previous?'interval':'once',title:draft.title,notes:draft.notes,...(draft.location?{location:draft.location}:{}),estimatedMinutes:draft.estimatedMinutes,priority:draft.priority,timezone:draft.timezone,optional:false,weekdays:draft.rules.weekdays,times:[draft.rules.timeWindow],startDate:from,endDate:to,windowStart:from,windowEnd:to,maxGapDays:max,earlyDays:max-min};
+  const id=seriesId+':batch:'+sequence,override=fixedSnapshots?.[id]||adjustments.find(x=>x.id===id),c={id,seriesId,sequence,index:sequence+1,ruleId:null,kind:previous?'interval':'once',title:draft.title,notes:draft.notes,...(draft.location?{location:draft.location}:{}),estimatedMinutes:draft.estimatedMinutes,priority:draft.priority,timezone:draft.timezone,optional:false,weekdays:draft.rules.weekdays,times:[draft.rules.timeWindow],...(draft.rules.preferredTime!=null?{preferredTime:draft.rules.preferredTime}:{}),startDate:from,endDate:to,windowStart:from,windowEnd:to,maxGapDays:max,earlyDays:max-min};
   if(override&&minute(override.end)-minute(override.start)!==draft.estimatedMinutes){unassigned.push({...c,reason:'调整时长与任务耗时不同，请修改结束时间'});break;}
   const planned=arrange([c],effective,{startDate,endDate},occupied,override?{[id]:override}:{});
   if(!planned.assigned.length){unassigned.push({...c,reason:planned.unassigned[0]?.reason||'此窗口没有可用时间'});break;}

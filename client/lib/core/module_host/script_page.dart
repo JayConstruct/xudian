@@ -29,6 +29,7 @@ import '../../app/app_motion.dart';
 import '../ui/responsive_content_grid.dart';
 import '../ui/input_validation.dart';
 import '../ui/script_form_controls.dart';
+import '../ui/script_content_widgets.dart';
 
 import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
@@ -2289,7 +2290,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         }
         return Column(
           key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: spec['crossAxisAlignment'] == 'start'
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.stretch,
           children: [
             for (var i = 0; i < children.length; i++)
               if (spec['fillHeight'] == true && i == children.length - 1)
@@ -2303,29 +2306,47 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   // control, when rows are inserted before a focused input.
                   key: keyCounts[children[i].key] == 1 ? children[i].key : null,
                   padding: EdgeInsets.only(
-                    bottom: (spec['spacing'] as num? ?? 12).toDouble().clamp(
-                      0,
-                      48,
-                    ),
+                    bottom:
+                        spec['trailingSpacing'] == false &&
+                            i == children.length - 1
+                        ? 0
+                        : (spec['spacing'] as num? ?? 12).toDouble().clamp(
+                            0,
+                            48,
+                          ),
                   ),
                   child: children[i],
                 ),
           ],
         );
       case 'row':
+        final spacing = (spec['spacing'] as num? ?? 8)
+            .toDouble()
+            .clamp(0, 48)
+            .toDouble();
         if (spec['layout'] == 'flex') {
           final specifications = objects(spec['children']);
           return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: spec['crossAxisAlignment'] == 'start'
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
             children: [
               for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
+                if (i > 0) SizedBox(width: spacing),
                 if (specifications[i]['flex'] is num &&
                     (specifications[i]['flex'] as num) > 0)
                   Expanded(
                     flex: (specifications[i]['flex'] as num).toInt().clamp(
                       1,
                       10,
+                    ),
+                    child: children[i],
+                  )
+                else if (specifications[i]['width'] is num)
+                  SizedBox(
+                    width: (specifications[i]['width'] as num).toDouble().clamp(
+                      0,
+                      760,
                     ),
                     child: children[i],
                   )
@@ -2336,8 +2357,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           );
         }
         return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: spacing,
+          runSpacing: spacing,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: children,
         );
@@ -2401,6 +2422,37 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           children: children,
         );
       case 'card':
+        if (spec['variant'] == 'outlined' || spec['event'] != null) {
+          final scheme = Theme.of(uiContext).colorScheme;
+          final shape = AppDesign.smoothShape(
+            side: BorderSide(
+              color: spec['variant'] == 'outlined'
+                  ? scheme.outlineVariant.withValues(alpha: .65)
+                  : Colors.transparent,
+            ),
+          );
+          return Material(
+            color: scheme.surface,
+            shape: shape,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              customBorder: shape,
+              onTap:
+                  event == null || _actionBusy || bind(spec['disabled']) == true
+                  ? null
+                  : () => _commandEvent(event, null),
+              child: Padding(
+                padding: EdgeInsets.all(
+                  (spec['padding'] as num? ?? 14).toDouble().clamp(0, 48),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: children,
+                ),
+              ),
+            ),
+          );
+        }
         if (spec['tone'] == 'soft' || spec['tone'] == 'selected') {
           final scheme = Theme.of(uiContext).colorScheme;
           return Material(
@@ -2428,17 +2480,71 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           ),
         );
       case 'text':
+        final maxLines = bind(spec['maxLines']);
+        final overflow = bind(spec['overflow']);
+        if (maxLines != null &&
+                (maxLines is! int || maxLines < 1 || maxLines > 10) ||
+            overflow != null && overflow != 'ellipsis') {
+          throw const FormatException('Invalid text line limit');
+        }
+        final theme = Theme.of(uiContext);
+        final baseStyle = switch (spec['style']) {
+          'title' => theme.textTheme.titleLarge,
+          'headline' => theme.textTheme.headlineSmall?.copyWith(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
+          'heading' => theme.textTheme.titleMedium,
+          'caption' || 'muted' => theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          'body' => theme.textTheme.bodyMedium,
+          _ => null,
+        };
+        final weight = switch (spec['weight']) {
+          'bold' => FontWeight.w700,
+          'semibold' => FontWeight.w600,
+          _ => null,
+        };
+        final color = switch (spec['color']) {
+          'primary' => theme.colorScheme.primary,
+          'muted' => theme.colorScheme.onSurfaceVariant,
+          _ => null,
+        };
         return Text(
           text,
-          style: spec['style'] == 'title'
-              ? Theme.of(uiContext).textTheme.titleLarge
-              : spec['style'] == 'heading'
-              ? Theme.of(uiContext).textTheme.titleMedium
-              : spec['style'] == 'muted'
-              ? Theme.of(uiContext).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(uiContext).colorScheme.onSurfaceVariant,
+          maxLines: maxLines as int?,
+          overflow: overflow == 'ellipsis' ? TextOverflow.ellipsis : null,
+          semanticsLabel: overflow == 'ellipsis' ? text : null,
+          textAlign: spec['align'] == 'center'
+              ? TextAlign.center
+              : spec['align'] == 'end'
+              ? TextAlign.end
+              : TextAlign.start,
+          style: weight != null || color != null
+              ? (baseStyle ?? theme.textTheme.bodyMedium)?.copyWith(
+                  fontWeight: weight,
+                  color: color,
                 )
-              : null,
+              : baseStyle,
+        );
+      case 'icon':
+        return ScriptGlyph(
+          icon: _icon(spec['icon']),
+          size: (spec['size'] as num? ?? 20).toDouble().clamp(12, 64),
+          tone: '${spec['tone'] ?? 'accent'}',
+          surface: spec['surface'] == true,
+          surfaceSize: (spec['surfaceSize'] as num? ?? 40).toDouble().clamp(
+            24,
+            80,
+          ),
+          label: spec['label'] == null ? null : '${bind(spec['label'])}',
+        );
+      case 'badge':
+        return ScriptBadge(
+          text: text,
+          tone: '${spec['tone'] ?? 'accent'}',
+          icon: _icon(spec['icon']),
         );
       case 'richText':
         return SelectableText(
@@ -2584,26 +2690,38 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             : () {
                 _commandEvent(event, spec['command']);
               };
+        final buttonIcon = _icon(spec['icon']);
+        final buttonLabel = buttonIcon == null
+            ? Text(text)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  UiIcon(buttonIcon, size: 20),
+                  const SizedBox(width: 8),
+                  Flexible(child: Text(text)),
+                ],
+              );
         return switch (spec['variant']) {
           'text' => TextButton(
             style: appUiButtonStyle,
             onPressed: press,
-            child: Text(text),
+            child: buttonLabel,
           ),
           'outlined' => OutlinedButton(
             style: appUiButtonStyle,
             onPressed: press,
-            child: Text(text),
+            child: buttonLabel,
           ),
           'filled' => FilledButton(
             style: appUiButtonStyle,
             onPressed: press,
-            child: Text(text),
+            child: buttonLabel,
           ),
           _ => FilledButton.tonal(
             style: appUiButtonStyle,
             onPressed: press,
-            child: Text(text),
+            child: buttonLabel,
           ),
         };
       case 'toolbar':
@@ -2792,6 +2910,21 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       case 'list':
         return Column(children: children);
       case 'tabs':
+        if (spec['variant'] == 'pills' || spec['variant'] == 'underline') {
+          final items = objects(spec['items']);
+          if (items.isEmpty || items.length > 20) {
+            throw const FormatException('Invalid tab choices');
+          }
+          return ScriptTabChoices(
+            labels: [for (final item in items) '${bind(item['label']) ?? ''}'],
+            selectedIndex: (bind(spec['selectedIndex']) as num? ?? 0).toInt(),
+            underlined: spec['variant'] == 'underline',
+            scrollable: spec['scrollable'] == true,
+            onSelected: _actionBusy || bind(spec['disabled']) == true
+                ? null
+                : (index) => _changeControl(spec, index, items[index]['event']),
+          );
+        }
         final tabs = <Widget>[
           for (final entry in objects(spec['items']).asMap().entries)
             if (spec['selectedIndex'] != null)
@@ -2865,7 +2998,12 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   ? 16
                   : 1),
           decoration: InputDecoration(
-            labelText: text,
+            labelText: spec['presentation'] == 'search' ? null : text,
+            hintText: spec['presentation'] == 'search' ? text : null,
+            isDense: spec['presentation'] == 'search' ? true : null,
+            contentPadding: spec['presentation'] == 'search'
+                ? const EdgeInsets.symmetric(horizontal: 14, vertical: 14)
+                : null,
             helperText: spec['helperText'] == null
                 ? null
                 : '${bind(spec['helperText'])}',
@@ -3000,7 +3138,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         }
         return control;
       case 'divider':
-        return const Divider();
+        return Divider(
+          height: (spec['height'] as num?)?.toDouble().clamp(0, 48),
+        );
       case 'timeGrid':
         return TimeGrid(
           columns: objects(spec['columns']),
@@ -3121,8 +3261,20 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         ? _inlineReviewFooter(_inlinePlanPreview!)
         : safeNode(object(footer));
     final message = tree?['footerMessage'];
+    final flat = tree?['footerStyle'] == 'flat';
     final rendered = _pageTransition(
-      Padding(
+      Container(
+        decoration: flat
+            ? BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant
+                        .withValues(alpha: .4),
+                  ),
+                ),
+              )
+            : null,
         padding: EdgeInsets.fromLTRB(
           16,
           8,
@@ -3141,7 +3293,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   child: safeNode(object(message)),
                 ),
               ),
-            footer['type'] == 'messageComposer'
+            footer['type'] == 'messageComposer' || flat
                 ? child
                 : FloatingSurface(
                     padding: const EdgeInsets.all(12),
@@ -3163,17 +3315,21 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     visible: visible,
     collapse: true,
     duration: const Duration(milliseconds: 260),
-    child: AnimatedSize(
-      alignment: Alignment.bottomCenter,
-      duration: AppMotion.duration(context, AppMotion.disclosure),
-      curve: AppMotion.enter,
-      child: _retainedFooter ?? const SizedBox.shrink(),
-    ),
+    child: AppMotion.reduced(context)
+        ? _retainedFooter ?? const SizedBox.shrink()
+        : AnimatedSize(
+            alignment: Alignment.bottomCenter,
+            duration: AppMotion.disclosure,
+            curve: AppMotion.enter,
+            child: _retainedFooter ?? const SizedBox.shrink(),
+          ),
   );
 
   Widget _pageBody(Map<String, Object?> spec) {
     final child = safeNode(spec);
-    if (spec['pageTransition'] == null) return child;
+    if (spec['pageTransition'] == null || AppMotion.reduced(context)) {
+      return child;
+    }
     return AnimatedSize(
       duration: AppMotion.duration(context, AppMotion.disclosure),
       curve: AppMotion.enter,

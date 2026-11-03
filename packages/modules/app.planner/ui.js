@@ -1,6 +1,7 @@
 import {services, ui, clock} from '@xudian/sdk';
 import {add} from './engine.js';
 import {renderPlanner} from './ux.js';
+import {renderBatches} from './batch_ui.js';
 
 const ref = id => ({moduleId: 'app.planner', serviceId: 'planner.' + id, majorVersion: 1});
 const query = (id, input = {}) => services.query(ref(id), input);
@@ -21,6 +22,7 @@ const parseSlots = value => String(value || '').split(/[,，]/).filter(s => s.tr
 
 export async function render(input = {}) {
   const pageId = input.context?.pageId;
+  if (pageId === 'app.planner.batches') return renderBatches(input);
   if (pageId === 'app.planner.tools') return tools(input);
   if (pageId === 'app.planner.editor') return occurrenceEditor(input);
   if (pageId === 'app.planner.summary') {

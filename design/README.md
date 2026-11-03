@@ -8,6 +8,8 @@
 
 页面编号、设计顺序和关键状态见 [UI 清单](PLAN.md)。本节维护选稿和实现范围，其他入口引用本节。
 
+UI-04 的新增批量管理子界面已按用户选定的 [管理 v02](screens/ui-04/20261103-162137-563384-batch-management-mobile-light-v02.png) 实现并完成本轮模拟器验证，见[批量管理验收](../docs/verification/BATCH_TASK_MANAGEMENT.md)。它继承当前视觉，不替换整套风格基准，也不代表其他规划页重设计已经完成。
+
 ## 项目与设计目录
 
 ```text

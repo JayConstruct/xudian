@@ -326,7 +326,9 @@ elif 'getprop' in args:
     def test_console_failure_or_unclosed_device_never_launches_duplicate(self):
         for mode in ('console-auth-failure', 'console-wrong-avd', 'console-keeps-running'):
             with self.subTest(mode=mode):
-                result = self.run_script('--cold-boot', '--yes', '--timeout', '1', mode=mode)
+                # Allow the fake ADB/PowerShell processes to reach the console
+                # branch even when a busy runner crosses a shell SECONDS tick.
+                result = self.run_script('--cold-boot', '--yes', '--timeout', '3', mode=mode)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertTrue((self.root / 'console-calls').exists())
                 self.assertFalse((self.root / 'launch').exists())

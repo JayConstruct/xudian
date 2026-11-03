@@ -157,7 +157,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   const a = await query('availability.get');
   const today = await clock.today(a.timezone);
   if (context.pageId === 'app.planner.quickAdd') return renderCreation(state, event, formValues, a);
-  if (context.pageId === 'app.planner.taskDetail') return detail(state, event, context, formValues, a);
+  if (context.pageId === 'app.planner.taskDetail') return renderTaskDetail(state, event, context, formValues, a);
   state.displayHours = displayPreference(await ui.preferences.get(displayKey));
   state.zoom = zoomIndex(await ui.preferences.get(zoomKey));
   const viewport = viewportPreference(await ui.preferences.get(viewportKey));
@@ -192,6 +192,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       }
     }
     if (event?.type === 'add') await panel('quickAdd');
+    if (event?.type === 'batches') await ui.navigate('app.planner.batches');
     if (event?.type === 'completeTask') {
       const current = await task(event.id);
       if (!current || current.deletedAt || current.archivedAt) throw Error('任务已不可用，请刷新');
@@ -374,6 +375,7 @@ function plannerPage(state, content, displayHoursLabel = '') {
     ...(alternate ? {backEvent: {type: 'board'}} : {}), actions: alternate ? [] : [
     {label: '新建', icon: 'add', presentation: 'inline', iconOnly: true, overflowOnly: true, event: {type: 'add'}},
     {label: '自动安排', icon: 'sparkles', presentation: 'menu', event: {type: 'chooseAuto'}},
+    {label: '批量任务', icon: 'layers', presentation: 'menu', event: {type: 'batches'}},
     {label: '操作历史', icon: 'history', presentation: 'menu', event: {type: 'history'}},
     {label: '已取消任务', icon: 'archive', presentation: 'menu', event: {type: 'cancelledTasks'}},
     {label: '视图与显示', icon: 'calendar', presentation: 'menu', separatorBefore: true, children: [
@@ -479,7 +481,11 @@ async function moveConfirmation(preview, zone, precise) {
   };
 }
 
-async function detail(state, event, context, forms, a) {
+export async function renderTaskDetail(state, event, context, forms, a, options = {}) {
+  const finish = async message => {
+    if (!options.embedded) await ui.navigate('app.planner.home');
+    return {...savedPanel(state, message), ...(options.embedded ? {completed: true} : {})};
+  };
   const current = await task(context.taskId);
   if (!current || current.deletedAt) return {state, tree: text('任务已不可用，请关闭后刷新')};
   const status = await query('task.state', {id: current.id});
@@ -507,7 +513,7 @@ async function detail(state, event, context, forms, a) {
         title: cancelled ? '取消任务' : '恢复任务',
         message: cancelled ? `取消“${current.title}”？\n任务和原安排会保留，取消后不再参与自动安排，可随时恢复。` : `恢复“${current.title}”？\n恢复后将按原来的安排继续执行。`,
         confirmLabel: cancelled ? '确认取消任务' : '恢复任务',
-      })) { await ui.navigate('app.planner.home'); return savedPanel(state, cancelled ? '任务已取消，记录已保留' : '任务已恢复'); }
+      })) { return finish(cancelled ? '任务已取消，记录已保留' : '任务已恢复'); }
     }
     if (event?.type === 'description') state.description = true;
     if (event?.type === 'time') state.time = true;
@@ -515,13 +521,13 @@ async function detail(state, event, context, forms, a) {
     if (event?.type === 'back') state.step = null;
     if (event?.type === 'complete') {
       if (await setCompletion(current, !current.completedAt, a.timezone, state.original.updatedAt)) {
-        await ui.navigate('app.planner.home'); return savedPanel(state, current.completedAt ? '任务已重新打开' : '任务已完成，已记录完成时间');
+        return finish(current.completedAt ? '任务已重新打开' : '任务已完成，已记录完成时间');
       }
     }
     if (event?.type === 'completionDate' && current.completedAt) {
       const answer = await ui.dialog({title: '补记完成日期', fields: [{key: 'actualCompletedOn', label: '实际完成日期', type: 'date', value: current.actualCompletedOn || await clock.today(a.timezone)}]});
       if (answer && await setCompletion(current, true, current.completedTimezone || a.timezone, state.original.updatedAt, answer.actualCompletedOn)) {
-        await ui.navigate('app.planner.home'); return savedPanel(state, '完成日期已更新');
+        return finish('完成日期已更新');
       }
     }
     if (event?.type === 'saveDetail') {
@@ -536,15 +542,15 @@ async function detail(state, event, context, forms, a) {
       if (deadlineChanged) Object.assign(changes, await deadline(d, zone));
       const saved = await execute('task.update', {id: current.id, expectedUpdatedAt: state.original.updatedAt, expectedValues: state.original,
         changes});
-      if (saved) { await ui.navigate('app.planner.home'); return savedPanel(state, '任务已更新'); }
+      if (saved) { return finish('任务已更新'); }
     }
     if (event?.type === 'restoreDeadline') {
       const saved = await execute('task.update', {id: current.id, expectedUpdatedAt: state.original.updatedAt, expectedValues: state.original, changes: state.original.initialDeadline});
-      if (saved) { await ui.navigate('app.planner.home'); return savedPanel(state, '已恢复初始截止'); }
+      if (saved) { return finish('已恢复初始截止'); }
     }
     if (event?.type === 'schedule') {
       const saved = await applyMove({taskId: current.id, start: stamp(d.startDate, d.start), end: stamp(d.endDate, d.end), intent: 'move', preserveDuration: false, scope: d.scheduleScope || 'only', expectedTasks: {[current.id]: state.original}}, a);
-      if (saved) { await ui.navigate('app.planner.home'); return savedPanel(state, '安排已更新'); }
+      if (saved) { return finish('安排已更新'); }
     }
     delete state.error;
   } catch (e) { state.error = String(e); }

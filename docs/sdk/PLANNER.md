@@ -2,6 +2,27 @@
 
 [SDK 入口与兼容要求](../MODULE_SDK.md)。各能力的最低宿主 API 在对应小节说明；旧调用的回退与权限边界继续适用。
 
+## 规划模块 1.12：优先时间点
+
+批量创建及系列编辑的 `rules` 接受可选 `preferredTime: 'HH:mm'`；传 `null` 可清除，归一化存储时省略空字段。它必须位于 `timeWindow` 内，且开始后能完整容纳 `estimatedMinutes`。每个候选日期先尝试该精确分钟，再按离该点最近的顺序尝试原5分钟候选，同距取较早时间；未设置保持原算法。日期排序、重复间隔、实际可用时段、冲突及缓冲继续生效；手动指定和锁定位置优先，不移动已有实例。无需新增宿主组件，仍要求 API `^1.45.0`。
+
+## 规划模块 1.11：批量任务管理
+
+`app.planner.batches` 为完整子路由，列表、详情、规则预览及嵌入新建表单均由模块声明。使用宿主 API `^1.45.0` 的通用卡片、图标、徽标、搜索、筛选页签及固定底栏；改变这些宿主组件须更新 APK。
+
+| 服务（major 1） | 输入与行为 |
+| --- | --- |
+| `planner.series.list` | 可选 `search`、`status:all/active/paused/ended`；返回真实系列、状态计数及下次任务，不按标题归组 |
+| `planner.series.get` | `id`；返回系列摘要、`revision`、规则、生成实例、真实完成／待执行／取消数量及补齐原因 |
+| `planner.series.status` | `id,status,expectedRevision,operationKey`；暂停／恢复／结束，保留所有已生成任务；已结束不可恢复 |
+| `planner.series.update.preview` | `id,changes,expectedRevision`；校验规则并返回变更字段，`affectedExisting:0` |
+| `planner.series.update.apply` | `operationKey,preview`；复验预览后保存，仅对后续生成任务生效 |
+| `planner.series.retry.preview` | `id`；预览单个活动系列的补齐结果及失败原因 |
+| `planner.series.retry.apply` | `operationKey,preview`；重新校验依据后补齐，保留既有实例 |
+| `planner.series.tasks.cancel` | `id,taskIds,expectedTasks,operationKey`；只取消属于本系列的未完成任务，`expectedTasks` 映射任务 ID 到 `updatedAt` |
+
+状态、规则、补齐及取消命令沿用 `services.prepare` → `ui.review` → `services.commit`。`revision` 是查询返回的完整不透明版本依据，调用方不得自行构造；操作键写持久回执，防止重复提交。批量取消记录可撤销历史，恢复任务前检查新增的任务、课程和手动占用，避免重新激活冲突时段。
+
 ### API 1.24 规划交互原型
 
 `ui.panel(pageId, context, {adaptive:true, wide:'center'})` 在手机仍用底部面板，在宽屏使用居中弹窗；未传 `wide` 时保留侧边面板。面板保存后可通过 `ui.navigate` 返回工作区并关闭面板。
