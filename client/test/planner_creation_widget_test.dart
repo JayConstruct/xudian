@@ -647,6 +647,9 @@ export async function render(input) {
       await settle(tester);
       await tester.tap(find.widgetWithText(FilledButton, '预览安排'));
       await settle(tester);
+      // Real module reads can finish near the end of settle on slower runners.
+      // Finish the route transition before counting its title and footer.
+      await tester.pumpAndSettle();
       expect(find.text('预览安排'), findsOneWidget);
       expect(await tasks(), isEmpty);
       expect(await seriesRows(), isEmpty);
