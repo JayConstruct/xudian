@@ -312,7 +312,9 @@ class _TimeGridState extends State<TimeGrid> {
         final body = SingleChildScrollView(
           key: const PageStorageKey('time-grid-vertical'),
           controller: vertical,
-          physics: const _EndAnchoredScrollPhysics(),
+          physics: const _EndAnchoredScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
           padding: EdgeInsets.only(bottom: trailingPadding),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,7 +516,10 @@ class _TimeGridState extends State<TimeGrid> {
 
 /// Keep the final row visible when restoring chrome changes both the viewport
 /// and trailing padding. Layout corrections do not count as user scrolling.
-class _EndAnchoredScrollPhysics extends ScrollPhysics {
+/// Clamp timetable edges even when the surrounding page uses bouncing physics:
+/// a fixed date header should never separate from its first or last lesson.
+/// Short timetables still accept drags to reveal and hide workspace chrome.
+class _EndAnchoredScrollPhysics extends ClampingScrollPhysics {
   const _EndAnchoredScrollPhysics({super.parent});
 
   @override

@@ -119,6 +119,109 @@ void main() {
   }
 
   test(
+    'continuous pinch zoom persists and invalid values do not replace it',
+    () async {
+      expect(boardOptions(await page())['pinchZoom'], isNotNull);
+      await page(event: {'type': 'pinchZoom', 'pixelsPerMinute': 1.87});
+      expect(boardOptions(await page())['pixelsPerMinute'], 1.87);
+      final invalid = await page(
+        event: {'type': 'pinchZoom', 'pixelsPerMinute': 8},
+      );
+      expect(object(invalid['state'])['error'], isNotNull);
+      expect(boardOptions(await page())['pixelsPerMinute'], 1.87);
+      await page(event: {'type': 'zoom', 'delta': 1});
+      expect(boardOptions(await page())['pixelsPerMinute'], 2);
+      await page(event: {'type': 'pinchZoom', 'pixelsPerMinute': .8});
+      await page(event: {'type': 'zoom', 'delta': -1});
+      expect(boardOptions(await page())['pixelsPerMinute'], .75);
+      await page(event: {'type': 'pinchZoom', 'pixelsPerMinute': 2.8});
+      await page(event: {'type': 'zoom', 'delta': 1});
+      expect(boardOptions(await page())['pixelsPerMinute'], 3);
+    },
+  );
+
+  test(
+    'card and selection previews follow their own detail switches',
+    () async {
+      Future<Map<String, Object?>> settings([
+        String? key,
+        bool value = false,
+      ]) => page(
+        pageId: 'app.planner.displaySettings',
+        event: key == null
+            ? null
+            : {'type': 'detailPreference', 'key': key, 'value': value},
+      );
+      String preview(Map<String, Object?> result, String key) => jsonEncode(
+        nodes(result['tree'])
+            .singleWhere((n) => n['key'] == 'planner:details:item:$key'),
+      );
+      var result = await settings();
+      expect(preview(result, 'coursePreview'), contains('教一 302'));
+      expect(preview(result, 'coursePreview'), contains('王老师'));
+      await settings('courseLocation');
+      result = await settings('courseTeacher');
+      expect(preview(result, 'coursePreview'), isNot(contains('教一 302')));
+      expect(preview(result, 'coursePreview'), isNot(contains('王老师')));
+      expect(preview(result, 'selectionPreview'), contains('地点 教一 302'));
+      expect(preview(result, 'selectionPreview'), contains('老师 王老师'));
+      expect(preview(result, 'selectionPreview'), contains('来源 课程'));
+      expect(preview(result, 'selectionPreview'), contains('空闲 09:35'));
+      for (final key in ['location', 'teacher', 'source', 'gaps']) {
+        result = await settings(key);
+      }
+      expect(preview(result, 'selectionPreview'), isNot(contains('地点 教一 302')));
+      expect(preview(result, 'selectionPreview'), isNot(contains('老师 王老师')));
+      expect(preview(result, 'selectionPreview'), isNot(contains('来源 课程')));
+      expect(preview(result, 'selectionPreview'), isNot(contains('空闲 09:35')));
+      expect(preview(result, 'selectionPreview'), contains('08:00—09:35'));
+      expect(boardOptions(await page())['allowedIntents'], [
+        'move',
+        'swap',
+        'resize',
+      ]);
+    },
+  );
+
+  test('detail settings persist and open in a panel over the board', () async {
+    Future<Map<String, Object?>> settings({Map<String, Object?>? event}) =>
+        page(pageId: 'app.planner.displaySettings', event: event);
+    var rendered = await settings();
+    expect(object(rendered['header'])['title'], '详情显示');
+    rendered = await settings(
+      event: {
+        'type': 'detailPreference',
+        'key': 'courseTeacher',
+        'value': false,
+      },
+    );
+    expect(
+      nodes(rendered['tree'])
+          .singleWhere((n) => n['key'] == 'detail:courseTeacher')['value'],
+      false,
+    );
+    expect(
+      object((await settings())['state'])['details'],
+      containsPair('courseTeacher', false),
+    );
+    var panels = 0;
+    host.interaction = (_, method, args) async {
+      expect(method, 'ui.panel');
+      expect(args['page'], 'app.planner.displaySettings');
+      panels++;
+      return null;
+    };
+    final board = await page(event: {'type': 'detailSettings'});
+    expect(panels, 1);
+    expect(boardOptions(board)['pinchZoom'], isNotNull);
+    await settings(event: {'type': 'resetDetails'});
+    expect(
+      object((await page())['state'])['details'],
+      containsPair('courseTeacher', true),
+    );
+  });
+
+  test(
     'automatic display fits visible tasks with an hour of padding',
     () async {
       expect(boardOptions(await page())['startMinute'], 480);
@@ -482,6 +585,106 @@ void main() {
     },
   );
 
+  testWidgets('details menu opens after a cancelled timeline drag', (
+    tester,
+  ) async {
+    final headers = await showPlanner(tester, withMenu: true);
+    final board = tester.widget<PlannerBoard>(find.byType(PlannerBoard));
+    board.onViewportChanged!({'startDate': '2026-10-14', 'visibleDays': 3});
+    board.onDragActiveChanged!(true);
+    board.onDragActiveChanged!(false);
+    await settlePlanner(tester);
+    var panels = 0;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.panel') {
+        expect(args['page'], 'app.planner.displaySettings');
+        panels++;
+      }
+      return null;
+    };
+    for (var attempt = 1; attempt <= 2; attempt++) {
+      await tester.tap(find.byTooltip('页面菜单'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('视图与显示'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('详情显示'));
+      await settlePlanner(tester);
+      expect(panels, attempt);
+    }
+    expect(headers.content!.spec['title'], '任务规划');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('popped menu action cannot outlive its header lease', (
+    tester,
+  ) async {
+    final headers = await showPlanner(tester, withMenu: true);
+    tester.widget<PlannerBoard>(find.byType(PlannerBoard)).onViewportChanged!({
+      'startDate': '2026-10-14',
+      'visibleDays': 3,
+    });
+    await settlePlanner(tester);
+    var panels = 0;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.panel') panels++;
+      return null;
+    };
+    await tester.tap(find.byTooltip('页面菜单'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('视图与显示'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('详情显示'));
+    // The accepted click is waiting for the popup exit frame. Switching the
+    // workspace in that frame must invalidate the pending callback.
+    headers.activate(
+      identity: 'another-workspace',
+      moduleId: 'other.module',
+      pageId: 'other.module.home',
+      enabled: true,
+      isActive: () => true,
+    );
+    await settlePlanner(tester);
+    expect(panels, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('popped menu action does not open over a newer route', (
+    tester,
+  ) async {
+    await showPlanner(tester, withMenu: true);
+    tester.widget<PlannerBoard>(find.byType(PlannerBoard)).onViewportChanged!({
+      'startDate': '2026-10-14',
+      'visibleDays': 3,
+    });
+    await settlePlanner(tester);
+    var panels = 0;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.panel') panels++;
+      return null;
+    };
+    await tester.tap(find.byTooltip('页面菜单'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('视图与显示'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('详情显示'));
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    final covered = navigator.push<void>(
+      MaterialPageRoute(
+        builder: (_) => const Scaffold(body: Text('Newer route')),
+      ),
+    );
+    await settlePlanner(tester);
+    expect(panels, 0);
+    navigator.pop();
+    await covered;
+    await settlePlanner(tester);
+    expect(panels, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('history renders a real move and clicking undo restores it', (
     tester,
   ) async {
@@ -524,10 +727,14 @@ void main() {
     final historyAction = (headers.content!.spec['actions'] as List)
         .map(object)
         .singleWhere((action) => action['label'] == '操作历史');
-    await tester.runAsync(
-      () => headers.content!.dispatch(historyAction['event']),
-    );
+    late Future<void> historyDispatch;
+    await tester.runAsync(() async {
+      historyDispatch = headers.content!.dispatch(historyAction['event']);
+    });
     await settlePlanner(tester);
+    await tester.runAsync(
+      () => historyDispatch.timeout(const Duration(seconds: 8)),
+    );
     expect(headers.content!.spec['title'], '操作历史');
     expect(find.text('点击撤销整次操作'), findsOneWidget);
     expect(find.textContaining('模块界面无效'), findsNothing);
@@ -547,10 +754,16 @@ void main() {
       expect(restored['plannedEndAt'], original['plannedEndAt']);
     });
     expect(object(headers.content!.spec['backEvent'])['type'], 'board');
-    await tester.runAsync(
-      () => headers.content!.dispatch(headers.content!.spec['backEvent']),
-    );
+    late Future<void> backDispatch;
+    await tester.runAsync(() async {
+      backDispatch = headers.content!.dispatch(
+        headers.content!.spec['backEvent'],
+      );
+    });
     await settlePlanner(tester);
+    await tester.runAsync(
+      () => backDispatch.timeout(const Duration(seconds: 8)),
+    );
     expect(find.byType(PlannerBoard), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

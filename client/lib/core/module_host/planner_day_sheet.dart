@@ -193,7 +193,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
   Offset? _pointer;
   BoardItem? _draft, _validation;
   DateTime? _start;
-  int _minutes = 5;
+  int _minutes = 5, _snapMinutes = 1;
 
   // Wall-clock arithmetic matches PlannerBoard and never uses device DST.
   DateTime? _date(Object? value) {
@@ -251,7 +251,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     'start': _stamp(_start!),
     'end': _stamp(_end),
     'preserveDuration': _minutes == _duration(_draft!),
-    'snapMinutes': 1,
+    'snapMinutes': _snapMinutes,
   };
 
   List<BoardItem> get _overlaps => widget.blocks.where((item) {
@@ -340,7 +340,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     super.dispose();
   }
 
-  void _edit(BoardItem item, {DateTime? start}) {
+  void _edit(BoardItem item, {DateTime? start, int? snapMinutes}) {
     final sources = [
       ...widget.candidates,
       ...widget.blocks,
@@ -362,6 +362,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
       _draft = source;
       _submitted = null;
       _minutes = minutes;
+      _snapMinutes = snapMinutes ?? (sameDraft ? _snapMinutes : 1);
       _start = position;
       _expanded = false;
       _validate();
@@ -386,11 +387,19 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
           : _date(after.first['start'])!
                 .subtract(Duration(minutes: _duration(item)));
     }
-    if (start.isBefore(_day)) start = _day;
+    // Slot placement follows a five-minute grid. Round forwards so an
+    // off-grid end time never moves a dropped task back into its predecessor.
+    final minute =
+        (start.difference(_day).inMicroseconds /
+                Duration.microsecondsPerMinute /
+                5)
+            .ceil() *
+        5;
+    start = _day.add(Duration(minutes: math.max(0, minute)));
     if (!start.isBefore(_nextDay)) {
-      start = _nextDay.subtract(const Duration(minutes: 1));
+      start = _nextDay.subtract(const Duration(minutes: 5));
     }
-    _edit(item, start: start);
+    _edit(item, start: start, snapMinutes: 5);
   }
 
   void _validate() {
@@ -467,12 +476,13 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     final start = selected ? _start : _date(item['start']);
     final end = selected ? _end : _date(item['end']);
     final canMove = widget.canMove(item);
-    final height = math.max(
-      48.0,
-      MediaQuery.textScalerOf(context).scale(14) * 1.5 +
-          MediaQuery.textScalerOf(context).scale(12) * 1.3 +
-          8,
-    );
+    final details = <(String, String)>[
+      for (final field in ['location', 'teacher'])
+        if (item[field == 'location' ? 'showLocation' : 'showTeacher'] !=
+                false &&
+            '${item[field] ?? ''}'.trim().isNotEmpty)
+          (field, '${item[field]}'.trim()),
+    ];
     String label(DateTime time) {
       final day = DateTime.utc(time.year, time.month, time.day);
       final difference = day.difference(_day).inDays;
@@ -491,7 +501,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
               ? '，${appearance.badgeText}'
               : item['completed'] == true
               ? '，已完成'
-              : ''}${item['readOnly'] == true ? '，来源只读' : ''}',
+              : ''}${item['readOnly'] == true ? '，来源只读' : ''}${details.isEmpty ? '' : '，${details.map((detail) => detail.$2).join('，')}'}',
       child: Material(
         color: surface,
         borderRadius: BorderRadius.circular(9),
@@ -502,7 +512,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
             onTap: !widget.enabled || feedback ? null : () => _edit(item),
             child: Container(
               key: feedback ? null : ValueKey('planner-day-card:${item['id']}'),
-              height: height,
+              constraints: const BoxConstraints(minHeight: 48),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               foregroundDecoration: selected && !appearance.dashed
                   ? BoxDecoration(
@@ -514,6 +524,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                 children: [
                   Expanded(
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -553,6 +564,22 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                             key: feedback
                                 ? null
                                 : ValueKey('planner-day-times:${item['id']}'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontSize: 12,
+                              height: 1.3,
+                            ),
+                          ),
+                        for (final detail in details)
+                          Text(
+                            detail.$2,
+                            key: feedback
+                                ? null
+                                : ValueKey(
+                                    'planner-day-${detail.$1}:${item['id']}',
+                                  ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
@@ -684,6 +711,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     );
     if (!mounted || picked == null || _draft?['id'] != id) return;
     setState(() {
+      _snapMinutes = 1;
       _start = DateTime.utc(
         previous.year,
         previous.month,
@@ -708,6 +736,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
       return;
     }
     setState(() {
+      _snapMinutes = 1;
       _minutes = minutes;
       _validate();
     });
@@ -804,6 +833,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                     onPressed: !widget.enabled
                         ? null
                         : () => setState(() {
+                            _snapMinutes = 1;
                             _start = nextFree;
                             _validate();
                           }),

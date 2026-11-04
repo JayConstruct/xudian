@@ -6,7 +6,7 @@
 
 有正式 App Release 时，可从 [发布页](https://github.com/JayConstruct/xudian/releases) 下载对应设备的 APK。安装后在“设置 → 关于序点 → 检查更新”查询新版本，详见 [App 更新](APP_UPDATES.md)。模块 Release 不作为 App 更新。
 
-打开 [Android Actions](https://github.com/JayConstruct/xudian/actions/workflows/android.yml)，选择成功运行，下载 `xudian-android-release-<commit>` 产物并解压。多数手机使用 `app-arm64-v8a-release.apk`；x86_64 模拟器使用 `app-x86_64-release.apk`。压缩包附带 `SOURCE_COMMIT` 和 `SHA256SUMS`，可核对源码版本和文件摘要。
+打开 [Android Actions](https://github.com/JayConstruct/xudian/actions/workflows/android.yml)，选择成功运行，下载 `xudian-android-release-<commit>` 产物并解压。App tag 发布的 APK 文件名包含应用名称、版本和 ABI，格式为 `序点-v<版本>-<ABI>-release.apk`；例如 `序点-v0.2.0-beta.24-arm64-v8a-release.apk`。同时提供字节完全一致的 `xudian-v<版本>-<ABI>-release.apk` 别名，兼容旧版 App 的更新检查。多数手机选择 `arm64-v8a`，旧 ARMv7 手机选择 `armeabi-v7a`，x86_64 模拟器选择 `x86_64`。普通分支／PR 的开发构建仍使用 Flutter 的 `app-<ABI>-release.apk` 命名。压缩包附带 `SOURCE_COMMIT` 和 `SHA256SUMS`，可核对源码版本和文件摘要。
 
 2026-10-10 已验证的构建为提交 `0b80430`：[成功运行](https://github.com/JayConstruct/xudian/actions/runs/38021150220) / [下载 APK](https://github.com/JayConstruct/xudian/actions/runs/38021150220/artifacts/11657938170)。该产物保存至 2026-10-24 03:43 UTC，过期后可使用后续成功构建或手动触发工作流。首装与商店安装的具体证据见 [验证记录](VERIFICATION.md)。
 

@@ -5,6 +5,7 @@ import {convert,suggestedMonday} from '../../packages/modules/app.import.shiguan
 import {captureScript,compileBridge} from '../../packages/modules/app.import.shiguang/bridge.js';
 import {adapters,loadAdapter,snapshot} from '../../packages/modules/app.import.shiguang/warehouse/catalog.js';
 import {listAdapters} from '../../packages/modules/app.import.shiguang/schools.js';
+import {locationSettings,suggestedCampusNames,importLocation} from '../../packages/modules/app.import.shiguang/locations.js';
 
 const options={name:'测试课表',scope:'school/student/2026-autumn',firstMonday:'2026-09-07',totalWeeks:20,timezone:'Asia/Shanghai'};
 const row={name:'数学',teacher:'老师',position:'A101',day:1,startSection:1,endSection:2,weeks:[5,1,3,1]};
@@ -22,6 +23,49 @@ test('converts supplied times, color and optional course fields',()=>{
   assert.equal(draft.timetable.totalWeeks,16);assert.equal(draft.courses[0].color,'#ff0000');
   assert.equal(draft.courses[0].notes,'备注');assert.equal(draft.courses[0].credit,2);
   assert.equal(draft.complete,true);assert.equal(draft.timetable.periods[1].start,'08:50');
+});
+test('location processing keeps captured data and meeting identities reversible',()=>{
+  const payload={courses:[{...row,position:'阳江校区 慎思楼 101'}]};
+  const original=JSON.stringify(payload);
+  const full=convert({payload,options});
+  const cleaned=convert({payload,options:{...options,locationMode:'removeCampus',campusNames:'阳江校区'}});
+  const omitted=convert({payload,options:{...options,locationMode:'omit'}});
+  assert.equal(cleaned.meetings[0].location,'慎思楼 101');
+  assert.equal(omitted.meetings[0].location,'');
+  assert.equal(cleaned.meetings[0].sourceId,full.meetings[0].sourceId);
+  assert.equal(omitted.meetings[0].sourceId,full.meetings[0].sourceId);
+  assert.equal(JSON.stringify(payload),original);
+  assert.deepEqual(convert({payload,options}),full);
+  assert.match(omitted.warnings.join('\n'),/来源地点设为空/);
+});
+test('campus removal uses explicit exact boundary text and preserves classroom content',()=>{
+  const settings=locationSettings({locationMode:'removeCampus',campusNames:'东校区\nA[1]校区\n东校区'});
+  for (const [input,output] of [
+    ['东校区 一教101','一教101'],['东校区一教101','一教101'],['（东校区）一教101','一教101'],
+    ['一教101（东校区）','一教101'],['一教101 / 东校区','一教101'],['A[1]校区 101','101'],
+    ['南校区 101','南校区 101'],['一教东校区研究室101','一教东校区研究室101'],['新东校区 101','新东校区 101'],
+  ]) assert.equal(importLocation(input,settings),output,input);
+  assert.equal(importLocation(' 东校区 101 ',locationSettings({})),' 东校区 101 ');
+  assert.equal(suggestedCampusNames({courses:[{position:'阳江校区 慎思楼101'},{position:'101（东校区）'},{position:'101'},{position:'阳江校区慎思楼102'}]}),'阳江校区\n东校区');
+  assert.throws(()=>locationSettings({locationMode:'removeCampus'}),/填写/);
+  assert.throws(()=>locationSettings({locationMode:'unknown'}),/处理方式/);
+  assert.throws(()=>convert({payload:[{...row,sourceId:'same',position:'东校区 101'},{...row,sourceId:'same',position:'西校区 101'}],options:{...options,locationMode:'omit'}}),/来源ID/);
+});
+test('automatic campus suggestions never consume classroom codes and remain within the configured limit',()=>{
+  for (const position of ['慎思楼101东校区','A101东校区','教学楼东校区','研究室东校区','体育馆东校区']) {
+    assert.equal(suggestedCampusNames({courses:[{position}]}),'',position);
+  }
+  assert.equal(suggestedCampusNames({courses:[{position:'东校区A101'},{position:'A101（阳江校区）'}]}),'东校区\n阳江校区');
+  const courses=Array.from({length:29},(_,i)=>({position:String.fromCharCode(0x4e00+i)+'校区A101'}));
+  courses.push({position:'第三十校区A101（第三十一校区）'});
+  const suggestions=suggestedCampusNames({courses});
+  assert.equal(suggestions.split('\n').length,30);
+  assert.doesNotThrow(()=>locationSettings({locationMode:'removeCampus',campusNames:suggestions}));
+});
+test('removing a campus preserves the sign of basement classroom numbers',()=>{
+  const settings=locationSettings({locationMode:'removeCampus',campusNames:'东校区'});
+  for (const position of ['东校区 -101','东校区-101','（东校区） -101']) assert.equal(importLocation(position,settings),'-101',position);
+  assert.equal(importLocation('东校区 B-101',settings),'B-101');
 });
 test('warehouse course codes and random ids do not become meeting identities',()=>{
   const draft=convert({payload:[{...row,id:'course-code'},{...row,id:'course-code',day:2}],options});

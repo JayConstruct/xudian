@@ -76,6 +76,10 @@ function draft(state, forms, event) {
 const displayKey = 'board.displayHours';
 const displayDefaults = {mode: 'auto', start: '08:00', end: '22:00'};
 const zoomKey = 'board.zoom';
+const pinchKey = 'board.pinchZoom';
+const detailsKey = 'board.details';
+const detailsDefaults = {courseLocation: true, courseTeacher: true, location: true, teacher: true, source: true, gaps: true};
+const detailsPreference = value => Object.fromEntries(Object.entries(detailsDefaults).map(([key, fallback]) => [key, typeof value?.[key] === 'boolean' ? value[key] : fallback]));
 const viewportKey = 'board.viewport';
 const visibleDayCounts = [1, 3, 5, 7];
 function timelineRange(value) {
@@ -160,6 +164,9 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   if (context.pageId === 'app.planner.taskDetail') return renderTaskDetail(state, event, context, formValues, a);
   state.displayHours = displayPreference(await ui.preferences.get(displayKey));
   state.zoom = zoomIndex(await ui.preferences.get(zoomKey));
+  const savedScale = await ui.preferences.get(pinchKey);
+  state.zoomScale = typeof savedScale === 'number' && savedScale >= .75 && savedScale <= 3 ? savedScale : zoomLevels[state.zoom].pixelsPerMinute;
+  state.details = detailsPreference(await ui.preferences.get(detailsKey));
   const viewport = viewportPreference(await ui.preferences.get(viewportKey));
   state.days = visibleDayCounts.includes(state.days) ? state.days : viewport.days || 3;
   state.startDate ||= viewport.startDate || add(today, -Math.floor(state.days / 2));
@@ -169,6 +176,21 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   state.candidateOffset = Number.isSafeInteger(state.candidateOffset) && state.candidateOffset >= 0 ? state.candidateOffset : 0;
   const candidateLimit = 100;
   try {
+    if (event?.type === 'detailSettings') {
+      await panel('displaySettings');
+      state.details = detailsPreference(await ui.preferences.get(detailsKey));
+    }
+    if (event?.type === 'detailPreference') {
+      if (!(event.key in detailsDefaults) || typeof event.value !== 'boolean') throw Error('详情显示选项无效');
+      state.details = await ui.preferences.set(detailsKey, {...state.details, [event.key]: event.value});
+    }
+    if (event?.type === 'resetDetails') state.details = await ui.preferences.set(detailsKey, {...detailsDefaults});
+    if (event?.type === 'pinchZoom') {
+      if (typeof event.pixelsPerMinute !== 'number' || !Number.isFinite(event.pixelsPerMinute) || event.pixelsPerMinute < .75 || event.pixelsPerMinute > 3) throw Error('时间轴缩放范围无效');
+      state.zoomScale = await ui.preferences.set(pinchKey, event.pixelsPerMinute);
+      state.zoom = zoomLevels.reduce((best, item, index) => Math.abs(item.pixelsPerMinute - state.zoomScale) < Math.abs(zoomLevels[best].pixelsPerMinute - state.zoomScale) ? index : best, 0);
+      await ui.preferences.set(zoomKey, state.zoom);
+    }
     if (event?.type === 'displayHours') {
       const previous = state.displayHours;
       const mode = await ui.dialog({title: '表格显示时段', fields: [{key: 'mode', type: 'select', label: '显示方式', value: previous.mode,
@@ -221,7 +243,9 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     if (event?.type === 'onlyDeadline') { state.onlyDeadline = event.value ?? !state.onlyDeadline; state.candidateOffset = 0; }
     if (event?.type === 'zoom') {
       if (event.delta !== -1 && event.delta !== 1) throw Error('请选择放大或缩小时间轴');
-      state.zoom = await ui.preferences.set(zoomKey, Math.max(0, Math.min(zoomLevels.length - 1, state.zoom + event.delta)));
+      const next = event.delta > 0 ? zoomLevels.findIndex(level => level.pixelsPerMinute > state.zoomScale + .001) : zoomLevels.reduce((last, level, index) => level.pixelsPerMinute < state.zoomScale - .001 ? index : last, -1);
+      state.zoom = await ui.preferences.set(zoomKey, next < 0 ? (event.delta > 0 ? zoomLevels.length - 1 : 0) : next);
+      state.zoomScale = await ui.preferences.set(pinchKey, zoomLevels[state.zoom].pixelsPerMinute);
     }
     if (event?.type === 'select') {
       const selected = event.value ? [...new Set([...state.selected, event.id])] : state.selected.filter(id => id !== event.id);
@@ -270,6 +294,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   } catch (e) { state.error = String(e); }
   // Summary pages do not need current board positions or candidate projection.
   // Undo and apply still validate current tasks in their command services.
+  if (context.pageId === 'app.planner.displaySettings') return {state, header: {title: '详情显示'}, tree: detailSettingsContent(state)};
   if (!loadRange && state.history) return plannerPage(state, await historyContent(state));
   if (!loadRange && state.cancelledView) return plannerPage(state, await cancelledContent(state, a));
   if (!loadRange && state.autoPreview) return plannerPage(state, previewContent(state));
@@ -315,6 +340,12 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       occupiesTime: false,
       actions: [{label: '恢复任务', icon: 'undo', event: {type: 'restoreTask', id: t.taskId || t.id, expectedUpdatedAt: t.updatedAt}}],
     } : {}),
+    showLocation: !t.courseId || state.details.courseLocation, showTeacher: !t.courseId || state.details.courseTeacher,
+    selectionDetails: [
+      ...(state.details.location && t.location?.trim() ? [{label: '地点', value: t.location.trim()}] : []),
+      ...(state.details.teacher && t.teacher?.trim() ? [{label: '老师', value: t.teacher.trim()}] : []),
+    ],
+    showSelectionSource: state.details.source, showSelectionGaps: state.details.gaps,
     ...(typeof t.location === 'string' && t.location.trim() ? {location: t.location.trim()} : {}),
     ...(typeof t.teacher === 'string' && t.teacher.trim() ? {teacher: t.teacher.trim()} : {}),
     event: t.readOnly ? {type: 'source', title: t.title, source: t.sourceLabel} : {type: 'detail', id: t.taskId || t.id},
@@ -349,7 +380,8 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       continuousDates: true, visibleDays: state.days, initialDate: state.startDate, scrollRequest: state.scrollRequest,
       timeline: {rangeContextKey: 'timelineRange', preferenceKey: viewportKey, stateKeys: {startDate: 'startDate', visibleDays: 'days'}},
       viewportEvent: {type: 'timelineViewport'}, selectedDate: state.selectedDate, now: stamp(localNow.date, localNow.time),
-      dashboard: true, minColumnWidth: 112, pixelsPerMinute: zoomLevels[state.zoom].pixelsPerMinute, candidateLabel: '待安排', candidateCount: data.candidateTotal,
+      allowedIntents: ['move', 'swap', 'resize'],
+      dashboard: true, minColumnWidth: 112, pixelsPerMinute: state.zoomScale, pinchZoom: {event: {type: 'pinchZoom'}, min: .75, max: 3}, candidateLabel: '待安排', candidateCount: data.candidateTotal,
       ...visibleHours, displayHours: state.displayHours, displayHoursEvent: {type: 'displayHours'},
       rangeLabel: rangeLabel(state.startDate, add(state.startDate, state.days - 1)), today,
       onlyDeadline: !!state.onlyDeadline, filterEvent: {type: 'onlyDeadline'},
@@ -382,9 +414,10 @@ function plannerPage(state, content, displayHoursLabel = '') {
       {kind: 'choiceGrid', label: '显示列数', children: visibleDayCounts.map(days => ({label: `${days}列`, selected: state.days === days, event: {type: 'periodShortcut', days}}))},
       {label: '跳转日期…', icon: 'dateRange', event: {type: 'period'}},
       {label: '每日显示时段', icon: 'schedule', subtitle: displayHoursLabel, separatorBefore: true, event: {type: 'displayHours'}},
+      {label: '详情显示', icon: 'tune', event: {type: 'detailSettings'}},
       {kind: 'stepper', label: '时间轴缩放', valueLabel: zoomLevels[state.zoom].label,
         decreaseEvent: {type: 'zoom', delta: -1}, increaseEvent: {type: 'zoom', delta: 1},
-        decreaseEnabled: state.zoom > 0, increaseEnabled: state.zoom < zoomLevels.length - 1},
+        decreaseEnabled: state.zoomScale > zoomLevels[0].pixelsPerMinute, increaseEnabled: state.zoomScale < zoomLevels[zoomLevels.length - 1].pixelsPerMinute},
     ]},
     {label: '待安排筛选', icon: 'tune', presentation: 'menu', valueLabel: state.onlyDeadline ? '仅有截止' : '全部', children: [
       {label: '全部任务', selected: !state.onlyDeadline, event: {type: 'onlyDeadline', value: false}},
@@ -394,6 +427,33 @@ function plannerPage(state, content, displayHoursLabel = '') {
     {label: '规划设置', icon: 'settings', presentation: 'menu', event: {type: 'tools', screen: 'settings'}},
   ]}, tree: alternate ? content : {type: 'column', key: 'planner', underlapChrome: true, fillHeight: true, spacing: 0, children: [content]}};
 
+}
+
+function detailSettingsContent(state) {
+  const option = (key, label) => checkbox('detail:' + key, label, state.details[key], {type: 'detailPreference', key});
+  return keyedList('planner:details', [
+    text('所有课程共用，设置自动保存。标题与时间始终显示。'),
+    ...(state.error ? [{type: 'notice', text: state.error}] : []),
+    {type: 'card', children: [text('课程卡片'), option('courseLocation', '显示地点'), option('courseTeacher', '显示老师'), text('空间不足时省略，可选中查看完整内容。')]},
+    {type: 'card', key: 'coursePreview', tone: 'soft', children: [
+      {...text('课程卡片预览'), style: 'caption', color: 'muted'},
+      {...text('高等数学'), weight: 'semibold'},
+      ...(state.details.courseLocation ? [text('教一 302')] : []),
+      ...(state.details.courseTeacher ? [text('王老师')] : []),
+      {...text('08:00—09:35'), style: 'caption', color: 'muted'},
+    ]},
+    {type: 'card', children: [text('选中后的详情'), option('location', '地点'), option('teacher', '老师'), option('source', '来源'), option('gaps', '空闲时段')]},
+    {type: 'card', key: 'selectionPreview', variant: 'outlined', children: [
+      {...text('选中详情预览'), style: 'caption', color: 'muted'},
+      {...text('高等数学'), weight: 'semibold'}, text('08:00—09:35 · 1小时35分钟'),
+      ...(state.details.location ? [text('地点 教一 302')] : []),
+      ...(state.details.teacher ? [text('老师 王老师')] : []),
+      ...(state.details.source ? [text('来源 课程')] : []),
+      ...(state.details.gaps ? [text('空闲 09:35—10:00')] : []),
+    ]},
+    text('双指张开或合拢可缩放时间轴。拖动按5分钟调整，精确时间请手动编辑。'),
+    button('恢复默认', {type: 'resetDetails'}, 'text'),
+  ]);
 }
 
 async function cancelledContent(state, a) {

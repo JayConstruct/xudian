@@ -743,10 +743,11 @@ void main() {
       );
       expect(object(loaded['state'])['error'], isNull);
       expect(
-        navigation?['page'],
-        'app.schedule.home',
-        reason: 'Configuration proceeds directly to actual changes',
+        navigation,
+        isNull,
+        reason: 'Configuration remains on the editable import preview',
       );
+      expect(jsonEncode(loaded['tree']), contains('处理地点'));
       final preview = object(
         await host.invokePage(adapter.moduleId, 'render', {
           'state': loaded['state'],
@@ -754,7 +755,7 @@ void main() {
         }),
       );
       expect(object(preview['state'])['error'], isNull);
-      expect(navigation?['page'], 'app.schedule.home');
+      expect(navigation?['page'], 'app.schedule.imports');
       expect(object(navigation?['context'])['importPlanId'], isA<String>());
       expect(await store.query(schedule, 'courses', {}), isEmpty);
       host.interaction = (_, method, _) async {
@@ -894,7 +895,7 @@ export async function render({event, formValues={}}) {
       }),
     );
     expect(object(preview['state'])['error'], isNull);
-    expect(navigation?['page'], 'app.schedule.home');
+    expect(navigation?['page'], 'app.schedule.imports');
     expect(await store.query(schedule, 'courses', {}), isEmpty);
     final planId = object(navigation?['context'])['importPlanId'] as String;
     await providerSave(store.plan(planId, adapter));
@@ -1072,6 +1073,217 @@ export async function render({event, formValues={}}) {
     },
   );
 
+  test('location options preview, cancel and restore without changing captured data or saving', () async {
+    final source = payload();
+    source['courses'] = [
+      {...objects(source['courses']).single, 'position': '阳江校区 慎思楼 101'},
+    ];
+    var navigations = 0;
+    var cancelLocation = false;
+    var mode = 'removeCampus';
+    host.interaction = (_, method, args) async {
+      if (method == 'files.readText') return jsonEncode(source);
+      if (method == 'ui.navigate') {
+        navigations++;
+        return true;
+      }
+      if (method == 'ui.dialog') {
+        final fields = objects(args['fields']);
+        expect(args['presentation'], 'page');
+        expect(
+          fields.singleWhere((f) => f['key'] == 'campusNames')['value'],
+          '阳江校区',
+        );
+        if (args['title'] == '确认学期配置') {
+          expect(
+            fields.singleWhere((f) => f['key'] == 'locationMode')['value'],
+            'keep',
+          );
+          return {
+            ...options,
+            'displayWeekStart': '1',
+            'locationMode': mode,
+            'campusNames': '阳江校区',
+          };
+        }
+        expect(args['title'], '处理导入地点');
+        if (cancelLocation) return null;
+        return {'locationMode': mode, 'campusNames': '阳江校区'};
+      }
+      fail('Unexpected operation $method');
+    };
+    final loaded = object(
+      await host.invokePage(adapter.moduleId, 'render', {
+        'event': {'type': 'json'},
+      }),
+    );
+    final initial = object(loaded['state']);
+    Map<String, Object?> meeting(Map<String, Object?> state) =>
+        objects(object(object(state['input'])['draft'])['meetings']).single;
+    expect(meeting(initial)['location'], '慎思楼 101');
+    expect(
+      objects(object(initial['payload'])['courses']).single['position'],
+      '阳江校区 慎思楼 101',
+    );
+    expect(jsonEncode(loaded['tree']), contains('阳江校区 慎思楼 101 → 慎思楼 101'));
+    expect(navigations, 0);
+
+    cancelLocation = true;
+    final canceled = object(
+      object(
+        await host.invokePage(adapter.moduleId, 'render', {
+          'state': initial,
+          'event': {'type': 'locations'},
+        }),
+      )['state'],
+    );
+    expect(canceled['input'], initial['input']);
+    expect(canceled['plan'], initial['plan']);
+    cancelLocation = false;
+    mode = 'omit';
+    final omitted = object(
+      object(
+        await host.invokePage(adapter.moduleId, 'render', {
+          'state': canceled,
+          'event': {'type': 'locations'},
+        }),
+      )['state'],
+    );
+    expect(meeting(omitted)['location'], '');
+    expect(meeting(omitted)['sourceId'], meeting(initial)['sourceId']);
+    expect(omitted['plan'], isNull);
+    expect(object(omitted['input'])['choices'], isEmpty);
+    expect(
+      navigations,
+      0,
+      reason: 'Applying location options only rebuilds the preview',
+    );
+
+    mode = 'keep';
+    final restored = object(
+      object(
+        await host.invokePage(adapter.moduleId, 'render', {
+          'state': omitted,
+          'event': {'type': 'locations'},
+        }),
+      )['state'],
+    );
+    expect(meeting(restored)['location'], '阳江校区 慎思楼 101');
+    expect(meeting(restored)['sourceId'], meeting(initial)['sourceId']);
+    await host.invokePage(adapter.moduleId, 'render', {
+      'state': restored,
+      'event': {'type': 'preview'},
+    });
+    expect(navigations, 1);
+    expect(await store.query(schedule, 'courses', {}), isEmpty);
+    expect(await store.query(schedule, 'meetings', {}), isEmpty);
+  });
+
+  test('provider preview uses a detail route so cancellation can return to the same editable import session', () async {
+    final source = payload();
+    source['courses'] = [
+      {...objects(source['courses']).single, 'position': '阳江校区 慎思楼 101'},
+    ];
+    final destinations = <Map<String, Object?>>[];
+    host.interaction = (_, method, args) async {
+      if (method == 'files.readText') return jsonEncode(source);
+      if (method == 'ui.navigate') {
+        destinations.add(args);
+        return true;
+      }
+      if (method == 'ui.dialog') {
+        if (args['title'] == '确认学期配置') {
+          return {
+            ...options,
+            'displayWeekStart': '1',
+            'locationMode': 'removeCampus',
+            'campusNames': '阳江校区',
+          };
+        }
+        expect(args['title'], '处理导入地点');
+        return {'locationMode': 'keep', 'campusNames': '阳江校区'};
+      }
+      fail('Preview/cancel must not save data: $method');
+    };
+    final loaded = object(
+      await host.invokePage(adapter.moduleId, 'render', {
+        'event': {'type': 'json'},
+      }),
+    );
+    final opened = object(
+      await host.invokePage(adapter.moduleId, 'render', {
+        'state': loaded['state'],
+        'event': {'type': 'preview'},
+      }),
+    );
+    final firstPlan = object(destinations.single['context'])['importPlanId'];
+    expect(destinations.single, {
+      'page': 'app.schedule.imports',
+      'context': {'importPlanId': firstPlan},
+    });
+    final provider = object(
+      await host.invokePage(schedule.moduleId, 'render', {
+        'context': {
+          'pageId': destinations.single['page'],
+          ...object(destinations.single['context']),
+        },
+      }),
+    );
+    expect(object(provider['state'])['adapterPlan'], isNotNull);
+    expect(
+      provider['header'],
+      isNull,
+      reason: 'Imports uses the native detail route back button',
+    );
+    final canceled = object(
+      await host.invokePage(schedule.moduleId, 'render', {
+        'state': provider['state'],
+        'context': {
+          'pageId': 'app.schedule.imports',
+          'importPlanId': firstPlan,
+        },
+        'event': {'type': 'cancelAdapter'},
+      }),
+    );
+    expect(object(canceled['state'])['adapterPlan'], isNull);
+
+    // The native route pops to the still-mounted importer. Re-enter that same
+    // page session, rather than constructing another importer from context.
+    final returned = object(
+      await host.invokePage(adapter.moduleId, 'render', {
+        'state': opened['state'],
+      }),
+    );
+    final state = object(returned['state']);
+    expect(state['payload'], source);
+    expect(object(state['options'])['locationMode'], 'removeCampus');
+    expect(object(state['options'])['campusNames'], '阳江校区');
+    expect(jsonEncode(returned['tree']), contains('阳江校区 慎思楼 101 → 慎思楼 101'));
+    final edited = object(
+      await host.invokePage(adapter.moduleId, 'render', {
+        'state': state,
+        'event': {'type': 'locations'},
+      }),
+    );
+    expect(object(edited['state'])['plan'], isNull);
+    expect(jsonEncode(edited['tree']), contains('阳江校区 慎思楼 101 → 阳江校区 慎思楼 101'));
+    await host.invokePage(adapter.moduleId, 'render', {
+      'state': edited['state'],
+      'event': {'type': 'preview'},
+    });
+    expect(destinations, hasLength(2));
+    expect(destinations.last['page'], 'app.schedule.imports');
+    expect(
+      object(destinations.last['context'])['importPlanId'],
+      isNot(firstPlan),
+    );
+    expect(object(destinations.last['context']).keys, [
+      'importPlanId',
+    ], reason: 'Raw captured data stays in the importer session');
+    expect(await store.query(schedule, 'courses', {}), isEmpty);
+    expect(await store.query(schedule, 'meetings', {}), isEmpty);
+  });
+
   test('optional source and arbitrary first-week date produce stable imports with readable actual changes', () async {
     String? planId;
     var configurations = 0;
@@ -1114,6 +1326,11 @@ export async function render({event, formValues={}}) {
     final draft = object(object(object(loaded['state'])['input'])['draft']);
     expect(object(draft['timetable'])['firstMonday'], '2026-09-07');
     expect(draft['scope'], 'shiguang:json/2026-09-07');
+    expect(planId, isNull);
+    await host.invokePage(adapter.moduleId, 'render', {
+      'state': loaded['state'],
+      'event': {'type': 'preview'},
+    });
     expect(planId, isNotNull);
     expect(await store.query(schedule, 'courses', {}), isEmpty);
     final preview = object(
@@ -1151,8 +1368,14 @@ export async function render({event, formValues={}}) {
     host.interaction = importInteraction;
     final coursesBefore = await store.query(schedule, 'courses', {});
     sourceWeeks = [1, 3, 7];
+    final updatedImport = object(
+      await host.invokePage(adapter.moduleId, 'render', {
+        'event': {'type': 'json'},
+      }),
+    );
     await host.invokePage(adapter.moduleId, 'render', {
-      'event': {'type': 'json'},
+      'state': updatedImport['state'],
+      'event': {'type': 'preview'},
     });
     final updatedPreview = object(
       await host.invokePage(schedule.moduleId, 'render', {

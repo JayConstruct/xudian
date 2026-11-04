@@ -74,6 +74,9 @@ def checks_fingerprint(root, inputs, tests):
     # Fixtures and common test helpers can affect selected tests too.
     candidates += list((root / 'client/test/fixtures').rglob('*'))
     candidates += list((root / 'client/test/support').rglob('*'))
+    # Package-backed tests must validate current module sources, not a cached
+    # dist/modules package from a previous update. Modules do not rebuild APKs.
+    candidates += list((root / 'packages/modules').rglob('*'))
     # Tests may import another test's fixtures; track the entire test source tree.
     candidates += list((root / 'client/test').rglob('*.dart'))
     candidates += [root / 'scripts/module_host/check_architecture.py',

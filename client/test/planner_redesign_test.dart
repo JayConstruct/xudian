@@ -648,6 +648,7 @@ void main() {
         }),
       );
       expect(insert['valid'], false);
+      expect((insert['conflicts'] as List).single, isNot(startsWith('Error:')));
     },
   );
 

@@ -250,9 +250,15 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           EXPECTED_CERT_SHA256: ${{ vars.ANDROID_SIGNING_CERT_SHA256 }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set +x
           set -euo pipefail
+          release_number='(0|[1-9][0-9]*)'
+          if [[ ! "${RELEASE_TAG:-}" =~ ^v${release_number}\.${release_number}\.${release_number}(-(alpha|beta|rc)\.${release_number})?$ ]]; then
+            echo 'A valid app release tag is required for APK filenames.' >&2
+            exit 1
+          fi
           for credential in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD EXPECTED_CERT_SHA256; do
             if [ -z "${!credential:-}" ]; then
               echo "Missing Android release signing setting: $credential" >&2
@@ -273,15 +279,17 @@ jobs:
           mkdir signed
           for abi in armeabi-v7a arm64-v8a x86_64; do
             apk="app-$abi-release.apk"
+            release_apk="序点-$RELEASE_TAG-$abi-release.apk"
             "$apksigner" sign --ks "$signing_dir/release.jks" \
               --ks-key-alias "$KEY_ALIAS" --ks-pass env:STORE_PASSWORD --key-pass env:KEY_PASSWORD \
-              --out "signed/$apk" "candidate/$apk"
-            "$apksigner" verify --verbose --print-certs "signed/$apk" > "$signing_dir/certificate.txt"
+              --out "signed/$release_apk" "candidate/$apk"
+            "$apksigner" verify --verbose --print-certs "signed/$release_apk" > "$signing_dir/certificate.txt"
             actual_cert=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$signing_dir/certificate.txt")
             if [ "$actual_cert" != "$expected_cert" ]; then
-              echo "Signing certificate mismatch: $apk" >&2
+              echo "Signing certificate mismatch: $release_apk" >&2
               exit 1
             fi
+            cp "signed/$release_apk" "signed/xudian-$RELEASE_TAG-$abi-release.apk"
           done
           cp candidate/SOURCE_COMMIT signed/SOURCE_COMMIT
           cd signed

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="900" viewBox="0 0 960 900">
+  <rect width="960" height="900" fill="#ececf1"/>
+  <style>text{font-family:'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#303239}.title{font-size:23px;font-weight:700}.body{font-size:16px}.muted{font-size:14px;fill:#677487}.small{font-size:13px;fill:#677487}.blue{fill:#5965a8}.card{fill:#f0f0f5;stroke:#e7e7ed}.line{stroke:#e6ebf2}</style>
+  <text x="40" y="42" class="title">拾光导入 · 地点处理设计稿</text>
+  <text x="40" y="72" class="body">先选择地点处理方式，再查看实际变更；原始采集结果保持可恢复。</text>
+  <rect x="40" y="104" width="410" height="724" rx="26" fill="#f5f5f2" stroke="#cbd5e1"/>
+  <text x="62" y="145" class="title">×　确认学期配置</text>
+  <text x="64" y="186" class="muted">确认学期、作息及地点后，查看实际变更。</text>
+  <rect x="60" y="207" width="370" height="54" rx="12" class="card"/><text x="76" y="239" class="body">课表名称　　阳江校区课表</text>
+  <rect x="60" y="273" width="370" height="54" rx="12" class="card"/><text x="76" y="305" class="body">第一教学周　2026-09-07</text>
+  <text x="64" y="363" class="body">地点处理</text>
+  <rect x="60" y="377" width="370" height="62" rx="15" class="card"/>
+  <text x="78" y="414" class="body">去掉校区，保留教室</text>
+  <text x="395" y="414" class="muted">▾</text>
+  <text x="64" y="466" class="small">沿用现有下拉选择：</text>
+  <text x="64" y="491" class="small">保留完整地点 / 去掉校区 / 不导入地点</text>
+  <text x="64" y="543" class="body">要去掉的校区名称（每行一个）</text>
+  <rect x="60" y="558" width="370" height="72" rx="12" class="card"/><text x="77" y="591" class="body">阳江校区</text>
+  <text x="64" y="654" class="small">自动填写可识别的名称，可手动修改。</text>
+  <text x="64" y="676" class="small">仅移除地点开头或末尾的完整名称。</text>
+  <rect x="60" y="740" width="370" height="52" rx="26" fill="#5965a8"/><text x="186" y="773" style="fill:white;font-size:17px">生成导入预览</text>
+  <rect x="490" y="104" width="410" height="724" rx="26" fill="#f5f5f2" stroke="#cbd5e1"/>
+  <text x="512" y="145" class="title">‹　确认导入结果</text>
+  <rect x="510" y="176" width="370" height="422" rx="16" class="card"/>
+  <text x="530" y="214" class="title">导入预览</text>
+  <text x="530" y="248" class="body">阳江校区课表 · 12 门课程</text>
+  <text x="530" y="277" class="muted">第一周 2026-09-07 · 20 周</text>
+  <line x1="530" y1="300" x2="860" y2="300" class="line"/>
+  <text x="530" y="333" class="body">地点：去掉校区，保留教室</text>
+  <text x="530" y="364" class="muted">阳江校区 慎思楼 101</text>
+  <text x="530" y="393" class="body blue">→ 慎思楼 101</text>
+  <text x="530" y="429" class="small">可随时恢复完整地点，再重新查看变更。</text>
+  <rect x="530" y="455" width="330" height="48" rx="24" fill="#e9ecf7"/><text x="661" y="485" class="body blue">处理地点</text>
+  <rect x="530" y="525" width="330" height="48" rx="24" fill="#5965a8"/><text x="642" y="555" style="fill:white;font-size:16px">查看实际变更</text>
+  <text x="530" y="637" class="body blue">修改学期配置</text>
+  <text x="530" y="680" class="body blue">取消本次导入</text>
+  <text x="40" y="868" class="muted">交互说明：取消地点设置保留草稿；应用设置仅重算预览，不直接写入课表；保存仍需课表确认。</text>
+</svg>

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="790" viewBox="0 0 1000 790">
+<rect width="1000" height="790" fill="#ececf1"/>
+<g font-family="Noto Sans CJK SC,Microsoft YaHei,sans-serif" fill="#303239">
+<text x="36" y="42" font-size="23" font-weight="700">规划显示 · 遗留交互修正</text>
+<text x="36" y="74" font-size="15" fill="#777985">沿用现有灰白底、蓝紫主色、原生勾选项与圆角卡片。</text>
+<rect x="36" y="104" width="445" height="605" rx="26" fill="#f5f5f2"/>
+<text x="58" y="147" font-size="22" font-weight="700">详情显示</text>
+<text x="60" y="185" font-size="14">课程卡片：地点 ☑　老师 ☐</text>
+<text x="60" y="218" font-size="14">选中详情：地点 ☑　老师 ☑　来源 ☑　空闲 ☑</text>
+<rect x="58" y="247" width="400" height="150" rx="16" fill="#e4eff6"/>
+<text x="78" y="277" font-size="14" fill="#777985">课程卡片预览</text>
+<text x="78" y="310" font-size="18" font-weight="600">高等数学</text>
+<text x="78" y="340" font-size="15">教一 302</text>
+<text x="78" y="370" font-size="13">08:00—09:35</text>
+<rect x="58" y="419" width="400" height="225" rx="16" fill="white"/>
+<text x="78" y="451" font-size="14" fill="#777985">选中详情预览</text>
+<text x="78" y="483" font-size="18" font-weight="600">高等数学</text>
+<text x="78" y="515" font-size="15">08:00—09:35 · 1小时35分钟</text>
+<text x="78" y="546" font-size="15">地点 教一 302　老师 王老师</text>
+<text x="78" y="578" font-size="15">来源 课程</text>
+<text x="78" y="609" font-size="15">空闲 09:35—10:00</text>
+<text x="60" y="680" font-size="13" fill="#5965a8">两个预览分别跟随对应开关，取消勾选立即更新。</text>
+<rect x="515" y="104" width="445" height="605" rx="26" fill="#f5f5f2"/>
+<text x="537" y="147" font-size="22" font-weight="700">当日任务</text>
+<text x="539" y="185" font-size="14" fill="#777985">与时间轴共用地点／老师设置</text>
+<rect x="537" y="212" width="400" height="168" rx="16" fill="#e4eff6"/>
+<text x="557" y="245" font-size="18" font-weight="600">高等数学</text>
+<text x="557" y="276" font-size="15">08:00—09:35</text>
+<text x="557" y="309" font-size="15">教一 302</text>
+<text x="557" y="342" font-size="13" fill="#777985">示例中“显示老师”已关闭，不占空白行。</text>
+<rect x="537" y="405" width="400" height="105" rx="16" fill="#eae7f5"/>
+<text x="557" y="440" font-size="18" font-weight="600">整理笔记</text>
+<text x="557" y="475" font-size="15">09:40—10:10</text>
+<text x="539" y="560" font-size="15">拖动：按 5 分钟定位</text>
+<text x="539" y="597" font-size="15">手动编辑：仍可填写任意分钟</text>
+<text x="539" y="634" font-size="15">课程和固定任务仅显示占用冲突</text>
+<text x="539" y="671" font-size="13" fill="#777985">不再触发尚未支持的插入顺延。</text>
+<text x="36" y="753" font-size="14" fill="#777985">修正现有能力的一致性；业务字段与预览由模块声明，宿主仅渲染配置与控制拖动。</text>
+</g></svg>

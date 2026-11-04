@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.planner",
     "name": "任务规划",
-    "version": "1.12.0",
-    "hostApi": "^1.45.0",
+    "version": "1.13.2",
+    "hostApi": "^1.47.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -91,6 +91,12 @@
     {
       "id": "app.planner.batches",
       "title": "批量任务",
+      "handler": "render",
+      "headerMode": "contributed"
+    },
+    {
+      "id": "app.planner.displaySettings",
+      "title": "详情显示",
       "handler": "render",
       "headerMode": "contributed"
     }

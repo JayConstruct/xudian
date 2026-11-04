@@ -164,7 +164,7 @@ void main() {
           .position;
 
   testWidgets(
-    'pulling down scrolls lessons first, then reveals the header, then opens a gap',
+    'pulling down scrolls lessons first, then reveals the header and stops at the edge',
     (tester) async {
       await pumpApp(tester);
       final chrome = tester
@@ -209,7 +209,7 @@ void main() {
       await gesture.moveBy(const Offset(0, 40));
       await tester.pump();
       expect(chrome.expanded, isTrue);
-      expect(position.pixels, lessThan(0));
+      expect(position.pixels, closeTo(0, .01));
       await gesture.up();
       await tester.pumpAndSettle();
       expect(position.pixels, closeTo(0, .01));

@@ -13,6 +13,7 @@ import unittest
 WORKFLOW = Path(__file__).resolve().parents[2] / '.github/workflows/android.yml'
 ABIS = ('armeabi-v7a', 'arm64-v8a', 'x86_64')
 CERT = 'ab' * 32
+TAG = 'v0.2.0-beta.24'
 
 
 def signing_shell():
@@ -67,6 +68,7 @@ class AndroidSigningTest(unittest.TestCase):
             'KEY_ALIAS': 'release',
             'KEY_PASSWORD': 'key-password-fixture',
             'EXPECTED_CERT_SHA256': CERT,
+            'RELEASE_TAG': TAG,
             'RUNNER_TEMP': str(self.root / 'temp'),
             'ANDROID_HOME': str(self.root / 'sdk'),
         }
@@ -84,11 +86,39 @@ class AndroidSigningTest(unittest.TestCase):
         result = self.run_signing()
         self.assertEqual(result.returncode, 0, result.stderr)
         signed = self.root / 'signed'
-        for line in (signed / 'SHA256SUMS').read_text().splitlines():
+        checksums = (signed / 'SHA256SUMS').read_text().splitlines()
+        self.assertEqual(len(checksums), 6)
+        for line in checksums:
             digest, name = line.split()
             self.assertEqual(digest, hashlib.sha256((signed / name).read_bytes()).hexdigest())
-        self.assertEqual(len(list(signed.glob('*.apk'))), 3)
+        self.assertEqual(len(list(signed.glob('*.apk'))), 6)
+        self.assertEqual({path.name for path in signed.glob('*.apk')},
+                         {f'{brand}-{TAG}-{abi}-release.apk'
+                          for brand in ('序点', 'xudian') for abi in ABIS})
+        for abi in ABIS:
+            primary = (signed / f'序点-{TAG}-{abi}-release.apk').read_bytes()
+            self.assertEqual(primary, b'APK fixture-signed')
+            self.assertEqual((signed / f'xudian-{TAG}-{abi}-release.apk').read_bytes(),
+                             primary)
         self.assertEqual((signed / 'SOURCE_COMMIT').read_text(), 'source-revision\n')
+
+    def test_stable_version_in_release_filenames(self):
+        self.env['RELEASE_TAG'] = 'v1.2.3'
+        result = self.run_signing()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual({path.name for path in (self.root / 'signed').glob('*.apk')},
+                         {f'{brand}-v1.2.3-{abi}-release.apk'
+                          for brand in ('序点', 'xudian') for abi in ABIS})
+
+    def test_missing_or_malformed_version_cannot_publish_unnamed_apks(self):
+        for tag in ['', 'v0.2.0-beta.01', 'v0.2.0-preview.1', '../v0.2.0',
+                    'v0.2.0;echo', '0.2.0', 'v0.2.0+123']:
+            with self.subTest(tag=tag):
+                self.env['RELEASE_TAG'] = tag
+                result = self.run_signing()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('release tag', result.stderr)
+                self.assertFalse((self.root / 'signed').exists())
 
     def test_accepts_colon_separated_uppercase_public_fingerprint(self):
         self.env['EXPECTED_CERT_SHA256'] = ':'.join(['AB'] * 32)

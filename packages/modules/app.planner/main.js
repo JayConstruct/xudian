@@ -201,7 +201,7 @@ export async function operationInspect({proposal,timezone,expectedTasks}){
   const expected=expectedTasks||proposal.expectedTasks,selectedExpected=expected?Object.fromEntries([input.taskId,input.targetTaskId].filter(id=>id&&expected[id]!==undefined).map(id=>[id,expected[id]])):null;
   const preview=await operationPreview({...input,...(timezone?{timezone}:{}),...(selectedExpected?{expectedTasks:selectedExpected}:{})});
   return {previewBlocks:preview.previewBlocks,previewLabel:proposal.intent==='resize'?'调整时长 · 1项':preview.previewLabel,conflicts:preview.conflicts,overdue:preview.overdue,valid:preview.confirmable};
- }catch(error){return {previewBlocks:[],previewLabel:'无法安排',conflicts:[String(error)],overdue:[],valid:false};}
+ }catch(error){return {previewBlocks:[],previewLabel:'无法安排',conflicts:[typeof error?.message==='string'?error.message:String(error)],overdue:[],valid:false};}
 }
 
 // A series is an explicit, user-confirmed rolling instruction. Its existing

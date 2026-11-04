@@ -260,26 +260,28 @@ void main() {
     });
   }
 
-  testWidgets('reduced motion preserves functional scrolling and fine snap', (
-    tester,
-  ) async {
-    final events = <Object?>[];
-    await _show(tester, reduced: true, onEvent: events.add);
-    await tester.pumpAndSettle();
-    final vertical = _controller(tester, 'planner-vertical');
-    final gesture = await _drag(
-      tester,
-      _viewport(tester).bottomRight - const Offset(4, 4),
-    );
-    final start = vertical.offset;
-    await tester.pump(const Duration(milliseconds: 700));
-    expect(vertical.offset - start, closeTo(_speed * .700, .001));
-    expect(find.textContaining('1分钟细调'), findsWidgets);
-    await gesture.up();
-    await tester.pumpAndSettle();
-    expect((events.single as Map)['snapMinutes'], 1);
-    expect(tester.binding.transientCallbackCount, 0);
-  });
+  testWidgets(
+    'reduced motion preserves functional scrolling and five minute snap',
+    (tester) async {
+      final events = <Object?>[];
+      await _show(tester, reduced: true, onEvent: events.add);
+      await tester.pumpAndSettle();
+      final vertical = _controller(tester, 'planner-vertical');
+      final gesture = await _drag(
+        tester,
+        _viewport(tester).bottomRight - const Offset(4, 4),
+      );
+      final start = vertical.offset;
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(vertical.offset - start, closeTo(_speed * .700, .001));
+      expect(find.textContaining('5分钟吸附'), findsWidgets);
+      expect(find.textContaining('1分钟细调'), findsNothing);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect((events.single as Map)['snapMinutes'], 5);
+      expect(tester.binding.transientCallbackCount, 0);
+    },
+  );
 
   testWidgets('timeline edge scrolling keeps the existing linked controllers', (
     tester,

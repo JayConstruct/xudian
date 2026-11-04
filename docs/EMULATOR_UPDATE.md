@@ -192,3 +192,8 @@ scripts/update-emulator.sh --serial emulator-5556 --adb-port 5037
 ```bash
 python3 -m unittest discover -s scripts/tests -v
 ```
+
+
+### 模块测试包与检查缓存
+
+更新脚本在执行 Flutter 测试前先从当前 `packages/modules/` 生成 `dist/modules/` 测试包，避免读取上一次构建留下的旧模块。模块源码、清单与资源参与检查指纹；修改独立模块只使相关检查失效，不使未变化的宿主 APK 构建失效。准备包失败时停止，不进入测试或安装；此步骤不改变预装资源。

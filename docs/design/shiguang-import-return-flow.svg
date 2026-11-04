@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1050" height="610" viewBox="0 0 1050 610">
+  <rect width="1050" height="610" fill="#f5f5f2"/>
+  <style>text{font-family:'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#303239}.title{font-size:23px;font-weight:700}.body{font-size:16px}.muted{font-size:14px;fill:#6d707a}.card{fill:#fefefc;stroke:#e3e4e8}.action{fill:#5965a8;font-size:16px}</style>
+  <text x="30" y="45" class="title">拾光导入 · 取消实际变更后继续调整</text>
+  <text x="30" y="75" class="muted">沿用现有灰白底、蓝紫按钮与详情页返回；原始采集和地点设置保留在原页面会话。</text>
+  <rect x="30" y="110" width="300" height="285" rx="20" class="card"/>
+  <text x="50" y="148" class="title">‹　确认导入结果</text>
+  <text x="50" y="192" class="body">地点：去掉校区，保留教室</text>
+  <text x="50" y="226" class="muted">阳江校区 慎思楼101</text>
+  <text x="50" y="256" class="body">→ 慎思楼101</text>
+  <rect x="50" y="298" width="260" height="49" rx="20" fill="#e9ecf7"/>
+  <text x="118" y="329" class="action">查看实际变更</text>
+  <path d="M342 246 H371" stroke="#5965a8" stroke-width="3"/><path d="m363 238 9 8-9 8" fill="none" stroke="#5965a8" stroke-width="3"/>
+  <rect x="385" y="110" width="300" height="285" rx="20" class="card"/>
+  <text x="405" y="148" class="title">‹　导入与备份</text>
+  <text x="405" y="192" class="body">教务适配器导入预览</text>
+  <text x="405" y="226" class="muted">核对新增、修改及删除</text>
+  <rect x="405" y="272" width="260" height="49" rx="20" fill="#e9ecf7"/>
+  <text x="501" y="303" class="action">取消导入</text>
+  <text x="405" y="360" class="muted">取消后点击返回，或系统返回</text>
+  <path d="M697 246 H726" stroke="#5965a8" stroke-width="3"/><path d="m718 238 9 8-9 8" fill="none" stroke="#5965a8" stroke-width="3"/>
+  <rect x="740" y="110" width="280" height="285" rx="20" class="card"/>
+  <text x="760" y="148" class="title">‹　确认导入结果</text>
+  <text x="760" y="192" class="body">原始地点与设置仍在</text>
+  <text x="760" y="226" class="muted">无需再次采集或配置学期</text>
+  <rect x="760" y="265" width="240" height="49" rx="20" fill="#e9ecf7"/><text x="844" y="296" class="action">处理地点</text>
+  <rect x="760" y="327" width="240" height="49" rx="20" fill="#e9ecf7"/><text x="812" y="358" class="action">查看实际变更</text>
+  <text x="30" y="445" class="body">详情层叠在拾光预览上；取消仅撤销本次变更预览，返回原页继续修改。</text>
+  <text x="30" y="481" class="muted">再次查看实际变更时生成新的计划；确认保存仍由课表模块审核，原始采集不覆盖。</text>
+  <text x="30" y="530" class="muted">保守识别：含教室数字或楼馆片段的名称不自动猜测，允许手动填写；保留 -101 等负号。</text>
+  <text x="30" y="567" class="muted">流程：修改地点 → 查看实际变更 → 取消 → 返回 → 改为保留完整地点 → 再次查看实际变更。</text>
+</svg>

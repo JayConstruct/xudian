@@ -246,6 +246,92 @@ void main() {
     expect(result.release!.version.toString(), '1.0.0');
   });
 
+  test('recognizes encoded application names in release APK filenames', () async {
+    const tag = 'v0.2.0-beta.24';
+    for (final name in [
+      for (final abi in ['armeabi-v7a', 'arm64-v8a', 'x86_64'])
+        '序点-$tag-$abi-release.apk',
+      'xudian-$tag-arm64-v8a-release.apk',
+      '序点 $tag 100%-arm64-v8a-release.apk',
+    ]) {
+      final result =
+          await withReleases([
+            release(
+              tag,
+              name: name,
+              prerelease: true,
+              download:
+                  'https://github.com/$appRepository/releases/download/$tag/${Uri.encodeComponent(name)}',
+            ),
+          ]).check(
+            installed,
+            AppUpdatePlatform.android,
+            channel: AppUpdateChannel.testing,
+          );
+      expect(result.updateAvailable, isTrue, reason: name);
+      expect(result.release!.version.toString(), '0.2.0-beta.24');
+    }
+  });
+
+  test(
+    'ASCII companion assets remain recognizable to older update clients',
+    () async {
+      const tag = 'v0.2.0-beta.24';
+      for (final abi in ['armeabi-v7a', 'arm64-v8a', 'x86_64']) {
+        final primary = release(
+          tag,
+          name: '序点-$tag-$abi-release.apk',
+          prerelease: true,
+        );
+        final alias = release(
+          tag,
+          name: 'xudian-$tag-$abi-release.apk',
+          prerelease: true,
+        );
+        final primaryAsset = (primary['assets'] as List).single as Map;
+        final aliasAsset = (alias['assets'] as List).single as Map;
+        // Older clients compare the encoded URI path with the raw asset name.
+        // The ASCII copy keeps that exact path contract alongside the new name.
+        bool legacyPathMatches(Map asset) =>
+            Uri.parse(asset['browser_download_url'] as String).path ==
+            '/$appRepository/releases/download/$tag/${asset['name']}';
+        expect(legacyPathMatches(primaryAsset), isFalse);
+        expect(legacyPathMatches(aliasAsset), isTrue);
+        final dual = {
+          ...primary,
+          'assets': [primaryAsset, aliasAsset],
+        };
+        final result = await withReleases([dual]).check(
+          installed,
+          AppUpdatePlatform.android,
+          channel: AppUpdateChannel.testing,
+        );
+        expect(result.updateAvailable, isTrue);
+      }
+    },
+  );
+
+  test('encoded APK names still require the exact declared release asset', () async {
+    const name = '序点-v9.0.0-arm64-v8a-release.apk';
+    final path =
+        '/$appRepository/releases/download/v9.0.0/${Uri.encodeComponent(name)}';
+    for (final download in [
+      'http://github.com$path',
+      'https://example.com$path',
+      'https://github.com/another/repo/releases/download/v9.0.0/${Uri.encodeComponent(name)}',
+      'https://github.com${path.replaceFirst("v9.0.0/", "v8.0.0/")}',
+      'https://github.com${path.replaceFirst("arm64-v8a", "x86_64")}',
+      'https://github.com$path?redirect=evil',
+      'https://github.com$path#other',
+    ]) {
+      final result = await withReleases([
+        release('v9.0.0', name: name, download: download),
+        release('v1.0.0'),
+      ]).check(installed, AppUpdatePlatform.android);
+      expect(result.release!.version.toString(), '1.0.0', reason: download);
+    }
+  });
+
   test(
     'paginates past module releases and compares all fetched app versions',
     () async {

@@ -1,8 +1,139 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:task_app/app/app_scroll_behavior.dart';
 import 'package:task_app/core/module_host/time_grid.dart';
+import 'package:task_app/core/ui/workspace_chrome.dart';
 
 void main() {
+  for (final rowCount in [2, 16]) {
+    testWidgets(
+      '${rowCount == 2 ? 'short' : 'long'} grids stay at both edges without a gap or rebound',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            scrollBehavior: const AppScrollBehavior(),
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: 360,
+                  height: 500,
+                  child: TimeGrid(
+                    columns: const [
+                      {'id': 'mon', 'label': '周一'},
+                    ],
+                    rows: [
+                      for (var i = 0; i < rowCount; i++)
+                        {'id': '$i', 'label': '节次 $i'},
+                    ],
+                    blocks: const [],
+                    onEvent: (_) {},
+                    options: const {'rowHeight': 72, 'headerHeight': 48},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final viewport = find.byKey(const PageStorageKey('time-grid-vertical'));
+        final scroll = tester
+            .widget<SingleChildScrollView>(viewport)
+            .controller!;
+        final firstRow = find.text('节次 0');
+        final initialTop = tester.getTopLeft(firstRow).dy;
+        final gesture = await tester.startGesture(tester.getCenter(viewport));
+        for (var i = 0; i < 3; i++) {
+          await gesture.moveBy(const Offset(0, 80));
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(scroll.offset, 0);
+          expect(tester.getTopLeft(firstRow).dy, initialTop);
+        }
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(scroll.offset, 0);
+
+        if (rowCount > 2) {
+          // With no edge resistance to unwind, reversing the drag immediately
+          // tracks the finger at a one-to-one distance inside the timetable.
+          scroll.jumpTo(120);
+          await tester.pump();
+          final reading = await tester.startGesture(tester.getCenter(viewport));
+          await reading.moveBy(const Offset(0, -30));
+          await tester.pump();
+          final before = scroll.offset;
+          await reading.moveBy(const Offset(0, -40));
+          await tester.pump();
+          expect(scroll.offset, closeTo(before + 40, .01));
+          await reading.moveBy(const Offset(0, 20));
+          await tester.pump();
+          expect(scroll.offset, closeTo(before + 20, .01));
+          await reading.up();
+          await tester.pumpAndSettle();
+        }
+
+        scroll.jumpTo(scroll.position.maxScrollExtent);
+        await tester.pump();
+        final end = scroll.offset;
+        final lastRow = find.text('节次 ${rowCount - 1}');
+        final initialBottom = tester.getBottomLeft(lastRow).dy;
+        final bottomDrag = await tester.startGesture(
+          tester.getCenter(viewport),
+        );
+        for (var i = 0; i < 3; i++) {
+          await bottomDrag.moveBy(const Offset(0, -80));
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(scroll.offset, end);
+          expect(tester.getBottomLeft(lastRow).dy, initialBottom);
+        }
+        await bottomDrag.up();
+        await tester.pumpAndSettle();
+        expect(scroll.offset, end);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('short grids still reveal and hide workspace controls', (
+    tester,
+  ) async {
+    final chrome = WorkspaceChromeController()
+      ..configure('short-grid', enabled: true)
+      ..updateHeaderExtent(64);
+    addTearDown(chrome.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        scrollBehavior: const AppScrollBehavior(),
+        home: WorkspaceChromeScrollScope(
+          controller: chrome,
+          child: Scaffold(
+            body: TimeGrid(
+              columns: const [
+                {'id': 'mon', 'label': '周一'},
+              ],
+              rows: const [
+                {'id': '1', 'label': '第一节'},
+              ],
+              blocks: const [],
+              onEvent: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    final viewport = find.byKey(const PageStorageKey('time-grid-vertical'));
+    final scroll = tester.widget<SingleChildScrollView>(viewport).controller!;
+    expect(scroll.position.maxScrollExtent, 0);
+    await tester.drag(viewport, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    expect(chrome.collapsed, isTrue);
+    expect(scroll.offset, 0);
+    await tester.drag(viewport, const Offset(0, 100));
+    await tester.pumpAndSettle();
+    expect(chrome.expanded, isTrue);
+    expect(scroll.offset, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'chrome cycles retain scroll position but window and timetable changes reset the range',
     (tester) async {

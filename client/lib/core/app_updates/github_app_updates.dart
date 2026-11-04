@@ -190,7 +190,10 @@ class GitHubAppUpdates {
           if (name is! String || address is! String) return false;
           final uri = Uri.tryParse(address);
           if (uri == null ||
-              !_repositoryUrl(uri, '/releases/download/$tag/$name')) {
+              !_repositoryUrl(
+                uri,
+                '/releases/download/$tag/${Uri.encodeComponent(name)}',
+              )) {
             return false;
           }
           final lower = name.toLowerCase();

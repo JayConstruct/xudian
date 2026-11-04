@@ -919,6 +919,13 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       if (finished == null) return;
       await finished.future;
     }
+    // Navigator.pop exposes the workspace route before its inherited
+    // isCurrent dependency has rebuilt this page. Await that frame before
+    // starting an event which may flush pending viewport preferences.
+    if (!mounted) return;
+    if (valid() && !routeActive && ModalRoute.of(context)?.isCurrent == true) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
     if (valid()) await _render(event);
   }
 

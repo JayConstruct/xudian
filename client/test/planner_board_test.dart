@@ -1040,17 +1040,18 @@ void main() {
       );
       await gesture.moveTo(point + Offset(width + 14, 0));
       await tester.pump();
-      expect(find.textContaining('1分钟精调'), findsWidgets);
+      expect(find.textContaining('5分钟吸附'), findsWidgets);
+      expect(find.textContaining('1分钟精调'), findsNothing);
       await gesture.moveTo(point + Offset(width + 14, 4));
       await tester.pump();
       expect(
-        find.descendant(of: ruler, matching: find.text('09:08')),
+        find.descendant(of: ruler, matching: find.text('09:12')),
         findsOneWidget,
       );
       await gesture.up();
       await tester.pumpAndSettle();
-      expect((events.single as Map)['start'], '2026-10-16T09:08:00.000');
-      expect((events.single as Map)['end'], '2026-10-16T10:08:00.000');
+      expect((events.single as Map)['start'], '2026-10-16T09:12:00.000');
+      expect((events.single as Map)['end'], '2026-10-16T10:12:00.000');
       expect(tester.takeException(), isNull);
     },
   );
@@ -1083,14 +1084,14 @@ void main() {
   );
 
   testWidgets(
-    'dashboard precision keeps real scroll travel while slowing finger travel',
+    'dashboard keeps finger and scroll travel at five minute increments after horizontal movement',
     (tester) async {
       await _mount(
         tester,
         candidates: const [
           {
             'id': 'scroll',
-            'title': '滚动细调',
+            'title': '滚动吸附',
             'durationMinutes': 30,
             'moveEvent': {'action': 'move'},
           },
@@ -1098,10 +1099,11 @@ void main() {
         options: const {'dashboard': true},
       );
       final point = _gridPoint(tester, 0, 615);
-      final gesture = await _dragTo(tester, find.text('滚动细调'), point);
+      final gesture = await _dragTo(tester, find.text('滚动吸附'), point);
       await gesture.moveTo(point + const Offset(14, 0));
       await tester.pump();
-      expect(find.textContaining('1分钟精调'), findsWidgets);
+      expect(find.textContaining('5分钟吸附'), findsWidgets);
+      expect(find.textContaining('1分钟精调'), findsNothing);
       final vertical = tester
           .widget<SingleChildScrollView>(
             find.byKey(const ValueKey('planner-vertical')),
@@ -1113,7 +1115,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('planner-drag-start')),
-          matching: find.text('11:16'),
+          matching: find.text('11:20'),
         ),
         findsOneWidget,
       );
@@ -1218,7 +1220,7 @@ void main() {
         find.descendant(of: hint, matching: find.textContaining('5分钟吸附')),
         findsOneWidget,
       );
-      expect(find.textContaining('横移精调 · 大幅横移换日'), findsWidgets);
+      expect(find.textContaining('精确时间可手动修改'), findsWidgets);
       await tester.pump(const Duration(seconds: 2));
       expect(
         find.descendant(of: hint, matching: find.textContaining('5分钟吸附')),
@@ -1234,7 +1236,7 @@ void main() {
   );
 
   testWidgets(
-    'dashboard horizontal fine gesture locks its date and deliberate day travel preserves the fine time',
+    'dashboard small lateral movement holds its date and deliberate day travel preserves five minute time',
     (tester) async {
       final events = <Object?>[];
       final active = <bool>[];
@@ -1243,7 +1245,7 @@ void main() {
         candidates: const [
           {
             'id': 'fine',
-            'title': '横移精调',
+            'title': '横移五分钟',
             'durationMinutes': 30,
             'moveEvent': {'action': 'move'},
           },
@@ -1255,12 +1257,12 @@ void main() {
       final grid = tester.getRect(find.byType(DragTarget<BoardItem>));
       final width = grid.width / 5;
       // Start eight pixels before the next date. Crossing that visual boundary
-      // by a few pixels must mean fine adjustment rather than changing dates.
+      // by a few pixels must retain the date and five minute increments.
       final point = Offset(
         grid.left + width - 8,
         _gridPoint(tester, 0, 615).dy,
       );
-      final gesture = await _dragTo(tester, find.text('横移精调'), point);
+      final gesture = await _dragTo(tester, find.text('横移五分钟'), point);
       final ruler = find.byKey(const ValueKey('planner-drag-start'));
       expect(active, [true]);
       await gesture.moveTo(point + const Offset(13, 0));
@@ -1268,7 +1270,8 @@ void main() {
       expect(find.textContaining('5分钟吸附'), findsWidgets);
       await gesture.moveTo(point + const Offset(14, 0));
       await tester.pump();
-      expect(find.textContaining('1分钟精调'), findsWidgets);
+      expect(find.textContaining('5分钟吸附'), findsWidgets);
+      expect(find.textContaining('1分钟精调'), findsNothing);
       expect(
         find.descendant(of: ruler, matching: find.text('10:15')),
         findsOneWidget,
@@ -1276,37 +1279,38 @@ void main() {
       await gesture.moveTo(point + const Offset(14, 4));
       await tester.pump();
       expect(
-        find.descendant(of: ruler, matching: find.text('10:16')),
+        find.descendant(of: ruler, matching: find.text('10:20')),
         findsOneWidget,
       );
       await gesture.moveTo(point + const Offset(14, 80));
       await tester.pump();
       expect(
-        find.descendant(of: ruler, matching: find.text('10:35')),
+        find.descendant(of: ruler, matching: find.text('11:35')),
         findsOneWidget,
       );
-      expect(find.textContaining('1分钟精调'), findsWidgets);
-      // Move decisively into the next column; exit fine mode without rounding
-      // or changing the currently previewed wall-clock time.
+      expect(find.textContaining('5分钟吸附'), findsWidgets);
+      expect(find.textContaining('1分钟精调'), findsNothing);
+      // Move decisively into the next column without changing the currently
+      // previewed wall-clock time or the five minute snap.
       await gesture.moveTo(point + Offset(width * .75, 80));
       await tester.pump();
       expect(find.textContaining('5分钟吸附'), findsWidgets);
       expect(
-        find.descendant(of: ruler, matching: find.text('10:35')),
+        find.descendant(of: ruler, matching: find.text('11:35')),
         findsOneWidget,
       );
       await gesture.up();
       await tester.pumpAndSettle();
       expect((events.single as Map)['snapMinutes'], 5);
-      expect((events.single as Map)['start'], '2026-10-16T10:35:00.000');
-      expect((events.single as Map)['end'], '2026-10-16T11:05:00.000');
+      expect((events.single as Map)['start'], '2026-10-16T11:35:00.000');
+      expect((events.single as Map)['end'], '2026-10-16T12:05:00.000');
       expect(active, [true, false]);
       expect(tester.takeException(), isNull);
     },
   );
 
   testWidgets(
-    'dashboard small cross-boundary fine gesture keeps the original date on drop',
+    'dashboard small cross-boundary movement keeps the original date and five minute snap on drop',
     (tester) async {
       final events = <Object?>[];
       await _mount(
@@ -1314,7 +1318,7 @@ void main() {
         candidates: const [
           {
             'id': 'edge',
-            'title': '边界精调',
+            'title': '边界吸附',
             'durationMinutes': 30,
             'moveEvent': {'action': 'move'},
           },
@@ -1328,15 +1332,15 @@ void main() {
         grid.left + width - 8,
         _gridPoint(tester, 0, 615).dy,
       );
-      final gesture = await _dragTo(tester, find.text('边界精调'), point);
+      final gesture = await _dragTo(tester, find.text('边界吸附'), point);
       await gesture.moveTo(point + const Offset(14, 0));
       await tester.pump();
       await gesture.moveTo(point + const Offset(14, 4));
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
-      expect((events.single as Map)['snapMinutes'], 1);
-      expect((events.single as Map)['start'], '2026-10-15T10:16:00.000');
+      expect((events.single as Map)['snapMinutes'], 5);
+      expect((events.single as Map)['start'], '2026-10-15T10:20:00.000');
       expect(tester.takeException(), isNull);
     },
   );
@@ -1366,11 +1370,12 @@ void main() {
       // 18 percent incursion may switch dates.
       await gesture.moveTo(Offset(grid.left + width * 1.17, point.dy));
       await tester.pump();
-      expect(find.textContaining('1分钟精调'), findsWidgets);
+      expect(find.textContaining('5分钟吸附'), findsWidgets);
+      expect(find.textContaining('1分钟精调'), findsNothing);
       await gesture.up();
       await tester.pumpAndSettle();
       expect((events.single as Map)['start'], '2026-10-15T10:15:00.000');
-      expect((events.single as Map)['snapMinutes'], 1);
+      expect((events.single as Map)['snapMinutes'], 5);
       final next = await _dragTo(tester, find.text('换日深度'), point);
       await next.moveTo(Offset(grid.left + width * 1.19, point.dy));
       await tester.pump();
@@ -1384,19 +1389,19 @@ void main() {
   );
 
   testWidgets(
-    'dashboard resize fixes the start while five minute and horizontal fine moves adjust only the end',
+    'dashboard resize fixes an off-grid start while vertical and lateral movement adjust only its end in five minute increments',
     (tester) async {
       final events = <Object?>[];
       await _mount(
         tester,
-        blocks: [_block('末端精调', '2026-10-15T09:07:00', '2026-10-15T10:07:00')],
+        blocks: [_block('末端吸附', '2026-10-15T09:07:00', '2026-10-15T10:07:00')],
         options: const {'dashboard': true},
         onEvent: events.add,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('末端精调'));
+      await tester.tap(find.text('末端吸附'));
       await tester.pump();
-      final handle = find.byKey(const ValueKey('resize:末端精调:2026-10-15'));
+      final handle = find.byKey(const ValueKey('resize:末端吸附:2026-10-15'));
       final point = tester.getCenter(handle);
       final gesture = await tester.startGesture(point);
       await gesture.moveTo(point + const Offset(0, 20));
@@ -1413,19 +1418,20 @@ void main() {
         find.descendant(of: end, matching: find.text('10:27')),
         findsOneWidget,
       );
-      expect(find.textContaining('1分钟精调'), findsWidgets);
+      expect(find.textContaining('5分钟吸附'), findsWidgets);
+      expect(find.textContaining('1分钟精调'), findsNothing);
       await gesture.moveTo(point + const Offset(14, 24));
       await tester.pump();
       expect(
-        find.descendant(of: end, matching: find.text('10:28')),
+        find.descendant(of: end, matching: find.text('10:32')),
         findsOneWidget,
       );
       await gesture.up();
       await tester.pumpAndSettle();
       expect((events.single as Map)['start'], '2026-10-15T09:07:00.000');
-      expect((events.single as Map)['end'], '2026-10-15T10:28:00.000');
+      expect((events.single as Map)['end'], '2026-10-15T10:32:00.000');
       expect((events.single as Map)['intent'], 'resize');
-      expect((events.single as Map)['snapMinutes'], 1);
+      expect((events.single as Map)['snapMinutes'], 5);
       expect(tester.takeException(), isNull);
     },
   );
@@ -2915,7 +2921,7 @@ void main() {
   );
 
   testWidgets(
-    'edge auto scroll moves both axes, keeps fine mode and stops on drop or cancel',
+    'edge auto scroll moves both axes, keeps five minute snapping and stops on drop or cancel',
     (tester) async {
       tester.view.physicalSize = const Size(320, 900);
       tester.view.devicePixelRatio = 1;
@@ -2955,10 +2961,11 @@ void main() {
       }
       expect(horizontal.offset, greaterThan(0));
       expect(vertical.offset, greaterThan(initialY));
-      expect(find.textContaining('1分钟细调'), findsWidgets);
+      expect(find.textContaining('5分钟吸附'), findsWidgets);
+      expect(find.textContaining('1分钟细调'), findsNothing);
       await gesture.up();
       await tester.pump();
-      expect((events.single as Map)['snapMinutes'], 1);
+      expect((events.single as Map)['snapMinutes'], 5);
       final x = horizontal.offset, y = vertical.offset;
       await tester.pump(const Duration(milliseconds: 400));
       expect(horizontal.offset, x);
@@ -3045,7 +3052,7 @@ void main() {
         'start': '2026-10-15T09:00:00.000',
         'end': '2026-10-15T10:30:00.000',
         'intent': 'resize',
-        'snapMinutes': 15,
+        'snapMinutes': 5,
       });
       events.clear();
       gesture = await tester.startGesture(tester.getCenter(handle));
@@ -3053,7 +3060,7 @@ void main() {
       await tester.pump();
       await gesture.up();
       await tester.pump();
-      expect((events.single as Map)['end'], '2026-10-15T09:01:00.000');
+      expect((events.single as Map)['end'], '2026-10-15T09:05:00.000');
     },
   );
 
@@ -3137,7 +3144,7 @@ void main() {
             .getTopLeft(find.byKey(const ValueKey('occupancy:a:2026-10-15')))
             .dy,
       );
-      expect(find.text('交换几何预览 · 15分钟吸附'), findsOneWidget);
+      expect(find.text('交换几何预览 · 5分钟吸附'), findsOneWidget);
       await gesture.cancel();
       await tester.pump();
     },
@@ -3345,6 +3352,167 @@ void main() {
   );
 
   testWidgets(
+    'allowed intents keep movable target swaps but turn unsupported insertions into ordinary moves',
+    (tester) async {
+      final events = <Object?>[], previews = <BoardItem>[];
+      await _mount(
+        tester,
+        candidates: const [
+          {
+            'id': 'source',
+            'title': '能力拖动源',
+            'durationMinutes': 30,
+            'moveEvent': {'action': 'move'},
+          },
+        ],
+        blocks: [
+          _block('target', '2026-10-16T09:00:00', '2026-10-16T10:30:00'),
+        ],
+        options: const {
+          'allowedIntents': ['move', 'swap', 'resize'],
+        },
+        onEvent: events.add,
+        onPreview: (event) async {
+          previews.add(event);
+          return {'valid': true};
+        },
+      );
+      var gesture = await _dragTo(
+        tester,
+        find.text('能力拖动源'),
+        _gridPoint(tester, 1, 9 * 60 + 45),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await gesture.up();
+      await tester.pump();
+      expect(events.single, containsPair('intent', 'swap'));
+      expect(events.single, containsPair('targetId', 'target'));
+
+      gesture = await _dragTo(
+        tester,
+        find.text('能力拖动源'),
+        _gridPoint(tester, 1, 9 * 60),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.textContaining('插入'), findsNothing);
+      await gesture.up();
+      await tester.pump();
+      final event = events.last as Map;
+      expect(event['intent'], 'move');
+      expect(event['start'], '2026-10-16T09:00:00.000');
+      expect(event.containsKey('targetId'), isFalse);
+      expect(previews, isNotEmpty);
+      expect(previews.any((event) => event['intent'] == 'insert'), isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final locked in ['readOnly', 'fixed', 'completed', 'noMoveEvent']) {
+    testWidgets('hovering a $locked target never proposes a swap', (
+      tester,
+    ) async {
+      final events = <Object?>[], previews = <BoardItem>[];
+      final target = {
+        ..._block('target', '2026-10-16T09:00:00', '2026-10-16T10:30:00'),
+        if (locked != 'noMoveEvent') locked: true,
+      };
+      if (locked == 'noMoveEvent') target.remove('moveEvent');
+      await _mount(
+        tester,
+        candidates: const [
+          {
+            'id': 'source',
+            'title': '移动到锁定安排',
+            'durationMinutes': 30,
+            'moveEvent': {'action': 'move'},
+          },
+        ],
+        blocks: [target],
+        options: const {
+          'allowedIntents': ['move', 'swap', 'resize'],
+        },
+        onEvent: events.add,
+        onPreview: (event) async {
+          previews.add(event);
+          return {
+            'valid': false,
+            'conflicts': ['与已有安排重叠'],
+          };
+        },
+      );
+      final gesture = await _dragTo(
+        tester,
+        find.text('移动到锁定安排'),
+        _gridPoint(tester, 1, 9 * 60 + 45),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.textContaining('交换'), findsNothing);
+      await gesture.up();
+      await tester.pump();
+      expect((events.single as Map)['intent'], 'move');
+      expect((events.single as Map).containsKey('targetId'), isFalse);
+      expect(previews, isNotEmpty);
+      expect(previews.every((event) => event['intent'] == 'move'), isTrue);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('swap-only capability never previews or emits a move', (
+    tester,
+  ) async {
+    final events = <Object?>[], previews = <BoardItem>[];
+    await _mount(
+      tester,
+      candidates: const [
+        {
+          'id': 'source',
+          'title': '仅交换源',
+          'durationMinutes': 30,
+          'moveEvent': {'action': 'move'},
+        },
+      ],
+      blocks: [_block('target', '2026-10-16T09:00:00', '2026-10-16T10:30:00')],
+      options: const {
+        'allowedIntents': ['swap'],
+      },
+      onEvent: events.add,
+      onPreview: (event) async {
+        previews.add(event);
+        return {'valid': true};
+      },
+    );
+    expect(
+      find.byKey(const ValueKey('resize:target:2026-10-16')),
+      findsNothing,
+    );
+    var gesture = await _dragTo(
+      tester,
+      find.text('仅交换源'),
+      _gridPoint(tester, 0, 9 * 60),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await gesture.up();
+    await tester.pump();
+    expect(events, isEmpty);
+    expect(previews, isEmpty);
+
+    gesture = await _dragTo(
+      tester,
+      find.text('仅交换源'),
+      _gridPoint(tester, 1, 9 * 60 + 45),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 200));
+    await gesture.up();
+    await tester.pump();
+    expect(events.single, containsPair('intent', 'swap'));
+    expect(events.single, containsPair('targetId', 'target'));
+    expect(previews, isNotEmpty);
+    expect(previews.every((event) => event['intent'] == 'swap'), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
     '100 overlapping blocks retain true stripes and accessible choice without negative widths',
     (tester) async {
       final events = <Object?>[];
@@ -3471,7 +3639,7 @@ void main() {
   );
 
   testWidgets(
-    'candidate long press proposes another day with duration and 15 minute snapping',
+    'candidate long press proposes another day with duration and five minute snapping',
     (tester) async {
       final events = <Object?>[];
       await _mount(
@@ -3492,14 +3660,14 @@ void main() {
         find.text('候选任务'),
         _gridPoint(tester, 1, 9 * 60 + 8),
       );
-      expect(find.textContaining('15分钟吸附'), findsOneWidget);
+      expect(find.textContaining('5分钟吸附'), findsOneWidget);
       await gesture.up();
       await tester.pump();
       final event = events.single as Map;
       expect(event['id'], 'raw-task');
-      expect(event['start'], '2026-10-16T09:15:00.000');
-      expect(event['end'], '2026-10-16T09:45:00.000');
-      expect(event['snapMinutes'], 15);
+      expect(event['start'], '2026-10-16T09:10:00.000');
+      expect(event['end'], '2026-10-16T09:40:00.000');
+      expect(event['snapMinutes'], 5);
       expect(event['intent'], 'move');
       expect(event.containsKey('deadlineSummary'), isFalse);
       expect(find.text('候选任务'), findsOneWidget);
@@ -3507,7 +3675,7 @@ void main() {
   );
 
   testWidgets(
-    'stationary dwell enters one minute mode without shifting the candidate time',
+    'stationary dwell retains five minute mode and small travel snaps the candidate time',
     (tester) async {
       final events = <Object?>[];
       await _mount(
@@ -3515,7 +3683,7 @@ void main() {
         candidates: const [
           {
             'id': 'fine',
-            'title': '细调任务',
+            'title': '停留吸附任务',
             'durationMinutes': 30,
             'moveEvent': {'action': 'move'},
           },
@@ -3523,16 +3691,17 @@ void main() {
         onEvent: events.add,
       );
       final point = _gridPoint(tester, 0, 9 * 60 + 7);
-      final gesture = await _dragTo(tester, find.text('细调任务'), point);
+      final gesture = await _dragTo(tester, find.text('停留吸附任务'), point);
       await tester.pump(const Duration(milliseconds: 700));
-      expect(find.textContaining('1分钟细调'), findsOneWidget);
-      expect(find.text('10/15 09:00 → 10/15 09:30'), findsOneWidget);
+      expect(find.textContaining('5分钟吸附'), findsOneWidget);
+      expect(find.textContaining('1分钟细调'), findsNothing);
+      expect(find.text('10/15 09:05 → 10/15 09:35'), findsOneWidget);
       await gesture.moveBy(const Offset(0, 3));
       await tester.pump();
       await gesture.up();
       await tester.pump();
-      expect((events.single as Map)['start'], '2026-10-15T09:03:00.000');
-      expect((events.single as Map)['snapMinutes'], 1);
+      expect((events.single as Map)['start'], '2026-10-15T09:10:00.000');
+      expect((events.single as Map)['snapMinutes'], 5);
     },
   );
 

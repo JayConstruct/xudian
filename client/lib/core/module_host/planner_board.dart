@@ -4,7 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' show DragStartBehavior;
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -158,6 +158,148 @@ class _PlannerBoardState extends State<PlannerBoard>
   final _vertical = ScrollController();
   final _gridKey = GlobalKey();
   final _viewportKey = GlobalKey();
+  final _pinchPointers = <int, Offset>{};
+  final _cancelledPinchPointers = <int>{};
+  double? _pinchScale;
+  double _pinchDistance = 0, _pinchBaseScale = 1, _pinchMinute = 0;
+  double _pinchStartScroll = 0;
+  int _pinchGeneration = 0;
+  bool _pinching = false, _pinchScrollPending = false;
+  bool _pinchTapSuppressed = false;
+  double _pinchFocalY = 0;
+  bool get _canPinch =>
+      widget.enabled &&
+      widget.options['pinchZoom'] is Map &&
+      _focusDays == null;
+
+  void _pinchDown(PointerDownEvent event) {
+    if (_cancelledPinchPointers.isNotEmpty) {
+      _cancelledPinchPointers.add(event.pointer);
+      return;
+    }
+    if (!_canPinch || _dragActive.value || _pinchPointers.length >= 2) return;
+    _pinchPointers[event.pointer] = event.position;
+    if (_pinchPointers.length != 2) return;
+    setState(() => _pinchTapSuppressed = true);
+    _startPinch();
+  }
+
+  void _startPinch() {
+    if (!_canPinch || _dragActive.value || _pinchPointers.length != 2) return;
+    final points = _pinchPointers.values.toList();
+    _pinchDistance = (points[0] - points[1]).distance;
+    if (_pinchDistance < 12) return;
+    final viewport =
+        _viewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (viewport == null) return;
+    _pinchGeneration++;
+    _pinchScrollPending = false;
+    _pinchTapSuppressed = true;
+    _pinchBaseScale = _scale;
+    _pinchStartScroll = _vertical.hasClients ? _vertical.offset : 0;
+    _pinchFocalY = viewport.globalToLocal((points[0] + points[1]) / 2).dy;
+    _pinchMinute =
+        _startMinute +
+        ((_vertical.hasClients ? _vertical.offset : 0) + _pinchFocalY) / _scale;
+    if (_vertical.hasClients) _vertical.jumpTo(_vertical.offset);
+    if (_horizontal.hasClients) _horizontal.jumpTo(_horizontal.offset);
+    setState(() => _pinching = true);
+  }
+
+  void _pinchMove(PointerMoveEvent event) {
+    if (!_pinchPointers.containsKey(event.pointer)) return;
+    if (!_canPinch) {
+      setState(_cancelPinch);
+      return;
+    }
+    _pinchPointers[event.pointer] = event.position;
+    if (_pinchPointers.length < 2) return;
+    if (!_pinching) {
+      _startPinch();
+      return;
+    }
+    final points = _pinchPointers.values.take(2).toList();
+    final config = widget.options['pinchZoom'] as Map;
+    final minimum = (config['min'] as num? ?? .75).toDouble().clamp(.5, 3.0);
+    final maximum = (config['max'] as num? ?? 3).toDouble().clamp(minimum, 3.0);
+    final scale =
+        (_pinchBaseScale * (points[0] - points[1]).distance / _pinchDistance)
+            .clamp(minimum, maximum);
+    final viewport =
+        _viewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (viewport == null) return;
+    _pinchFocalY = viewport.globalToLocal((points[0] + points[1]) / 2).dy;
+    setState(() => _pinchScale = scale);
+    if (_pinchScrollPending) return;
+    _pinchScrollPending = true;
+    final generation = _pinchGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _pinchGeneration) return;
+      _pinchScrollPending = false;
+      if (!_vertical.hasClients) return;
+      _vertical.jumpTo(
+        ((_pinchMinute - _startMinute) * _scale - _pinchFocalY).clamp(
+          0,
+          _vertical.position.maxScrollExtent,
+        ),
+      );
+      _refreshWindow();
+    });
+  }
+
+  void _pinchUp(PointerEvent event) {
+    if (!_canPinch && _pinchPointers.isNotEmpty) setState(_cancelPinch);
+    _cancelledPinchPointers.remove(event.pointer);
+    _pinchPointers.remove(event.pointer);
+    if (_pinchPointers.isEmpty &&
+        _cancelledPinchPointers.isEmpty &&
+        _pinchTapSuppressed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            _pinchPointers.isEmpty &&
+            _cancelledPinchPointers.isEmpty) {
+          setState(() => _pinchTapSuppressed = false);
+        }
+      });
+    }
+    if (!_pinching || _pinchPointers.length >= 2) return;
+    setState(() => _pinching = false);
+    final config = widget.options['pinchZoom'];
+    if (_pinchScale != null && config is Map && config['event'] is Map) {
+      widget.onEvent({
+        ...Map<String, Object?>.from(config['event'] as Map),
+        'pixelsPerMinute': _pinchScale,
+      });
+    }
+  }
+
+  void _cancelPinch() {
+    // A completed gesture keeps its display until the module acknowledges it;
+    // dispatching that event temporarily disables the board as well.
+    if (!_pinching && _pinchScale != null) return;
+    if (_pinchPointers.isEmpty && !_pinching && _pinchScale == null) return;
+    final restoreScroll = _pinching;
+    final offset = _pinchStartScroll;
+    final generation = ++_pinchGeneration;
+    _cancelledPinchPointers.addAll(_pinchPointers.keys);
+    _pinchTapSuppressed = _cancelledPinchPointers.isNotEmpty;
+    _pinchPointers.clear();
+    _pinching = false;
+    _pinchScale = null;
+    _pinchScrollPending = false;
+    if (restoreScroll) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            generation != _pinchGeneration ||
+            !_vertical.hasClients) {
+          return;
+        }
+        _vertical.jumpTo(offset.clamp(0, _vertical.position.maxScrollExtent));
+        _refreshWindow();
+      });
+    }
+  }
+
   final _proposal = ValueNotifier<_Proposal?>(null);
   final _feedbackPointer = ValueNotifier<Offset>(Offset.zero);
   final _dragActive = ValueNotifier<bool>(false);
@@ -176,20 +318,13 @@ class _PlannerBoardState extends State<PlannerBoard>
       <(DateTime, DateTime), List<(Object?, DateTime, DateTime)>>{};
 
   String? _pinnedSegment;
-  Timer? _fineTimer, _intentTimer, _previewTimer;
+  Timer? _intentTimer, _previewTimer;
   late final Ticker _scrollTicker;
   Duration _scrollElapsed = Duration.zero;
-  int _fineStep = 1;
-  double get _finePixels =>
-      _dashboard ? math.max(_scale, _fineStep == 1 ? 4 : 2) : _scale;
-  int get _snap => _fine ? _fineStep : (_dashboard ? 5 : 15);
-  String _snapLabel(int step) => step == 1
-      ? (_dashboard ? '1分钟精调' : '1分钟细调')
-      : step == 5
-      ? '5分钟吸附'
-      : '15分钟吸附';
-  Offset? _anchor, _lastPosition, _pointerPosition;
-  DateTime? _fineStart, _moveOrigin, _movePointerOrigin;
+  int get _snap => 5;
+  String _snapLabel(int step) => '5分钟吸附';
+  Offset? _pointerPosition;
+  DateTime? _moveOrigin, _movePointerOrigin;
   DateTime? _gestureTime;
   Offset? _gesturePointer, _horizontalIntentAnchor;
   double _gestureScroll = 0, _horizontalIntentScroll = 0;
@@ -198,16 +333,11 @@ class _PlannerBoardState extends State<PlannerBoard>
   Object? _targetId;
   String? _pendingIntent;
   Object? _pendingTargetId;
-  bool _fine = false;
   bool _resizing = false;
   BoardItem? _activeItem;
   Offset? _resizeDown, _resizeBasePoint;
   DateTime? _resizeBaseEnd;
-  double _fineScrollAnchor = 0;
-  int _fineDayAnchor = 0,
-      _dragSession = 0,
-      _previewRevision = 0,
-      _viewGeneration = 0;
+  int _dragSession = 0, _previewRevision = 0, _viewGeneration = 0;
   String? _previewSignature;
   double _columnWidth = 112;
   double _cardHeight = 48;
@@ -622,7 +752,7 @@ class _PlannerBoardState extends State<PlannerBoard>
       ContentColors.surface(_accent(item), Theme.of(context).colorScheme);
 
   void _activate(BoardItem item) {
-    if (!widget.enabled) return;
+    if (!widget.enabled || _pinchTapSuppressed) return;
     if (_dashboard && _date(item['start']) != null) {
       setState(() => _selectedItem = item);
     } else if (item['event'] != null) {
@@ -710,7 +840,8 @@ class _PlannerBoardState extends State<PlannerBoard>
     return value > _startMinute ? value : 1440;
   }
 
-  double get _scale => _focusScale ?? _number('pixelsPerMinute', 1, .5, 3);
+  double get _scale =>
+      _focusScale ?? _pinchScale ?? _number('pixelsPerMinute', 1, .5, 3);
   // The script supplies floating wall-clock ISO values in its planning zone.
   // UTC is only an arithmetic container here, so the device timezone and its
   // DST rules cannot alter geometry; scripts resolve actual instants.
@@ -780,6 +911,8 @@ class _PlannerBoardState extends State<PlannerBoard>
   }
 
   bool _movable(BoardItem item) =>
+      !_pinching &&
+      !_pinchTapSuppressed &&
       widget.enabled &&
       (item['_boardGeneration'] == null ||
           item['_boardGeneration'] == _viewGeneration) &&
@@ -788,6 +921,11 @@ class _PlannerBoardState extends State<PlannerBoard>
       item['completed'] != true &&
       item['moveEvent'] is Map &&
       _duration(item) != null;
+
+  bool _allowsIntent(String intent) {
+    final allowed = widget.options['allowedIntents'];
+    return allowed is! List || allowed.contains(intent);
+  }
 
   @override
   void initState() {
@@ -875,6 +1013,19 @@ class _PlannerBoardState extends State<PlannerBoard>
   @override
   void didUpdateWidget(covariant PlannerBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!_canPinch ||
+        jsonEncode(widget.options['pinchZoom']) !=
+            jsonEncode(oldWidget.options['pinchZoom'])) {
+      _cancelPinch();
+    }
+    final acknowledgedPinch =
+        _pinchScale != null && widget.options['pixelsPerMinute'] == _pinchScale;
+    if (!_pinching &&
+        (acknowledgedPinch ||
+            widget.options['pixelsPerMinute'] !=
+                oldWidget.options['pixelsPerMinute'])) {
+      _pinchScale = null;
+    }
     if (widget.options['now'] != oldWidget.options['now']) {
       _clockElapsed.reset();
     }
@@ -964,7 +1115,8 @@ class _PlannerBoardState extends State<PlannerBoard>
           _refreshWindow();
         }
       });
-    } else if (_focusScale == null &&
+    } else if (!acknowledgedPinch &&
+        _focusScale == null &&
         widget.options['pixelsPerMinute'] !=
             oldWidget.options['pixelsPerMinute']) {
       // Keep the minute at the top of the viewport fixed when changing the
@@ -994,6 +1146,14 @@ class _PlannerBoardState extends State<PlannerBoard>
     }
     if (!widget.enabled ||
         widget.previewIdentity != oldWidget.previewIdentity ||
+        !listEquals(
+          widget.options['allowedIntents'] is List
+              ? widget.options['allowedIntents'] as List
+              : null,
+          oldWidget.options['allowedIntents'] is List
+              ? oldWidget.options['allowedIntents'] as List
+              : null,
+        ) ||
         daysChanged ||
         widget.options['startMinute'] != oldWidget.options['startMinute'] ||
         widget.options['endMinute'] != oldWidget.options['endMinute'] ||
@@ -1012,7 +1172,6 @@ class _PlannerBoardState extends State<PlannerBoard>
     _rangeRetryTimer?.cancel();
     _clockTimer?.cancel();
     _clockElapsed.stop();
-    _fineTimer?.cancel();
     _intentTimer?.cancel();
     _scrollTicker.dispose();
     _previewTimer?.cancel();
@@ -1054,7 +1213,6 @@ class _PlannerBoardState extends State<PlannerBoard>
 
   void _clearDrag({bool endGesture = true}) {
     if (endGesture) _setDragActive(false);
-    _fineTimer?.cancel();
     _intentTimer?.cancel();
     _scrollTicker.stop();
     _scrollElapsed = Duration.zero;
@@ -1077,15 +1235,11 @@ class _PlannerBoardState extends State<PlannerBoard>
     } else {
       clearNotifiers();
     }
-    _anchor = _lastPosition = null;
     _pointerPosition = null;
-    _fineStart = null;
     _gestureTime = null;
     _gesturePointer = _horizontalIntentAnchor = null;
     _gestureDay = null;
     if (endGesture) _moveOrigin = _movePointerOrigin = null;
-    _fine = false;
-    _fineStep = 1;
     _intent = 'move';
     _targetId = null;
     _pendingIntent = null;
@@ -1108,6 +1262,14 @@ class _PlannerBoardState extends State<PlannerBoard>
   };
 
   void _publish(_Proposal proposal) {
+    if (!_allowsIntent(proposal.intent)) {
+      _proposal.value = null;
+      _previewSignature = null;
+      _previewTimer?.cancel();
+      _previewRevision++;
+      _validation.value = null;
+      return;
+    }
     _proposal.value = proposal;
     final preview = widget.onPreview;
     if (preview == null) return;
@@ -1205,20 +1367,12 @@ class _PlannerBoardState extends State<PlannerBoard>
   void _beginResize(BoardItem item, Offset global) {
     _clearDrag();
     final box = _gridKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !_movable(item)) return;
+    if (box == null || !_movable(item) || !_allowsIntent('resize')) return;
     _setDragActive(true);
     _resizing = true;
     _resizeBasePoint = box.globalToLocal(global);
     _resizeBaseEnd = _date(item['end']);
     _hover(item, global);
-  }
-
-  int _fineDelta(Offset global) {
-    final finger = (global.dy - _anchor!.dy) / _finePixels;
-    final scroll =
-        ((_vertical.hasClients ? _vertical.offset : 0) - _fineScrollAnchor) /
-        _scale;
-    return ((finger + scroll) / _fineStep).round() * _fineStep;
   }
 
   DateTime? _pointerInstant(Offset global) {
@@ -1236,34 +1390,8 @@ class _PlannerBoardState extends State<PlannerBoard>
     );
   }
 
-  void _enterFine(int step) {
-    final value = _proposal.value;
-    final position = _pointerPosition;
-    final box = _gridKey.currentContext?.findRenderObject() as RenderBox?;
-    if (!mounted || value == null || position == null || box == null) return;
-    _fine = true;
-    _fineStep = step;
-    _anchor = position;
-    _fineStart = _resizing ? value.end : value.start;
-    _fineScrollAnchor = _vertical.hasClients ? _vertical.offset : 0;
-    _fineDayAnchor = (box.globalToLocal(position).dx / _columnWidth)
-        .floor()
-        .clamp(0, _days.length - 1);
-    _publish(
-      _Proposal(
-        value.item,
-        value.start,
-        value.end,
-        step,
-        intent: value.intent,
-        targetId: value.targetId,
-      ),
-    );
-  }
-
-  /// Horizontal intent changes precision/date; vertical travel changes time.
-  /// Rebase at each transition so neither changing mode nor changing day jumps
-  /// to the pointer's absolute time, including when a card was grabbed midway.
+  // Five-minute movement keeps the grab offset, including manually entered
+  // off-grid times. Deliberate horizontal travel changes the date.
   DateTime _dashboardTime(Offset global, int index) {
     final vertical = _vertical.hasClients ? _vertical.offset : 0.0;
     final horizontal = _horizontal.hasClients ? _horizontal.offset : 0.0;
@@ -1295,10 +1423,9 @@ class _PlannerBoardState extends State<PlannerBoard>
       _horizontalIntentScroll = horizontal;
     }
     final delta =
-        (global.dy - _gesturePointer!.dy) /
-            (_fine ? math.max(4, _scale) : _scale) +
+        (global.dy - _gesturePointer!.dy) / _scale +
         (vertical - _gestureScroll) / _scale;
-    final step = _fine ? 1 : 5;
+    const step = 5;
     var time = _gestureTime!.add(
       Duration(minutes: (delta / step).round() * step),
     );
@@ -1317,31 +1444,23 @@ class _PlannerBoardState extends State<PlannerBoard>
         index != _gestureDay &&
         dx.abs() >= math.max(48, _columnWidth * .55) &&
         depth >= _columnWidth * .18;
-    final fingerDx = (global.dx - _horizontalIntentAnchor!.dx).abs();
-    final enterFine = !_fine && fingerDx >= 14 && fingerDx >= dy.abs() * .8;
-    if (changeDay || enterFine) {
-      if (changeDay) {
-        final previous = _proposal.value;
-        final held = previous == null
-            ? time
-            : (_resizing ? previous.end : previous.start);
-        time = held.add(
-          _midnight(_date(_days[index]['date'])!)
-              .difference(_midnight(_date(_days[_gestureDay!]['date'])!)),
-        );
-        _gestureDay = index;
-        _fine = false;
-        _horizontalIntentAnchor = global;
-        _horizontalIntentScroll = horizontal;
-      } else {
-        _fine = true;
-        _fineStep = 1;
-      }
+    if (changeDay) {
+      final previous = _proposal.value;
+      final held = previous == null
+          ? time
+          : (_resizing ? previous.end : previous.start);
+      time = held.add(
+        _midnight(_date(_days[index]['date'])!)
+            .difference(_midnight(_date(_days[_gestureDay!]['date'])!)),
+      );
+      _gestureDay = index;
+      _horizontalIntentAnchor = global;
+      _horizontalIntentScroll = horizontal;
       _gestureTime = time;
       _gesturePointer = global;
       _gestureScroll = vertical;
       HapticFeedback.selectionClick();
-    } else if (!_fine && dx.abs() < 14 && dy.abs() > 10) {
+    } else if (dx.abs() < 14 && dy.abs() > 10) {
       // Start measuring lateral intent afresh during ordinary vertical travel.
       _horizontalIntentAnchor = global;
       _horizontalIntentScroll = horizontal;
@@ -1360,22 +1479,6 @@ class _PlannerBoardState extends State<PlannerBoard>
     _ensureAutoScroll();
     final point = box.globalToLocal(global);
     var index = (point.dx / _columnWidth).floor().clamp(0, days.length - 1);
-    if (!_dashboard &&
-        !fromScroll &&
-        (_lastPosition == null || (global - _lastPosition!).distance > 8)) {
-      _fineTimer?.cancel();
-      if (_fine && (global - (_anchor ?? global)).distance > 48) {
-        _fine = false;
-        _fineStart = null;
-      }
-      _lastPosition = global;
-      if (!_fine) {
-        _fineTimer = Timer(
-          const Duration(milliseconds: 650),
-          () => _enterFine(1),
-        );
-      }
-    }
     final dashboardTime = _dashboard ? _dashboardTime(global, index) : null;
     if (_dashboard) index = _gestureDay!;
     final day = _midnight(_date(days[index]['date'])!);
@@ -1385,13 +1488,9 @@ class _PlannerBoardState extends State<PlannerBoard>
       return;
     }
     final raw = _startMinute + point.dy / _scale;
-    final minute = _fine && _fineStart != null
-        ? _fineStart!.hour * 60 + _fineStart!.minute + _fineDelta(global)
-        : (raw / 15).round() * 15;
-    // Display bounds do not constrain the duration or move it back from midnight.
+    final minute = (raw / 5).round() * 5;
     var start =
-        dashboardTime ??
-        day.add(Duration(minutes: minute.clamp(0, _fine ? 1439 : 1425)));
+        dashboardTime ?? day.add(Duration(minutes: minute.clamp(0, 1435)));
     var end = start.add(duration);
     if (_resizing && _resizeBaseEnd != null && _resizeBasePoint != null) {
       start = _date(item['start'])!;
@@ -1403,26 +1502,15 @@ class _PlannerBoardState extends State<PlannerBoard>
           .difference(_midnight(_date(days[baseIndex]['date'])!));
       end =
           dashboardTime ??
-          (_fine && _fineStart != null
-              ? _fineStart!.add(
-                  day.difference(
-                        _midnight(_date(days[_fineDayAnchor]['date'])!),
-                      ) +
-                      Duration(minutes: _fineDelta(global)),
-                )
-              : _resizeBaseEnd!.add(
-                  dayDelta +
-                      Duration(
-                        minutes: ((point.dy - _resizeBasePoint!.dy) / _scale)
-                            .round(),
-                      ),
-                ));
-      if (!_dashboard && !_fine) {
-        end = _midnight(end).add(
-          Duration(minutes: ((end.hour * 60 + end.minute) / 15).round() * 15),
-        );
-      }
-      if (!end.isAfter(start)) end = start.add(const Duration(minutes: 1));
+          _resizeBaseEnd!.add(
+            dayDelta +
+                Duration(
+                  minutes:
+                      ((point.dy - _resizeBasePoint!.dy) / _scale / 5).round() *
+                      5,
+                ),
+          );
+      if (!end.isAfter(start)) end = start.add(const Duration(minutes: 5));
       _publish(_Proposal(item, start, end, _snap, intent: 'resize'));
       return;
     }
@@ -1458,6 +1546,11 @@ class _PlannerBoardState extends State<PlannerBoard>
       final fraction =
           start.difference(a).inMilliseconds / b.difference(a).inMilliseconds;
       nextIntent = fraction > .25 && fraction < .75 ? 'swap' : 'insert';
+      if (!_allowsIntent(nextIntent) ||
+          (nextIntent == 'swap' && !_movable(target))) {
+        nextIntent = 'move';
+        target = null;
+      }
     }
     final nextId = target?['id'];
     if (nextId == _targetId && nextIntent == _intent) {
@@ -1471,22 +1564,14 @@ class _PlannerBoardState extends State<PlannerBoard>
       _pendingIntent = nextIntent;
       _pendingTargetId = nextId;
       _intentTimer = Timer(const Duration(milliseconds: 280), () {
-        if (!mounted || _proposal.value == null) return;
+        if (!mounted || _activeItem == null || _pointerPosition == null) return;
         _intent = nextIntent;
         _targetId = nextId;
         _pendingIntent = null;
         _pendingTargetId = null;
-        final old = _proposal.value!;
-        _publish(
-          _Proposal(
-            old.item,
-            old.start,
-            old.end,
-            old.snap,
-            intent: _intent,
-            targetId: _targetId,
-          ),
-        );
+        // Re-evaluate the target against the current source snapshot and
+        // capabilities before publishing a settled intent.
+        _hover(_activeItem!, _pointerPosition!);
       });
     }
     _publish(
@@ -1508,7 +1593,9 @@ class _PlannerBoardState extends State<PlannerBoard>
     }
     _hover(item, position);
     final proposal = _proposal.value;
-    if (proposal != null && item['moveEvent'] is Map) {
+    if (proposal != null &&
+        _allowsIntent(proposal.intent) &&
+        item['moveEvent'] is Map) {
       widget.onEvent(_eventFor(proposal));
     }
     _clearDrag();
@@ -1636,7 +1723,7 @@ class _PlannerBoardState extends State<PlannerBoard>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      _fine ? Icons.tune_rounded : Icons.open_with_rounded,
+                      Icons.open_with_rounded,
                       size: 15,
                       color: scheme.primary,
                     ),
@@ -1670,7 +1757,7 @@ class _PlannerBoardState extends State<PlannerBoard>
                 ],
                 const SizedBox(height: 3),
                 Text(
-                  _fine ? '上下精调 · 大幅横移换日' : '横移精调 · 大幅横移换日',
+                  '5分钟调整 · 横移换日 · 精确时间可手动修改',
                   style: Theme.of(context).textTheme.labelSmall
                       ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
@@ -3011,6 +3098,7 @@ class _PlannerBoardState extends State<PlannerBoard>
           math.max(0.0, (_endMinute - _startMinute) * _scale - 24),
         );
         if (_movable(item) &&
+            _allowsIntent('resize') &&
             (!_dashboard || _selectedItem?['id'] == item['id'] || pinned) &&
             (!short || _selectedItem?['id'] == item['id']) &&
             !end.isAfter(to) &&
@@ -3279,7 +3367,7 @@ class _PlannerBoardState extends State<PlannerBoard>
 
   List<Widget> _gapLabels(BoardItem item, {List<BoardItem>? replacements}) {
     final start = _date(item['start']);
-    if (start == null) return [];
+    if (start == null || item['showSelectionGaps'] == false) return [];
     return [
       for (final gap in _gaps(item, replacements: replacements))
         for (final dayIndex in [
@@ -3323,11 +3411,15 @@ class _PlannerBoardState extends State<PlannerBoard>
             .take(3)
             .toList();
     final scheme = Theme.of(context).colorScheme;
-    final fallbackGaps = _gaps(item)
-        .where((gap) => !_gapVisibleInGrid(gap))
-        .toList();
+    final fallbackGaps =
+        (item['showSelectionGaps'] == false
+                ? <(DateTime, DateTime)>[]
+                : _gaps(item))
+            .where((gap) => !_gapVisibleInGrid(gap))
+            .toList();
     final sourceLabel = item['sourceLabel']?.toString();
     final showSource =
+        item['showSelectionSource'] != false &&
         sourceLabel != null &&
         sourceLabel.isNotEmpty &&
         (item['readOnly'] == true || sourceLabel != '任务');
@@ -3426,6 +3518,19 @@ class _PlannerBoardState extends State<PlannerBoard>
                     ),
                   ),
                 ),
+              for (final detail
+                  in (item['selectionDetails'] is List
+                          ? item['selectionDetails'] as List
+                          : const [])
+                      .whereType<Map>())
+                if ('${detail['value'] ?? ''}'.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '${detail['label'] ?? ''} ${detail['value']}',
+                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    ),
+                  ),
               if (showSource && sourceLabel != appearance.badgeText)
                 Text(sourceLabel),
               if ('${item['selectionNote'] ?? ''}'.isNotEmpty)
@@ -4800,7 +4905,9 @@ class _PlannerBoardState extends State<PlannerBoard>
                             key: const ValueKey('planner-date-header'),
                             controller: _header,
                             scrollDirection: Axis.horizontal,
-                            physics: _timeline
+                            physics: _pinching
+                                ? const NeverScrollableScrollPhysics()
+                                : _timeline
                                 ? _PlannerDayScrollPhysics(_columnWidth)
                                 : const NeverScrollableScrollPhysics(),
                             child: Row(
@@ -4903,209 +5010,229 @@ class _PlannerBoardState extends State<PlannerBoard>
               ],
             ),
             Expanded(
-              child: SizedBox(
-                key: _viewportKey,
-                child: SingleChildScrollView(
-                  key: const ValueKey('planner-vertical'),
-                  controller: _vertical,
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: widget.bottomInset),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 48,
-                          height: gridHeight,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Positioned.fill(
-                                child: _PlannerRulerOpacity(
-                                  proposal: _proposal,
-                                  child: Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      for (
-                                        var minute = _focusDays == null
-                                            ? ((_startMinute + 59) ~/ 60) * 60
-                                            : ((_startMinute + 4) ~/ 5) * 5;
-                                        minute < _endMinute ||
-                                            (_focusDays != null &&
-                                                minute == _endMinute);
-                                        minute += _focusDays == null ? 60 : 5
-                                      )
-                                        Positioned(
-                                          key: ValueKey(
-                                            'planner-ruler:$minute',
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: _pinchDown,
+                onPointerMove: _pinchMove,
+                onPointerUp: _pinchUp,
+                onPointerCancel: _pinchUp,
+                child: SizedBox(
+                  key: _viewportKey,
+                  child: SingleChildScrollView(
+                    key: const ValueKey('planner-vertical'),
+                    physics: _pinching
+                        ? const NeverScrollableScrollPhysics()
+                        : null,
+                    controller: _vertical,
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: widget.bottomInset),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 48,
+                            height: gridHeight,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Positioned.fill(
+                                  child: _PlannerRulerOpacity(
+                                    proposal: _proposal,
+                                    child: Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        for (
+                                          var minute = _focusDays == null
+                                              ? ((_startMinute + 59) ~/ 60) * 60
+                                              : ((_startMinute + 4) ~/ 5) * 5;
+                                          minute < _endMinute ||
+                                              (_focusDays != null &&
+                                                  minute == _endMinute);
+                                          minute += _focusDays == null ? 60 : 5
+                                        )
+                                          Positioned(
+                                            key: ValueKey(
+                                              'planner-ruler:$minute',
+                                            ),
+                                            top: minute == _endMinute
+                                                ? math.max(
+                                                    0,
+                                                    gridHeight -
+                                                        scaler.scale(11) * 1.5,
+                                                  )
+                                                : (minute - _startMinute) *
+                                                      _scale,
+                                            left: 2,
+                                            child: Text(
+                                              '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelSmall,
+                                            ),
                                           ),
-                                          top: minute == _endMinute
-                                              ? math.max(
-                                                  0,
-                                                  gridHeight -
-                                                      scaler.scale(11) * 1.5,
-                                                )
-                                              : (minute - _startMinute) *
-                                                    _scale,
-                                          left: 2,
-                                          child: Text(
-                                            '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .labelSmall,
-                                          ),
-                                        ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Positioned.fill(
-                                child: AnimatedBuilder(
-                                  animation: Listenable.merge([
-                                    _proposal,
-                                    _vertical,
-                                  ]),
-                                  builder: (context, _) => Stack(
-                                    clipBehavior: Clip.none,
-                                    children: _dragRuler(gridHeight),
-                                  ),
-                                ),
-                              ),
-                              if (_timeline)
-                                Positioned.fill(child: _currentTimeLabel()),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: NotificationListener<ScrollNotification>(
-                            onNotification: (notification) =>
-                                _timelineScrollNotification(
-                                  notification,
-                                  _horizontal,
-                                ),
-                            child: SingleChildScrollView(
-                              key: const ValueKey('planner-horizontal'),
-                              controller: _horizontal,
-                              physics: _timeline
-                                  ? _PlannerDayScrollPhysics(
-                                      _columnWidth,
-                                      dragOrigin: () => _timelineDragOrigin,
-                                    )
-                                  : null,
-                              scrollDirection: Axis.horizontal,
-                              dragStartBehavior: DragStartBehavior.down,
-                              child: DragTarget<BoardItem>(
-                                onWillAcceptWithDetails: (details) =>
-                                    _movable(details.data),
-                                onMove: (details) =>
-                                    _hover(details.data, details.offset),
-                                onLeave: (_) => _clearDrag(endGesture: false),
-                                onAcceptWithDetails: (details) =>
-                                    _drop(details.data, details.offset),
-                                builder: (context, _, _) => SizedBox(
-                                  key: _gridKey,
-                                  width: gridWidth,
-                                  height: gridHeight,
+                                Positioned.fill(
                                   child: AnimatedBuilder(
                                     animation: Listenable.merge([
                                       _proposal,
-                                      _validation,
-                                      _window,
+                                      _vertical,
                                     ]),
+                                    builder: (context, _) => Stack(
+                                      clipBehavior: Clip.none,
+                                      children: _dragRuler(gridHeight),
+                                    ),
+                                  ),
+                                ),
+                                if (_timeline)
+                                  Positioned.fill(child: _currentTimeLabel()),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: NotificationListener<ScrollNotification>(
+                              onNotification: (notification) =>
+                                  _timelineScrollNotification(
+                                    notification,
+                                    _horizontal,
+                                  ),
+                              child: SingleChildScrollView(
+                                key: const ValueKey('planner-horizontal'),
+                                controller: _horizontal,
+                                physics: _pinching
+                                    ? const NeverScrollableScrollPhysics()
+                                    : _timeline
+                                    ? _PlannerDayScrollPhysics(
+                                        _columnWidth,
+                                        dragOrigin: () => _timelineDragOrigin,
+                                      )
+                                    : null,
+                                scrollDirection: Axis.horizontal,
+                                dragStartBehavior: DragStartBehavior.down,
+                                child: DragTarget<BoardItem>(
+                                  onWillAcceptWithDetails: (details) =>
+                                      _movable(details.data),
+                                  onMove: (details) =>
+                                      _hover(details.data, details.offset),
+                                  onLeave: (_) => _clearDrag(endGesture: false),
+                                  onAcceptWithDetails: (details) =>
+                                      _drop(details.data, details.offset),
+                                  builder: (context, _, _) => SizedBox(
+                                    key: _gridKey,
+                                    width: gridWidth,
+                                    height: gridHeight,
                                     child: AnimatedBuilder(
-                                      animation: _window,
-                                      child: RepaintBoundary(
-                                        child: CustomPaint(
-                                          painter: _BoardLines(
-                                            _columnWidth,
-                                            _scale,
-                                            _startMinute,
-                                            scheme.outlineVariant,
-                                            interval: _focusDays == null
-                                                ? 30
-                                                : 5,
+                                      animation: Listenable.merge([
+                                        _proposal,
+                                        _validation,
+                                        _window,
+                                      ]),
+                                      child: AnimatedBuilder(
+                                        animation: _window,
+                                        child: RepaintBoundary(
+                                          child: CustomPaint(
+                                            painter: _BoardLines(
+                                              _columnWidth,
+                                              _scale,
+                                              _startMinute,
+                                              scheme.outlineVariant,
+                                              interval: _focusDays == null
+                                                  ? 30
+                                                  : 5,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      builder: (context, lines) => Stack(
-                                        children: [
-                                          for (
-                                            var dayIndex = 0;
-                                            dayIndex < days.length;
-                                            dayIndex++
-                                          )
-                                            if (_dashboard &&
-                                                _today(days[dayIndex]))
-                                              Positioned(
-                                                left: dayIndex * _columnWidth,
-                                                top: 0,
-                                                bottom: 0,
-                                                width: _columnWidth,
-                                                child: ColoredBox(
-                                                  color: scheme.primary
-                                                      .withValues(alpha: .025),
+                                        builder: (context, lines) => Stack(
+                                          children: [
+                                            for (
+                                              var dayIndex = 0;
+                                              dayIndex < days.length;
+                                              dayIndex++
+                                            )
+                                              if (_dashboard &&
+                                                  _today(days[dayIndex]))
+                                                Positioned(
+                                                  left: dayIndex * _columnWidth,
+                                                  top: 0,
+                                                  bottom: 0,
+                                                  width: _columnWidth,
+                                                  child: ColoredBox(
+                                                    color: scheme.primary
+                                                        .withValues(
+                                                          alpha: .025,
+                                                        ),
+                                                  ),
                                                 ),
+                                            Positioned.fill(child: lines!),
+                                            ..._timelinePlaceholders(
+                                              gridHeight,
+                                            ),
+                                            ..._segments(_blocks, cardHeight),
+                                            if (_selectedItem != null)
+                                              ..._gapLabels(_selectedItem!),
+                                            ..._segments(
+                                              widget.previewBlocks,
+                                              cardHeight,
+                                              preview: true,
+                                            ),
+                                            ..._currentTimeLine(),
+                                          ],
+                                        ),
+                                      ),
+                                      builder: (context, base) => Stack(
+                                        clipBehavior: Clip.hardEdge,
+                                        children: [
+                                          Positioned.fill(child: base!),
+                                          if (_proposal.value != null)
+                                            ..._segments(
+                                              _localPreview(_proposal.value!),
+                                              cardHeight,
+                                              preview: true,
+                                              prefix: 'local',
+                                            ),
+                                          if (_proposal.value?.targetId != null)
+                                            ..._segments(
+                                              [
+                                                ?_index(
+                                                  _blocks,
+                                                  cardHeight,
+                                                ).byId[_proposal
+                                                    .value!
+                                                    .targetId],
+                                              ],
+                                              cardHeight,
+                                              preview: true,
+                                              prefix: 'target',
+                                              outline: true,
+                                            ),
+                                          if (_proposal.value != null)
+                                            ..._gapLabels({
+                                              ..._proposal.value!.item,
+                                              'start': _stamp(
+                                                _proposal.value!.start,
                                               ),
-                                          Positioned.fill(child: lines!),
-                                          ..._timelinePlaceholders(gridHeight),
-                                          ..._segments(_blocks, cardHeight),
-                                          if (_selectedItem != null)
-                                            ..._gapLabels(_selectedItem!),
+                                              'end': _stamp(
+                                                _proposal.value!.end,
+                                              ),
+                                            }, replacements: _servicePreview()),
                                           ..._segments(
-                                            widget.previewBlocks,
+                                            _servicePreview(),
                                             cardHeight,
                                             preview: true,
+                                            prefix: 'service',
                                           ),
-                                          ..._currentTimeLine(),
                                         ],
                                       ),
-                                    ),
-                                    builder: (context, base) => Stack(
-                                      clipBehavior: Clip.hardEdge,
-                                      children: [
-                                        Positioned.fill(child: base!),
-                                        if (_proposal.value != null)
-                                          ..._segments(
-                                            _localPreview(_proposal.value!),
-                                            cardHeight,
-                                            preview: true,
-                                            prefix: 'local',
-                                          ),
-                                        if (_proposal.value?.targetId != null)
-                                          ..._segments(
-                                            [
-                                              ?_index(
-                                                _blocks,
-                                                cardHeight,
-                                              ).byId[_proposal.value!.targetId],
-                                            ],
-                                            cardHeight,
-                                            preview: true,
-                                            prefix: 'target',
-                                            outline: true,
-                                          ),
-                                        if (_proposal.value != null)
-                                          ..._gapLabels({
-                                            ..._proposal.value!.item,
-                                            'start': _stamp(
-                                              _proposal.value!.start,
-                                            ),
-                                            'end': _stamp(_proposal.value!.end),
-                                          }, replacements: _servicePreview()),
-                                        ..._segments(
-                                          _servicePreview(),
-                                          cardHeight,
-                                          preview: true,
-                                          prefix: 'service',
-                                        ),
-                                      ],
                                     ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -5588,14 +5715,16 @@ class _PlannerBlockContentsState extends State<_PlannerBlockContents> {
                 ? null
                 : 1,
           ),
-          if ('${item['location'] ?? ''}'.trim().isNotEmpty)
+          if (item['showLocation'] != false &&
+              '${item['location'] ?? ''}'.trim().isNotEmpty)
             (
               key: 'location',
               text: '${item['location']}'.trim(),
               style: detailStyle,
               lines: 2,
             ),
-          if ('${item['teacher'] ?? ''}'.trim().isNotEmpty)
+          if (item['showTeacher'] != false &&
+              '${item['teacher'] ?? ''}'.trim().isNotEmpty)
             (
               key: 'teacher',
               text: '${item['teacher']}'.trim(),

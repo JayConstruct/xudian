@@ -205,7 +205,7 @@ void main() {
   );
 
   testWidgets(
-    'an upward finger closes the real top gap before moving the toolbar',
+    'pulling at the top stays at the edge and reversing immediately moves the toolbar',
     (tester) async {
       await pumpApp(tester);
       final full = tester.getSize(header()).height;
@@ -215,21 +215,16 @@ void main() {
       );
       await gesture.moveBy(const Offset(0, 70));
       await frame(tester);
-      expect(position.pixels, lessThan(0));
+      expect(position.pixels, 0);
       expect(tester.getSize(header()).height, closeTo(full, .1));
-      await gesture.moveBy(Offset(0, position.pixels / 2));
+      await gesture.moveBy(const Offset(0, 70));
       await frame(tester);
-      expect(position.pixels, lessThan(0));
+      expect(position.pixels, 0);
       expect(tester.getSize(header()).height, closeTo(full, .1));
-      for (var i = 0; i < 20 && tester.getSize(header()).height == full; i++) {
-        await gesture.moveBy(const Offset(0, -10));
-        await frame(tester);
-        if (position.pixels < 0) {
-          expect(tester.getSize(header()).height, closeTo(full, .1));
-        }
-      }
+      await gesture.moveBy(const Offset(0, -10));
+      await frame(tester);
       expect(position.pixels, closeTo(0, .1));
-      expect(tester.getSize(header()).height, lessThan(full));
+      expect(tester.getSize(header()).height, closeTo(full - 10, .1));
       final released = tester.getSize(header()).height;
       await gesture.up();
       await tester.pumpAndSettle();

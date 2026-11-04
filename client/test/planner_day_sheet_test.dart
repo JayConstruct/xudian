@@ -633,6 +633,7 @@ void main() {
       expect(events.single, containsPair('start', '2026-10-22T09:35:00.000'));
       expect(events.single, containsPair('end', '2026-10-22T09:45:00.000'));
       expect(events.single, containsPair('preserveDuration', true));
+      expect(events.single, containsPair('snapMinutes', 5));
       expect(
         (events.single as Map)['expectedTasks'],
         _candidate['moveEvent'] is Map
@@ -644,6 +645,152 @@ void main() {
       expect(_key('planner-day-editor'), findsNothing);
       expect(find.text('待安排 1'), findsOneWidget);
       expect(events, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final flags in [
+    (false, false),
+    (true, false),
+    (false, true),
+    (true, true),
+  ]) {
+    testWidgets(
+      'day course cards honor location=${flags.$1} and teacher=${flags.$2} without empty rows',
+      (tester) async {
+        await _mount(
+          tester,
+          blocks: [
+            {
+              ..._task(
+                '课程',
+                '2026-10-22T08:00:00',
+                '2026-10-22T09:35:00',
+                readOnly: true,
+              ),
+              'location': '教学楼101',
+              'teacher': '王老师',
+              'showLocation': flags.$1,
+              'showTeacher': flags.$2,
+            },
+          ],
+        );
+        await _open(tester);
+        final card = _key('planner-day-card:课程');
+        expect(
+          find.descendant(of: card, matching: find.text('教学楼101')),
+          flags.$1 ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.descendant(of: card, matching: find.text('王老师')),
+          flags.$2 ? findsOneWidget : findsNothing,
+        );
+        final rows = (flags.$1 ? 1 : 0) + (flags.$2 ? 1 : 0);
+        final title = find.descendant(of: card, matching: find.text('课程'));
+        final titleHeight = tester.getSize(title).height;
+        final lineHeight = tester.getSize(_key('planner-day-times:课程')).height;
+        final expectedHeight = (titleHeight + lineHeight * (1 + rows) + 8)
+            .clamp(48, 200);
+        expect(tester.getSize(card).height, closeTo(expectedHeight, .01));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('day course metadata stays inside a narrow large-text card', (
+    tester,
+  ) async {
+    await _mount(
+      tester,
+      size: const Size(320, 720),
+      scaler: const TextScaler.linear(1.8),
+      blocks: [
+        {
+          ..._task(
+            '带较长名称的课程',
+            '2026-10-22T08:00:00',
+            '2026-10-22T09:35:00',
+            readOnly: true,
+          ),
+          'location': '东校区第二教学楼实验中心101教室',
+          'teacher': '王老师、李老师及其他授课教师',
+        },
+      ],
+    );
+    await _open(tester);
+    final card = tester.getRect(_key('planner-day-card:带较长名称的课程'));
+    final time = tester.getRect(_key('planner-day-times:带较长名称的课程'));
+    final location = tester.getRect(_key('planner-day-location:带较长名称的课程'));
+    final teacher = tester.getRect(_key('planner-day-teacher:带较长名称的课程'));
+    expect(location.top, greaterThanOrEqualTo(time.bottom));
+    expect(teacher.top, greaterThanOrEqualTo(location.bottom));
+    expect(teacher.bottom, lessThanOrEqualTo(card.bottom));
+    expect(location.left, greaterThanOrEqualTo(card.left));
+    expect(location.right, lessThanOrEqualTo(card.right));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'dropping after an off-grid predecessor rounds forward to five minutes',
+    (tester) async {
+      final events = <Object?>[], previews = <BoardItem>[];
+      final course = _task(
+        '不整点课程',
+        '2026-10-22T08:00:00',
+        '2026-10-22T09:37:00',
+        readOnly: true,
+      );
+      await _mount(
+        tester,
+        blocks: [course],
+        onEvent: events.add,
+        onPreview: (event) async {
+          previews.add(event);
+          return {'valid': true};
+        },
+      );
+      await _open(tester);
+      await _drop(tester, 1);
+      expect(find.text('结束于 09:50'), findsOneWidget);
+      await tester.tap(_key('planner-day-confirm'));
+      expect(events.single, containsPair('start', '2026-10-22T09:40:00.000'));
+      expect(events.single, containsPair('end', '2026-10-22T09:50:00.000'));
+      expect(events.single, containsPair('snapMinutes', 5));
+      expect(previews.last['snapMinutes'], 5);
+      expect(course['end'], '2026-10-22T09:37:00');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'day-end drop stops at 23:55 and keeps overlap validation active',
+    (tester) async {
+      final previews = <BoardItem>[];
+      await _mount(
+        tester,
+        blocks: [
+          _task(
+            '晚间安排',
+            '2026-10-22T23:00:00',
+            '2026-10-23T00:05:00',
+            readOnly: true,
+          ),
+        ],
+        onPreview: (event) async {
+          previews.add(event);
+          return {'valid': true};
+        },
+      );
+      await _open(tester);
+      await _drop(tester, 1);
+      expect(previews.last['start'], '2026-10-22T23:55:00.000');
+      expect(previews.last['snapMinutes'], 5);
+      expect(find.text('结束于 10/23 00:05'), findsOneWidget);
+      expect(find.text('与「晚间安排」时间重叠'), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(_key('planner-day-confirm')).onPressed,
+        isNull,
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -683,12 +830,20 @@ void main() {
   );
 
   testWidgets(
-    'empty day accepts drop and edited duration reaches the service event',
+    'manual start and duration edits keep arbitrary minutes after a five minute drop',
     (tester) async {
       final events = <Object?>[];
       await _mount(tester, onEvent: events.add);
       await _open(tester);
       await _drop(tester, 0);
+      await tester.tap(_key('planner-day-start'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.keyboard_outlined));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), '09');
+      await tester.enterText(find.byType(TextField).at(1), '07');
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
       await tester.tap(_key('planner-day-duration'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '0');
@@ -698,10 +853,12 @@ void main() {
       await tester.enterText(find.byType(TextField), '3');
       await tester.tap(find.text('确定'));
       await tester.pumpAndSettle();
-      expect(find.text('结束于 09:03'), findsOneWidget);
+      expect(find.text('结束于 09:10'), findsOneWidget);
       await tester.tap(_key('planner-day-confirm'));
-      expect((events.single as Map)['end'], '2026-10-22T09:03:00.000');
+      expect((events.single as Map)['start'], '2026-10-22T09:07:00.000');
+      expect((events.single as Map)['end'], '2026-10-22T09:10:00.000');
       expect((events.single as Map)['preserveDuration'], false);
+      expect((events.single as Map)['snapMinutes'], 1);
       expect(tester.takeException(), isNull);
     },
   );

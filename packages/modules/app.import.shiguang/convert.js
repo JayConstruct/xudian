@@ -1,4 +1,5 @@
 // Pure conversion: no credentials, browser access, or database writes.
+import {locationSettings,importLocation} from './locations.js';
 const object = (value, label) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label}需为对象`);
   return value;
@@ -36,6 +37,7 @@ const minutes=value=>{const [h,m]=normalizedTime(value).split(':').map(Number);r
 export function convert({payload, options = {}}) {
   const input=Array.isArray(payload)?{courses:payload}:object(payload,'拾光数据');
   object(options,'导入配置');
+  const locations=locationSettings(options);
   const config=input.config==null?{}:object(input.config,'学期配置');
   if (!Array.isArray(input.courses) || input.courses.length>10000) throw new Error('需提供 courses 数组，最多10000条');
   if (input.timeSlots!=null && !Array.isArray(input.timeSlots)) throw new Error('作息需为数组');
@@ -62,7 +64,7 @@ export function convert({payload, options = {}}) {
     if (minutes(start)<previous || minutes(end)<=minutes(start)) throw new Error('作息不能重叠或跨午夜');
     previous=minutes(end);return {number:i+1,start,end};
   });
-  const courses=new Map(),meetings=new Map();
+  const courses=new Map(),meetings=new Map(),originalLocations=new Map();
   let missingIdentity=false,matchedCustomTime=false,shiftedSunday=false;
   for (const [i,raw] of input.courses.entries()) {
     const row=object(raw,`第${i+1}条课程`),name=text(row.name,`第${i+1}条课程名称`);
@@ -101,7 +103,11 @@ export function convert({payload, options = {}}) {
     const stable=row.sourceId;
     if (stable==null) missingIdentity=true;
     const sourceId=stable==null?'meeting:'+canonical([courseId,weekday,startPeriod,endPeriod,teacher,location]):text(stable,'安排来源ID',500);
-    const meeting={sourceId,courseId,weekday,startPeriod,endPeriod,weeks,teacher,location};
+    if (originalLocations.has(sourceId) && originalLocations.get(sourceId)!==location) throw new Error('同一安排来源ID对应不同上课地点');
+    originalLocations.set(sourceId,location);
+    // Identity always includes the original location. Changing presentation
+    // options updates an existing arrangement instead of creating another one.
+    const meeting={sourceId,courseId,weekday,startPeriod,endPeriod,weeks,teacher,location:importLocation(location,locations)};
     const prior=meetings.get(sourceId);
     if (prior) {
       if (canonical({...prior,weeks:[]})!==canonical({...meeting,weeks:[]})) throw new Error('同一安排来源ID对应不同上课安排');
@@ -112,6 +118,8 @@ export function convert({payload, options = {}}) {
   if (missingIdentity) warnings.push('来源未提供稳定安排ID；周次变化可以合并，改名、教师、地点或节次变化可能识别为新安排');
   if (matchedCustomTime) warnings.push('自定义上课时刻已准确对应现有节次，上课起止时间保留');
   if (shiftedSunday) warnings.push('来源以周日开始一周，周日课程已调整周次以保留实际日期');
+  if (locations.locationMode==='removeCampus') warnings.push('已按填写的校区名称处理地点，请在实际变更中核对教室');
+  if (locations.locationMode==='omit') warnings.push('本次导入不包含地点；更新已有安排时会将来源地点设为空，请在实际变更中核对');
   if (!meetings.size) warnings.push('来源课程为空，不会清空已有课表');
   return {draftVersion:1,scope:'shiguang:'+scope,adapterVersion:'shiguang-compat@1.2.0',complete:options.complete===true,
     timetable:{name,firstMonday,totalWeeks,timezone,displayWeekStart,periods},courses:[...courses.values()],meetings:[...meetings.values()],occurrenceChanges:[],warnings};

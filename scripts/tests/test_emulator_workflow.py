@@ -51,6 +51,17 @@ class WorkflowTest(unittest.TestCase):
         self.write('client/test/host_ui_test.dart', 'after')
         self.assertNotEqual(workflow.checks_fingerprint(self.root, {}, ['test/host_ui_test.dart']), before)
 
+    def test_module_changes_invalidate_checks_without_rebuilding_the_host(self):
+        for name in ['packages/modules/app.example/main.js', 'packages/modules/app.example/module.json',
+                     'packages/modules/app.example/logo.svg']:
+            with self.subTest(name=name):
+                self.write(name, 'before')
+                inputs = workflow.snapshot(self.root)
+                previous = workflow.checks_fingerprint(self.root, inputs, [])
+                self.write(name, 'after')
+                self.assertEqual(workflow.snapshot(self.root), inputs)
+                self.assertNotEqual(workflow.checks_fingerprint(self.root, inputs, []), previous)
+
     def test_reuse_rejects_corruption_lower_version_and_other_modes(self):
         apk = self.write('artifact.apk', 'apk')
         cache = {'fingerprint': 'source', 'mode': 'release', 'versionCode': 4044,

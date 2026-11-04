@@ -203,6 +203,7 @@ def main(argv=None):
                 if not args.modules_only:
                     perform('静态分析', ['flutter', 'analyze', '--no-pub'], cwd=client)
                     perform('生产架构检查', ['python3', str(ROOT / 'scripts/module_host/check_architecture.py')])
+                perform('模块测试包准备', ['python3', str(ROOT / 'scripts/module_host/build_packages.py')])
                 perform('相关测试', ['flutter', 'test', '--no-pub', '--concurrency=2', '--reporter', 'expanded', *(tests or [])], cwd=client)
             if not args.modules_only:
                 if can_reuse:

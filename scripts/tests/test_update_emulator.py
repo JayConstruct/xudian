@@ -70,6 +70,8 @@ class UpdateEmulatorTest(unittest.TestCase):
                 return 'x86_64\n'
             if 'dumpsys' in command:
                 return 'versionCode=4043' if not any('install' in c for c in calls) else 'versionCode=4044'
+            if command == ['python3', str(self.root / 'scripts/module_host/build_packages.py')] and failure == 'fixtures':
+                raise subprocess.CalledProcessError(1, command)
             if command[:3] == ['flutter', 'build', 'apk']:
                 if failure == 'build':
                     raise subprocess.CalledProcessError(1, command)
@@ -87,10 +89,20 @@ class UpdateEmulatorTest(unittest.TestCase):
                 update.main(['--test', 'test/example_test.dart', '--commit', 'Update', '--path', 'selected.txt'])
         self.assertFalse(any('commit' in command for command in calls))
         self.assertFalse(any(command[:3] == ['git', '--literal-pathspecs', 'add'] for command in calls))
-        if failure == 'build':
+        if failure in ('fixtures', 'build'):
             self.assertFalse(any('install' in command for command in calls))
+        prepare = ['python3', str(self.root / 'scripts/module_host/build_packages.py')]
+        self.assertIn(prepare, calls)
+        test_calls = [c for c in calls if c[:2] == ['flutter', 'test']]
+        if failure == 'fixtures':
+            self.assertFalse(test_calls)
+        else:
+            self.assertLess(calls.index(prepare), calls.index(test_calls[0]))
         self.assertFalse((self.root / '.cache/emulator-update/latest-success.json').exists())
         self.assertTrue((self.root / '.cache/emulator-update/latest-attempt.json').exists())
+
+    def test_package_fixture_failure_prevents_stale_tests_install_and_commit(self):
+        self.exercise_failure('fixtures')
 
     def test_build_failure_prevents_install_and_commit(self):
         self.exercise_failure('build')
