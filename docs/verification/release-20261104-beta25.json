@@ -1,0 +1,239 @@
+{
+  "date": "2026-11-04",
+  "status": "published-and-verified",
+  "sourceCommit": "29f58eb1fb961e9c654d57871bc48718197b7e55",
+  "appTag": "v0.2.0-beta.25",
+  "moduleTag": "modules-20261104-planner-display-import",
+  "moduleSourceCommit": "569db6e3744f32ee22d7bf791376192b7ce0f61e",
+  "atomicSourceAndAppTagPush": true,
+  "checks": {
+    "finalCandidateLocalFlutterRelated": 14,
+    "unchangedFeatureLocalFlutterRelatedBeforePackagingCorrection": 277,
+    "pythonTooling": 300,
+    "moduleCatalog": 36,
+    "localSigningAndCISpecialistChecks": 39,
+    "shiguangNode": 24,
+    "nodePageReadParityScenarios": 8,
+    "analyze": "passed",
+    "architecture": "passed",
+    "repository": "passed",
+    "docs": "passed",
+    "actionlint": "passed",
+    "fullFlutterCI": {
+      "passed": 1881,
+      "failed": 0,
+      "shards": [
+        {
+          "name": "tests (0)",
+          "jobId": 126455293195,
+          "passed": 634
+        },
+        {
+          "name": "tests (1)",
+          "jobId": 126455293211,
+          "passed": 613
+        },
+        {
+          "name": "tests (2)",
+          "jobId": 126455293273,
+          "passed": 634
+        }
+      ],
+      "runId": 41794491909,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/41794491909"
+    },
+    "mainCI": {
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/41794491999",
+      "sameCommitTagDelegationVerified": true
+    },
+    "moduleCI": {
+      "runId": 41792271619,
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/41792271619"
+    }
+  },
+  "emulator": {
+    "updateCommand": "scripts/update-emulator.sh --force --module app.planner --module app.import.shiguang --verify-catalog --catalog-offline --test test/github_app_updates_test.dart",
+    "versionName": "0.2.0-beta.25",
+    "versionCode": 4232,
+    "buildNumber": 232,
+    "apkSha256": "7f01b86a1cb5fba1e460110ea56717f0c44880f7967144e8edded3f5dbdb4e63",
+    "installedApkSha256": "7f01b86a1cb5fba1e460110ea56717f0c44880f7967144e8edded3f5dbdb4e63",
+    "sourceFingerprint": "7f8735cf0e6a559d9a373e4f278e03f4ed940d3adc0c00ec2d4fd5099dbfc892",
+    "forceRebuilt": true,
+    "sameSignatureDataPreservingUpgrade": true,
+    "appDataCleared": false,
+    "modules": [
+      {
+        "id": "app.planner",
+        "version": "1.13.2",
+        "sha256": "d6e9afd27c6b371a8549b7f103c2e505d6f2ce16348344e757c49632aa63fd7b",
+        "installedSha256": "d6e9afd27c6b371a8549b7f103c2e505d6f2ce16348344e757c49632aa63fd7b",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.import.shiguang",
+        "version": "1.8.2",
+        "sha256": "148e308bf7e86f8f2b2484e888fd6e18a422d0ea8e9da9ddeb4a4ea27d9a6a83",
+        "installedSha256": "148e308bf7e86f8f2b2484e888fd6e18a422d0ea8e9da9ddeb4a4ea27d9a6a83",
+        "status": "already-installed"
+      }
+    ],
+    "catalogOnlineOfflineColdStartPassed": true,
+    "totalUpdateSeconds": 248.758
+  },
+  "deviceAcceptance": {
+    "finalCandidateCatalogCloseBackReopenSearchFilterOfflineColdStartPassed": true,
+    "featureImplementationUnchangedSinceBeta24": true,
+    "priorFeatureAcceptance": [
+      "Five-minute board and day-list drag previews; arbitrary-minute manual editing is covered by regression tests.",
+      "Pinch in/out, near-start pinch, saved zoom and cold-start restoration.",
+      "Course and selected-detail location/teacher switches and independent previews; preferences restored.",
+      "Course/fixed-task occupancy conflict without unsupported insert/swap.",
+      "Schedule top/bottom clamping, reverse scrolling, toolbar collapse/reveal and course-detail reopen.",
+      "Shiguang remove-campus/omit/restore with local fixture; cancel/back retains the same editable draft.",
+      "Details menu after horizontal scrolling and actual drag cancellation; cold-start and reopen.",
+      "App update check completed and opens/closes/reopens with correct installed version."
+    ],
+    "priorFeatureEvidence": [
+      "dist/verification/feature-six-20261104/",
+      "dist/verification/residual-ux-20261104/",
+      "dist/verification/releases/release-20261104-beta24/"
+    ]
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.25",
+    "sourceCommit": "29f58eb1fb961e9c654d57871bc48718197b7e55",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.25",
+    "publishedAt": "2026-11-04T07:53:42Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "sourceCommitVerified": true,
+    "tagDereference": [
+      {
+        "type": "tag",
+        "sha": "7afefd9d8739f0dd9077efb72de26c842aa1d66e"
+      },
+      {
+        "type": "commit",
+        "sha": "29f58eb1fb961e9c654d57871bc48718197b7e55"
+      }
+    ],
+    "allPublishedChecksumsVerified": true,
+    "publishedAssetNamesMatchExpected": true,
+    "checksumNamesResolveToPublishedAssets": true,
+    "buildNumber": 164,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "filename": "xudian-v0.2.0-beta.25-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "packageName": "dev.taskapp.task_app",
+        "versionName": "0.2.0-beta.25",
+        "versionCode": 2164,
+        "inferredBuildNumber": 164,
+        "abiVersionCodeOffset": 2000,
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "builtInModuleCount": 6,
+        "builtInModulesEqualSource": true,
+        "credentialPathAndPrivateKeyPemScan": "passed",
+        "size": 26852542,
+        "sha256": "db479fb79af2c5c8fa2ce6ed4c000a9a5872fe47e30286a0e07b1a181dffb745",
+        "publishedFilename": "xudian-v0.2.0-beta.25-arm64-v8a-release.apk"
+      },
+      {
+        "filename": "xudian-v0.2.0-beta.25-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "packageName": "dev.taskapp.task_app",
+        "versionName": "0.2.0-beta.25",
+        "versionCode": 1164,
+        "inferredBuildNumber": 164,
+        "abiVersionCodeOffset": 1000,
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "builtInModuleCount": 6,
+        "builtInModulesEqualSource": true,
+        "credentialPathAndPrivateKeyPemScan": "passed",
+        "size": 24759496,
+        "sha256": "658d5ea0d61c8fab6c690870c7ffa258a7974be104d1ef14947c8146a850e3bc",
+        "publishedFilename": "xudian-v0.2.0-beta.25-armeabi-v7a-release.apk"
+      },
+      {
+        "filename": "xudian-v0.2.0-beta.25-x86_64-release.apk",
+        "abi": "x86_64",
+        "packageName": "dev.taskapp.task_app",
+        "versionName": "0.2.0-beta.25",
+        "versionCode": 4164,
+        "inferredBuildNumber": 164,
+        "abiVersionCodeOffset": 4000,
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "builtInModuleCount": 6,
+        "builtInModulesEqualSource": true,
+        "credentialPathAndPrivateKeyPemScan": "passed",
+        "size": 28523695,
+        "sha256": "577df5bc5faf63266b39dae82f3674a1b19a8377ec28ead006c31fbecc0f3e42",
+        "publishedFilename": "xudian-v0.2.0-beta.25-x86_64-release.apk"
+      }
+    ],
+    "sixBundledModulesMatchFrozenSource": true,
+    "versionCodesExceedPublicBeta24": true,
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false
+  },
+  "publicModules": {
+    "tag": "modules-20261104-planner-display-import",
+    "sourceCommit": "569db6e3744f32ee22d7bf791376192b7ce0f61e",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261104-planner-display-import",
+    "publishedAt": "2026-11-04T07:26:33Z",
+    "anonymousDownloadVerified": true,
+    "modules": [
+      {
+        "moduleId": "app.planner",
+        "version": "1.13.2",
+        "size": 74875,
+        "sha256": "d6e9afd27c6b371a8549b7f103c2e505d6f2ce16348344e757c49632aa63fd7b",
+        "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261104-planner-display-import/app.planner-1.13.2.xmodule",
+        "hostApi": "^1.47.0",
+        "packageBytesMatchCommittedArtifact": true
+      },
+      {
+        "moduleId": "app.import.shiguang",
+        "version": "1.8.2",
+        "size": 1001888,
+        "sha256": "148e308bf7e86f8f2b2484e888fd6e18a422d0ea8e9da9ddeb4a4ea27d9a6a83",
+        "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261104-planner-display-import/app.import.shiguang-1.8.2.xmodule",
+        "hostApi": "^1.33.0",
+        "packageBytesMatchCommittedArtifact": true
+      }
+    ]
+  },
+  "publicIndexes": {
+    "branch": "module-catalog",
+    "sourceCommit": "569db6e3744f32ee22d7bf791376192b7ce0f61e",
+    "allNineIndexesIdentical": true,
+    "anonymousDownloadVerified": true,
+    "fastForwardAfterModuleDownloadVerification": true,
+    "staleCdnObserved": false
+  },
+  "supersededCandidate": {
+    "tag": "v0.2.0-beta.24",
+    "sourceCommit": "569db6e3744f32ee22d7bf791376192b7ce0f61e",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.24",
+    "status": "content-verified-with-filename-mismatch",
+    "allSixAPKContentsAndFixedSignaturesVerified": true,
+    "reason": "GitHub removed the Chinese filename prefix from three uploaded assets, so their names did not resolve from SHA256SUMS.",
+    "resolution": "New source commit and beta.25 tag publish exactly three ASCII brand/version/ABI filenames. Existing beta.24 assets and tags are preserved.",
+    "publicNoticeVerified": true
+  },
+  "limitations": [
+    "Public fixed-signature APKs were downloaded and verified separately; the emulator retains its development signature and existing app data.",
+    "No ARM physical-device or native Windows runtime acceptance.",
+    "Shiguang import used a local fixture and native file picker; real school account login was not exercised.",
+    "APK installation does not replace independently installed modules; update planner 1.13.2 and Shiguang 1.8.2 through the module store or corresponding immutable packages."
+  ],
+  "localEvidence": "dist/verification/releases/release-20261104-beta25/"
+}
