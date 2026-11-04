@@ -279,7 +279,7 @@ jobs:
           mkdir signed
           for abi in armeabi-v7a arm64-v8a x86_64; do
             apk="app-$abi-release.apk"
-            release_apk="序点-$RELEASE_TAG-$abi-release.apk"
+            release_apk="xudian-$RELEASE_TAG-$abi-release.apk"
             "$apksigner" sign --ks "$signing_dir/release.jks" \
               --ks-key-alias "$KEY_ALIAS" --ks-pass env:STORE_PASSWORD --key-pass env:KEY_PASSWORD \
               --out "signed/$release_apk" "candidate/$apk"
@@ -289,16 +289,15 @@ jobs:
               echo "Signing certificate mismatch: $release_apk" >&2
               exit 1
             fi
-            cp "signed/$release_apk" "signed/xudian-$RELEASE_TAG-$abi-release.apk"
           done
           cp candidate/SOURCE_COMMIT signed/SOURCE_COMMIT
           cd signed
-          sha256sum *-release.apk > SHA256SUMS
+          sha256sum xudian-*-release.apk > SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: xudian-android-release-${{ github.sha }}
           path: |
-            signed/*-release.apk
+            signed/xudian-*-release.apk
             signed/SHA256SUMS
             signed/SOURCE_COMMIT
           if-no-files-found: error
@@ -333,5 +332,5 @@ jobs:
           if [ -f "docs/releases/$RELEASE_TAG.md" ]; then
             notes_flags=(--generate-notes --notes-file "docs/releases/$RELEASE_TAG.md")
           fi
-          gh release create "$RELEASE_TAG" apk/*-release.apk apk/SHA256SUMS apk/SOURCE_COMMIT \
+          gh release create "$RELEASE_TAG" apk/xudian-*-release.apk apk/SHA256SUMS apk/SOURCE_COMMIT \
             --verify-tag --title "序点 $RELEASE_TAG" "${notes_flags[@]}" "${release_flags[@]}"

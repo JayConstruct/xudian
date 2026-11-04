@@ -16,7 +16,7 @@ App 沿用已选择的更新通道。模块沿用模块商店配置的目录源�
 
 ## 发布 Android 更新
 
-Android 检查工作流支持 `v*` tag 触发。正式版使用 `vMAJOR.MINOR.PATCH`；测试版使用 `vMAJOR.MINOR.PATCH-alpha.N`、`-beta.N` 或 `-rc.N`，tag 必须与 `client/pubspec.yaml` 的完整版本号一致（不含 `+` 后的构建号）。普通分支检查继续上传 Actions 构建产物；tag 在检查、测试、构建全部通过后，额外发布 Release，包括三个 ABI 的 APK、`SHA256SUMS` 和 `SOURCE_COMMIT`。发布不会覆盖已有 Release。
+Android 检查工作流支持 `v*` tag 触发。正式版使用 `vMAJOR.MINOR.PATCH`；测试版使用 `vMAJOR.MINOR.PATCH-alpha.N`、`-beta.N` 或 `-rc.N`，tag 必须与 `client/pubspec.yaml` 的完整版本号一致（不含 `+` 后的构建号）。普通分支检查继续上传 Actions 构建产物；tag 在检查、测试、构建全部通过后，额外发布 Release，包括三个 ABI 的 APK、`SHA256SUMS` 和 `SOURCE_COMMIT`。公开 APK 统一命名为 `xudian-<版本标签>-<ABI>-release.apk`，使用 GitHub 保留的 ASCII 品牌名，每个 ABI 只发布一份；摘要清单使用相同文件名。本地中文导出文件名不受影响。发布不会覆盖已有 Release。
 
 测试版自动标记为 GitHub Pre-release，不设为 Latest，App 正式更新检查仍会过滤它，开启测试通道后可检查并打开对应下载页。所有 App tag（包括 alpha／beta／rc）发布均使用同一固定签名；历史 CI 临时签名或本机开发签名安装不因此自动兼容。安装前备份数据，签名不匹配时不要通过卸载现有应用来强行覆盖。
 

@@ -82,24 +82,29 @@ class AndroidSigningTest(unittest.TestCase):
             self.assertNotIn(secret, result.stdout + result.stderr)
         return result
 
-    def test_all_abis_signed_and_checksums_recomputed(self):
+    def test_three_github_stable_ascii_assets_are_signed_and_checksummed(self):
         result = self.run_signing()
         self.assertEqual(result.returncode, 0, result.stderr)
         signed = self.root / 'signed'
         checksums = (signed / 'SHA256SUMS').read_text().splitlines()
-        self.assertEqual(len(checksums), 6)
+        expected = {f'xudian-{TAG}-{abi}-release.apk' for abi in ABIS}
+        self.assertEqual(len(checksums), 3)
+        checksum_names = set()
         for line in checksums:
             digest, name = line.split()
             self.assertEqual(digest, hashlib.sha256((signed / name).read_bytes()).hexdigest())
-        self.assertEqual(len(list(signed.glob('*.apk'))), 6)
-        self.assertEqual({path.name for path in signed.glob('*.apk')},
-                         {f'{brand}-{TAG}-{abi}-release.apk'
-                          for brand in ('序点', 'xudian') for abi in ABIS})
+            checksum_names.add(name)
+        self.assertEqual(checksum_names, expected)
+        self.assertEqual({path.name for path in signed.iterdir()},
+                         expected | {'SHA256SUMS', 'SOURCE_COMMIT'})
+        # GitHub strips non-ASCII characters from release asset names. Produce
+        # only the three canonical names so public names and checksums agree.
+        for name in expected:
+            self.assertTrue(name.isascii())
+            self.assertRegex(name, r'^xudian-[a-zA-Z0-9_.-]+-release\.apk$')
         for abi in ABIS:
-            primary = (signed / f'序点-{TAG}-{abi}-release.apk').read_bytes()
-            self.assertEqual(primary, b'APK fixture-signed')
             self.assertEqual((signed / f'xudian-{TAG}-{abi}-release.apk').read_bytes(),
-                             primary)
+                             b'APK fixture-signed')
         self.assertEqual((signed / 'SOURCE_COMMIT').read_text(), 'source-revision\n')
 
     def test_stable_version_in_release_filenames(self):
@@ -107,8 +112,7 @@ class AndroidSigningTest(unittest.TestCase):
         result = self.run_signing()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual({path.name for path in (self.root / 'signed').glob('*.apk')},
-                         {f'{brand}-v1.2.3-{abi}-release.apk'
-                          for brand in ('序点', 'xudian') for abi in ABIS})
+                         {f'xudian-v1.2.3-{abi}-release.apk' for abi in ABIS})
 
     def test_missing_or_malformed_version_cannot_publish_unnamed_apks(self):
         for tag in ['', 'v0.2.0-beta.01', 'v0.2.0-preview.1', '../v0.2.0',
@@ -175,7 +179,9 @@ class AndroidSigningTest(unittest.TestCase):
         self.assertIn('needs: sign', publish)
         self.assertIn("'candidate' || 'release'", build)
         self.assertIn('path: candidate', sign)
-        self.assertIn('signed/*-release.apk', sign)
+        self.assertIn('signed/xudian-*-release.apk', sign)
+        self.assertIn('sha256sum xudian-*-release.apk > SHA256SUMS', sign)
+        self.assertIn('apk/xudian-*-release.apk', publish)
         self.assertNotIn('if: always()', sign)
 
     def test_workflow_actions_pinned_to_immutable_commits(self):
