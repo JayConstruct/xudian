@@ -156,6 +156,13 @@
             "additionalProperties": false
           },
           "uniqueItems": true
+        },
+        "workflowStartup": {
+          "enum": [
+            "eager",
+            "lazy"
+          ],
+          "description": "Lazy workflow ESM initializes at first page or interrupt; computation always initializes at activation."
         }
       }
     },
@@ -310,6 +317,43 @@
     },
     "uiPack": {
       "$ref": "ui-pack-v1.schema.json"
+    },
+    "recordContracts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "kind",
+          "collection",
+          "fields"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "timeRange",
+              "timeJournal",
+              "timeReceipt",
+              "timeOccurrence"
+            ]
+          },
+          "collection": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "settings": {
+            "type": "object"
+          }
+        }
+      }
     }
   },
   "$defs": {

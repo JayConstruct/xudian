@@ -15,6 +15,7 @@ import '../module_catalog/catalog_providers.dart';
 
 export '../module_catalog/catalog_providers.dart';
 import 'module_host.dart';
+import 'module_installation_snapshot.dart';
 import 'module_management_widgets.dart';
 import 'module_catalog_widgets.dart';
 import 'module_package.dart';
@@ -31,43 +32,21 @@ Future<Map<String, InstalledCatalogModule>> _installed(
   Map<String, InstalledCatalogModule> verified = const {},
   bool reuseVerified = false,
 }) async {
-  final result = <String, InstalledCatalogModule>{};
-  final rows = await host.store.sql("""
-    SELECT installations.module_id, installations.version, installations.enabled,
-           packages.digest, packages.origin, repositories.value AS repository
-    FROM host_installations AS installations
-    LEFT JOIN host_packages AS packages
-      ON packages.module_id=installations.module_id
-      AND packages.version=installations.version
-    LEFT JOIN host_meta AS repositories
-      ON repositories.key='module-repository:' || installations.module_id
-    WHERE installations.installed=1
-  """);
-  for (final row in rows) {
-    final id = row['module_id'] as String;
-    final version = row['version'] as String;
-    // Both candidates have already passed full verification. Match immutable
-    // persisted identity and provenance before reusing either in-memory object.
-    final candidates = reuseVerified
-        ? [host.instances[id]?.package, verified[id]?.package]
-        : const <ScriptPackage?>[];
-    final package = candidates
-        .whereType<ScriptPackage>()
-        .where(
-          (candidate) =>
-              candidate.id == id &&
-              candidate.version == version &&
-              candidate.packageDigest == row['digest'] &&
-              candidate.origin == row['origin'],
-        )
-        .firstOrNull;
-    result[id] = InstalledCatalogModule(
-      package ?? await host.packageSource(id, version),
-      enabled: row['enabled'] == 1,
-      repository: row['repository'] as String?,
-    );
-  }
-  return result;
+  final current = await readModuleInstallations(
+    host,
+    verified: {
+      for (final entry in verified.entries) entry.key: entry.value.package,
+    },
+    reuseVerified: reuseVerified,
+  );
+  return {
+    for (final entry in current.entries)
+      entry.key: InstalledCatalogModule(
+        entry.value.package,
+        enabled: entry.value.enabled,
+        repository: entry.value.repository,
+      ),
+  };
 }
 
 Future<void> installResolvedModules(
@@ -733,7 +712,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     try {
       final next = await showDialog<String>(
         context: context,
-        builder: (dialogContext) => _CatalogDetailsLoader(
+        builder: (dialogContext) => ModuleDetailsLoader(
           title: catalog?.modules[id]?.name ?? id,
           load: () => _detailsContent(id, dialogContext),
         ),
@@ -1196,65 +1175,3 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
 }
 
 /// Paint the dialog shell before any installed-package or index work begins.
-class _CatalogDetailsLoader extends StatefulWidget {
-  const _CatalogDetailsLoader({required this.title, required this.load});
-  final String title;
-  final Future<Widget> Function() load;
-
-  @override
-  State<_CatalogDetailsLoader> createState() => _CatalogDetailsLoaderState();
-}
-
-class _CatalogDetailsLoaderState extends State<_CatalogDetailsLoader> {
-  final content = Completer<Widget>();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      unawaited(
-        Future<Widget>.sync(widget.load)
-            .then<void>(content.complete, onError: content.completeError),
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<Widget>(
-    future: content.future,
-    builder: (context, snapshot) {
-      if (snapshot.hasData) return snapshot.data!;
-      return NativeUi(
-        child: AlertDialog(
-          title: Text(widget.title),
-          titlePadding: AppDesign.dialogTitlePadding,
-          contentPadding: AppDesign.dialogContentPadding,
-          actionsPadding: AppDesign.dialogActionsPadding,
-          content: SizedBox(
-            width: 620,
-            child: snapshot.hasError
-                ? SelectableText('${snapshot.error}')
-                : const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      LinearProgressIndicator(),
-                      SizedBox(height: 12),
-                      Text('正在读取模块详情…'),
-                    ],
-                  ),
-          ),
-          actions: [
-            NativeUi(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('关闭'),
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}

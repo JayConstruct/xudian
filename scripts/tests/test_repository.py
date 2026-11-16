@@ -41,6 +41,15 @@ class RepositoryTest(unittest.TestCase):
     def test_only_catalog_referenced_packages_pass(self):
         self.assertEqual(repository.check_repository(self.root, self.tracked), [])
 
+    def test_removed_obsolete_bundle_does_not_require_staging(self):
+        self.assertEqual(repository.check_repository(self.root, self.tracked +
+            ['client/assets/modules/retired-0.1.0.xmodule']), [])
+
+    def test_deleted_referenced_bundle_is_still_an_error(self):
+        catalog = json.loads((self.root / 'client/assets/modules/catalog.json').read_text())
+        (self.root / 'client' / catalog[0]['asset']).unlink()
+        self.assertTrue(repository.check_repository(self.root, self.tracked))
+
     def test_force_tracked_local_artifacts_are_rejected(self):
         for name in ['client/build/app.apk', 'delivery.apk', '.env.production',
                      'client/android/local.properties', 'dist/report.json', 'user.sqlite',

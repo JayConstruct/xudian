@@ -1,6 +1,7 @@
-import {services, ui, clock, ids} from '@xudian/sdk';
+import {data, services, ui, clock, ids} from '@xudian/sdk';
 import {add, day} from './engine.js';
 import {renderCreation} from './creation.js';
+import {plannerEditor, quickAdjustmentContract} from './presentation.js';
 
 const ref = id => ({moduleId: 'app.planner', serviceId: 'planner.' + id, majorVersion: 1});
 const query = (id, input = {}) => services.query(ref(id), input);
@@ -372,11 +373,12 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     ]);
   } else content = {
     type: 'plannerBoard', key: 'planner:board', candidates, blocks,
-    quickAdjustment: {taskModuleId: 'app.tasks', applyServiceId: 'planner.operation.apply', undoServiceId: 'planner.batch.undo'},
+    quickAdjustment: quickAdjustmentContract,
     previewQuery: {ref: ref('operation.inspect'), input: {timezone: a.timezone, expectedTasks}},
     previewIdentity: JSON.stringify([a.timezone, state.startDate, state.days, state.candidateOffset, state.onlyDeadline, expectedTasks, data.busy]),
     days: Array.from({length: data.range.days}, (_, index) => { const date = add(data.range.startDate, index); return {date, label: date.slice(5).replace('-', '/')}; }),
     options: {
+      editor: plannerEditor,
       continuousDates: true, visibleDays: state.days, initialDate: state.startDate, scrollRequest: state.scrollRequest,
       timeline: {rangeContextKey: 'timelineRange', preferenceKey: viewportKey, stateKeys: {startDate: 'startDate', visibleDays: 'days'}},
       viewportEvent: {type: 'timelineViewport'}, selectedDate: state.selectedDate, now: stamp(localNow.date, localNow.time),
@@ -476,9 +478,9 @@ async function cancelledContent(state, a) {
 }
 
 async function historyContent(state) {
-  const history = await query('operation.list');
+  const [history, contract] = await Promise.all([query('operation.list'), data.contract('journal')]);
   return keyedList('planner:history', [
-    text('最近50次操作 · 后续修改或完成将阻止整体撤销'),
+    text(`最近${contract.settings.retainedRecords}次操作 · 后续修改或完成将阻止整体撤销`),
     ...(state.error ? [text(state.error)] : []),
     ...history.map(b => ({...row(`${b.createdAt} · ${b.changeCount}项`, b.undone ? '已撤销' : '点击撤销整次操作', b.undone ? undefined : {type: 'undo', id: b.id}), key: b.id})),
     ...(!history.length ? [text('暂无操作记录')] : []),

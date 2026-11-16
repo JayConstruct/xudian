@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.ui.examples",
     "name": "UI 示例",
-    "version": "1.4.2",
-    "hostApi": "^1.15.0",
+    "version": "1.5.0",
+    "hostApi": "^1.50.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -309,6 +309,18 @@
       "id": "app.ui.examples.demo.dailyTask",
       "title": "待办条目",
       "handler": "render"
+    },
+    {
+      "id": "app.ui.examples.demo.motion",
+      "title": "属性动画与按压反馈",
+      "handler": "render",
+      "retainPosition": true
+    },
+    {
+      "id": "app.ui.examples.demo.swipeActions",
+      "title": "滑动操作",
+      "handler": "render",
+      "retainPosition": true
     }
   ]
 }

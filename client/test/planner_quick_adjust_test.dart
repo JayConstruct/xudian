@@ -7,6 +7,7 @@ import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/plan_confirmation.dart';
 import 'package:task_app/core/module_host/planner_quick_adjust.dart';
+import 'package:task_app/core/module_host/record_contract.dart';
 import 'package:task_app/data/app_database.dart';
 
 import 'planner_task_schedule_test.dart' show sourcePackage, table;
@@ -14,9 +15,31 @@ import 'planner_task_schedule_test.dart' show sourcePackage, table;
 Map<String, Object?> clone(Object? value) =>
     Map<String, Object?>.from(jsonDecode(jsonEncode(value)) as Map);
 
+TimeAdjustmentRecords testRecords({
+  String owner = 'app.planner',
+  String subject = 'app.tasks',
+}) {
+  Map<String, Object?> definition(String id) => Map<String, Object?>.from(
+    jsonDecode(File('../packages/modules/$id/module.json').readAsStringSync())
+        as Map,
+  );
+  final source = RecordContract.parse(definition('app.tasks'));
+  final journal = RecordContract.parse(definition('app.planner'));
+  return TimeAdjustmentRecords(
+    subjectModuleId: subject,
+    ownerModuleId: owner,
+    subject: source['time']!,
+    journal: journal['journal']!,
+    receipt: journal['receipt']!,
+    occurrence: journal['occurrence']!,
+  );
+}
+
 PlannerQuickAdjustment moveGate(Map<String, Object?> event) =>
     PlannerQuickAdjustment.move(
       event,
+      records: testRecords(),
+      isCurrent: () => true,
       moduleId: 'app.planner',
       taskModuleId: 'app.tasks',
       applyServiceId: 'planner.operation.apply',
@@ -616,6 +639,8 @@ void main() {
     }
     final gate = PlannerQuickAdjustment.move(
       event,
+      records: testRecords(owner: 'test.timeline', subject: 'test.items'),
+      isCurrent: () => true,
       moduleId: 'test.timeline',
       taskModuleId: 'test.items',
       applyServiceId: 'timeline.adjust',

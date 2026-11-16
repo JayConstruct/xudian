@@ -1,14 +1,13 @@
 import '../ui/native_ui.dart';
 import '../ui/ui_icon.dart';
 
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import 'module_package.dart';
 import '../ui/ui_component.dart';
 import '../ui/temporal_input.dart';
 import '../ui/input_validation.dart';
+import '../ui/json_review.dart';
 import '../../app/design_system.dart';
 import 'data_change_review.dart';
 import 'plan_confirmation.dart';
@@ -19,9 +18,8 @@ Future<bool> reviewDialog(
   Object? details, {
   PlanConfirmation? confirmation,
 }) async {
-  final summary = confirmation == null
-      ? null
-      : DataChangeSummary.tryParse(details);
+  // Keep the frozen plan and its field comparisons for this dialog's lifetime.
+  final summary = DataChangeSummary.tryParse(details);
   if (confirmation != null && summary != null) {
     return await showDialog<bool>(
           context: context,
@@ -37,34 +35,46 @@ Future<bool> reviewDialog(
         ) ??
         false;
   }
+  var rawReady = false;
   return await showDialog<bool>(
         context: context,
         builder: (context) => UiPackScope(
           defaultOnly: true,
           child: NativeUi(
-            child: AlertDialog(
-              titlePadding: AppDesign.dialogTitlePadding,
-              contentPadding: AppDesign.dialogContentPadding,
-              actionsPadding: AppDesign.dialogActionsPadding,
-              title: Text(title),
-              content: SizedBox(
-                width: 700,
-                child: SingleChildScrollView(child: _reviewContent(details)),
+            child: StatefulBuilder(
+              builder: (context, setState) => AlertDialog(
+                titlePadding: AppDesign.dialogTitlePadding,
+                contentPadding: AppDesign.dialogContentPadding,
+                actionsPadding: AppDesign.dialogActionsPadding,
+                title: Text(title),
+                content: SizedBox(
+                  width: 700,
+                  child: SingleChildScrollView(
+                    child: _reviewContent(
+                      details,
+                      summary,
+                      onReadyChanged: (ready) =>
+                          setState(() => rawReady = ready),
+                    ),
+                  ),
+                ),
+                actions: [
+                  NativeUi(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('取消'),
+                    ),
+                  ),
+                  NativeUi(
+                    child: FilledButton(
+                      onPressed: summary != null || rawReady
+                          ? () => Navigator.pop(context, true)
+                          : null,
+                      child: const Text('确认'),
+                    ),
+                  ),
+                ],
               ),
-              actions: [
-                NativeUi(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('取消'),
-                  ),
-                ),
-                NativeUi(
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('确认'),
-                  ),
-                ),
-              ],
             ),
           ),
         ),
@@ -151,8 +161,11 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
   }
 }
 
-Widget _reviewContent(Object? details) {
-  final summary = DataChangeSummary.tryParse(details);
+Widget _reviewContent(
+  Object? details,
+  DataChangeSummary? summary, {
+  required ValueChanged<bool> onReadyChanged,
+}) {
   if (summary != null) return DataChangeReview(summary: summary);
   return Column(
     mainAxisSize: MainAxisSize.min,
@@ -160,10 +173,7 @@ Widget _reviewContent(Object? details) {
     children: [
       if (details is Map && details.containsKey('writes'))
         const Text('无法生成可靠的数据摘要，请核对以下原始详情。'),
-      SelectableText(
-        const JsonEncoder.withIndent('  ').convert(details),
-        scrollPhysics: const NeverScrollableScrollPhysics(),
-      ),
+      JsonReviewContent(value: details, onReadyChanged: onReadyChanged),
     ],
   );
 }

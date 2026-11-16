@@ -251,6 +251,7 @@ const bootstrap = r'''
 const sdkSource = r'''
 const call = (name, args) => globalThis.__host(name, args);
 export const data = Object.freeze({
+  contract: id => call('data.contract', {id}),
   get: (collection, id) => call('data.get', {collection, id}),
   query: (collection, options = {}) => call('data.query', {collection, ...options}),
   watch: (collection, options, listener) => globalThis.__watch('data.watch', {collection,...options},listener),

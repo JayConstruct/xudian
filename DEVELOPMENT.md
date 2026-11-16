@@ -1,10 +1,10 @@
 # 开发指南
 
-从项目根目录执行以下命令。Linux / WSL 使用项目 SDK；Windows 使用本机 Flutter 与 Android Studio。平台配置见 [Windows Android](docs/WINDOWS_ANDROID_DEVELOPMENT.md)、[VPS / WSL](docs/MULTI_MACHINE_DEVELOPMENT.md) 和 [远程 Android 预览](docs/REMOTE_ANDROID_DEVELOPMENT.md)。
-
-当前工程采用 Flutter/Dart 宿主与 JavaScript/QuickJS 模块，源码继续位于 `client/` 和 `packages/`。UI 选稿及实现进度见 [设计入口](design/README.md)，构建和模拟器流程使用现有工程。
+宿主在 `client/`，独立模块在 `packages/modules/`。先看 [客户端代码入口](client/README.md) 与 [架构边界](docs/DESIGN.md)，待办状态统一见 [BACKLOG](docs/BACKLOG.md)。
 
 ## 准备环境
+
+Linux / WSL 在项目根目录执行：
 
 ```bash
 source scripts/dev-env.sh
@@ -14,85 +14,54 @@ flutter pub get
 cd ..
 ```
 
-环境脚本设置 `.tools/flutter`、`.tools/android-sdk`、Java 21 和 `.cache/` 内的依赖路径。首次搭建 Linux 工作机需安装 Git、curl、unzip、GCC/C++ 构建工具及 Java 21，再准备 Flutter、Android 平台/Build Tools 和工程要求的 NDK，以 `flutter doctor -v` 和构建配置为准。项目没有 Linux 桌面目标。
+环境脚本使用 `.tools/flutter`、`.tools/android-sdk`、Java 21 和 `.cache/` 内的依赖缓存。首次搭建还需 Git、curl、unzip、GCC/C++ 构建工具及工程要求的 Android 平台、Build Tools、NDK，以构建配置和 `flutter doctor -v` 为准；项目没有 Linux 桌面目标。修改 `pubspec.yaml` 后重新执行 `flutter pub get`，依赖就绪后才使用 `--no-pub`。
 
-修改 `pubspec.yaml` 后重新执行 `flutter pub get`；`--no-pub` 用于依赖已经准备好的环境。SDK、缓存、凭据和构建输出不应进入提交。
-
-## GitHub 提交范围
-
-提交源码、测试与固定夹具、依赖锁文件、平台资源、构建脚本、工作流及可复验文档。QuickJS vendor 和拾光 warehouse 是固定版本的运行源码；`app_database.g.dart`、默认模块资源及图标也由当前构建直接读取，不能只因可生成就排除。
-
-`.gitignore` 排除工具链、缓存、APK/AAB、构建输出、截图与完整本机验收产物、凭据和本机配置。新风格原图直接放 `design/styles/`，页面原图直接放 `design/screens/ui-XX/`；同名完整提示词并列。开始前运行 `python3 scripts/design_artifacts.py new styles --brief '需求说明'` 或 `new ui-01 --brief '需求说明'`，批次清单与参考放命令返回的 `.batches/` 目录，详见 [归档规范](docs/DESIGN_ARTIFACTS.md)。design 入口和清单可以提交；原稿、提示词及批次不提交，历史 dist/design 保持旧格式。需要随文档保存的获选副本放 docs/design/selected/ 并附来源。目录边界见 [目录规范](docs/REPOSITORY_LAYOUT.md)，不可变模块包继续由 releases/modules/ 管理。
-
-验收文档保留日期、版本、摘要、步骤、失败原因和 CI 链接，机器绝对路径改为项目相对路径或示例路径；不提交用户业务数据、账号和密钥。提交前运行 `python3 scripts/check_repository.py`、`git status --short` 和 `git diff --check`；仓库检查拒绝本机产物、没有索引引用的发布包及未被预装清单引用的客户端包，同时校验预装包身份与内外摘要。新增忽略规则不会自动移除已经跟踪的文件。APK 通过 Actions 产物分发，公开模块通过 GitHub Releases 分发。
-
-修改工作流时还须检查 Actions 表达式上下文；仅解析 YAML 无法发现这类错误。CI 在构建前执行固定版本 actionlint。已安装 Go 的开发机可运行 `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes= .github/workflows/*.yml packages/catalog/.github/workflows/*.yml`，工具与编译缓存不纳入源码。
+纯 Windows 开发使用本机 SDK，见 [Windows Android](docs/WINDOWS_ANDROID_DEVELOPMENT.md)。WSL 的 Linux ADB、VPS 和远程设备连接见 [多机开发](docs/MULTI_MACHINE_DEVELOPMENT.md) 与 [远程预览](docs/REMOTE_ANDROID_DEVELOPMENT.md)。SDK、缓存、凭据和本机配置不提交。
 
 ## 日常更新
 
-WSL 开始开发时运行 `scripts/start-emulator.sh`，启动 Windows 模拟器并等待 Android 就绪；已运行时直接复用。强制冷启动用 `--cold-boot`，高刷用 `--cold-boot --refresh-rate 120`（或 `165`），可加 `--lock-refresh-rate` 锁定 Android 最高/最低刷新率并保存恢复脚本；均保留应用和数据。SDK 路径、AVD、等待时间与刷新率恢复方式见 [模拟器流程](docs/EMULATOR_UPDATE.md)。
+先运行 `scripts/start-emulator.sh`，复用已运行的模拟器或启动后等待就绪，再按改动选择：
 
-| 改动 | 命令 |
+| 场景 | 根目录命令 |
 | --- | --- |
-| Flutter 页面，保持热重载 | `scripts/update-emulator.sh --dev` |
-| 只更新课表脚本 | `scripts/update-emulator.sh --modules-only --module app.schedule` |
-| 只更新拾光脚本 | `scripts/update-emulator.sh --modules-only --module app.import.shiguang` |
-| Release 验收 | `scripts/update-emulator.sh` |
+| 宿主 UI 调试与热重载 | `scripts/update-emulator.sh --dev` |
+| 仅更新独立模块 | `scripts/update-emulator.sh --modules-only --module app.schedule` |
+| 宿主与模块一起更新 | `scripts/update-emulator.sh --module app.schedule` |
+| Release 效果与相关回归 | `scripts/update-emulator.sh --test test/相关文件.dart` |
+| 商店、离线与冷启动验收 | `scripts/update-emulator.sh --verify-catalog --catalog-offline` |
 
-脚本按改动选择测试，自动复用有效缓存，覆盖安装后核对版本和摘要，保留应用数据。提交指定文件、设备参数、权限审核和失败处理统一见 [模拟器更新流程](docs/EMULATOR_UPDATE.md)。
+更新脚本复用有效缓存，覆盖安装并核对版本、摘要及启动，保留现有数据。模块内容改变须递增版本；更新 APK 不会自动升级已安装模块。冷启动、高刷、测试选择、签名不匹配与失败处理见 [模拟器流程](docs/EMULATOR_UPDATE.md)。提交与发布按 [发布流程](docs/RELEASE_WORKFLOW.md) 执行；不要在更新脚本前重复其分析与相同测试，发布验收、排查缓存或明确要求重建时加 `--force`。
 
-## 检查与模块打包
+## 常用检查与构建
 
-```bash
-source scripts/dev-env.sh
-python3 scripts/check_repository.py
-python3 scripts/check_docs.py
-python3 scripts/module_host/check_architecture.py
-python3 -m unittest discover -s scripts/tests -v
-cd client
-flutter analyze --no-pub
-flutter test --no-pub --concurrency=2
-```
+以下命令用于独立检查或排查；将 `test/相关文件.dart` 替换为本轮相关测试，运行改动的最终验收仍使用上面的更新流程。
 
-`check_docs.py` 使用 Git 跟踪与未忽略的新文件检查 Markdown 链接、图片和章节锚点，并核对 SDK 当前 API 与代码一致；不联网抓取外部地址。CI 默认跳过 `dist/`、`.cache/`、`build/`、`.dart_tool/` 和本机设计原稿等明确的产物链接；本机可加 `--check-local` 要求这些链接也存在，或用 `--json <报告路径>` 保存结果。
+| 目的 | 目录与命令 |
+| --- | --- |
+| 仓库与文档边界 | 根目录：`python3 scripts/check_repository.py`、`python3 scripts/check_docs.py` |
+| 生产依赖边界 | 根目录：`python3 scripts/module_host/check_architecture.py` |
+| Python 工具回归 | 根目录：`python3 -m unittest discover -s scripts/tests -v` |
+| 打包模块到 `dist/modules/` | 根目录：`python3 scripts/module_host/build_packages.py`；[预装资源规则](docs/MODULE_HOST.md#构建和验证) |
+| Flutter 分析与相关测试 | `client/`：`flutter analyze --no-pub`、`flutter test --no-pub --concurrency=2 test/相关文件.dart` |
+| Android 分 ABI 构建 | `client/`：`flutter build apk --release --split-per-abi --no-pub` |
+| Drift 绑定生成 | `client/`：`dart run build_runner build`；同时审阅迁移、备份和恢复测试 |
+| 临时 APK 下载链接 | 根目录：`scripts/share-apk.sh`，调试包加 `--debug`；[分享参数](docs/REMOTE_ANDROID_DEVELOPMENT.md#临时-apk-分享) |
 
-按功能选择相关测试；涉及数据、生命周期、权限和依赖时扩大回归范围。网络冒烟另可运行 `dart test/openai_compatible_provider_network_smoke.dart`。测试结果和平台范围见 [验证记录](docs/VERIFICATION.md)，Widget 测试不代表真机帧率。
+涉及数据、生命周期、权限和依赖时扩大回归；HTTP／AI 的真实网络测试须按 [客户端测试约束](client/README.md#测试约束) 使用独立服务器子进程。Widget 测试不代表真机帧率。
 
-宿主 HTTP 和 AI 连接回归使用独立子进程启动本机服务器，保留真实请求、鉴权与取消断言。启动等待上限为 10 秒，超时后明确报错并清理子进程，进程退出另有 2 秒上限；不要在 Flutter 测试主线程直接调用 `HttpServer.bind`，原生绑定阻塞时同线程的 Dart 超时也无法执行。
+`check_docs.py` 检查 Git 跟踪与未忽略的新 Markdown 文件、相对链接、图片、锚点及 SDK 当前 API，不联网。默认跳过明确的本机产物链接；`--check-local` 要求它们存在，`--json <报告路径>` 保存结果。提交前另查 `git status --short` 和 `git diff --check`。
 
-独立模块打包使用 `python3 scripts/module_host/build_packages.py`，输出到 `dist/modules/`。修改内容时提升 `module.json` 版本。仅需改变首次安装资源时加 `--defaults`：工具只更新现有清单条目，保留 `default` 标记，写入 `<模块 ID>-<版本>.xmodule`，不自动将课表、拾光等商店模块加入资源；旧资源归档到被忽略的 `dist/bundle-archive/`。候选包、同版本冲突及归档冲突全部校验通过后才写入。审阅 `client/assets/modules/catalog.json` 及资源差异，再运行仓库检查并重建 APK；该资源更新不会自动升级用户已安装的模块。新增预装条目须明确编辑清单并审核，目录发布使用 [作者发布流程](docs/MODULE_CATALOG.md)。
+工作流修改须校验 Actions 表达式上下文；仅解析 YAML 不够。已安装 Go 时运行 `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -shellcheck= -pyflakes= .github/workflows/*.yml packages/catalog/.github/workflows/*.yml`，工具缓存不提交。
 
-## 客户端构建与分享
-
-提交与公开发布按 [发布流程](docs/RELEASE_WORKFLOW.md) 执行，复用固定验收脚本并避免本地与 CI 重复全量回归。
-
-在 `client/` 执行：
-
-```bash
-flutter build apk --release --split-per-abi --no-pub
-```
-
-输出在 `client/build/app/outputs/flutter-apk/`，多数手机使用 ARM64 包。覆盖已有应用时，构建号与 ABI 偏移后的 Android versionCode 必须满足设备版本要求，并保持签名一致；模拟器脚本自动处理构建号。本机未设置 `XUDIAN_KEYSTORE_*` 时使用 debug 签名；所有 tag 发布（包括测试版）在独立 CI 任务中使用固定签名，缺少密钥或公开指纹配置就停止发布。配置和密钥保管见 [App 更新](docs/APP_UPDATES.md) 与 [Android 签名保管](docs/ANDROID_SIGNING.md)。
-
-临时下载从仓库根目录运行 `scripts/share-apk.sh`；调试包用 `--debug`。需要 `python3` 与 `cloudflared`，默认端口 8765，可设置 `APK_SHARE_PORT`。终端打印 HTTPS 地址，按 `Ctrl+C` 关闭；重启隧道会更换域名，持有地址的人可下载当前 APK。SSH 长会话可用 `screen` 保持服务。
-
-## 数据库生成
-
-数据库为 `xudian_v9.sqlite`，Drift schema 为 **2**，schema 1 升级会先备份并执行旧数据迁移。修改表定义后进入 `client/` 运行：
-
-```bash
-dart run build_runner build
-```
-
-生成绑定代码同时审阅迁移、备份及数据恢复测试。迁移细节统一见 [模块宿主](docs/MODULE_HOST.md#迁移更新和恢复)。
+Android APK 输出到 `client/build/app/outputs/flutter-apk/`，多数手机使用 ARM64。覆盖安装须保持签名一致并满足设备 versionCode 要求；本机开发签名不能替换公开固定证书包。构建号、ABI 偏移和发布签名规则见 [App 更新](docs/APP_UPDATES.md#发布-android-更新) 与 [签名保管](docs/ANDROID_SIGNING.md)。
 
 ## Windows 桌面
 
-在 Windows 安装兼容的 Flutter、Visual Studio C++ 桌面开发组件及 Windows SDK，通过 `flutter doctor -v` 后进入 `client/`：
+在 Windows 安装 Flutter、Visual Studio C++ 桌面开发组件与 Windows SDK，通过 `flutter doctor -v` 后进入 `client/` 执行 `flutter pub get`、`flutter build windows --release`。程序与依赖资源须一起分发；安装、凭据、导入、键盘和窗口缩放按 [平台验收矩阵](docs/design/UX_PLATFORM_BACKLOG.md#platform-01windows) 验证。
 
-```powershell
-flutter pub get
-flutter build windows --release
-```
+## 专题入口
 
-生成的程序和依赖资源须一起分发。安装包制作、系统凭据、导入、键盘和窗口缩放需在 Windows 验证。历史环境版本、远程验收及性能说明见 [历史归档](docs/archive/README.md)。
+- 源码、固定依赖、生成文件与本机产物：[目录与提交规范](docs/REPOSITORY_LAYOUT.md)。
+- UI 选稿与实现范围：[设计入口](design/README.md)；原图、提示词与批次：[设计稿规范](docs/DESIGN_ARTIFACTS.md)。
+- 模块接口、迁移及发布：[SDK](docs/MODULE_SDK.md)、[模块宿主](docs/MODULE_HOST.md)、[模块目录](docs/MODULE_CATALOG.md)。
+- 当前能力、待办与历史证据：[项目首页](README.md)、[统一待办](docs/BACKLOG.md)、[验证索引](docs/VERIFICATION.md)。

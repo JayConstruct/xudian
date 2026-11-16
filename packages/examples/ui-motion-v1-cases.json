@@ -1,0 +1,249 @@
+[
+  {
+    "name": "motion-default",
+    "valid": true,
+    "node": {
+      "type": "motion",
+      "key": "sample",
+      "target": {
+        "scale": 0.94
+      },
+      "child": {
+        "type": "text",
+        "text": "preview"
+      }
+    }
+  },
+  {
+    "name": "motion-bound",
+    "valid": true,
+    "node": {
+      "type": "motion",
+      "key": "sample",
+      "target": {
+        "scale": {
+          "bind": [
+            "state",
+            "scale"
+          ]
+        }
+      },
+      "child": {
+        "type": "text",
+        "text": "preview"
+      }
+    },
+    "resolved": {
+      "type": "motion",
+      "key": "sample",
+      "target": {
+        "scale": 0.94
+      },
+      "child": {
+        "type": "text",
+        "text": "preview"
+      }
+    }
+  },
+  {
+    "name": "motion-empty",
+    "valid": false,
+    "node": {
+      "type": "motion",
+      "key": "sample",
+      "target": {},
+      "child": {
+        "type": "text",
+        "text": "preview"
+      }
+    }
+  },
+  {
+    "name": "motion-out-of-range",
+    "valid": false,
+    "node": {
+      "type": "motion",
+      "key": "sample",
+      "target": {
+        "opacity": 1.1
+      },
+      "child": {
+        "type": "text",
+        "text": "preview"
+      }
+    }
+  },
+  {
+    "name": "motion-fractional-duration",
+    "valid": false,
+    "node": {
+      "type": "motion",
+      "key": "sample",
+      "target": {
+        "scale": 1
+      },
+      "child": {
+        "type": "text",
+        "text": "preview"
+      },
+      "timing": {
+        "duration": 0.5
+      }
+    }
+  },
+  {
+    "name": "motion-null-duration",
+    "valid": false,
+    "node": {
+      "type": "motion",
+      "key": "sample",
+      "target": {
+        "scale": 1
+      },
+      "child": {
+        "type": "text",
+        "text": "preview"
+      },
+      "timing": {
+        "duration": null
+      }
+    }
+  },
+  {
+    "name": "swipe-default",
+    "valid": true,
+    "node": {
+      "type": "swipeActions",
+      "key": "sample",
+      "extent": 96,
+      "actions": [
+        {
+          "label": "Edit",
+          "event": {
+            "type": "edit"
+          }
+        }
+      ],
+      "child": {
+        "type": "text",
+        "text": "preview"
+      }
+    }
+  },
+  {
+    "name": "swipe-bound",
+    "valid": true,
+    "node": {
+      "type": "swipeActions",
+      "key": "sample",
+      "extent": 96,
+      "actions": [
+        {
+          "label": "Edit",
+          "event": {
+            "type": "edit"
+          }
+        }
+      ],
+      "child": {
+        "type": "text",
+        "text": "preview"
+      },
+      "enabled": {
+        "bind": [
+          "state",
+          "enabled"
+        ]
+      }
+    },
+    "resolved": {
+      "type": "swipeActions",
+      "key": "sample",
+      "extent": 96,
+      "actions": [
+        {
+          "label": "Edit",
+          "event": {
+            "type": "edit"
+          }
+        }
+      ],
+      "child": {
+        "type": "text",
+        "text": "preview"
+      },
+      "enabled": false
+    }
+  },
+  {
+    "name": "swipe-insufficient-space",
+    "valid": false,
+    "node": {
+      "type": "swipeActions",
+      "key": "sample",
+      "extent": 48,
+      "actions": [
+        {
+          "label": "Edit",
+          "event": {
+            "type": "edit"
+          }
+        },
+        {
+          "label": "Edit",
+          "event": {
+            "type": "edit"
+          }
+        }
+      ],
+      "child": {
+        "type": "text",
+        "text": "preview"
+      }
+    }
+  },
+  {
+    "name": "swipe-unknown-command",
+    "valid": false,
+    "node": {
+      "type": "swipeActions",
+      "key": "sample",
+      "extent": 96,
+      "actions": [
+        {
+          "label": "Edit",
+          "event": {
+            "type": "edit"
+          },
+          "command": {}
+        }
+      ],
+      "child": {
+        "type": "text",
+        "text": "preview"
+      }
+    }
+  },
+  {
+    "name": "swipe-unknown-field",
+    "valid": false,
+    "node": {
+      "type": "swipeActions",
+      "key": "sample",
+      "extent": 96,
+      "actions": [
+        {
+          "label": "Edit",
+          "event": {
+            "type": "edit"
+          }
+        }
+      ],
+      "child": {
+        "type": "text",
+        "text": "preview"
+      },
+      "priority": 1
+    }
+  }
+]

@@ -1,6 +1,6 @@
 # 远程 Android 预览
 
-环境准备和临时 APK 分享见 [开发指南](../DEVELOPMENT.md)。本流程用于 VPS 与身边电脑/手机之间的调试连接；本机模拟器优先使用 [一键更新](EMULATOR_UPDATE.md)。
+环境准备见 [开发指南](../DEVELOPMENT.md)，临时下载参数见下方 [APK 分享](#临时-apk-分享)。本流程用于 VPS 与身边电脑/手机之间的调试连接；本机模拟器优先使用 [一键更新](EMULATOR_UPDATE.md)。
 
 VPS 负责构建与 Dart 编译，手机通过 USB 连接身边的 Windows/Mac/Linux 电脑；电脑负责 ADB 和 SSH 隧道。电脑无需安装 Flutter，只需 Android SDK Platform-Tools 与 SSH 客户端。无线调试也可先在电脑完成配对，再复用此流程。
 
@@ -66,4 +66,8 @@ flutter attach --debug -d DEVICE_SERIAL --app-id=dev.taskapp.task_app --no-dds -
 
 如果能列出设备但一直等待调试服务，检查是否安装并打开 debug 包，以及 8181 转发与 `--no-dds`。隧道或手机断开后恢复连接并重启 attach。脚本支持 `XUDIAN_ADB_PORT` 与 `XUDIAN_VM_SERVICE_PORT`，WSL 配置见 [VPS 与 WSL 开发配置](MULTI_MACHINE_DEVELOPMENT.md)。
 
-历史连接测量见 [开发记录](../DEVELOPMENT.md)。
+## 临时 APK 分享
+
+在项目根目录运行 `scripts/share-apk.sh`，调试包加 `--debug`。需要 `python3` 与 `cloudflared`；默认端口 8765，可通过 `APK_SHARE_PORT` 修改。终端打印 HTTPS 地址，按 `Ctrl+C` 关闭；重启隧道会更换域名，持有地址的人可下载当前 APK。SSH 长会话可用 `screen` 保持服务。
+
+历史连接与环境记录见 [多机开发](MULTI_MACHINE_DEVELOPMENT.md) 和 [历史归档](archive/README.md)。

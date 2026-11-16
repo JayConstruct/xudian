@@ -16,9 +16,11 @@ import 'planner_timeline_window.dart';
 import 'planner_status_indicator.dart';
 import 'planner_card_appearance.dart';
 
-part 'planner_day_sheet.dart';
-
-typedef BoardItem = Map<String, Object?>;
+import 'planner_day_sheet.dart';
+import 'planner_board_types.dart';
+import 'planner_board_layout.dart';
+import 'planner_source_hatching.dart';
+export 'planner_board_types.dart';
 
 /// A presentation-only date/time board. Scripts own scheduling, validation,
 /// source writes, confirmation and undo; dropping emits a proposal, never edits
@@ -93,41 +95,6 @@ class _Proposal {
   final int snap;
   final String intent;
   final Object? targetId;
-}
-
-class _BoardSegment {
-  _BoardSegment(
-    this.item,
-    this.start,
-    this.end,
-    this.dayIndex,
-    this.day,
-    this.from,
-    this.to,
-    this.top,
-    this.bottom,
-  );
-  final BoardItem item;
-  final DateTime start, end, from, to;
-  final int dayIndex;
-  final String day;
-  final double top, bottom;
-  int lane = 0;
-  String get key => '${item['id']}:$day';
-}
-
-class _BoardGroup {
-  _BoardGroup(this.segments, this.top, this.bottom, this.lanes);
-  final List<_BoardSegment> segments;
-  final double top, bottom;
-  final int lanes;
-}
-
-class _BoardGeometry {
-  _BoardGeometry(this.days, this.byKey, this.byId);
-  final List<List<_BoardGroup>> days;
-  final Map<String, _BoardGroup> byKey;
-  final Map<Object?, BoardItem> byId;
 }
 
 class _PlannerBoardState extends State<PlannerBoard>
@@ -305,9 +272,7 @@ class _PlannerBoardState extends State<PlannerBoard>
   final _dragActive = ValueNotifier<bool>(false);
   final _validation = ValueNotifier<BoardItem?>(null);
   final _window = ValueNotifier<Rect>(const Rect.fromLTWH(0, 0, 800, 600));
-  List<BoardItem>? _geometrySource;
-  Object? _geometrySettings;
-  _BoardGeometry? _geometry;
+  final _layout = PlannerBoardLayout();
   final _parsedDates = <String, DateTime?>{};
   final _textHeights = <Object, double>{};
   List<BoardItem>? _daySource, _validatedDays;
@@ -412,13 +377,13 @@ class _PlannerBoardState extends State<PlannerBoard>
                 onDidRemovePage: (_) {},
                 pages: [
                   MaterialPage<void>(
-                    child: _PlannerDaySheetTransition(
+                    child: PlannerDaySheetTransition(
                       key: ValueKey(_dayListDate),
                       visible: !_dayListClosing,
                       onDismissed: () {
                         if (mounted && _dayListClosing) _hideDayList();
                       },
-                      child: _PlannerDaySheet(
+                      child: PlannerDaySheet(
                         date: _dayListDate!,
                         candidates: _candidates,
                         blocks: _blocks,
@@ -562,8 +527,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     _timelineWindow = PlannerTimelineWindow(date)
       ..seed(widget.days, widget.blocks, date);
     _daySource = _validatedDays = null;
-    _geometrySource = null;
-    _geometry = null;
+    _layout.clear();
     _dailyOccupancy.clear();
   }
 
@@ -580,8 +544,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     if (!window.recenter(date, _visibleDayCount)) return;
     _timelineRepositioning = true;
     setState(() {
-      _geometrySource = null;
-      _geometry = null;
+      _layout.clear();
       _dailyOccupancy.clear();
     });
     _horizontal.jumpTo(
@@ -665,8 +628,7 @@ class _PlannerBoardState extends State<PlannerBoard>
       setState(() {
         window.seed(days, blocks, _leftDate ?? left);
         _rangeFailure = null;
-        _geometrySource = null;
-        _geometry = null;
+        _layout.clear();
         _dailyOccupancy.clear();
       });
     } catch (_) {
@@ -1067,8 +1029,7 @@ class _PlannerBoardState extends State<PlannerBoard>
         !identical(widget.pendingAdjustment, oldWidget.pendingAdjustment) ||
         widget.pendingAdjustment != null &&
             !identical(widget.candidates, oldWidget.candidates)) {
-      _geometrySource = null;
-      _geometry = null;
+      _layout.clear();
       _dailyOccupancy.clear();
     }
     final daysChanged =
@@ -2012,7 +1973,7 @@ class _PlannerBoardState extends State<PlannerBoard>
         child: CustomPaint(
           painter:
               scheduled && item['readOnly'] == true && item['_resident'] != true
-              ? _SourceHatching(accent)
+              ? PlannerSourceHatching(accent)
               : null,
           child: InkWell(
             borderRadius: BorderRadius.circular(9),
@@ -2481,124 +2442,18 @@ class _PlannerBoardState extends State<PlannerBoard>
     );
   }
 
-  _BoardGeometry _index(List<BoardItem> items, double cardHeight) {
-    final titleBandHeight = _minimumTitleBandHeight;
-    final settings = (
-      _days,
-      _startMinute,
-      _endMinute,
-      _scale,
-      cardHeight,
-      titleBandHeight,
-    );
-    if (identical(items, _blocks) &&
-        identical(items, _geometrySource) &&
-        settings == _geometrySettings &&
-        _geometry != null) {
-      return _geometry!;
-    }
-    final days = _days;
-    final segments = List.generate(days.length, (_) => <_BoardSegment>[]);
-    final starts = [for (final day in days) _midnight(_date(day['date'])!)];
-    final bounds = [
-      for (final day in starts)
-        (
-          day.add(Duration(minutes: _startMinute)),
-          day.add(Duration(minutes: _endMinute)),
-        ),
-    ];
-    // Parse each item once per data/geometry revision, never per scroll frame.
-    for (final item in items) {
-      final start = _date(item['start']), end = _date(item['end']);
-      if (start == null || end == null || !end.isAfter(start)) continue;
-      for (var day = 0; day < days.length; day++) {
-        final (from, to) = bounds[day];
-        if (!start.isBefore(to) || !end.isAfter(from)) continue;
-        final top = math.max(
-          0.0,
-          start.difference(from).inMilliseconds / 60000 * _scale,
-        );
-        final bottom = math.min(
-          (_endMinute - _startMinute) * _scale,
-          end.difference(from).inMilliseconds / 60000 * _scale,
-        );
-        segments[day].add(
-          _BoardSegment(
-            item,
-            start,
-            end,
-            day,
-            '${days[day]['date']}',
-            from,
-            to,
-            top,
-            bottom,
-          ),
-        );
-      }
-    }
-    final byKey = <String, _BoardGroup>{};
-    double labelBottom(_BoardSegment segment) =>
-        segment.bottom - segment.top >= titleBandHeight
-        ? segment.bottom
-        : math.max(segment.bottom, segment.top + cardHeight);
-    final groupsByDay = <List<_BoardGroup>>[];
-    for (final day in segments) {
-      day.sort((a, b) {
-        final order = a.top.compareTo(b.top);
-        return order != 0
-            ? order
-            : '${a.item['id']}'.compareTo('${b.item['id']}');
-      });
-      final groups = <_BoardGroup>[];
-      var current = <_BoardSegment>[];
-      var groupBottom = 0.0;
-      void finish() {
-        if (current.isEmpty) return;
-        final ends = <double>[];
-        for (final segment in current) {
-          var lane = ends.indexWhere((end) => end <= segment.top);
-          if (lane < 0) {
-            lane = ends.length;
-            ends.add(0);
-          }
-          ends[lane] = labelBottom(segment);
-          segment.lane = lane;
-        }
-        final group = _BoardGroup(
-          current,
-          current.first.top,
-          groupBottom,
-          ends.length,
-        );
-        groups.add(group);
-        for (final segment in current) {
-          byKey[segment.key] = group;
-        }
-        current = [];
-      }
-
-      for (final segment in day) {
-        if (current.isNotEmpty && segment.top >= groupBottom) finish();
-        current.add(segment);
-        groupBottom = math.max(
-          current.length == 1 ? 0 : groupBottom,
-          labelBottom(segment),
-        );
-      }
-      finish();
-      groupsByDay.add(groups);
-    }
-    final result = _BoardGeometry(groupsByDay, byKey, {
-      for (final item in items) item['id']: item,
-    });
-    if (identical(items, _blocks)) {
-      _geometrySource = items;
-      _geometrySettings = settings;
-      _geometry = result;
-    }
-    return result;
-  }
+  BoardGeometry _index(List<BoardItem> items, double cardHeight) =>
+      _layout.index(
+        items,
+        days: _days,
+        startMinute: _startMinute,
+        endMinute: _endMinute,
+        scale: _scale,
+        cardHeight: cardHeight,
+        titleBandHeight: _minimumTitleBandHeight,
+        parse: _date,
+        cacheable: identical(items, _blocks),
+      );
 
   List<Widget> _segments(
     List<BoardItem> items,
@@ -2620,7 +2475,7 @@ class _PlannerBoardState extends State<PlannerBoard>
         .floor()
         .clamp(0, math.max(0, index.days.length - 1))
         .toInt();
-    final groups = <_BoardGroup>{};
+    final groups = <BoardGroup>{};
     for (var day = firstDay; day <= lastDay && day < index.days.length; day++) {
       final dayGroups = index.days[day];
       var low = 0, high = dayGroups.length;
@@ -2981,7 +2836,7 @@ class _PlannerBoardState extends State<PlannerBoard>
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: CustomPaint(
-                            painter: _SourceHatching(_accent(item)),
+                            painter: PlannerSourceHatching(_accent(item)),
                           ),
                         )
                       : null,
@@ -3223,7 +3078,7 @@ class _PlannerBoardState extends State<PlannerBoard>
         math.max(_focusStart! + 15, ((last + 4) ~/ 5) * 5),
       );
       _focusScale = 28;
-      _geometrySource = null;
+      _layout.clear();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_vertical.hasClients) _vertical.jumpTo(0);
@@ -3241,7 +3096,7 @@ class _PlannerBoardState extends State<PlannerBoard>
       _focusStart = null;
       _focusEnd = null;
       _focusScale = null;
-      _geometrySource = null;
+      _layout.clear();
       if (widget.options['continuousDates'] == true) {
         _timelinePositioned = false;
       }
@@ -5266,7 +5121,7 @@ class _PlannerBoardState extends State<PlannerBoard>
                         IconButton(
                           onPressed: () => setState(() {
                             _focusScale = (_scale / 1.4).clamp(8, 64);
-                            _geometrySource = null;
+                            _layout.clear();
                           }),
                           icon: const Icon(Icons.remove),
                           tooltip: '缩小时间轴',
@@ -5275,7 +5130,7 @@ class _PlannerBoardState extends State<PlannerBoard>
                         IconButton(
                           onPressed: () => setState(() {
                             _focusScale = (_scale * 1.4).clamp(8, 64);
-                            _geometrySource = null;
+                            _layout.clear();
                           }),
                           icon: const Icon(Icons.add),
                           tooltip: '放大时间轴',
@@ -5993,7 +5848,7 @@ class _DenseOccupancy extends CustomPainter {
     this.shortBands = false,
   });
   final bool shortBands;
-  final _BoardGroup group;
+  final BoardGroup group;
   final Color color;
   final double visibleTop, visibleBottom;
   @override
@@ -6026,26 +5881,6 @@ class _DenseOccupancy extends CustomPainter {
 }
 
 /// Source texture is shared by the card and compact occupancy indicators.
-class _SourceHatching extends CustomPainter {
-  const _SourceHatching(this.color);
-  final Color color;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withValues(alpha: .14)
-      ..strokeWidth = .6;
-    for (double x = -size.height; x < size.width; x += 7) {
-      canvas.drawLine(
-        Offset(x, size.height),
-        Offset(x + size.height, 0),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_SourceHatching oldDelegate) => oldDelegate.color != color;
-}
 
 class _ShortTaskLeader extends CustomPainter {
   const _ShortTaskLeader(this.color, this.downward);

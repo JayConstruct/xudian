@@ -99,7 +99,12 @@ class UpdateEmulatorTest(unittest.TestCase):
         else:
             self.assertLess(calls.index(prepare), calls.index(test_calls[0]))
         self.assertFalse((self.root / '.cache/emulator-update/latest-success.json').exists())
-        self.assertTrue((self.root / '.cache/emulator-update/latest-attempt.json').exists())
+        attempt = self.root / '.cache/emulator-update/latest-attempt.json'
+        report = json.loads(attempt.read_text())
+        evidence = self.root / report['evidenceDir']
+        self.assertEqual((evidence / 'results.json').read_text(), attempt.read_text())
+        self.assertFalse(report['completed'])
+        self.assertRegex(evidence.name, r'^\d{8}T\d{6}\.\d{6}Z-emulator-update$')
 
     def test_package_fixture_failure_prevents_stale_tests_install_and_commit(self):
         self.exercise_failure('fixtures')
@@ -116,7 +121,7 @@ class UpdateEmulatorTest(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('// unchanged test')
         output = self.root / '.cache/emulator-update'
-        output.mkdir(parents=True)
+        output.mkdir(parents=True, exist_ok=True)
         apk = output / 'verified.apk'
         apk.write_bytes(b'verified APK')
         digest = hashlib.sha256(apk.read_bytes()).hexdigest()
@@ -127,6 +132,8 @@ class UpdateEmulatorTest(unittest.TestCase):
                  'buildNumber': 44, 'versionCode': 4044,
                  'checksFingerprint': update.checks_fingerprint(self.root, inputs, tests)}
         (output / 'release-cache.json').write_text(json.dumps(cache))
+        previous_success = (output / 'latest-success.json').read_text() if (
+            output / 'latest-success.json').exists() else None
         calls = []
 
         def fake_run(command, **kwargs):
@@ -148,15 +155,22 @@ class UpdateEmulatorTest(unittest.TestCase):
             if command == ['python3', str(self.root / 'scripts/check_repository.py')]:
                 return ''
             if command[:2] == ['python3', str(self.root / 'scripts/module_host/verify_catalog.py')]:
-                self.assertFalse((output / 'latest-success.json').exists())
-                installation = json.loads((output / 'catalog-installation.json').read_text())
+                self.assertEqual((output / 'latest-success.json').read_text() if (
+                    output / 'latest-success.json').exists() else None, previous_success)
+                build_report = Path(command[command.index('--build-report') + 1])
+                installation = json.loads(build_report.read_text())
+                self.assertEqual(build_report.name, 'catalog-installation.json')
+                self.assertEqual(build_report.parent, self.root / installation['evidenceDir'])
                 self.assertEqual(installation['installedApkSha256'], digest)
                 self.assertIn('--cold-start', command)
+                target = Path(command[command.index('--output') + 1])
+                self.assertEqual(target, build_report.parent / 'catalog')
+                target.mkdir(parents=True)
+                (target / 'details.xml').write_text('<hierarchy/>')
+                (target / 'results.json').write_text(json.dumps({
+                    'completed': not catalog_failure, 'seconds': 1.25}))
                 if catalog_failure:
                     raise subprocess.CalledProcessError(1, command)
-                target = Path(command[command.index('--output') + 1])
-                target.mkdir(parents=True)
-                (target / 'results.json').write_text(json.dumps({'completed': True, 'seconds': 1.25}))
                 return ''
             if command[:4] == ['git', '--literal-pathspecs', 'diff', '--check']:
                 return ''
@@ -180,6 +194,9 @@ class UpdateEmulatorTest(unittest.TestCase):
         self.assertTrue(report['skippedInstall'])
         self.assertIn(['python3', str(self.root / 'scripts/check_repository.py')], calls)
         self.assertFalse(any('flutter' in command or 'install' in command for command in calls))
+        evidence = self.root / report['evidenceDir']
+        self.assertEqual((evidence / 'results.json').read_text(), (output / 'latest-success.json').read_text())
+        self.assertEqual((output / 'latest-attempt.json').read_text(), (output / 'latest-success.json').read_text())
 
     def test_single_command_reuses_apk_then_requires_catalog_acceptance(self):
         output, calls = self.cached_update(['--verify-catalog', '--catalog-offline'])
@@ -189,6 +206,11 @@ class UpdateEmulatorTest(unittest.TestCase):
         command = next(c for c in calls if 'verify_catalog.py' in ' '.join(c))
         self.assertIn('--offline', command)
         self.assertFalse(any('flutter' in command or 'install' in command for command in calls))
+        evidence = self.root / report['evidenceDir']
+        self.assertTrue((evidence / 'catalog-installation.json').is_file())
+        self.assertTrue((evidence / 'catalog/details.xml').is_file())
+        self.assertEqual(self.root / report['catalogAcceptance']['report'], evidence / 'catalog/results.json')
+        self.assertFalse((output / 'catalog-installation.json').exists())
 
     def test_catalog_failure_prevents_success_and_commit(self):
         output, calls = self.cached_update(
@@ -198,6 +220,34 @@ class UpdateEmulatorTest(unittest.TestCase):
         self.assertFalse(report['completed'])
         self.assertEqual(report['failedStep'], '商店页面验收')
         self.assertFalse(any('commit' in command for command in calls))
+        evidence = self.root / report['evidenceDir']
+        self.assertEqual((evidence / 'results.json').read_text(), (output / 'latest-attempt.json').read_text())
+        self.assertTrue((evidence / 'catalog-installation.json').exists())
+        self.assertTrue((evidence / 'catalog/details.xml').exists())
+        self.assertFalse(json.loads((evidence / 'catalog/results.json').read_text())['completed'])
+
+    def test_later_failure_preserves_previous_success_and_each_attempt_evidence(self):
+        output, _ = self.cached_update(['--verify-catalog'])
+        success = (output / 'latest-success.json').read_text()
+        first_evidence = self.root / json.loads(success)['evidenceDir']
+        self.cached_update(['--verify-catalog'], catalog_failure=True)
+        failure = (output / 'latest-attempt.json').read_text()
+        second_evidence = self.root / json.loads(failure)['evidenceDir']
+        self.assertNotEqual(first_evidence, second_evidence)
+        self.assertEqual((first_evidence / 'results.json').read_text(), success)
+        self.assertEqual((second_evidence / 'results.json').read_text(), failure)
+        self.assertEqual((output / 'latest-success.json').read_text(), success)
+
+    def test_dry_run_does_not_create_cache_or_evidence(self):
+        for test in update.DEFAULT_TESTS:
+            target = self.root / 'client' / test
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('// test')
+        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*'))
+        with patch.object(update, 'ROOT', self.root), patch.object(update, 'run') as run:
+            self.assertEqual(update.main(['--dry-run', '--verify-catalog']), 0)
+        run.assert_not_called()
+        self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*')))
 
     def test_offline_acceptance_requires_catalog_acceptance_flag(self):
         with self.assertRaises(SystemExit):

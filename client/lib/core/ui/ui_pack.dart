@@ -74,7 +74,24 @@ final Map<String, UiContract> uiContracts = Map.unmodifiable({
     'entityRow',
   ])
     'ui.$name@1': UiContract('ui.$name@1'),
-  'ui.button@1': const UiContract('ui.button@1', events: ['press']),
+  'ui.button@1': UiContract(
+    'ui.button@1',
+    events: ['press'],
+    propsSchema: {
+      'type': 'object',
+      'properties': {
+        ...uiCommonPropsSchema['properties'] as Map<String, Object?>,
+        'feedback': {
+          'type': 'object',
+          'additionalProperties': false,
+          'properties': {
+            'pressedScale': {'type': 'number', 'minimum': .9, 'maximum': 1},
+            'duration': {'type': 'integer', 'minimum': 0, 'maximum': 300},
+          },
+        },
+      },
+    },
+  ),
   // Native controls retain their host-owned widget in a mandatory slot.
   for (final name in [
     'nativeTile',

@@ -44,7 +44,9 @@
 
 宿主API `^1.28.0` 的 dashboard 看板会向当前工作区报告拖动状态，宿主仅将手机底栏淡出并停止其命中与语义，页面尺寸和底部避让值保持稳定；切页、取消与销毁自动清理，旧页面不能影响当前底栏。首页根节点可设置 `underlapChrome: true`，时间表绘制延伸到底栏下，宿主传入的底部避让仍用于选中面板、缩放操作和滚动末尾。自 API 1.46 起，看板拖动统一5分钟增量，横向只换日，停留与小幅横移不再进入1分钟精调；手动编辑仍可填写任意分钟。手指附近显示任务、日期起止和5分钟提示，并限制在屏幕安全区域。正常块与选中块不改变真实几何，调整时长手柄仅在选中后出现。
 
-宿主API `^1.29.0` 的 `plannerBoard` 可声明顶层 `quickAdjustment: {taskModuleId, applyServiceId, undoServiceId}`；两个服务必须属于当前页面模块、major为1，任务来源仍须具备已有服务权限。此声明仅显示原生“快速调整”按钮，脚本不能设置开启状态或声明免审核。用户点亮按钮后，真实 `move`／`resize` 手势可对同一落点、单一任务的时间字段及配套历史写集授权一次；来源为通用 `tasks` 集合，配套 `batches`／`receipts`／`occurrences` 使用当前规划事务契约。冻结写集、服务参数、任务快照与时区瞬间均须一致，交换、插入、超截止及不匹配计划回到原确认。成功后提供8秒“撤销”，只恢复该次快照；后续编辑或完成仍阻止撤销。现有 `ui.review(planId, confirmation)` 和 `services.commit(planId)` 不增加脚本免审核参数。
+宿主 API `^1.49.0` 的 `plannerBoard` 使用 `quickAdjustment: {contract:"time-range/2", taskModuleId, applyServiceId, undoServiceId, records:{subject,journal,receipt,occurrence}}`。`records` 的值都是已安装模块声明的契约 ID：`subject` 从 `taskModuleId` 所属模块解析，其余从当前页面模块解析。页面不能提供字段映射；缺失、重复、角色错误或来源模块已替换时不能快捷授权。应用／撤销服务属于当前模块且 major 为 1，跨模块权限仍须精确声明。
+
+真实 `move`／`resize` 手势只授权同一实体的时间字段与受约束的历史、回执及关联记录。宿主按提供者绑定的通用角色检查完整写集、冻结快照、时区瞬间和精确撤销；交换、插入、超截止、未知记录或字段修改回到显式确认。`time-only/1` 已移除，无旧契约适配。`ui.review` 与 `services.commit` 没有脚本免审核参数。
 
 原生页面自行维护快速调整的保存中显示，模块不需要传临时假任务：松手后目标位置显示一份任务，原候选／原安排临时隐藏，失败时恢复。保存不改变表格尺寸，用户可继续滚动。成功提示从宿主实际提交回执和冻结任务快照生成，最多两行展示具体任务与新时间，连续成功替换提示、撤销绑定最新操作；较早操作仍可在模块历史中处理。此原生显示优化不改变上述脚本契约与模块版本要求。
 
@@ -93,3 +95,14 @@ app.planner 1.2.0 用 `planner.operation.inspect` 提供轻量只读结果；使
 宿主 API `^1.40.0` 支持规划区块的可选配置 `statusIndicator:'edgeToCorner'`，与已有 `completed` 布尔值配合：未完成时显示贴右边缘的 3dp 彩色竖线，完成时显示 16dp 深色白勾角标；窄列竖线随既有边距缩至 2dp，紧凑区块的角标按可用留白缩小并避让时间，空间不足时保持贴边。宿主以同一形状约 280ms 收拢变形，重新打开时反向过渡，减少动态效果时立即切换；装饰不增加文字 padding、信息行或标题图标列。模块选择是否声明，省略时保留原显示；该字段只影响展示，不修改状态或命令授权。使用模块须声明 `hostApi:'^1.40.0'`，新增原生绘制能力需更新 APK。
 
 宿主 API `^1.41.0` 支持规划区块的 `appearance: {borderStyle:'dashed', titleDecoration:'lineThrough', cornerIcon:'slash', badgeText:'已取消'}`。各属性独立可选，`cornerIcon` 也接受 `'check'`；这些字段不推断任务状态，不更改原时段、标题内容或交互授权。虚线轮廓、角标及标签不改变文字布局；角标避让时间，状态标签空间不足时收起，状态仍进入无障碍说明。`selectionNote` 为选中面板增加模块提供的说明；`selectionLayout:'inlineActions'` 在仅有一个 `actions` 操作时，将该操作与“查看详情”并排显示，多操作保留原布局。`occupiesTime:false` 保留区块显示，同时在本地空闲提示与日列表重叠预览中释放时段，最终安排仍由服务验证。需要更新 APK 并声明 `hostApi:'^1.41.0'`。
+
+
+## 日编辑面板配置
+
+规划模块将编辑文案和快捷契约引用集中在 `presentation.js`；历史页保留数量从 `data.contract('journal')` 读取，与写入和审核使用同一声明。
+
+API `1.48.0` 的 `options.editor` 接受 `maxDurationMinutes`（1—525600 的整数）和 `labels` 文案映射。模块负责配置业务时长上限，宿主仅限制输入，服务仍须独立验证。模板仅替换 `{title}`、`{minutes}`、`{time}`、`{count}`、`{max}` 等传入值，不执行表达式。
+
+可配置键包括 `dayTitle`、`closeDay`、`durationTitle`、`minutes`、`durationError`、`cancel`、`confirm`、`editTitle`、`cancelEdit`、`apply`、`busy`、`emptyCandidates`、`dropHint`、`retry`、`validationFailed`、`unavailable`、`overlap`、`pending`、`duration`、`moveTo`、`candidateCount`、`dragHint`、`previousPage`、`nextPage`、`scheduledCount`、`sortHint`、`editHint`、`endsAt`。未配置时使用通用条目文案。
+
+记录映射与保留规则见 [数据服务的记录契约](DATA_SERVICES.md#记录契约)。私有集合、字段和历史保留数量可通过模块更新演进；改变通用角色的含义或授权范围仍需新的宿主契约。

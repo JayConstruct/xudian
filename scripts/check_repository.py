@@ -70,7 +70,10 @@ def check_repository(root, tracked):
     allowed = {f'client/assets/modules/{name}' for name in expected_bundles}
     allowed.update(f'releases/modules/{name}' for name in expected_releases)
     for name in tracked:
-        if name.endswith('.xmodule') and name not in allowed:
+        # Validate the working tree: an obsolete bundle deleted by the packer
+        # may still appear in the index until the user stages their changes.
+        # Missing referenced bundles/releases are checked above.
+        if name.endswith('.xmodule') and name not in allowed and (root / name).exists():
             errors.append(f'Unreferenced package is tracked: {name}')
     return errors
 

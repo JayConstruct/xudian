@@ -1,8 +1,9 @@
 """Regress the Android accessibility cases that delayed release acceptance."""
 from pathlib import Path
+import json
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
 from scripts.module_host import verify_catalog as catalog
@@ -69,6 +70,89 @@ class CatalogAcceptanceTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, '返回未到达'):
             self.flow.reopen()
         self.emulator.record.assert_not_called()
+
+
+class CatalogEvidenceTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        source = self.root / 'packages/catalog/catalog.json'
+        source.parent.mkdir(parents=True)
+        source.write_text(json.dumps({'modules': [{'id': 'app.schedule', 'name': '课表'}]}))
+        self.build_report = self.root / '.cache/emulator-update/latest-success.json'
+        self.build_report.parent.mkdir(parents=True)
+        self.build_report.write_text(json.dumps({
+            'completed': True, 'installedApkSha256': 'digest',
+            'installedVersionCode': 4044, 'sourceFingerprint': 'source'}))
+
+    def run_acceptance(self, arguments=(), *, failed=False):
+        emulator = Mock()
+        emulator.adb.return_value = 'versionName=0.2.0 versionCode=4044'
+        emulator.installed_digest.return_value = 'digest'
+        flow = Mock()
+        flow.steps = []
+
+        def step(name, action):
+            flow.steps.append({'name': name})
+            (catalog.verify_emulator.OUT / 'details.xml').write_text('<hierarchy/>')
+            if failed:
+                raise RuntimeError('page verification failed')
+
+        flow.step.side_effect = step
+        with patch.object(catalog, 'ROOT', self.root), \
+                patch.object(catalog, 'snapshot', return_value={}), \
+                patch.object(catalog, 'fingerprint', return_value='source'), \
+                patch.object(catalog.verify_emulator, 'Emulator', return_value=emulator), \
+                patch.object(catalog.verify_emulator, 'OUT'), \
+                patch.object(catalog, 'CatalogAcceptance', return_value=flow):
+            if failed:
+                with self.assertRaisesRegex(RuntimeError, 'page verification failed'):
+                    catalog.main(list(arguments))
+            else:
+                self.assertEqual(catalog.main(list(arguments)), 0)
+
+    def test_default_runs_keep_separate_complete_evidence_directories(self):
+        self.run_acceptance()
+        reports = list((self.root / 'dist/verification').glob('*-catalog/results.json'))
+        self.assertEqual(len(reports), 1)
+        first = reports[0]
+        original = first.read_text()
+        report = json.loads(original)
+        self.assertTrue(report['completed'])
+        self.assertEqual(self.root / report['evidenceDir'], first.parent)
+        self.assertRegex(first.parent.name, r'^\d{8}T\d{6}\.\d{6}Z-catalog$')
+        self.assertTrue((first.parent / 'details.xml').is_file())
+        self.run_acceptance()
+        self.assertEqual(len(list((self.root / 'dist/verification').glob('*-catalog/results.json'))), 2)
+        self.assertEqual(first.read_text(), original)
+
+    def test_failure_keeps_report_and_recordings_together(self):
+        self.run_acceptance(failed=True)
+        reports = list((self.root / 'dist/verification').glob('*-catalog/results.json'))
+        self.assertEqual(len(reports), 1)
+        report = json.loads(reports[0].read_text())
+        self.assertFalse(report['completed'])
+        self.assertIn('page verification failed', report['error'])
+        self.assertEqual(self.root / report['evidenceDir'], reports[0].parent)
+        self.assertTrue((reports[0].parent / 'details.xml').is_file())
+
+    def test_explicit_output_preserves_existing_report(self):
+        output = self.root / 'custom'
+        self.run_acceptance(['--output', str(output)])
+        original = (output / 'results.json').read_text()
+        with self.assertRaises(SystemExit):
+            self.run_acceptance(['--output', str(output)])
+        self.assertEqual((output / 'results.json').read_text(), original)
+
+    def test_dry_run_does_not_create_output_or_connect_to_device(self):
+        output = self.root / 'dry-run'
+        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*'))
+        with patch.object(catalog, 'ROOT', self.root), \
+                patch.object(catalog.verify_emulator, 'Emulator') as emulator:
+            self.assertEqual(catalog.main(['--dry-run', '--output', str(output)]), 0)
+        emulator.assert_not_called()
+        self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*')))
 
 
 if __name__ == '__main__':

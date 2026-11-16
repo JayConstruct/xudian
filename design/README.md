@@ -1,5 +1,7 @@
 # UI 设计入口
 
+独立 V2 的图片与文本设计输入见 [V2 设计总稿](../docs/design/v2/README.md)：汇集当前四页截图优化稿、19 张实际截图、视觉规范、26 页流程及便携下载包。以下选稿与实现状态描述现有应用，不代表 V2 已实现。
+
 ## 选稿与实现状态
 
 继续现有 Flutter/Dart 宿主与 JavaScript/QuickJS 模块。唯一获选基准为 [C · 旧版视觉融合 v02](styles/20261030-013221-184495-c-legacy-fusion-v02.png)，其 [完整提示词](styles/20261030-013221-184495-c-legacy-fusion-v02.prompt.txt) 与 [选定批次](styles/.batches/20261030-013221-184495/README.md) 保留来源及摘要。

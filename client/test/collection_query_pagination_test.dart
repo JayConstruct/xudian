@@ -1,3 +1,5 @@
+import 'package:task_app/core/performance/ui_load_trace.dart';
+
 import 'dart:convert';
 
 import 'package:drift/native.dart';
@@ -67,14 +69,14 @@ void main() {
     store.queries.clear();
     final actual = await store.query(actor, 'records', options);
     if (fast != null) expect(store.paginated, fast, reason: '$options');
-    // Any staged write disables optimization. An unrelated write leaves data
-    // unchanged and exercises the exact historical Dart filter/sort algorithm.
+    // A deletion of an absent record in this scope exercises the reference
+    // overlay path without changing the result.
     final fallback = SnapshotSession(actor, 'reference');
     fallback.writes['unrelated'] = {
-      'moduleId': 'unrelated',
-      'space': 'other',
-      'collection': 'other',
-      'id': '1',
+      'moduleId': actor.moduleId,
+      'space': actor.space,
+      'collection': 'records',
+      'id': 'absent-reference-record',
       'value': null,
     };
     final expected = await store.query(
@@ -85,6 +87,117 @@ void main() {
     );
     expect(actual, expected, reason: '$options');
   }
+
+  test(
+    'unrelated writes retain SQL pagination and report bounded decoding',
+    () async {
+      await records(
+        List.generate(
+          600,
+          (i) => {'id': 'r${i.toString().padLeft(4, '0')}', 'value': i},
+        ),
+      );
+      for (final scope in [
+        ['other.module', actor.space, 'records'],
+        [actor.moduleId, 'other-space', 'records'],
+        [actor.moduleId, actor.space, 'other-collection'],
+      ]) {
+        final session = SnapshotSession(actor, 'unrelated');
+        session.writes['other'] = {
+          'moduleId': scope[0],
+          'space': scope[1],
+          'collection': scope[2],
+          'id': 'x',
+          'value': null,
+        };
+        final samples = <UiLoadSample>[];
+        store.queries.clear();
+        final page = await UiLoadTrace.observe(
+          () => store.query(actor, 'records', {
+            'offset': 300,
+            'limit': 2,
+          }, session: session),
+          samples.add,
+        );
+        expect(page.map((row) => (row as Map)['value']), [300, 301]);
+        expect(store.paginated, isTrue);
+        expect(samples.single.arguments['recordsDecoded'], 2);
+        expect(samples.single.arguments['mode'], 'sql');
+        expect(session.collections, hasLength(1));
+      }
+    },
+  );
+
+  test(
+    'chunked fallback preserves exact sorted pages and overlay order',
+    () async {
+      final values = List.generate(
+        777,
+        (i) => <String, Object?>{
+          'id': 'r${i.toString().padLeft(4, '0')}',
+          'rank': (i * 31) % 97,
+          'title': '条目${i % 9}',
+        },
+      );
+      await records(values);
+      final session = SnapshotSession(actor, 'chunks');
+      for (final entry in <String, Object?>{
+        'r0000': null,
+        'r0256': {'id': 'r0256', 'rank': 900, 'title': '条目2'},
+        'new': {'id': 'new', 'rank': -1, 'title': '条目2'},
+      }.entries) {
+        session.writes[entry.key] = {
+          'moduleId': actor.moduleId,
+          'space': actor.space,
+          'collection': 'records',
+          'id': entry.key,
+          'value': entry.value,
+        };
+      }
+      final expected = [
+        for (final value in values)
+          if (value['id'] != 'r0000')
+            value['id'] == 'r0256'
+                ? session.writes['r0256']!['value'] as Map<String, Object?>
+                : value,
+        session.writes['new']!['value'] as Map<String, Object?>,
+      ];
+      for (final descending in [false, true]) {
+        final sorted =
+            expected.where((v) => (v['title'] as String).contains('2')).toList()
+              ..sort((a, b) {
+                final rank =
+                    (a['rank'] as int).compareTo(b['rank'] as int) *
+                    (descending ? -1 : 1);
+                return rank == 0
+                    ? (a['id'] as String).compareTo(b['id'] as String)
+                    : rank;
+              });
+        final samples = <UiLoadSample>[];
+        final page = await UiLoadTrace.observe(
+          () => store.query(actor, 'records', {
+            'filter': {'field': 'title', 'op': 'contains', 'value': '2'},
+            'sort': [
+              {'field': 'rank', 'direction': descending ? 'desc' : 'asc'},
+            ],
+            'offset': 7,
+            'limit': 11,
+          }, session: session),
+          samples.add,
+        );
+        expect(page, sorted.skip(7).take(11).toList());
+        expect(samples.single.arguments['mode'], 'overlay');
+        expect(samples.single.arguments['recordsDecoded'], 775);
+      }
+      expect(
+        await store.query(actor, 'records', {
+          'offset': 775,
+          'limit': 10,
+        }, session: session),
+        expected.skip(775).toList(),
+      );
+    },
+  );
 
   test(
     'null, missing, false and numeric/string equality remain distinct',

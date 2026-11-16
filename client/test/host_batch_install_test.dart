@@ -12,6 +12,7 @@ import 'module_host_test.dart' as fixtures;
 Future<ScriptPackage> candidate(
   String id, {
   String version = '1.0.0',
+  String workflowStartup = 'eager',
   List<Object?> dependencies = const [],
   List<String> permissions = const [],
   List<Object?> services = const [],
@@ -26,6 +27,7 @@ Future<ScriptPackage> candidate(
         'id': id,
         'version': version,
         'hostApi': '^1.8.0',
+        'workflowStartup': workflowStartup,
         'dataVersion': 1,
         'dependencies': dependencies,
         'permissions': permissions,

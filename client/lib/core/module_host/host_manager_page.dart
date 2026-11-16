@@ -20,6 +20,7 @@ import '../ui/ui_pack.dart';
 import '../ui/ui_pack_providers.dart';
 import '../ui/ui_pack_settings_page.dart';
 import 'module_host.dart';
+import 'module_installation_snapshot.dart';
 import 'module_package.dart';
 import 'host_providers.dart';
 import 'host_dialogs.dart';
@@ -70,6 +71,8 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
   ModuleHost? _rowsHost;
   Future<List<Map<String, Object?>>>? _installationRows;
   Stream<void>? _installationChanges;
+  Map<String, ScriptPackage> _verifiedDetails = {};
+  int _detailsGeneration = 0;
   late final _bundledCatalog = rootBundle
       .loadString('assets/modules/catalog.json')
       .then((text) => (jsonDecode(text) as List).map(object).toList());
@@ -90,6 +93,8 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
 
   Stream<void> _watchInstallations(ModuleHost host) {
     if (!identical(_rowsHost, host)) {
+      _detailsGeneration++;
+      _verifiedDetails = {};
       _rowsHost = host;
       _installationRows = _readInstallations(host);
       _installationChanges = host.registryChanges.stream.map((_) {
@@ -192,32 +197,74 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
   }
 
   Future<void> details(ModuleHost host, String id) async {
-    final rows = await host.store.sql(
-      'SELECT * FROM host_installations WHERE module_id=?',
-      [id],
-    );
-    if (rows.isEmpty) {
-      if (!mounted) return;
-      await installResolvedModules(context, ref, host, requests: {id: 'any'});
-      return;
-    }
-    final row = rows.first;
-    final package = await host.packageSource(id, row['version'] as String);
-    final repository = await host.repositoryFor(id);
-    final allDependents = await installedDependentLabels(host, id);
-    if (!mounted) return;
+    final generation = ++_detailsGeneration;
     final next = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => ModuleDetailsDialog(
-        package: package,
-        repository: repository,
-        status: moduleState(row),
-        dependents: host.affectedDependents(id),
-        allDependents: allDependents,
-        onDependency: (dependency) => Navigator.pop(dialogContext, dependency),
+      builder: (dialogContext) => ModuleDetailsLoader(
+        title: id,
+        load: () async {
+          bool isCurrent() =>
+              mounted &&
+              dialogContext.mounted &&
+              ModalRoute.of(dialogContext)?.isCurrent == true &&
+              generation == _detailsGeneration &&
+              identical(_rowsHost, host) &&
+              identical(ref.read(moduleHostProvider).asData?.value, host);
+          final current = await readModuleInstallations(
+            host,
+            verified: _verifiedDetails,
+            reuseVerified: true,
+            retainedModuleId: id,
+            isCurrent: isCurrent,
+          );
+          if (!dialogContext.mounted || !isCurrent()) {
+            throw StateError('模块详情已关闭或宿主已变化');
+          }
+          _verifiedDetails = {
+            for (final entry in current.entries) entry.key: entry.value.package,
+          };
+          final selected = current[id];
+          if (selected == null) {
+            Navigator.pop(dialogContext, 'install:$id');
+            return const SizedBox.shrink();
+          }
+          return ModuleDetailsDialog(
+            package: selected.package,
+            repository: selected.repository,
+            status: moduleState(selected.row),
+            dependents: host.affectedDependents(id),
+            allDependents: [
+              for (final entry in current.entries)
+                if (entry.key != id &&
+                    entry.value.installed &&
+                    entry.value.package.dependencies.contains(id))
+                  '${entry.key}（${entry.value.enabled ? '已启用' : '已停用'}）',
+            ],
+            onDependency: (dependency) =>
+                Navigator.pop(dialogContext, dependency),
+          );
+        },
       ),
     );
-    if (next != null && mounted) await details(host, next);
+    if (generation != _detailsGeneration ||
+        !mounted ||
+        !identical(_rowsHost, host) ||
+        !identical(ref.read(moduleHostProvider).asData?.value, host)) {
+      return;
+    }
+    _detailsGeneration++;
+    if (next != null) {
+      if (next.startsWith('install:')) {
+        await installResolvedModules(
+          context,
+          ref,
+          host,
+          requests: {next.substring('install:'.length): 'any'},
+        );
+      } else {
+        await details(host, next);
+      }
+    }
   }
 
   Future<void> remove(ModuleHost host, String id) async {

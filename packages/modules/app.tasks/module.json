@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.tasks",
     "name": "任务",
-    "version": "1.6.1",
-    "hostApi": "^1.21.0",
+    "version": "1.7.0",
+    "hostApi": "^1.49.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -943,5 +943,25 @@
         ]
       }
     }
-  ]
+  ],
+  "recordContracts": {
+    "time": {
+      "kind": "timeRange",
+      "collection": "tasks",
+      "fields": {
+        "id": "id",
+        "title": "title",
+        "startAt": "plannedStartAt",
+        "endAt": "plannedEndAt",
+        "zone": "plannedTimezone",
+        "date": "plannedDate",
+        "duration": "estimatedMinutes",
+        "modifiedAt": "updatedAt",
+        "locked": "locked",
+        "completed": "completedAt",
+        "deleted": "deletedAt",
+        "archived": "archivedAt"
+      }
+    }
+  }
 }

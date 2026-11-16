@@ -31,7 +31,7 @@
 | 找生产入口与架构边界 | [客户端说明](../client/README.md) · [架构](DESIGN.md) · [模块宿主](MODULE_HOST.md) |
 | 更新模拟器中的 APK 或模块 | [模拟器更新](EMULATOR_UPDATE.md) |
 | 管理目录、提交范围和缓存 | [目录规范](REPOSITORY_LAYOUT.md) |
-| 发布 Android App 与保管签名 | [App 发布](APP_UPDATES.md#发布-android-更新) · [签名保管](ANDROID_SIGNING.md) |
+| 提交、发布 Android App 与保管签名 | [发布流程](RELEASE_WORKFLOW.md) · [App 发布](APP_UPDATES.md#发布-android-更新) · [签名保管](ANDROID_SIGNING.md) |
 | 分析页面加载或冷启动 | [UI 加载性能](UI_LOADING_PERFORMANCE.md) · [启动采样](STARTUP_PERFORMANCE.md) |
 | 开发其他设备环境 | [Windows Android](WINDOWS_ANDROID_DEVELOPMENT.md) · [VPS／WSL](MULTI_MACHINE_DEVELOPMENT.md) · [远程预览](REMOTE_ANDROID_DEVELOPMENT.md) |
 
@@ -39,10 +39,12 @@
 
 | 要做什么 | 入口 |
 | --- | --- |
-| 查看决策与下一步任务 | [项目交接](../PROJECT_HANDOFF.md) · [统一待办](BACKLOG.md) |
+| 查看决策与下一步任务 | [架构与产品边界](DESIGN.md) · [统一待办](BACKLOG.md) |
 | 查看选稿、实现范围与页面顺序 | [设计入口](../design/README.md) · [页面清单](../design/PLAN.md) |
+| 从图片与文本开始独立 V2 设计 | [V2 设计包](design/v2/README.md) · [视觉规范](design/v2/VISUAL_SPEC.md) · [页面流程](design/v2/PAGE_FLOWS.md) |
 | 保存原图、提示词与批次 | [设计稿规范](DESIGN_ARTIFACTS.md) |
 | 修改公共 UI 或具体交互 | [界面规则](UI_DESIGN_SYSTEM.md) · [Toast](design/TOAST.md) · [数据审核](design/DATA_CHANGE_REVIEW.md) |
+| 规划模块可独立更新的 UI、动画与手势能力 | [模块 UI 运行时扩展方案](design/MODULE_UI_RUNTIME.md) · [已实现页面契约](sdk/PAGES.md) |
 | 核对规划需求或持续生成规则 | [规划交互](design/PLANNER_UX_REDESIGN.md) · [任务新建](design/TASK_CREATION.md) |
 | 查性能排查入口、平台及视觉验收条件 | [体验与平台细则](design/UX_PLATFORM_BACKLOG.md) · [时区与显示诊断](design/TIMEZONE_DISPLAY.md) |
 | 查历史运行结果 | [验证索引](VERIFICATION.md) · [历史归档](archive/README.md) |

@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/app/app_scroll_behavior.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
@@ -7,6 +10,7 @@ import 'package:task_app/core/module_host/data_change_review.dart';
 import 'package:task_app/core/module_host/host_dialogs.dart';
 import 'package:task_app/core/module_host/host_schema.dart';
 import 'package:task_app/core/module_host/module_package.dart';
+import 'package:task_app/core/ui/json_review.dart';
 import 'package:task_app/core/ui/ui_design.dart';
 import 'package:task_app/data/app_database.dart';
 
@@ -29,6 +33,23 @@ Map<String, Object?> _plan(List<Object?> writes) => {
   'writes': writes,
   'result': {'message': '真实结果'},
 };
+
+Future<void> _waitForReviewContent(WidgetTester tester) async {
+  await tester.pumpAndSettle();
+  // compute uses a real isolate; fake animation time alone does not wait for it.
+  await tester.runAsync(() async {
+    for (
+      var attempt = 0;
+      attempt < 1000 && find.text('正在准备完整详情…').evaluate().isNotEmpty;
+      attempt++
+    ) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await tester.pump();
+    }
+  });
+  await tester.pumpAndSettle();
+  expect(find.text('正在准备完整详情…'), findsNothing);
+}
 
 void main() {
   test('summarizes add update delete unchanged with record names and all changed fields', () {
@@ -146,21 +167,23 @@ void main() {
     String title = '确认实际数据变更',
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        scrollBehavior: const AppScrollBehavior(),
-        theme: AppDesign.theme(Brightness.light),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () => reviewDialog(context, title, details),
-              child: const Text('审核'),
+      ProviderScope(
+        child: MaterialApp(
+          scrollBehavior: const AppScrollBehavior(),
+          theme: AppDesign.theme(Brightness.light),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => reviewDialog(context, title, details),
+                child: const Text('审核'),
+              ),
             ),
           ),
         ),
       ),
     );
     await tester.tap(find.text('审核'));
-    await tester.pumpAndSettle();
+    await _waitForReviewContent(tester);
   }
 
   testWidgets(
@@ -187,7 +210,7 @@ void main() {
       final raw = find.text('全量原始详情');
       await tester.ensureVisible(raw);
       await tester.tap(raw);
-      await tester.pumpAndSettle();
+      await _waitForReviewContent(tester);
       expect(find.textContaining('frozen-plan'), findsOneWidget);
       expect(find.textContaining('真实结果'), findsOneWidget);
     },
@@ -228,6 +251,57 @@ void main() {
     expect(find.text('没有实际数据变化'), findsOneWidget);
     expect(find.text('全量原始详情'), findsOneWidget);
   });
+
+  testWidgets('raw review cannot be confirmed when preparing details fails', (
+    tester,
+  ) async {
+    await show(tester, {'invalidJson': double.nan});
+    expect(find.text('无法显示完整详情，请重试。'), findsOneWidget);
+    final confirm = find.widgetWithText(FilledButton, '确认');
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+    await tester.tap(find.text('重试加载详情'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'dialog rebuild preserves the frozen review and reopening prepares a fresh snapshot',
+    (tester) async {
+      final details = _plan([]);
+      await show(tester, details);
+      await tester.tap(find.text('全量原始详情'));
+      await tester.pumpAndSettle();
+      final raw = find.byType(JsonReviewContent);
+      final snapshot = tester.widget<JsonReviewContent>(raw).value;
+      final state = tester.state(raw);
+      details['result'] = {'message': '下一次审核的结果'};
+      tester.view.physicalSize = const Size(900, 700);
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpAndSettle();
+      expect(
+        identical(tester.widget<JsonReviewContent>(raw).value, snapshot),
+        isTrue,
+      );
+      expect(identical(tester.state(raw), state), isTrue);
+      expect(find.textContaining('真实结果'), findsOneWidget);
+      expect(find.textContaining('下一次审核的结果'), findsNothing);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('审核'));
+      await tester.pumpAndSettle();
+      expect(find.byType(JsonReviewContent), findsNothing);
+      await tester.ensureVisible(find.text('全量原始详情'));
+      await tester.tap(find.text('全量原始详情'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('下一次审核的结果'), findsOneWidget);
+      expect(find.textContaining('真实结果'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('raw package review body drags to its last original field', (
     tester,
@@ -290,7 +364,7 @@ void main() {
       final valueDisclosure = find.textContaining('之后：内容较长，展开查看完整值');
       await tester.ensureVisible(valueDisclosure);
       await tester.tap(valueDisclosure);
-      await tester.pumpAndSettle();
+      await _waitForReviewContent(tester);
       final view = find.byType(SingleChildScrollView);
       final scroll = tester.state<ScrollableState>(
         find.descendant(of: view, matching: find.byType(Scrollable)).first,
@@ -334,7 +408,7 @@ void main() {
       final rawDisclosure = find.text('全量原始详情');
       await tester.ensureVisible(rawDisclosure);
       await tester.tap(rawDisclosure);
-      await tester.pumpAndSettle();
+      await _waitForReviewContent(tester);
       final raw = find.byWidgetPredicate(
         (widget) =>
             widget is SelectableText &&
@@ -399,7 +473,7 @@ void main() {
       final value = find.textContaining('之后：内容较长，展开查看完整值');
       await tester.ensureVisible(value);
       await tester.tap(value);
-      await tester.pumpAndSettle();
+      await _waitForReviewContent(tester);
       expect(find.textContaining(longValue), findsOneWidget);
     },
   );
@@ -449,7 +523,31 @@ void main() {
       final raw = find.text('全量原始详情');
       await tester.ensureVisible(raw);
       await tester.tap(raw);
-      await tester.pumpAndSettle();
+      await _waitForReviewContent(tester);
+      final content = find.byType(JsonReviewContent);
+      final body = find.descendant(
+        of: content,
+        matching: find.byType(SelectableText),
+      );
+      final next = find.descendant(
+        of: content,
+        matching: find.widgetWithText(TextButton, '下一段'),
+      );
+      final pages = <String>[];
+      while (true) {
+        final text = tester.widget<SelectableText>(body).data!;
+        expect(text.length, lessThanOrEqualTo(jsonReviewPageLength));
+        pages.add(text);
+        if (next.evaluate().isEmpty ||
+            tester.widget<TextButton>(next).onPressed == null) {
+          break;
+        }
+        await tester.ensureVisible(next);
+        await tester.tap(next);
+        await tester.pumpAndSettle();
+      }
+      expect(pages.length, greaterThan(1));
+      expect(jsonDecode(pages.join()), _plan(writes));
       expect(find.textContaining('记录49'), findsOneWidget);
     },
   );

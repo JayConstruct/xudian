@@ -161,7 +161,7 @@ void main() {
       await tester.tap(_key('planner-day-card:整理笔记'));
       await tester.pumpAndSettle();
       expect(find.textContaining('与「已取消示例」时间重叠'), findsNothing);
-      expect(find.text('确认安排'), findsOneWidget);
+      expect(find.text('确认'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -198,7 +198,7 @@ void main() {
       await _open(tester);
       expect(tester.takeException(), isNull);
       expect(rootController.navigator, navigation.currentState);
-      await tester.tap(find.byTooltip('关闭当日任务'));
+      await tester.tap(find.byTooltip('关闭'));
       await tester.pumpAndSettle();
       expect(rootController.navigator, navigation.currentState);
       navigation.currentState!.push<void>(
@@ -273,7 +273,7 @@ void main() {
           .semanticsOwner!
           .rootSemanticsNode!
           .toStringDeep();
-      expect(accessibility, contains('关闭当日任务'));
+      expect(accessibility, contains('关闭'));
       expect(accessibility, contains('待安排'));
       expect(accessibility, isNot(contains('规划工具栏')));
       expect(accessibility, isNot(contains('底部导航')));
@@ -284,7 +284,7 @@ void main() {
       );
       expect(find.text('规划工具栏').hitTestable(), findsNothing);
       expect(find.text('底部导航').hitTestable(), findsNothing);
-      await tester.tap(find.byTooltip('关闭当日任务'));
+      await tester.tap(find.byTooltip('关闭'));
       await tester.pumpAndSettle();
       expect(_key('planner-day-sheet'), findsNothing);
       expect(tester.getRect(_key('planner-day:2026-10-22')), before);
@@ -482,7 +482,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(opacity(tester), 1);
       final settled = tester.getRect(_key('planner-day-sheet'));
-      await tester.tap(find.byTooltip('关闭当日任务'));
+      await tester.tap(find.byTooltip('关闭'));
       await tester.pump();
       expect(_key('planner-day-sheet'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 70));
@@ -513,7 +513,7 @@ void main() {
       expect(find.byType(PlannerBoard), findsOneWidget);
       await _open(tester);
       expect(opacity(tester), 1);
-      await tester.tap(find.byTooltip('关闭当日任务'));
+      await tester.tap(find.byTooltip('关闭'));
       await tester.pumpAndSettle();
       expect(_key('planner-day-sheet'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -531,7 +531,7 @@ void main() {
       tester.widget<SlideTransition>(_key('planner-day-slide')).position.value,
       Offset.zero,
     );
-    await tester.tap(find.byTooltip('关闭当日任务'));
+    await tester.tap(find.byTooltip('关闭'));
     await tester.pump();
     expect(_key('planner-day-sheet'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -548,7 +548,7 @@ void main() {
       expect(opacity(tester), 1);
       await _mount(tester, reduced: false, settle: false);
       expect(opacity(tester), 1);
-      await tester.tap(find.byTooltip('关闭当日任务'));
+      await tester.tap(find.byTooltip('关闭'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 30));
       await _mount(tester, reduced: true);
@@ -599,7 +599,7 @@ void main() {
       expect(tester.getRect(times).left, tester.getRect(title).left);
       expect(find.text('前日 23:30–00:15'), findsOneWidget);
       expect(find.textContaining('空闲'), findsNothing);
-      await tester.tap(find.byTooltip('关闭当日任务'));
+      await tester.tap(find.byTooltip('关闭'));
       await tester.pumpAndSettle();
       expect(_key('planner-day-sheet'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -640,7 +640,7 @@ void main() {
             ? (_candidate['moveEvent'] as Map)['expectedTasks']
             : null,
       );
-      await tester.tap(find.byTooltip('取消本次安排'));
+      await tester.tap(find.byTooltip('取消调整'));
       await tester.pumpAndSettle();
       expect(_key('planner-day-editor'), findsNothing);
       expect(find.text('待安排 1'), findsOneWidget);
@@ -899,7 +899,7 @@ void main() {
       tester.widget<FilledButton>(_key('planner-day-confirm')).onPressed,
       isNull,
     );
-    await tester.tap(find.byTooltip('取消本次安排'));
+    await tester.tap(find.byTooltip('取消调整'));
     await tester.pump();
     await tester.tap(find.text('待安排 1'));
     await tester.pumpAndSettle();

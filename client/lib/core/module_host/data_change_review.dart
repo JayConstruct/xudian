@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../contracts/json_values.dart';
+import '../ui/json_review.dart';
 import '../ui/native_ui.dart';
 
 enum DataChangeKind { add, update, delete, unchanged }
@@ -21,7 +22,7 @@ class DataFieldChange {
 }
 
 class DataRecordChange {
-  const DataRecordChange(this.write, this.kind);
+  DataRecordChange(this.write, this.kind);
   final Map<String, Object?> write;
   final DataChangeKind kind;
   String get moduleId => write['moduleId'] as String;
@@ -44,10 +45,12 @@ class DataRecordChange {
     DataChangeKind.delete => '删除',
     DataChangeKind.unchanged => '内容未变',
   };
-  List<DataFieldChange> get fields {
+  late final List<DataFieldChange> fields = _fields();
+
+  List<DataFieldChange> _fields() {
     final before = write['before'] as Map<String, Object?>? ?? const {};
     final after = write['value'] as Map<String, Object?>? ?? const {};
-    return [
+    return List.unmodifiable([
       for (final field in {...before.keys, ...after.keys})
         if (before.containsKey(field) != after.containsKey(field) ||
             canonicalJson(before[field]) != canonicalJson(after[field]))
@@ -58,7 +61,7 @@ class DataRecordChange {
             hadBefore: before.containsKey(field),
             hasAfter: after.containsKey(field),
           ),
-    ];
+    ]);
   }
 }
 
@@ -150,32 +153,15 @@ class DataChangeReview extends StatelessWidget {
   static const previewLimit = 20;
   static const fieldPreviewLimit = 12;
 
-  String _value(Object? value, bool exists) =>
-      !exists ? '（字段不存在）' : const JsonEncoder.withIndent('  ').convert(value);
-
   Widget _fieldValue(String label, Object? value, bool exists) {
-    final text = _value(value, exists);
-    if (text.length <= 600) {
+    final text = !exists ? '（字段不存在）' : smallJsonReviewText(value);
+    if (text != null) {
       return SelectableText(
         '$label：$text',
         scrollPhysics: const NeverScrollableScrollPhysics(),
       );
     }
-    return NativeUi(
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        title: Text('$label：内容较长，展开查看完整值（${text.length} 个字符）'),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelectableText(
-              text,
-              scrollPhysics: const NeverScrollableScrollPhysics(),
-            ),
-          ),
-        ],
-      ),
-    );
+    return JsonReviewSection(title: '$label：内容较长，展开查看完整值', value: value);
   }
 
   Widget _fields(List<DataFieldChange> fields) => Column(
@@ -226,7 +212,12 @@ class DataChangeReview extends StatelessWidget {
               child: ExpansionTile(
                 tilePadding: EdgeInsets.zero,
                 title: Text('其余 ${fields.length - fieldPreviewLimit} 个变化字段'),
-                children: [_fields(fields.skip(fieldPreviewLimit).toList())],
+                children: [
+                  Builder(
+                    builder: (_) =>
+                        _fields(fields.skip(fieldPreviewLimit).toList()),
+                  ),
+                ],
               ),
             ),
         ],
@@ -274,21 +265,7 @@ class DataChangeReview extends StatelessWidget {
           Text(
             '摘要显示前 $previewLimit 条（删除优先），共 ${records.length} 条；其余 ${records.length - previewLimit} 条请在全量原始详情中核对。',
           ),
-        NativeUi(
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: const Text('全量原始详情'),
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: SelectableText(
-                  const JsonEncoder.withIndent('  ').convert(summary.details),
-                  scrollPhysics: const NeverScrollableScrollPhysics(),
-                ),
-              ),
-            ],
-          ),
-        ),
+        JsonReviewSection(title: '全量原始详情', value: summary.details),
       ],
     );
   }

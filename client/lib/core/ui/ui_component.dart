@@ -6,6 +6,7 @@ import 'ui_feedback.dart';
 import 'ui_icons.dart';
 import 'ui_pack.dart';
 import 'daily_widgets.dart';
+import 'script_motion.dart';
 import 'ui_pack_providers.dart';
 
 class UiResolvedRecipe {
@@ -688,6 +689,15 @@ Widget defaultUiComponent(
           ? null
           : () => events['press']!(null);
       final label = Text('${props['label'] ?? ''}');
+      if (props.containsKey('feedback')) {
+        return ScriptFeedbackButton(
+          feedback: ScriptButtonFeedback.parse(props['feedback']),
+          onPressed: press,
+          variant: props['variant'] as String?,
+          style: appUiButtonStyle,
+          child: label,
+        );
+      }
       return switch (props['variant']) {
         'text' => TextButton(
           style: appUiButtonStyle,

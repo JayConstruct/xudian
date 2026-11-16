@@ -1,0 +1,507 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'script_motion.dart';
+import 'script_ui_scope.dart';
+import 'ui_motion.dart';
+
+class ScriptSwipeAction {
+  const ScriptSwipeAction(this.label, this.event, this.icon, this.disabled);
+  final String label;
+  final Map<String, Object?> event;
+  final IconData? icon;
+  final bool disabled;
+}
+
+class ScriptSwipeConfig {
+  ScriptSwipeConfig({
+    required this.enabled,
+    required this.end,
+    required this.extent,
+    required this.threshold,
+    required this.timing,
+    required this.actions,
+    required this.identity,
+  });
+  final bool enabled, end;
+  final double extent, threshold;
+  final ScriptTiming timing;
+  final List<ScriptSwipeAction> actions;
+  final String identity;
+  factory ScriptSwipeConfig.parse(
+    Map<String, Object?> spec,
+    IconData? Function(Object?) icon,
+  ) {
+    uiObject(spec, {
+      'type',
+      'key',
+      'enabled',
+      'side',
+      'extent',
+      'openThreshold',
+      'settle',
+      'actions',
+      'child',
+      'revision',
+    }, 'swipeActions');
+    final enabled = spec.containsKey('enabled') ? spec['enabled'] : true;
+    final side = spec.containsKey('side') ? spec['side'] : 'end';
+    final revision = spec['revision'];
+    if (enabled is! bool ||
+        !['start', 'end'].contains(side) ||
+        spec.containsKey('revision') &&
+            revision is! String &&
+            revision is! int) {
+      throw const FormatException('Invalid swipeActions configuration');
+    }
+    final raw = spec['actions'];
+    if (raw is! List || raw.isEmpty || raw.length > 3) {
+      throw const FormatException('swipeActions requires 1–3 actions');
+    }
+    final actions = <ScriptSwipeAction>[];
+    for (final item in raw) {
+      final action = uiObject(item, {
+        'label',
+        'icon',
+        'event',
+        'disabled',
+      }, 'swipe action');
+      final label = action['label'], event = action['event'];
+      final disabled = action.containsKey('disabled')
+          ? action['disabled']
+          : false;
+      final glyph = action.containsKey('icon') ? icon(action['icon']) : null;
+      if (label is! String ||
+          label.trim().isEmpty ||
+          event is! Map ||
+          disabled is! bool ||
+          action.containsKey('icon') &&
+              (action['icon'] is! String || glyph == null)) {
+        throw const FormatException('Invalid swipe action');
+      }
+      actions.add(
+        ScriptSwipeAction(
+          label,
+          event.cast<String, Object?>(),
+          glyph,
+          disabled,
+        ),
+      );
+    }
+    final extent = uiNumber(
+      spec['extent'],
+      raw.length * 48.0,
+      240,
+      'swipe extent',
+    );
+    return ScriptSwipeConfig(
+      enabled: enabled,
+      end: side == 'end',
+      extent: extent,
+      threshold: spec.containsKey('openThreshold')
+          ? uiNumber(spec['openThreshold'], .2, .8, 'openThreshold')
+          : .4,
+      timing: spec.containsKey('settle')
+          ? ScriptTiming.parse(spec['settle'])
+          : const ScriptTiming(),
+      actions: List.unmodifiable(actions),
+      identity: jsonEncode({
+        for (final entry in spec.entries)
+          if (entry.key != 'child') entry.key: entry.value,
+      }),
+    );
+  }
+}
+
+/// Horizontal presentation only. Actions retain the page's normal workflow.
+class ScriptSwipeActions extends StatefulWidget {
+  const ScriptSwipeActions({
+    super.key,
+    required this.config,
+    required this.canSwipe,
+    required this.child,
+    required this.onAction,
+  });
+  final ScriptSwipeConfig config;
+  final bool canSwipe;
+  final Widget child;
+  final Future<void> Function(Map<String, Object?> event) onAction;
+  @override
+  State<ScriptSwipeActions> createState() => _ScriptSwipeActionsState();
+}
+
+class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
+    with SingleTickerProviderStateMixin {
+  late final controller = AnimationController(vsync: this)
+    ..addStatusListener((status) {
+      if (status == AnimationStatus.completed ||
+          status == AnimationStatus.dismissed) {
+        resources?.release(this);
+      }
+    });
+  final menu = MenuController();
+  final menuFocus = FocusNode();
+  final pointers = <int>{};
+  ScriptUiResources? resources;
+  ScrollPosition? position;
+  Object? group;
+  bool active = true, busy = false, tracking = false, locked = false;
+  bool reduced = false, cancelled = false;
+  double sign = -1;
+  Size? geometry;
+  TextScaler? scaler;
+  bool get enabled => active && !busy && widget.config.enabled && !locked;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scope = ScriptUiScope.maybeOf(context);
+    final nextResources = scope?.resources;
+    final scrollable = Scrollable.maybeOf(context);
+    final nextPosition = scrollable?.position;
+    final nextSign =
+        (Directionality.of(context) == TextDirection.ltr) == widget.config.end
+        ? -1.0
+        : 1.0;
+    final nextScaler = MediaQuery.textScalerOf(context);
+    final nextActive =
+        (scope?.active ?? true) && TickerMode.valuesOf(context).enabled;
+    final nextBusy = scope?.busy ?? false;
+    // A backgrounded route may never receive the old pointer's up event.
+    if (!nextActive) pointers.clear();
+    if (!identical(resources, nextResources) ||
+        !identical(nextPosition, position) ||
+        sign != nextSign ||
+        scaler != nextScaler ||
+        !nextActive ||
+        nextBusy) {
+      _close(rebuild: false, deferMenu: true);
+    }
+    resources = nextResources;
+    if (!identical(nextPosition, position)) {
+      position?.isScrollingNotifier.removeListener(_scrollChanged);
+      position = nextPosition;
+      position?.isScrollingNotifier.addListener(_scrollChanged);
+    }
+    group = scrollable ?? resources ?? this;
+    sign = nextSign;
+    scaler = nextScaler;
+    active = nextActive;
+    busy = nextBusy;
+    reduced = AppMotion.reduced(context);
+    if (reduced && controller.isAnimating) {
+      controller.value = controller.value >= widget.config.threshold ? 1 : 0;
+      resources?.release(this);
+    }
+  }
+
+  @override
+  void didUpdateWidget(ScriptSwipeActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.config.identity != widget.config.identity ||
+        oldWidget.canSwipe != widget.canSwipe) {
+      _close(rebuild: false, deferMenu: true);
+      if (!widget.canSwipe) pointers.clear();
+      sign =
+          (Directionality.of(context) == TextDirection.ltr) == widget.config.end
+          ? -1
+          : 1;
+    }
+  }
+
+  void _scrollChanged() {
+    if (position?.isScrollingNotifier.value == true) _close();
+  }
+
+  void _close({bool rebuild = true, bool deferMenu = false}) {
+    controller.value = 0;
+    resources?.release(this);
+    resources?.forget(this);
+    tracking = false;
+    cancelled = true;
+    if (menu.isOpen) {
+      if (deferMenu) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) menu.close();
+        });
+      } else {
+        menu.close();
+      }
+    }
+    if (rebuild && mounted) setState(() {});
+  }
+
+  void _own() => resources?.open(group!, this, _close);
+  void _start(DragStartDetails details) {
+    if (!enabled || cancelled || pointers.length > 1) return;
+    _own();
+    controller.stop();
+    resources?.release(this);
+    setState(() => tracking = true);
+  }
+
+  void _update(DragUpdateDetails details) {
+    if (!tracking || cancelled || !enabled) return;
+    controller.value =
+        (controller.value + details.delta.dx * sign / widget.config.extent)
+            .clamp(0.0, 1.0);
+  }
+
+  void _end(DragEndDetails details) {
+    if (!tracking || cancelled || !enabled) return;
+    setState(() => tracking = false);
+    final target = controller.value >= widget.config.threshold ? 1.0 : 0.0;
+    if (target == 0) resources?.forget(this);
+    if (reduced ||
+        widget.config.timing.duration == Duration.zero ||
+        resources?.acquire(this) == false) {
+      controller.value = target;
+      resources?.release(this);
+    } else {
+      unawaited(
+        controller
+            .animateTo(
+              target,
+              duration: widget.config.timing.duration,
+              curve: widget.config.timing.curve,
+            )
+            .orCancel
+            .catchError((Object _) {}),
+      );
+    }
+  }
+
+  Future<void> _dispatch(ScriptSwipeAction action, String identity) async {
+    if (!enabled || action.disabled || identity != widget.config.identity) {
+      return;
+    }
+    setState(() => locked = true);
+    _close();
+    try {
+      await widget.onAction(action.event);
+    } finally {
+      if (mounted) setState(() => locked = false);
+    }
+  }
+
+  bool _fits(double width) {
+    if (!widget.canSwipe ||
+        !width.isFinite ||
+        width < widget.config.extent + 48) {
+      return false;
+    }
+    for (final action in widget.config.actions) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: action.label,
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final fits =
+          painter.width + 24 <=
+          widget.config.extent / widget.config.actions.length;
+      painter.dispose();
+      if (!fits) return false;
+    }
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final identity = widget.config.identity;
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close},
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final narrow = width < 96;
+          final bodyWidth = narrow ? width : width - 48;
+          final nextGeometry = Size(
+            bodyWidth,
+            MediaQuery.textScalerOf(context).scale(1),
+          );
+          if (geometry != null && geometry != nextGeometry) {
+            _close(rebuild: false, deferMenu: true);
+          }
+          geometry = nextGeometry;
+          final swipe = _fits(bodyWidth);
+          if (!swipe) pointers.clear();
+          final more = MenuAnchor(
+            controller: menu,
+            childFocusNode: menuFocus,
+            onOpen: () {
+              controller.value = 0;
+              resources?.release(this);
+              _own();
+            },
+            onClose: () => resources?.forget(this),
+            menuChildren: [
+              for (final action in widget.config.actions)
+                MenuItemButton(
+                  onPressed: enabled && !action.disabled
+                      ? () => unawaited(_dispatch(action, identity))
+                      : null,
+                  leadingIcon: action.icon == null ? null : Icon(action.icon),
+                  child: Text(action.label),
+                ),
+            ],
+            builder: (_, menuController, _) => IconButton(
+              focusNode: menuFocus,
+              tooltip: '更多操作',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              onPressed: enabled
+                  ? () {
+                      if (menuController.isOpen) {
+                        menuController.close();
+                      } else {
+                        menuController.open();
+                      }
+                    }
+                  : null,
+              icon: const Icon(Icons.more_horiz),
+            ),
+          );
+          final body = !swipe
+              ? widget.child
+              : Listener(
+                  onPointerDown: (event) {
+                    if (!enabled) return;
+                    if (pointers.isEmpty) cancelled = false;
+                    pointers.add(event.pointer);
+                    if (pointers.length > 1) _close();
+                  },
+                  onPointerUp: (event) => pointers.remove(event.pointer),
+                  onPointerCancel: (event) {
+                    if (pointers.remove(event.pointer)) _close();
+                  },
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onHorizontalDragStart: enabled ? _start : null,
+                    onHorizontalDragUpdate: enabled ? _update : null,
+                    onHorizontalDragEnd: enabled ? _end : null,
+                    onHorizontalDragCancel: enabled ? _close : null,
+                    child: AnimatedBuilder(
+                      animation: controller,
+                      child: widget.child,
+                      builder: (_, child) {
+                        final open =
+                            controller.value == 1 &&
+                            !tracking &&
+                            !controller.isAnimating;
+                        final intercept =
+                            tracking ||
+                            controller.isAnimating ||
+                            controller.value > 0;
+                        return ClipRect(
+                          child: Stack(
+                            children: [
+                              PositionedDirectional(
+                                top: 0,
+                                bottom: 0,
+                                start: widget.config.end ? null : 0,
+                                end: widget.config.end ? 0 : null,
+                                width: widget.config.extent,
+                                child: ExcludeSemantics(
+                                  excluding: !open,
+                                  child: ExcludeFocus(
+                                    excluding: !open,
+                                    child: IgnorePointer(
+                                      ignoring: !open || !enabled,
+                                      child: Row(
+                                        children: [
+                                          for (final action
+                                              in widget.config.actions)
+                                            Expanded(
+                                              child: TextButton(
+                                                onPressed:
+                                                    enabled && !action.disabled
+                                                    ? () => unawaited(
+                                                        _dispatch(
+                                                          action,
+                                                          identity,
+                                                        ),
+                                                      )
+                                                    : null,
+                                                child: Text(action.label),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Transform.translate(
+                                offset: Offset(
+                                  sign *
+                                      widget.config.extent *
+                                      controller.value,
+                                  0,
+                                ),
+                                child: Stack(
+                                  children: [
+                                    IgnorePointer(
+                                      ignoring: intercept,
+                                      child: ExcludeFocus(
+                                        excluding: intercept,
+                                        child: ExcludeSemantics(
+                                          excluding: intercept,
+                                          child: child!,
+                                        ),
+                                      ),
+                                    ),
+                                    if (intercept)
+                                      Positioned.fill(
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: open ? _close : null,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                );
+          return narrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    body,
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: more,
+                    ),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: body),
+                    more,
+                  ],
+                );
+        },
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    resources?.release(this);
+    resources?.forget(this);
+    position?.isScrollingNotifier.removeListener(_scrollChanged);
+    menuFocus.dispose();
+    controller.dispose();
+    super.dispose();
+  }
+}

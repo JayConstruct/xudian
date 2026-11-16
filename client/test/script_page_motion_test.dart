@@ -9,6 +9,7 @@ import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/script_page.dart';
 import 'package:task_app/core/ui/script_transition.dart';
+import 'package:task_app/core/ui/script_swipe_actions.dart';
 import 'package:task_app/data/app_database.dart';
 
 void main() {
@@ -30,7 +31,7 @@ void main() {
             'manifest': {
               'id': 'test.motion',
               'version': '1.0.0',
-              'hostApi': '^1.43.0',
+              'hostApi': '^1.50.0',
               'dataVersion': 1,
               'permissions': ['ui'],
               'dependencies': [],
@@ -43,6 +44,21 @@ void main() {
           {
             'main.js': r'''
 import {ui} from '@xudian/sdk';
+let localRenders = 0;
+export function renderLocal({state={},event}) {
+  state={...state};
+  if(event?.type==='toggle') state.selected=!state.selected;
+  if(event?.type==='perform') state.actions=(state.actions||0)+1;
+  return {state,tree:{type:'column',scrollKey:'local',children:[
+    {type:'text',text:'renders:'+(++localRenders)},
+    {type:'text',text:'actions:'+(state.actions||0)},
+    {type:'motion',key:'local-motion',target:{translateX:state.selected?20:0,scale:state.selected?.9:1},
+      timing:{duration:800,curve:'linear'},child:{type:'text',text:'preview'}},
+    {type:'button',text:'toggle',feedback:{pressedScale:.95},event:{type:'toggle'}},
+    {type:'swipeActions',key:'local-swipe',extent:160,actions:[{label:'perform',event:{type:'perform'}}],
+      child:{type:'card',variant:'outlined',children:[{type:'text',text:'swipe me'}]}}
+  ]}};
+}
 export async function render({state={},event,formValues={}}) {
   state={...state};
   if(event?.type==='field') await ui.dialog({title:'sync',fields:[]});
@@ -92,7 +108,11 @@ export async function render({state={},event,formValues={}}) {
     }
   }
 
-  Future<void> mount(WidgetTester tester, {bool reduced = false}) async {
+  Future<void> mount(
+    WidgetTester tester, {
+    bool reduced = false,
+    String handler = 'render',
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: MediaQuery(
@@ -101,7 +121,7 @@ export async function render({state={},event,formValues={}}) {
             body: ScriptPage(
               host: host,
               moduleId: 'test.motion',
-              handler: 'render',
+              handler: handler,
             ),
           ),
         ),
@@ -109,6 +129,40 @@ export async function render({state={},event,formValues={}}) {
     );
     await settle(tester);
   }
+
+  testWidgets(
+    'real JS receives discrete actions but no motion or swipe frames',
+    (tester) async {
+      await mount(tester, handler: 'renderLocal');
+      expect(find.text('renders:1'), findsOneWidget);
+      await tester.tap(find.text('toggle'));
+      await settle(tester);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('renders:2'), findsOneWidget);
+      expect(
+        tester
+            .widget<ScriptSwipeActions>(find.byType(ScriptSwipeActions))
+            .canSwipe,
+        isTrue,
+      );
+      await tester.drag(find.text('swipe me'), const Offset(-180, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('renders:2'), findsOneWidget);
+      expect(find.text('actions:0'), findsOneWidget);
+      await tester.tap(find.text('perform').hitTestable());
+      await settle(tester);
+      expect(find.text('renders:3'), findsOneWidget);
+      expect(find.text('actions:1'), findsOneWidget);
+      await tester.tap(find.byTooltip('更多操作'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('perform').hitTestable());
+      await settle(tester);
+      expect(find.text('renders:4'), findsOneWidget);
+      expect(find.text('actions:2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   for (final reduced in [false, true]) {
     testWidgets(

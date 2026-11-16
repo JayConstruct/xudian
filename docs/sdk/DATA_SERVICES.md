@@ -60,3 +60,19 @@ API 1.37 支持可信 `app.host / host.clock.tick` 自动化事件：在宿主�
 只有具有 `automation.execute` 且规则明确声明发布者 `app.host` 的模块参与；查询不能触发写入，
 脚本伪造同名事件不执行自动规则。宿主暂停或关闭时停止定时检查，恢复后再次检查；不保证系统后台常驻。
 处理程序须自行保证幂等，返回无写集且 `result.skipped:true` 时不产生提交／自动化历史。
+
+
+## 记录契约
+
+API `1.49.0` 支持模块定义顶层 `recordContracts`，键为契约 ID，值为 `{kind, collection, fields, settings?}`。集合必须属于声明模块；`fields` 从以下通用角色映射到实际字段名，必须完整、唯一，`id` 固定映射为 `id`。角色声明不要求每条记录都含有可选状态值。声明会在包验证阶段检查，并随不可变包、提供者实例一起绑定。
+
+| kind | fields 中的角色 | settings |
+| --- | --- | --- |
+| `timeRange` | `id,title,startAt,endAt,zone,date,duration,modifiedAt,locked,completed,deleted,archived` | 无 |
+| `timeJournal` | `id,kind,createdAt,request,changes,undone,sequence,undoOccupancy,undoneAt` | `retainedRecords` 为 1—10000 整数；`defaultKind` 为非空字符串 |
+| `timeReceipt` | `id,kind,request,createdAt` | 无 |
+| `timeOccurrence` | `id,taskId,date,duration,locked,status` | `activeValue` 为非空字符串 |
+
+例如任务模块将 `startAt` 绑定到自己的 `plannedStartAt`，规划模块将日志角色绑定到自己的历史集合。模块只拥有自己的映射；调用方页面只引用契约 ID。宿主不会忽略未映射字段，它们仍参与“其他字段不得改变”的核验。日志 `changes`、请求指纹与占用快照继续使用 `time-range/2` 规定的操作结构；任意数据模型不会因声明角色而获得免审核权限。
+
+脚本可用 `await data.contract('journal')` 读取**本模块**已验证的契约，返回 `{kind,collection,fields,settings}`。此只读能力不接收模块 ID，不读取其他模块的契约或业务记录；未知 ID 报错。规划历史写入与宿主审核共用声明中的 `retainedRecords`，避免两端各自固定数量。改变集合或字段时仍需迁移已有数据；绑定本身不会搬运或改写数据。

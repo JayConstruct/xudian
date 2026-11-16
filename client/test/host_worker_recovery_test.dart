@@ -1,3 +1,5 @@
+import 'package:task_app/core/performance/ui_load_trace.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -42,6 +44,67 @@ export function render(){return {tree:{type:'text',text:String(++count)}};}
     );
     return host.instances['test.recovery']!;
   }
+
+  test(
+    'lazy workflow starts once on demand and keeps independent globals',
+    () async {
+      final samples = <UiLoadSample>[];
+      await UiLoadTrace.observe(() async {
+        await host.install(
+          await fixtures.candidate(
+            'test.lazy',
+            workflowStartup: 'lazy',
+            script: '''
+let count = 0;
+export function render(){return {count: ++count};}
+''',
+          ),
+        );
+        final instance = host.instances['test.lazy']!;
+        expect(instance.hasWorkers, isFalse);
+        expect(
+          await host.invokePage('test.lazy', 'render', {}, readOnly: true),
+          isNull,
+        );
+        expect(instance.hasWorkers, isFalse);
+        expect(object(await instance.run('render', {}, null))['count'], 1);
+        final pages = await Future.wait([
+          host.invokePage('test.lazy', 'render', {}),
+          host.invokePage('test.lazy', 'render', {}),
+        ]);
+        expect(pages.map((p) => object(p)['count']), [1, 2]);
+        expect(instance.hasWorkers, isTrue);
+        expect(object(await instance.run('render', {}, null))['count'], 2);
+      }, samples.add);
+      expect(
+        samples.where(
+          (s) =>
+              s.name == 'host.worker.load' &&
+              s.arguments['worker'] == 'workflow',
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('disabling a lazy module never starts its unused workflow', () async {
+    await host.install(
+      await fixtures.candidate('test.lazy', workflowStartup: 'lazy'),
+    );
+    final instance = host.instances['test.lazy']!;
+    await host.disable('test.lazy');
+    expect(instance.hasWorkers, isFalse);
+    expect(() => instance.engines.ready(workflow: true), throwsStateError);
+    expect(instance.worker.closed, isTrue);
+  });
+
+  test('invalid startup policy is rejected before activation', () async {
+    await expectLater(
+      fixtures.candidate('test.lazy', workflowStartup: 'sometimes'),
+      throwsFormatException,
+    );
+    expect(host.instances.containsKey('test.lazy'), isFalse);
+  });
 
   test(
     'activation loads both independent engines before publishing the module',

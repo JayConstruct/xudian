@@ -19,9 +19,9 @@
 | `scripts/`、`.github/` | 构建、校验、模拟器流程与工作流 |
 | `module-index/`、`releases/modules/` | 作者版本索引及其引用的全部不可变模块包 |
 | `docs/` | 当前说明、精选设计参考、版本说明、精简验收记录和必要历史归档 |
-| 根目录 Markdown／Git 配置 | 项目入口、开发／协作约定、交接说明、忽略及换行规则 |
+| 根目录 Markdown／Git 配置 | 项目、开发及协作入口，忽略及换行规则 |
 
-`app_database.g.dart`、Android Gradle wrapper、运行所需的上游源码和资源仍由构建直接读取，应保留。`docs/verification/` 只提交步骤、版本、摘要和结果；完整日志、截图、下载包和设备数据留在本机。图片不按扩展名一律忽略，应用图标和精选文档参考图可以提交。
+`app_database.g.dart`、Android Gradle wrapper、运行所需的上游源码和资源仍由构建直接读取，应保留。图片不按扩展名一律忽略，应用图标和精选文档参考图可以提交。
 
 新一轮 UI 获选且需要随文档保存时，副本放 `docs/design/selected/`，附原路径、批次、SHA-256 与选择说明。原始风格稿直接放浅层 `design/styles/`；目录入口见 [design/](../design/README.md)。
 
@@ -32,7 +32,7 @@
 | `.tools/` | 已安装 Flutter／Android SDK 与开发工具，通常保留 |
 | `.cache/gradle/`、`.cache/pub/` | 可复用的依赖缓存，通常保留以免重复下载 |
 | `.cache/config/` 等开发配置 | 包含本机开发签名和配置，不整体清空 `.cache/` |
-| `.cache/emulator-update/` | 保留状态 JSON、其引用的 APK、最近回退包及模块验收状态；清理未引用的旧缓存 APK |
+| `.cache/emulator-update/` | 更新锁、最近状态、构建缓存 APK 及模块更新状态；详细验收证据放 `dist/verification/` |
 | `client/.dart_tool/flutter_build/` | 可重建的编译缓存，可保留最近目录后清理旧目录；保留依赖配置和其余 `.dart_tool` 状态 |
 | `client/build/` | 可重建的 APK 和编译中间产物，整理前先保留当前验收 APK |
 | `.cache/downloads/` | 已安装工具链的重复下载归档，确认工具已安装后可清理指定文件 |
@@ -40,7 +40,7 @@
 | `dist/bundle-archive/` | 打包工具使用的旧预装包归档，保留既有工具入口 |
 | `dist/releases/app/<版本>/` | 本机 APK 发布暂存，包括原包、摘要、来源提交与报告 |
 | `dist/releases/modules/<发布标签>/` | 本机模块发布暂存，每个标签独立目录，不代替 Git 中的不可变发布包 |
-| `dist/verification/<专题>/<批次>/` | 当前与关键历史验收证据；保留性能基线、原始报告、截图和成组的数据快照 |
+| `dist/verification/<时间>-<主题>/` | 每轮完整结果、日志、截图与必要快照；既有专题／批次目录按历史路径保留 |
 | `design/styles/`、`design/screens/ui-XX/` | 新原图与同名提示词直接放本层，批次记录在 .batches/；原稿和批次不提交 |
 | `dist/design/<主题>/<批次>/` | 保留历史批次和旧清单，新 UI 使用根目录 design，见 [设计稿规范](DESIGN_ARTIFACTS.md) |
 | `dist/archive/` | 历史交付目录、旧整理备份与旧目录仓库检出，保留各自上下文 |
@@ -49,6 +49,13 @@
 新 UI 在实际设计时运行 `new styles` 或 `new ui-01` 至 `new ui-22`，原图文件以返回的完整时间批次为前缀；不向旧 app-ui-* 或历史批次追加。元数据与图片存放位置分开，避免为查找风格稿进入多层目录。
 
 固定发布签名保存在仓库外，不能作为缓存清理。其他本机凭据目录和用户数据也不属于构建缓存。
+
+## 文档与记录只维护一处
+
+- 当前规则在对应专题维护，剩余任务及状态统一在 [BACKLOG](BACKLOG.md)；规则或状态未变时无需为每轮工作改写它们。根目录不另建交接记录。
+- 普通改动在 `docs/verification/YYYY-MM.md` 追加简短条目；发布、迁移、性能基线等需要独立追溯的里程碑可单列。已有历史报告保留，入口统一为 [验证索引](VERIFICATION.md)，专题只链接对应条目。
+- 精简条目记录日期、范围、版本与摘要（运行产物改变时）、检查及页面操作结果、失败原因、限制和证据路径；涉及 CI 时附链接，未执行则注明。不得提交用户业务数据或账号密钥，机器绝对路径改为仓库相对路径或示例。
+- 每轮详细证据集中在一个本机目录。更新脚本自动生成 `dist/verification/<UTC时间>-emulator-update/`，其中 `results.json` 保存成功或失败结果，`catalog/` 保存商店截图与报告；额外日志和页面检查也放同轮目录。`.cache/emulator-update/latest-*.json` 仅作最近状态入口，以 `evidenceDir` 找到完整记录。
 
 ## 清理与验证
 

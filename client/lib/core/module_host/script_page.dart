@@ -19,6 +19,9 @@ import '../ui/ui_component.dart';
 import '../ui/ui_pack.dart';
 import '../ui/temporal_input.dart';
 import '../ui/script_transition.dart';
+import '../ui/script_motion.dart';
+import '../ui/script_swipe_actions.dart';
+import '../ui/script_ui_scope.dart';
 import '../ui/time_range_table.dart';
 import '../ui/conversation_widgets.dart';
 import '../ui/native_ui.dart';
@@ -41,6 +44,7 @@ import 'module_package.dart';
 import 'time_grid.dart';
 import 'planner_board.dart';
 import 'planner_quick_adjust.dart';
+import 'native_time_gestures.dart';
 import 'collection_store.dart';
 import 'data_change_review.dart';
 import 'inline_plan_review.dart';
@@ -131,9 +135,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   BoardItem? _retryPlannerMove;
   ScaffoldMessengerState? _plannerNoticeMessenger;
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _plannerUndoNotice;
-  final _plannerApprovals = Expando<PlannerQuickAdjustment>(
-    'native planner gesture',
-  );
+  final _timeGestures = NativeTimeGestures();
   final _inlineApprovals = Expando<InlinePlanApproval>(
     'native plan confirmation',
   );
@@ -500,16 +502,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       ),
     ),
   );
-  BoardItem? _quickAdjustmentConfig(BoardItem spec) {
-    final config = spec['quickAdjustment'];
-    if (config is! Map ||
-        !['taskModuleId', 'applyServiceId', 'undoServiceId'].every(
-          (key) => config[key] is String && (config[key] as String).isNotEmpty,
-        )) {
-      return null;
-    }
-    return object(config);
-  }
+  BoardItem? _quickAdjustmentConfig(BoardItem spec) => _timeGestures
+      .configuration(widget.host, widget.moduleId, spec['quickAdjustment']);
 
   void _plannerEvent(Object? event, BoardItem? quickConfig) {
     if (busy || staleTree || !routeActive || !workspaceActive) return;
@@ -528,13 +522,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         _quickAdjust &&
         event is Map &&
         event['type'] == 'move') {
-      _plannerApprovals[event] = PlannerQuickAdjustment.move(
-        object(event),
-        moduleId: widget.moduleId,
-        taskModuleId: quickConfig['taskModuleId'] as String,
-        applyServiceId: quickConfig['applyServiceId'] as String,
-        undoServiceId: quickConfig['undoServiceId'] as String,
-      );
+      _timeGestures.begin(event, widget.host, widget.moduleId, quickConfig);
       if (event['intent'] == null ||
           event['intent'] == 'move' ||
           event['intent'] == 'resize') {
@@ -642,7 +630,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               return;
             }
             final event = <String, Object?>{'type': 'undo', 'id': batchId};
-            _plannerApprovals[event] = undo;
+            _timeGestures.attachUndo(event, undo);
             unawaited(_render(event));
           },
         ),
@@ -1093,7 +1081,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     _delayProgress(current);
     final sentForms = Map<String, Object?>.of(formValues);
     final sentRevisions = Map<String, int>.of(formRevisions);
-    final adjustment = event is Map ? _plannerApprovals[event] : null;
+    final adjustment = event is Map ? _timeGestures.lookup(event) : null;
     final inlineApproval = event is Map ? _inlineApprovals[event] : null;
     final commandApproval = event is Map ? _commandApprovals[event] : null;
     bool commandIsCurrent() =>
@@ -1204,14 +1192,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                         )
                   : adjustment != null
                   ? (reference, preparedInput, plan, confirmation) {
-                      if (reference.major != 1 ||
-                          !mounted ||
-                          !routeActive ||
-                          !workspaceActive ||
-                          !identical(
-                            instance,
-                            widget.host.instances[widget.moduleId],
-                          )) {
+                      if (reference.major != 1 || !commandIsCurrent()) {
                         return false;
                       }
                       final accepted = adjustment.allows(
@@ -1973,8 +1954,115 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     );
   }
 
+  bool _swipeContentSafe(Map<String, Object?> spec, [int depth = 0]) {
+    if (depth > 32 ||
+        !const {
+          'column',
+          'row',
+          'card',
+          'text',
+          'icon',
+          'badge',
+          'button',
+          'divider',
+        }.contains(spec['type'])) {
+      return false;
+    }
+    // A recipe can introduce selectable text or native slots. Unknown recipes
+    // retain all their controls and use the menu, without a competing drag.
+    final registry = uiContext
+        .dependOnInheritedWidgetOfExactType<UiScopeData>()
+        ?.registry;
+    final ref = switch (spec['type']) {
+      'card' => 'ui.card@1',
+      'text' => 'ui.text@1',
+      'button' => 'ui.button@1',
+      'divider' => 'ui.divider@1',
+      _ => null,
+    };
+    if (ref != null && registry?.resolve(ref) != null) return false;
+    return objects(spec['children'])
+        .every((child) => _swipeContentSafe(child, depth + 1));
+  }
+
+  Widget _motionNode(Map<String, Object?> spec, int depth) {
+    final key = spec['key'];
+    if (key is! String || key.isEmpty || spec['child'] is! Map) {
+      throw const FormatException('Motion/gesture requires a key and child');
+    }
+    final identity = ValueKey((
+      key,
+      renderedInstance,
+      treeContextIdentity,
+      tree?['scrollKey'] ?? tree?['key'],
+    ));
+    if (spec['type'] == 'motion') {
+      uiObject(spec, {'type', 'key', 'target', 'timing', 'child'}, 'motion');
+      uiObject(spec['target'], {
+        'opacity',
+        'translateX',
+        'translateY',
+        'scale',
+      }, 'motion target');
+      final target = ScriptMotionValue.parse(_bindValue(spec['target']));
+      final timing = spec.containsKey('timing')
+          ? ScriptTiming.parse(spec['timing'])
+          : const ScriptTiming();
+      return ScriptMotion(
+        key: identity,
+        target: target,
+        timing: timing,
+        child: node(object(spec['child']), depth + 1),
+      );
+    }
+    final resolved = <String, Object?>{
+      ...spec,
+      if (spec.containsKey('enabled')) 'enabled': bind(spec['enabled']),
+      if (spec.containsKey('revision')) 'revision': bind(spec['revision']),
+      'actions': spec['actions'] is List
+          ? (spec['actions'] as List).map((raw) {
+              final action = object(raw);
+              return {
+                ...action,
+                'event': _bindValue(action['event']),
+                if (action.containsKey('disabled'))
+                  'disabled': bind(action['disabled']),
+              };
+            }).toList()
+          : spec['actions'],
+    };
+    final config = ScriptSwipeConfig.parse(resolved, _icon);
+    final child = object(spec['child']);
+    return ScriptSwipeActions(
+      key: identity,
+      config: config,
+      canSwipe: _swipeContentSafe(child),
+      child: node(child, depth + 1),
+      onAction: (event) async {
+        if (busy ||
+            staleTree ||
+            !routeActive ||
+            !workspaceActive ||
+            !identical(
+              renderedInstance,
+              widget.host.instances[widget.moduleId],
+            )) {
+          return;
+        }
+        await _render(event);
+      },
+    );
+  }
+
   Widget _node(Map<String, Object?> spec, int depth, bool replace) {
     if (depth > 32) return const Text('组件嵌套超过限制');
+    if (spec['type'] == 'motion' || spec['type'] == 'swipeActions') {
+      try {
+        return _motionNode(spec, depth);
+      } on FormatException catch (error) {
+        return Text('模块界面无效：$error');
+      }
+    }
     if (spec['type'] == 'component') return componentNode(spec, depth);
     if (spec['type'] == 'componentExample') {
       return componentExample(spec, depth);
@@ -2066,6 +2154,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                 'variant',
                 'min',
                 'max',
+                'feedback',
               ])
                 if (spec.containsKey(key)) key: spec[key],
             }),
@@ -2165,9 +2254,23 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         ],
       );
     }
-    final children = objects(spec['children'])
-        .map((n) => node(n, depth + 1))
+    final childSpecs = objects(spec['children']);
+    final newKeys = childSpecs
+        .where(
+          (item) => item['type'] == 'motion' || item['type'] == 'swipeActions',
+        )
+        .map((item) => item['key'])
         .toList();
+    if (newKeys.isNotEmpty) {
+      final counts = <Object?, int>{};
+      for (final item in childSpecs) {
+        counts.update(item['key'], (count) => count + 1, ifAbsent: () => 1);
+      }
+      if (newKeys.any((key) => counts[key] != 1)) {
+        throw const FormatException('Duplicate motion/gesture key');
+      }
+    }
+    final children = childSpecs.map((n) => node(n, depth + 1)).toList();
     final text = '${bind(spec['text']) ?? ''}';
     final event = bind(spec['event']);
     switch (spec['type']) {
@@ -2709,6 +2812,15 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   Flexible(child: Text(text)),
                 ],
               );
+        if (spec.containsKey('feedback')) {
+          return ScriptFeedbackButton(
+            feedback: ScriptButtonFeedback.parse(spec['feedback']),
+            onPressed: press,
+            variant: spec['variant'] as String?,
+            style: appUiButtonStyle,
+            child: buttonLabel,
+          );
+        }
         return switch (spec['variant']) {
           'text' => TextButton(
             style: appUiButtonStyle,
@@ -3482,135 +3594,140 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) => UiPackScope(
     moduleId: widget.moduleId,
-    child: Builder(
-      builder: (context) {
-        nodeContext = context;
-        dateContentBlocked =
-            DateRevealScope.of(context)?.isTransitioning == true;
-        retainDateNavigation = _hasDateNavigation(tree);
-        // Inline compositions provide one shared progress indicator.
-        final loading =
-            busy &&
-            showProgress &&
-            routeActive &&
-            compositionReadiness == null &&
-            _pendingPlannerAdjustment == null;
-        final contextController =
-            compositionReadiness?.controller.contextControllers.contains(
-              compositionReadiness!.memberId,
-            ) ==
-            true;
-        final currentTree =
-            tree != null &&
-            (treeContextIdentity == canonicalJson(pageContext) ||
-                contextController ||
-                retainDateNavigation);
-        final headerLease = WorkspaceHeaderScope.read(context)?.lease;
-        final hasNativeHeader =
-            headerLease?.mode == 'contributed' &&
-            headerLease?.moduleId == widget.moduleId &&
-            headerLease?.pageId == widget.pageContext['pageId'];
-        final content = Column(
-          mainAxisSize: widget.embedded ? MainAxisSize.min : MainAxisSize.max,
-          children: [
-            // A modal is waiting for user input; only the active page shows
-            // render progress. Keep busy for serialization and disabled inputs.
-            if (loading && currentTree)
-              const LinearProgressIndicator(minHeight: 2),
-            if (error != null)
-              MaterialBanner(
-                content: Text(error!),
-                actions: [
-                  TextButton(
-                    onPressed: () => _render(),
-                    child: const Text('重试'),
-                  ),
-                ],
-              ),
-            if (_formCacheError != null)
-              MaterialBanner(
-                content: Text(_formCacheError!),
-                actions: [
-                  TextButton(
-                    onPressed: _cacheFormValues,
-                    child: const Text('重试保存'),
-                  ),
-                ],
-              ),
-            if (!widget.embedded && currentTree && tree?['header'] is Map)
-              safeNode(object(tree!['header'])),
-            if (!widget.embedded &&
-                currentTree &&
-                _hasQuickAdjustHeader &&
-                !hasNativeHeader)
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: WorkspaceHeaderAction(
-                      key: const ValueKey('planner-standalone-quick-adjust'),
-                      action: _quickAdjustHeaderAction,
-                      compact: true,
-                      onPressed: () => _setQuickAdjust(!_quickAdjust),
+    child: ScriptUiScope(
+      active: routeActive && workspaceActive && !staleTree,
+      busy: busy,
+      child: Builder(
+        builder: (context) {
+          nodeContext = context;
+          dateContentBlocked =
+              DateRevealScope.of(context)?.isTransitioning == true;
+          retainDateNavigation = _hasDateNavigation(tree);
+          // Inline compositions provide one shared progress indicator.
+          final loading =
+              busy &&
+              showProgress &&
+              routeActive &&
+              compositionReadiness == null &&
+              _pendingPlannerAdjustment == null;
+          final contextController =
+              compositionReadiness?.controller.contextControllers.contains(
+                compositionReadiness!.memberId,
+              ) ==
+              true;
+          final currentTree =
+              tree != null &&
+              (treeContextIdentity == canonicalJson(pageContext) ||
+                  contextController ||
+                  retainDateNavigation);
+          final headerLease = WorkspaceHeaderScope.read(context)?.lease;
+          final hasNativeHeader =
+              headerLease?.mode == 'contributed' &&
+              headerLease?.moduleId == widget.moduleId &&
+              headerLease?.pageId == widget.pageContext['pageId'];
+          final content = Column(
+            mainAxisSize: widget.embedded ? MainAxisSize.min : MainAxisSize.max,
+            children: [
+              // A modal is waiting for user input; only the active page shows
+              // render progress. Keep busy for serialization and disabled inputs.
+              if (loading && currentTree)
+                const LinearProgressIndicator(minHeight: 2),
+              if (error != null)
+                MaterialBanner(
+                  content: Text(error!),
+                  actions: [
+                    TextButton(
+                      onPressed: () => _render(),
+                      child: const Text('重试'),
                     ),
-                  ),
-                ),
-              ),
-            if (widget.embedded)
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: tree?['compact'] == true ? 4 : 12,
-                ),
-                child: Stack(
-                  alignment: Alignment.topCenter,
-                  children: [
-                    Offstage(
-                      offstage: !currentTree,
-                      child: tree == null
-                          ? const SizedBox.shrink()
-                          : safeNode(tree!),
-                    ),
-                    if (!currentTree && loading) const PageLoadingPlaceholder(),
                   ],
                 ),
-              )
-            else
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Offstage(
-                      offstage: !currentTree,
-                      child: tree == null
-                          ? const SizedBox.shrink()
-                          : pageContent(),
+              if (_formCacheError != null)
+                MaterialBanner(
+                  content: Text(_formCacheError!),
+                  actions: [
+                    TextButton(
+                      onPressed: _cacheFormValues,
+                      child: const Text('重试保存'),
                     ),
-                    if (!currentTree && loading)
-                      const Align(
-                        alignment: Alignment.topCenter,
-                        child: PageLoadingPlaceholder(),
+                  ],
+                ),
+              if (!widget.embedded && currentTree && tree?['header'] is Map)
+                safeNode(object(tree!['header'])),
+              if (!widget.embedded &&
+                  currentTree &&
+                  _hasQuickAdjustHeader &&
+                  !hasNativeHeader)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: WorkspaceHeaderAction(
+                        key: const ValueKey('planner-standalone-quick-adjust'),
+                        action: _quickAdjustHeaderAction,
+                        compact: true,
+                        onPressed: () => _setQuickAdjust(!_quickAdjust),
                       ),
-                  ],
+                    ),
+                  ),
                 ),
-              ),
-            if (tree?['footer'] is Map || tree?['pageTransition'] is Map)
-              Offstage(offstage: !currentTree, child: _pageFooter()),
-          ],
-        );
-        return IgnorePointer(
-          ignoring: dateContentBlocked && !retainDateNavigation,
-          child: ExcludeFocus(
-            excluding: dateContentBlocked && !retainDateNavigation,
-            child: ExcludeSemantics(
+              if (widget.embedded)
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: tree?['compact'] == true ? 4 : 12,
+                  ),
+                  child: Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      Offstage(
+                        offstage: !currentTree,
+                        child: tree == null
+                            ? const SizedBox.shrink()
+                            : safeNode(tree!),
+                      ),
+                      if (!currentTree && loading)
+                        const PageLoadingPlaceholder(),
+                    ],
+                  ),
+                )
+              else
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Offstage(
+                        offstage: !currentTree,
+                        child: tree == null
+                            ? const SizedBox.shrink()
+                            : pageContent(),
+                      ),
+                      if (!currentTree && loading)
+                        const Align(
+                          alignment: Alignment.topCenter,
+                          child: PageLoadingPlaceholder(),
+                        ),
+                    ],
+                  ),
+                ),
+              if (tree?['footer'] is Map || tree?['pageTransition'] is Map)
+                Offstage(offstage: !currentTree, child: _pageFooter()),
+            ],
+          );
+          return IgnorePointer(
+            ignoring: dateContentBlocked && !retainDateNavigation,
+            child: ExcludeFocus(
               excluding: dateContentBlocked && !retainDateNavigation,
-              child: content,
+              child: ExcludeSemantics(
+                excluding: dateContentBlocked && !retainDateNavigation,
+                child: content,
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     ),
   );
 }

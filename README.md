@@ -44,23 +44,9 @@ scripts/update-emulator.sh --dev
 | 开发、测试、构建与模拟器更新 | [开发指南](DEVELOPMENT.md) |
 | 生产代码从哪里开始看 | [客户端说明](client/README.md) |
 | 当前架构与后续设计边界 | [架构](docs/DESIGN.md) |
-| 已确认决策与下一步工作 | [项目交接](PROJECT_HANDOFF.md) |
+| 剩余任务、状态与关闭条件 | [统一待办](docs/BACKLOG.md) |
 | 课表、拾光、SDK、发布及平台指南 | [文档导航](docs/README.md) |
 
-## 目录
+## 源码与资料
 
-```text
-client/             Flutter 宿主、Android/Windows 工程和测试
-packages/modules/   JavaScript 业务模块与界面包
-packages/schemas/   版本化 JSON 契约
-packages/catalog/   统一目录仓库内容
-packages/xquickjs/  固定版本 QuickJS 原生引擎
-module-index/       作者版本索引
-releases/modules/   索引引用的版本化不可变模块包
-design/             当前方案与 UI 清单；styles/ 放原图，screens/ 放页面稿
-docs/               当前专题说明；archive/ 保存历史
-scripts/            开发、验证、打包与发布工具
-assets/brand/       品牌资源
-```
-
-`.tools/`、`.cache/`、`dist/` 及 design 中的原图/提示词/批次为本机材料，不提交。design 的入口、清单及顶层目录说明可以提交。公开模块包及保留规则见 [发布目录](releases/README.md)，历史记录从 [归档索引](docs/archive/README.md) 查看。
+宿主在 `client/`，业务模块在 `packages/modules/`，协议与固定依赖在 `packages/`；设计入口为 `design/`，现行说明与历史记录在 `docs/`。完整目录、生成文件及本机材料的提交边界见 [目录规范](docs/REPOSITORY_LAYOUT.md)，已发布模块的保留规则见 [发布目录](releases/README.md)。

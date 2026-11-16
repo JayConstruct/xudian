@@ -208,15 +208,17 @@ def main(argv=None):
     if args.dry_run:
         print(json.dumps({'module': args.module, 'phases': phases}, ensure_ascii=False, indent=2))
         return 0
-    output = args.output or ROOT / '.cache/emulator-update/catalog-acceptance' / datetime.datetime.now(
-        datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
-    output.mkdir(parents=True, exist_ok=True)
+    output = args.output or ROOT / 'dist/verification' / (datetime.datetime.now(
+        datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ') + '-catalog')
+    output.mkdir(parents=True, exist_ok=args.output is not None)
     if (output / 'results.json').exists():
         parser.error('结果目录已有报告，请使用新目录：' + str(output))
     verify_emulator.OUT = output
     emulator = verify_emulator.Emulator(args.serial, adb_host=args.adb_host, adb_port=args.adb_port)
     flow = CatalogAcceptance(emulator, output, module)
-    report = {'completed': False, 'steps': flow.steps, 'modifiedBusinessRecords': False}
+    report = {'completed': False, 'steps': flow.steps, 'modifiedBusinessRecords': False,
+              'evidenceDir': str(output.relative_to(ROOT) if output.is_relative_to(ROOT)
+                                 else output.resolve())}
     started = time.monotonic()
     try:
         build = json.loads(args.build_report.read_text())

@@ -9,6 +9,7 @@ import '../contracts/json_values.dart';
 import '../declarative/package/module_package.dart';
 import '../ui/ui_pack.dart';
 import 'host_api.dart';
+import 'record_contract.dart';
 
 Map<String, Object?> object(Object? value, [String label = 'value']) {
   if (value is! Map) throw FormatException('$label must be an object');
@@ -68,6 +69,10 @@ bool safePath(String path) =>
     !path.split('/').any((part) => part == '.' || part == '..');
 
 class ScriptPackage {
+  late final Map<String, RecordContract> recordContracts;
+  bool get lazyWorkflow =>
+      object(definition['manifest'])['workflowStartup'] == 'lazy';
+
   ScriptPackage._(
     this.bytes,
     this.packageDigest,
@@ -111,6 +116,14 @@ class ScriptPackage {
         (manifest['dataVersion'] as int) < 1) {
       throw const FormatException('Invalid data version');
     }
+    if (manifest['workflowStartup'] != null &&
+        !['eager', 'lazy'].contains(manifest['workflowStartup'])) {
+      throw const FormatException('Invalid workflow startup policy');
+    }
+    if (isUiPack && manifest.containsKey('workflowStartup')) {
+      throw const FormatException('UI packs cannot configure script workers');
+    }
+    recordContracts = RecordContract.parse(definition);
     final dependencyIds = <String>{};
     optionalServicePermissions(manifest);
     for (final raw in manifest['dependencies'] as List? ?? []) {
@@ -216,6 +229,7 @@ class ScriptPackage {
     : bytes = source.bytes,
       packageDigest = source.packageDigest,
       definition = source.definition,
+      recordContracts = source.recordContracts,
       files = source.files,
       release = source.release,
       trusted = true,

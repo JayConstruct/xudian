@@ -1,9 +1,21 @@
-part of 'planner_board.dart';
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../ui/content_colors.dart';
+import '../ui/ui_motion.dart';
+import 'planner_board_types.dart';
+import 'planner_source_hatching.dart';
+import 'planner_card_appearance.dart';
+import 'planner_status_indicator.dart';
+import 'planner_editor_config.dart';
 
 /// Retains the sheet through its exit without rebuilding its list on each tick.
 /// The full-screen layer stays in place until this transition finishes.
-class _PlannerDaySheetTransition extends StatefulWidget {
-  const _PlannerDaySheetTransition({
+class PlannerDaySheetTransition extends StatefulWidget {
+  const PlannerDaySheetTransition({
     super.key,
     required this.visible,
     required this.onDismissed,
@@ -15,11 +27,11 @@ class _PlannerDaySheetTransition extends StatefulWidget {
   final Widget child;
 
   @override
-  State<_PlannerDaySheetTransition> createState() =>
-      _PlannerDaySheetTransitionState();
+  State<PlannerDaySheetTransition> createState() =>
+      PlannerDaySheetTransitionState();
 }
 
-class _PlannerDaySheetTransitionState extends State<_PlannerDaySheetTransition>
+class PlannerDaySheetTransitionState extends State<PlannerDaySheetTransition>
     with SingleTickerProviderStateMixin {
   late final _controller = AnimationController(
     vsync: this,
@@ -66,7 +78,7 @@ class _PlannerDaySheetTransitionState extends State<_PlannerDaySheetTransition>
   }
 
   @override
-  void didUpdateWidget(_PlannerDaySheetTransition oldWidget) {
+  void didUpdateWidget(PlannerDaySheetTransition oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.visible != oldWidget.visible) _update();
   }
@@ -106,8 +118,9 @@ class _PlannerDaySheetTransitionState extends State<_PlannerDaySheetTransition>
 
 /// Compact day presentation. All changes remain proposals until the script's
 /// existing preview, confirmation and transaction pipeline accepts them.
-class _PlannerDaySheet extends StatefulWidget {
-  const _PlannerDaySheet({
+class PlannerDaySheet extends StatefulWidget {
+  const PlannerDaySheet({
+    super.key,
     required this.date,
     required this.candidates,
     required this.blocks,
@@ -131,11 +144,15 @@ class _PlannerDaySheet extends StatefulWidget {
   final ValueChanged<bool>? onDragActiveChanged;
 
   @override
-  State<_PlannerDaySheet> createState() => _PlannerDaySheetState();
+  State<PlannerDaySheet> createState() => PlannerDaySheetState();
 }
 
 class _PlannerDayDurationDialog extends StatefulWidget {
-  const _PlannerDayDurationDialog({required this.minutes});
+  const _PlannerDayDurationDialog({
+    required this.minutes,
+    required this.config,
+  });
+  final PlannerEditorConfig config;
   final int minutes;
 
   @override
@@ -155,35 +172,46 @@ class _PlannerDayDurationDialogState extends State<_PlannerDayDurationDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('任务时长'),
+    title: Text(widget.config.text('durationTitle')),
     content: TextField(
       controller: _controller,
       autofocus: true,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: InputDecoration(labelText: '分钟', errorText: _error),
+      decoration: InputDecoration(
+        labelText: widget.config.text('minutes'),
+        errorText: _error,
+      ),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
+        child: Text(widget.config.text('cancel')),
       ),
       TextButton(
         onPressed: () {
           final value = int.tryParse(_controller.text);
-          if (value == null || value < 1 || value > 10080) {
-            setState(() => _error = '请输入1至10080分钟');
+          if (value == null ||
+              value < 1 ||
+              value > widget.config.maxDurationMinutes) {
+            setState(
+              () => _error = widget.config.text('durationError', {
+                'max': widget.config.maxDurationMinutes,
+              }),
+            );
           } else {
             Navigator.pop(context, value);
           }
         },
-        child: const Text('确定'),
+        child: Text(widget.config.text('confirm')),
       ),
     ],
   );
 }
 
-class _PlannerDaySheetState extends State<_PlannerDaySheet> {
+class PlannerDaySheetState extends State<PlannerDaySheet> {
+  PlannerEditorConfig get _config =>
+      PlannerEditorConfig(widget.options['editor']);
   final _scroll = ScrollController();
   final _listKey = GlobalKey();
   Timer? _previewTimer, _scrollTimer;
@@ -292,7 +320,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
   }
 
   @override
-  void didUpdateWidget(_PlannerDaySheet oldWidget) {
+  void didUpdateWidget(PlannerDaySheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Drop drafts whose source was removed, locked or completed by a refresh.
     if (_draft != null && widget.enabled) {
@@ -416,7 +444,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
       } catch (_) {
         validation = {
           'valid': false,
-          'previewLabel': '时间校验失败，请重试',
+          'previewLabel': _config.text('validationFailed'),
           'retry': true,
         };
       }
@@ -507,7 +535,9 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
         borderRadius: BorderRadius.circular(9),
         clipBehavior: Clip.antiAlias,
         child: CustomPaint(
-          painter: item['readOnly'] == true ? _SourceHatching(accent) : null,
+          painter: item['readOnly'] == true
+              ? PlannerSourceHatching(accent)
+              : null,
           child: InkWell(
             onTap: !widget.enabled || feedback ? null : () => _edit(item),
             child: Container(
@@ -550,7 +580,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                             if (selected) ...[
                               const SizedBox(width: 6),
                               Text(
-                                '待确认',
+                                _config.text('pending'),
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: scheme.primary,
                                 ),
@@ -598,7 +628,9 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                     ),
                   const SizedBox(width: 8),
                   Text(
-                    '${selected ? _minutes : _duration(item)}分钟',
+                    _config.text('duration', {
+                      'minutes': selected ? _minutes : _duration(item),
+                    }),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -686,7 +718,10 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
               border: Border.all(color: Theme.of(context).colorScheme.primary),
             ),
       child: empty
-          ? Text('拖到这里安排任务', style: Theme.of(context).textTheme.labelSmall)
+          ? Text(
+              _config.text('dropHint'),
+              style: Theme.of(context).textTheme.labelSmall,
+            )
           : hovering.isNotEmpty
           ? SizedBox(
               height: 2,
@@ -728,7 +763,8 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     final minutes = await showDialog<int>(
       context: context,
       useRootNavigator: false,
-      builder: (context) => _PlannerDayDurationDialog(minutes: _minutes),
+      builder: (context) =>
+          _PlannerDayDurationDialog(minutes: _minutes, config: _config),
     );
     // Keep the local choice; confirmation still requires an active board and
     // service validation.
@@ -749,10 +785,10 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
     final remoteError = conflicts is List && conflicts.isNotEmpty
         ? conflicts.join('；')
         : _validation?['valid'] == false
-        ? '${_validation?['previewLabel'] ?? '当前时间不可安排'}'
+        ? '${_validation?['previewLabel'] ?? _config.text('unavailable')}'
         : null;
     final error = overlaps.isNotEmpty
-        ? '与「${overlaps.first['title']}」时间重叠'
+        ? _config.text('overlap', {'title': overlaps.first['title']})
         : remoteError;
     final nextFree = overlaps.isEmpty ? null : _nextFree;
     final differentDay =
@@ -771,7 +807,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
             children: [
               Expanded(
                 child: Text(
-                  '调整时间 · ${_draft!['title']}',
+                  _config.text('editTitle', {'title': _draft!['title']}),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall,
@@ -779,7 +815,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
               ),
               IconButton(
                 onPressed: () => setState(_cancelDraft),
-                tooltip: '取消本次安排',
+                tooltip: _config.text('cancelEdit'),
                 icon: const Icon(Icons.close, size: 20),
               ),
             ],
@@ -802,7 +838,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                   key: const ValueKey('planner-day-duration'),
                   onPressed: widget.enabled ? _pickDuration : null,
                   icon: const Icon(Icons.timelapse, size: 16),
-                  label: Text('$_minutes分钟'),
+                  label: Text(_config.text('duration', {'minutes': _minutes})),
                 ),
               ),
             ],
@@ -810,7 +846,10 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              '结束于 ${differentDay ? '${_end.month}/${_end.day} ' : ''}${_time(_end)}',
+              _config.text('endsAt', {
+                'time':
+                    '${differentDay ? '${_end.month}/${_end.day} ' : ''}${_time(_end)}',
+              }),
               style: Theme.of(context).textTheme.labelSmall
                   ?.copyWith(color: scheme.onSurfaceVariant),
             ),
@@ -837,14 +876,16 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                             _start = nextFree;
                             _validate();
                           }),
-                    child: Text('移至 ${_time(nextFree)}'),
+                    child: Text(
+                      _config.text('moveTo', {'time': _time(nextFree)}),
+                    ),
                   ),
                 if (_validation?['retry'] == true)
                   TextButton(
                     onPressed: !widget.enabled
                         ? null
                         : () => setState(_validate),
-                    child: const Text('重试'),
+                    child: Text(_config.text('retry')),
                   ),
               ],
             ),
@@ -864,7 +905,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                     _submitted = _event;
                     widget.onEvent(_submitted);
                   },
-            child: Text(widget.enabled ? '确认安排' : '正在处理…'),
+            child: Text(_config.text(widget.enabled ? 'apply' : 'busy')),
           ),
         ],
       ),
@@ -903,7 +944,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                             style: theme.textTheme.titleMedium,
                           ),
                           Text(
-                            '当日任务',
+                            _config.text('dayTitle'),
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
@@ -913,7 +954,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                     ),
                     IconButton(
                       onPressed: widget.onClose,
-                      tooltip: '关闭当日任务',
+                      tooltip: _config.text('closeDay'),
                       icon: const Icon(Icons.close),
                     ),
                   ],
@@ -929,7 +970,9 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                       child: Row(
                         children: [
                           Text(
-                            '待安排 $candidateCount',
+                            _config.text('candidateCount', {
+                              'count': candidateCount,
+                            }),
                             style: theme.textTheme.titleSmall,
                           ),
                           Icon(
@@ -939,7 +982,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                           const Spacer(),
                           Flexible(
                             child: Text(
-                              '长按拖到下方安排',
+                              _config.text('dragHint'),
                               maxLines: 1,
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: scheme.onSurfaceVariant,
@@ -966,9 +1009,9 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                     ),
                   ),
                 if (_expanded && candidates.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('暂无待安排任务'),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(_config.text('emptyCandidates')),
                   ),
                 if (widget.options['candidatePageLabel'] != null)
                   Row(
@@ -976,7 +1019,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                     children: [
                       if (widget.options['candidatePreviousEvent'] != null)
                         IconButton(
-                          tooltip: '上一页待安排任务',
+                          tooltip: _config.text('previousPage'),
                           onPressed: !widget.enabled
                               ? null
                               : () => widget.onEvent(
@@ -990,7 +1033,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                       ),
                       if (widget.options['candidateNextEvent'] != null)
                         IconButton(
-                          tooltip: '下一页待安排任务',
+                          tooltip: _config.text('nextPage'),
                           onPressed: !widget.enabled
                               ? null
                               : () => widget.onEvent(
@@ -1004,12 +1047,12 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                 Row(
                   children: [
                     Text(
-                      '已安排 ${items.length}',
+                      _config.text('scheduledCount', {'count': items.length}),
                       style: theme.textTheme.titleSmall,
                     ),
                     const Spacer(),
                     Text(
-                      '按时间排序',
+                      _config.text('sortHint'),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -1060,7 +1103,7 @@ class _PlannerDaySheetState extends State<_PlannerDaySheet> {
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      '点击任务可调整时间',
+                      _config.text('editHint'),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,

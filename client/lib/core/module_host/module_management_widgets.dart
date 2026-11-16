@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
 import '../ui/ui_design.dart';
@@ -5,25 +7,6 @@ import '../ui/ui_design.dart';
 import 'package:flutter/material.dart';
 
 import 'module_package.dart';
-import 'module_host.dart';
-
-Future<List<String>> installedDependentLabels(
-  ModuleHost host,
-  String id,
-) async {
-  final result = <String>[];
-  for (final row in await host.store.sql(
-    'SELECT * FROM host_installations WHERE installed=1',
-  )) {
-    final moduleId = row['module_id'] as String;
-    if (moduleId == id) continue;
-    final source = await host.packageSource(moduleId, row['version'] as String);
-    if (source.dependencies.contains(id)) {
-      result.add('$moduleId（${row['enabled'] == 1 ? '已启用' : '已停用'}）');
-    }
-  }
-  return result;
-}
 
 List<Map<String, Object?>> deduplicateServices(
   Iterable<Map<String, Object?>> services,
@@ -314,3 +297,70 @@ Future<bool> confirmModuleImpact(
       ),
     ) ??
     false;
+
+class ModuleDetailsLoader extends StatefulWidget {
+  const ModuleDetailsLoader({
+    super.key,
+    required this.title,
+    required this.load,
+  });
+  final String title;
+  final Future<Widget> Function() load;
+
+  @override
+  State<ModuleDetailsLoader> createState() => _ModuleDetailsLoaderState();
+}
+
+class _ModuleDetailsLoaderState extends State<ModuleDetailsLoader> {
+  final content = Completer<Widget>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        Future<Widget>.sync(widget.load)
+            .then<void>(content.complete, onError: content.completeError),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Widget>(
+    future: content.future,
+    builder: (context, snapshot) {
+      if (snapshot.hasData) return snapshot.data!;
+      return NativeUi(
+        child: AlertDialog(
+          title: Text(widget.title),
+          titlePadding: AppDesign.dialogTitlePadding,
+          contentPadding: AppDesign.dialogContentPadding,
+          actionsPadding: AppDesign.dialogActionsPadding,
+          content: SizedBox(
+            width: 620,
+            child: snapshot.hasError
+                ? SelectableText('${snapshot.error}')
+                : const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text('正在读取模块详情…'),
+                    ],
+                  ),
+          ),
+          actions: [
+            NativeUi(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('关闭'),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}

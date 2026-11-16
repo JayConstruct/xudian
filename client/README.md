@@ -30,6 +30,12 @@
 
 数据库为 `xudian_v9.sqlite`，Drift schema 为 **2**。schema 1 升级前创建备份并迁移至通用 `host_*` 集合；旧表与来源保留为档案。文件名中的 v9 不代表迁移版本。AI 连接配置由 AI 模块集合保存，密钥位于系统安全存储。
 
+## 测试约束
+
+按改动选择生产调用链的相关测试；涉及数据、生命周期、权限或依赖时扩大范围。宿主 HTTP 和 AI 连接回归使用独立子进程启动本机服务器，保留真实请求、鉴权与取消断言。启动等待上限为 10 秒，超时须报错并清理子进程，进程退出另有 2 秒上限；不要在 Flutter 测试主线程直接调用 `HttpServer.bind`，原生绑定阻塞时同线程的 Dart 超时也无法执行。服务器夹具见 `test/support/local_http_server.dart`。
+
+额外网络冒烟在 `client/` 执行 `dart test/openai_compatible_provider_network_smoke.dart`。自动化结果不能替代设备页面操作或真机性能采样，具体范围记录在 [验证索引](../docs/VERIFICATION.md)。
+
 ## 开发入口
 
 在 Android Studio 打开本目录，启动文件选择 `lib/main.dart`。环境、测试和构建命令统一见 [开发指南](../DEVELOPMENT.md)；宿主限制见 [模块宿主](../docs/MODULE_HOST.md)，开发契约见 [SDK](../docs/MODULE_SDK.md)。

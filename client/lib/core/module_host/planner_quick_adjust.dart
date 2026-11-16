@@ -4,12 +4,16 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../contracts/json_values.dart';
 import 'plan_confirmation.dart';
+import 'record_contract.dart';
 
 /// One native gesture can approve one exact time-only planner transaction.
 /// The script cannot manufacture this capability or request a broader scope.
 class PlannerQuickAdjustment {
+  static const contract = 'time-range/2';
   PlannerQuickAdjustment.move(
     Map<String, Object?> event, {
+    required this.records,
+    required this.isCurrent,
     required this.moduleId,
     required this.taskModuleId,
     required this.applyServiceId,
@@ -20,6 +24,8 @@ class PlannerQuickAdjustment {
     this._batch,
     this._taskWrite,
     this._occurrence, {
+    required this.records,
+    required this.isCurrent,
     required this.moduleId,
     required this.taskModuleId,
     required this.applyServiceId,
@@ -27,6 +33,8 @@ class PlannerQuickAdjustment {
   }) : _event = null;
 
   final String moduleId, taskModuleId, applyServiceId, undoServiceId;
+  final TimeAdjustmentRecords records;
+  final bool Function() isCurrent;
 
   final Map<String, Object?>? _event;
   Map<String, Object?>? _batch, _taskWrite, _occurrence;
@@ -42,20 +50,20 @@ class PlannerQuickAdjustment {
     try {
       final change = _map(_list(_batch!['changes']).single);
       final before = _map(change['before']), after = _map(change['after']);
-      final zone = tz.getLocation(after['plannedTimezone'] as String);
+      final zone = tz.getLocation(after['zone'] as String);
       final start = tz.TZDateTime.from(
-        DateTime.parse(after['plannedStartAt'] as String),
+        DateTime.parse(after['startAt'] as String),
         zone,
       );
       final end = tz.TZDateTime.from(
-        DateTime.parse(after['plannedEndAt'] as String),
+        DateTime.parse(after['endAt'] as String),
         zone,
       );
       final rawTitle = after['title'] as String? ?? '';
       final title = rawTitle.replaceAll(RegExp(r'\s+'), ' ').trim();
       final verb = _event['intent'] == 'resize'
           ? '已调整为'
-          : before['plannedStartAt'] == null
+          : before['startAt'] == null
           ? '已安排至'
           : '已移至';
       String day(DateTime value) =>
@@ -68,7 +76,7 @@ class PlannerQuickAdjustment {
           start.month == end.month &&
           start.day == end.day;
       final finish = sameDay ? time(end) : '${day(end)} ${time(end)}';
-      return '${title.isEmpty ? '任务' : title}$verb${day(start)} ${time(start)}–$finish';
+      return '${title.isEmpty ? '条目' : title}$verb${day(start)} ${time(start)}–$finish';
     } catch (_) {
       // Feedback must never turn an accepted save into an error.
       return '已调整';
@@ -84,16 +92,20 @@ class PlannerQuickAdjustment {
     required PlanConfirmation? confirmation,
   }) {
     if (_used ||
+        !isCurrent() ||
         moduleId != this.moduleId ||
         confirmation?.acknowledgement != null) {
       return false;
     }
     try {
-      final request = _map(input), response = _map(result);
-      final records = writes.map(_map).toList();
+      final signature = _event != null
+          ? _operationRequest(_map(_map(input)['preview']))
+          : null;
+      final request = records.projectInput(input), response = _map(result);
+      final projected = records.projectWrites(writes).map(_map).toList();
       final identities = <String>{};
       final spaces = <String, String>{};
-      for (final write in records) {
+      for (final write in projected) {
         if (!_keys(write, {
               'moduleId',
               'space',
@@ -131,9 +143,9 @@ class PlannerQuickAdjustment {
       }
       final approved = _event == null
           ? serviceId == undoServiceId &&
-                _allowsUndo(request, records, response)
+                _allowsUndo(request, projected, response)
           : serviceId == applyServiceId &&
-                _allowsMove(request, records, response);
+                _allowsMove(request, projected, response, signature!);
       if (!approved) return false;
       _used = true;
       return true;
@@ -147,6 +159,7 @@ class PlannerQuickAdjustment {
     Map<String, Object?> input,
     List<Map<String, Object?>> writes,
     Map<String, Object?> result,
+    String signature,
   ) {
     final event = _event!;
     final kind = event['intent'] ?? 'move';
@@ -181,61 +194,43 @@ class PlannerQuickAdjustment {
       return false;
     }
     final taskWrites = writes
-        .where((w) => w['moduleId'] == taskModuleId)
+        .where((w) => w['collection'] == '@subject')
         .toList();
     if (taskWrites.length != 1) return false;
     final taskWrite = taskWrites.single;
     final before = _map(taskWrite['before']), after = _map(taskWrite['value']);
     final fields = _map(change['fields']);
     const temporal = {
-      'plannedDate',
-      'plannedStartAt',
-      'plannedEndAt',
-      'plannedTimezone',
-      'estimatedMinutes',
-      'updatedAt',
+      'date',
+      'startAt',
+      'endAt',
+      'zone',
+      'duration',
+      'modifiedAt',
     };
-    if (taskWrite['collection'] != 'tasks' ||
+    if (taskWrite['collection'] != '@subject' ||
         taskWrite['id'] != id ||
         !_equal(change['before'], before) ||
         before['locked'] == true ||
-        [
-          'completedAt',
-          'deletedAt',
-          'archivedAt',
-        ].any((k) => before[k] != null) ||
+        ['completed', 'deleted', 'archived'].any((k) => before[k] != null) ||
         !_onlyChanges(before, after, temporal) ||
-        !_keys(fields, {
-          'plannedStartAt',
-          'plannedEndAt',
-          'plannedTimezone',
-          'estimatedMinutes',
-        }) ||
+        !_keys(fields, {'startAt', 'endAt', 'zone', 'duration'}) ||
         fields.length != 4 ||
         fields.entries.any((e) => !_equal(e.value, after[e.key])) ||
-        !_matchesInstant(
-          after['plannedStartAt'],
-          after['plannedTimezone'],
-          event['start'],
-        ) ||
-        !_matchesInstant(
-          after['plannedEndAt'],
-          after['plannedTimezone'],
-          event['end'],
-        ) ||
-        after['plannedDate'] != (event['start'] as String).substring(0, 10)) {
+        !_matchesInstant(after['startAt'], after['zone'], event['start']) ||
+        !_matchesInstant(after['endAt'], after['zone'], event['end']) ||
+        after['date'] != (event['start'] as String).substring(0, 10)) {
       return false;
     }
-    final begin = DateTime.parse(after['plannedStartAt'] as String);
-    final finish = DateTime.parse(after['plannedEndAt'] as String);
+    final begin = DateTime.parse(after['startAt'] as String);
+    final finish = DateTime.parse(after['endAt'] as String);
     final minutes =
         finish.difference(begin).inMicroseconds /
         Duration.microsecondsPerMinute;
     if (minutes < 1 ||
         minutes != minutes.roundToDouble() ||
-        after['estimatedMinutes'] != minutes ||
-        kind == 'resize' &&
-            !_equal(before['plannedStartAt'], after['plannedStartAt'])) {
+        after['duration'] != minutes ||
+        kind == 'resize' && !_equal(before['startAt'], after['startAt'])) {
       return false;
     }
     final key = input['operationKey'];
@@ -244,7 +239,7 @@ class PlannerQuickAdjustment {
         .where(
           (w) =>
               w['moduleId'] == moduleId &&
-              w['collection'] == 'batches' &&
+              w['collection'] == '@journal' &&
               w['id'] == key,
         )
         .toList();
@@ -273,7 +268,7 @@ class PlannerQuickAdjustment {
         !_string(batch['createdAt']) ||
         batch['sequence'] is! int ||
         (batch['sequence'] as int) < 1 ||
-        batch['request'] != _operationRequest(preview)) {
+        batch['request'] != signature) {
       return false;
     }
     final deltas = _list(batch['changes']);
@@ -295,7 +290,7 @@ class PlannerQuickAdjustment {
     Map<String, Object?>? occurrence;
     final occurrenceWrites = writes
         .where(
-          (w) => w['moduleId'] == moduleId && w['collection'] == 'occurrences',
+          (w) => w['moduleId'] == moduleId && w['collection'] == '@occurrence',
         )
         .toList();
     if (delta['occurrenceId'] != null) {
@@ -306,16 +301,11 @@ class PlannerQuickAdjustment {
           old['taskId'] != id ||
           !_equal(old, delta['beforeOccurrence']) ||
           !_equal(value, delta['afterOccurrence']) ||
-          !_onlyChanges(old, value, {
-            'date',
-            'estimatedMinutes',
-            'locked',
-            'status',
-          }) ||
-          value['date'] != after['plannedDate'] ||
-          value['estimatedMinutes'] != after['estimatedMinutes'] ||
+          !_onlyChanges(old, value, {'date', 'duration', 'locked', 'status'}) ||
+          value['date'] != after['date'] ||
+          value['duration'] != after['duration'] ||
           value['locked'] != after['locked'] ||
-          value['status'] != 'confirmed') {
+          value['status'] != records.occurrence.settings['activeValue']) {
         return false;
       }
     } else if (delta.length != 3 || occurrenceWrites.isNotEmpty) {
@@ -337,6 +327,8 @@ class PlannerQuickAdjustment {
       _batch,
       _taskWrite,
       _occurrence,
+      records: records,
+      isCurrent: isCurrent,
       moduleId: moduleId,
       taskModuleId: taskModuleId,
       applyServiceId: applyServiceId,
@@ -361,16 +353,18 @@ class PlannerQuickAdjustment {
         continue;
       }
       if (write['moduleId'] != moduleId) return false;
-      if (write['collection'] == 'batches' && write['value'] == null) {
+      if (write['collection'] == '@journal' && write['value'] == null) {
         final old = _map(write['before']);
         if (old['changes'] is! List ||
             old['createdAt'] is! String ||
             (old['sequence'] ?? 0) is! int ||
-            (old['sequence'] as int? ?? 0) > (batch['sequence'] as int) - 50) {
+            (old['sequence'] as int? ?? 0) >
+                (batch['sequence'] as int) -
+                    (records.journal.settings['retainedRecords'] as int)) {
           return false;
         }
         deleted[write['id']] = old;
-      } else if (write['collection'] == 'receipts') {
+      } else if (write['collection'] == '@receipt') {
         receipts[write['id']] = write;
       } else {
         return false;
@@ -382,7 +376,7 @@ class PlannerQuickAdjustment {
       if (old == null || old['request'] == null) return false;
       final expected = {
         'id': old['id'],
-        'kind': old['kind'] ?? 'plan',
+        'kind': old['kind'] ?? records.journal.settings['defaultKind'],
         'request': _oldRequest(old),
         'createdAt': old['createdAt'],
       };
@@ -423,7 +417,7 @@ class PlannerQuickAdjustment {
         .where(
           (w) =>
               w['moduleId'] == moduleId &&
-              w['collection'] == 'batches' &&
+              w['collection'] == '@journal' &&
               w['id'] == batch['id'],
         )
         .toList();
@@ -470,8 +464,7 @@ class PlannerQuickAdjustment {
       return false;
     }
     final spans = value['overlaps'] as List;
-    final start = _utc(task['plannedStartAt']),
-        end = _utc(task['plannedEndAt']);
+    final start = _utc(task['startAt']), end = _utc(task['endAt']);
     if (start == null || end == null) return spans.isEmpty;
     final seen = <String>{};
     for (final raw in spans) {

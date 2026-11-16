@@ -7,6 +7,8 @@ import 'package:uuid/uuid.dart';
 import '../../data/app_database.dart';
 import '../contracts/json_values.dart';
 import 'json_schema.dart';
+import 'collection_query_engine.dart';
+import '../performance/ui_load_trace.dart';
 import 'module_package.dart';
 import 'native_resource.dart';
 
@@ -114,7 +116,7 @@ class CollectionStore {
   final events = StreamController<Map<String, Object?>>.broadcast();
   final _plans = <String, ChangePlan>{};
   final _actors = <String, ModuleActor>{};
-  final _sqlPageCompatibility = <String, bool>{};
+  late final _queries = CollectionQueryEngine(sql);
   final _nativeResources = <String, NativeResource>{};
 
   void registerNativeResource(NativeResource resource) =>
@@ -198,7 +200,7 @@ class CollectionStore {
             final spec = object(index);
             final indexed = canonicalJson([
               for (final field in spec['fields'] as List)
-                _path(value, field as String),
+                CollectionQueryEngine.field(value, field as String),
             ]);
             if (spec['unique'] == true &&
                 !(unique[spec['id'] as String] ??= {}).add(indexed)) {
@@ -267,7 +269,10 @@ class CollectionStore {
     final value = await get(actor, collection, id);
     if (value == null) return false;
     final def = await definition(actor, collection);
-    return _filter(object(value), def['entityActiveFilter']);
+    return CollectionQueryEngine.matches(
+      object(value),
+      def['entityActiveFilter'],
+    );
   }
 
   Future<List<Object?>> query(
@@ -296,215 +301,76 @@ class CollectionStore {
     if (offset < 0 || limit < 1 || limit > 10000) {
       throw const FormatException('Invalid pagination');
     }
-    if (session == null || session.writes.isEmpty) {
-      final page = await _querySqlPage(
-        actor,
-        collection,
+    final overlay = (session?.writes.values ?? <Map<String, Object?>>[])
+        .where(
+          (write) =>
+              write['moduleId'] == actor.moduleId &&
+              write['space'] == actor.space &&
+              write['collection'] == collection,
+        )
+        .toList();
+    final trace = UiLoadTrace.start(
+      'collection.query',
+      arguments: {
+        'moduleId': actor.moduleId,
+        'collection': collection,
+        'offset': offset,
+        'limit': limit,
+        'overlayWrites': overlay.length,
+      },
+    );
+    var mode = overlay.isEmpty ? 'fallback' : 'overlay';
+    var decoded = 0;
+    var returned = 0;
+    var outcome = 'error';
+    try {
+      if (overlay.isEmpty) {
+        final page = await _queries.sqlPage(
+          [actor.moduleId, actor.space, collection],
+          collection,
+          options,
+          offset,
+          limit,
+          revision,
+        );
+        if (page != null) {
+          mode = 'sql';
+          decoded = page.length;
+          returned = page.length;
+          outcome = 'ok';
+          return page;
+        }
+      }
+      final result = await _queries.fallbackPage(
+        [actor.moduleId, actor.space, collection],
         options,
+        overlay,
         offset,
         limit,
-        revision,
       );
-      if (page != null) return page;
-    }
-    final rows = await sql(
-      'SELECT id,value FROM host_records WHERE module_id=? AND space=? AND collection=? AND deleted=0 ORDER BY id',
-      [actor.moduleId, actor.space, collection],
-    );
-    final values = <String, Object?>{
-      for (final row in rows)
-        row['id'] as String: jsonDecode(row['value'] as String),
-    };
-    for (final write in session?.writes.values ?? <Map<String, Object?>>[]) {
-      if (write['moduleId'] == actor.moduleId &&
-          write['space'] == actor.space &&
-          write['collection'] == collection) {
-        if (write['value'] == null) {
-          values.remove(write['id']);
-        } else {
-          values[write['id'] as String] = write['value'];
-        }
-      }
-    }
-    final result = values.values
-        .where((v) => _filter(object(v), options['filter']))
-        .toList();
-    final sorts = options['sort'] as List? ?? [];
-    if (sorts.isNotEmpty) {
-      result.sort((a, b) {
-        for (final raw in sorts) {
-          final s = object(raw);
-          final av = _path(a, s['field'] as String),
-              bv = _path(b, s['field'] as String);
-          var cmp = _compare(av, bv);
-          if (s['direction'] == 'desc') cmp = -cmp;
-          if (cmp != 0) return cmp;
-        }
-        return '${object(a)['id']}'.compareTo('${object(b)['id']}');
-      });
-    }
-    return (freezeJson(result.skip(offset).take(limit).toList()) as List)
-        .cast<Object?>();
-  }
-
-  /// Keep filtering and pagination inside SQLite when its scalar semantics
-  /// exactly match the Dart fallback. Checks return metadata only, never records.
-  Future<List<Object?>?> _querySqlPage(
-    ModuleActor actor,
-    String collection,
-    Map<String, Object?> options,
-    int offset,
-    int limit,
-    int revision,
-  ) async {
-    final compiler = _ScalarQueryCompiler();
-    final predicate = compiler.filter(options['filter']);
-    if (predicate == null) return null;
-    final scope = [actor.moduleId, actor.space, collection];
-    const where = 'module_id=? AND space=? AND collection=? AND deleted=0';
-    final sorts = options['sort'] as List? ?? [];
-    if (sorts.length > 64 || compiler.args.length > 700) return null;
-    final compatibilityKey = canonicalJson({
-      'scope': scope,
-      'revision': revision,
-      'sort': sorts,
-      'types': compiler.typeChecks.map(
-        (key, value) => MapEntry(key, value.toList()),
-      ),
-      'ascii': compiler.asciiChecks.toList(),
-    });
-    final cached = _sqlPageCompatibility[compatibilityKey];
-    if (cached == false) return null;
-    void cache(bool compatible) {
-      if (_sqlPageCompatibility.length >= 128) _sqlPageCompatibility.clear();
-      _sqlPageCompatibility[compatibilityKey] = compatible;
-    }
-
-    final orderBy = <String>[];
-    final orderArgs = <Object?>[];
-    for (final raw in sorts) {
-      final sort = object(raw);
-      final path = compiler.path(sort['field']);
-      if (path == null) return null;
-      orderBy.add(
-        "json_extract(value,?) ${sort['direction'] == 'desc' ? 'DESC' : 'ASC'}",
+      // Multiple chunks must describe one revision, including outside a command.
+      final current = await sql(
+        'SELECT revision FROM host_collections WHERE module_id=? AND space=? AND name=?',
+        [actor.moduleId, actor.space, collection],
       );
-      orderArgs.add(path);
-      if (cached == true) continue;
-      final kinds =
-          (await sql(
-                'SELECT DISTINCT json_type(value,?) AS kind FROM host_records WHERE $where',
-                [path, ...scope],
-              ))
-              .map((row) => row['kind'])
-              .where((kind) => kind != null && kind != 'null')
-              .toSet();
-      if (kinds.every((kind) => kind == 'integer' || kind == 'real')) {
-        // Nulls sort first ascending, as in _compare.
-      } else if (kinds.every((kind) => kind == 'text')) {
-        compiler.asciiChecks.add(path);
-      } else if (kinds.every((kind) => kind == 'true' || kind == 'false')) {
-        // Both booleans have the same order as their Dart string values.
-      } else {
-        cache(false);
-        return null;
+      if (current.isEmpty || current.single['revision'] != revision) {
+        throw StateError('Collection changed while reading');
       }
-    }
-    if (cached != true) {
-      for (final check in compiler.typeChecks.entries) {
-        final placeholders = List.filled(check.value.length, '?').join(',');
-        final invalid = await sql(
-          'SELECT 1 FROM host_records WHERE $where AND '
-          'json_type(value,?) IS NOT NULL AND json_type(value,?) NOT IN ($placeholders) LIMIT 1',
-          [...scope, check.key, check.key, ...check.value],
-        );
-        if (invalid.isNotEmpty) {
-          cache(false);
-          return null;
-        }
-      }
-      for (final path in compiler.asciiChecks) {
-        final invalid = await sql(
-          'SELECT 1 FROM host_records WHERE $where AND json_type(value,?)=\'text\' AND '
-          'length(CAST(json_extract(value,?) AS BLOB)) != length(json_extract(value,?)) LIMIT 1',
-          [...scope, path, path, path],
-        );
-        if (invalid.isNotEmpty) {
-          cache(false);
-          return null;
-        }
-      }
-      // Record IDs are the stable tiebreaker. Non-ASCII IDs use the Dart path so
-      // ordering also remains exact for UTF-16 surrogate pairs.
-      final unicodeIds = await sql(
-        'SELECT 1 FROM host_records WHERE $where AND length(CAST(id AS BLOB)) != length(id) LIMIT 1',
-        scope,
+      decoded = result.decoded;
+      final page = result.page;
+      returned = page.length;
+      outcome = 'ok';
+      return page;
+    } finally {
+      trace?.finish(
+        arguments: {
+          'mode': mode,
+          'recordsDecoded': decoded,
+          'returned': returned,
+          'outcome': outcome,
+        },
       );
-      if (unicodeIds.isNotEmpty) {
-        cache(false);
-        return null;
-      }
-      cache(true);
     }
-    orderBy.add('id ASC');
-    final rows = await sql(
-      'SELECT id,value FROM host_records WHERE $where AND ($predicate) '
-      'ORDER BY ${orderBy.join(',')} LIMIT ? OFFSET ?',
-      [...scope, ...compiler.args, ...orderArgs, limit, offset],
-    );
-    return (freezeJson([
-      for (final row in rows) jsonDecode(row['value'] as String),
-    ]) as List).cast<Object?>();
-  }
-
-  Object? _path(Object? value, String path) {
-    for (final part in path.split('.')) {
-      if (value is! Map) return null;
-      value = value[part];
-    }
-    return value;
-  }
-
-  int _compare(Object? a, Object? b) => a == b
-      ? 0
-      : a == null
-      ? -1
-      : b == null
-      ? 1
-      : a is num && b is num
-      ? a.compareTo(b)
-      : '$a'.compareTo('$b');
-  bool _filter(Map<String, Object?> value, Object? raw) {
-    if (raw == null) return true;
-    final f = object(raw);
-    if (f['all'] is List) {
-      return (f['all'] as List).every((v) => _filter(value, v));
-    }
-    if (f['any'] is List) {
-      return (f['any'] as List).any((v) => _filter(value, v));
-    }
-    final actual = _path(value, string(f['field'], 'filter.field')),
-        expected = f['value'];
-    return switch (f['op']) {
-      'eq' => canonicalJson(actual) == canonicalJson(expected),
-      'ne' => canonicalJson(actual) != canonicalJson(expected),
-      'isNull' => actual == null,
-      'notNull' => actual != null,
-      'in' =>
-        expected is List &&
-            expected.any((v) => canonicalJson(v) == canonicalJson(actual)),
-      'contains' =>
-        actual is String && expected is String && actual.contains(expected),
-      'lt' =>
-        actual != null && expected != null && _compare(actual, expected) < 0,
-      'lte' =>
-        actual != null && expected != null && _compare(actual, expected) <= 0,
-      'gt' =>
-        actual != null && expected != null && _compare(actual, expected) > 0,
-      'gte' =>
-        actual != null && expected != null && _compare(actual, expected) >= 0,
-      _ => throw FormatException('Unsupported filter operation: ${f['op']}'),
-    };
   }
 
   Future<void> stage(
@@ -728,7 +594,7 @@ class CollectionStore {
             final spec = object(index);
             final indexed = canonicalJson([
               for (final field in spec['fields'] as List)
-                _path(value, field as String),
+                CollectionQueryEngine.field(value, field as String),
             ]);
             if (spec['unique'] == true) {
               final collision = await sql(
@@ -866,127 +732,5 @@ class CollectionStore {
   Future<void> close() async {
     await changes.close();
     await events.close();
-  }
-}
-
-/// SQL supports only values whose equality and ordering agree with canonical
-/// JSON and _compare. Unsupported shapes intentionally retain the Dart path.
-class _ScalarQueryCompiler {
-  final args = <Object?>[];
-  final typeChecks = <String, Set<String>>{};
-  final asciiChecks = <String>{};
-  int _nodes = 0;
-
-  String? path(Object? field) {
-    if (field is! String || field.isEmpty) return null;
-    final parts = field.split('.');
-    if (parts.any(
-      (part) => !RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$').hasMatch(part),
-    )) {
-      return null;
-    }
-    return r'$' + parts.map((part) => '."$part"').join();
-  }
-
-  void requireTypes(String path, Set<String> kinds) {
-    final previous = typeChecks[path];
-    if (previous == null) {
-      typeChecks[path] = kinds;
-    } else {
-      previous.retainAll(kinds);
-    }
-  }
-
-  String? filter(Object? raw, [int depth = 0]) {
-    if (raw == null) return '1';
-    if (depth > 32 || ++_nodes > 128 || raw is! Map) return null;
-    final f = raw.cast<String, Object?>();
-    for (final group in ['all', 'any']) {
-      if (f[group] is List) {
-        final clauses = <String>[];
-        for (final child in f[group] as List) {
-          final compiled = filter(child, depth + 1);
-          if (compiled == null) return null;
-          clauses.add('($compiled)');
-        }
-        if (clauses.isEmpty) return group == 'all' ? '1' : '0';
-        return clauses.join(group == 'all' ? ' AND ' : ' OR ');
-      }
-    }
-    final jsonPath = path(f['field']);
-    if (jsonPath == null) return null;
-    final expected = f['value'];
-    switch (f['op']) {
-      case 'isNull':
-        args.add(jsonPath);
-        return "COALESCE(json_type(value,?), 'null')='null'";
-      case 'notNull':
-        args.add(jsonPath);
-        return "COALESCE(json_type(value,?), 'null')!='null'";
-      case 'eq':
-      case 'ne':
-        final equal = equality(jsonPath, expected);
-        return equal == null
-            ? null
-            : f['op'] == 'eq'
-            ? equal
-            : 'NOT ($equal)';
-      case 'in':
-        if (expected is! List) return '0';
-        if (expected.isEmpty) return '0';
-        if (expected.length > 128) return null;
-        final clauses = <String>[];
-        for (final value in expected) {
-          final equal = equality(jsonPath, value);
-          if (equal == null) return null;
-          clauses.add('($equal)');
-        }
-        return clauses.join(' OR ');
-      case 'lt':
-      case 'lte':
-      case 'gt':
-      case 'gte':
-        if (expected == null) return '0';
-        if (expected is num && expected.isFinite) {
-          requireTypes(jsonPath, {'null', 'integer', 'real'});
-        } else if (expected is String &&
-            expected.codeUnits.every((c) => c > 0 && c < 128)) {
-          requireTypes(jsonPath, {'null', 'text'});
-          asciiChecks.add(jsonPath);
-        } else {
-          return null;
-        }
-        final operator = {
-          'lt': '<',
-          'lte': '<=',
-          'gt': '>',
-          'gte': '>=',
-        }[f['op']];
-        args.addAll([jsonPath, canonicalJson(expected)]);
-        return "COALESCE(json_extract(value,?) $operator json_extract(?, '\$'),0)";
-      default:
-        return null;
-    }
-  }
-
-  String? equality(String path, Object? expected) {
-    if (expected == null) {
-      args.add(path);
-      return "COALESCE(json_type(value,?), 'null')='null'";
-    }
-    if (expected is bool) {
-      args.add(path);
-      return "COALESCE(json_type(value,?)='${expected ? 'true' : 'false'}',0)";
-    }
-    if (expected is String || expected is int) {
-      args.addAll([
-        path,
-        expected is String ? 'text' : 'integer',
-        path,
-        canonicalJson(expected),
-      ]);
-      return "COALESCE(json_type(value,?)=? AND json_extract(value,?)=json_extract(?, '\$'),0)";
-    }
-    return null;
   }
 }

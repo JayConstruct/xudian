@@ -1,0 +1,305 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Host API 1.50 UI nodes",
+  "description": "New nodes only. Child trees, event bindings, known icons, sibling identities and permissions are validated by the host. Button feedback is available through definitions/feedback.",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/motion"
+    },
+    {
+      "$ref": "#/definitions/swipeActions"
+    }
+  ],
+  "definitions": {
+    "bind": {
+      "type": "object",
+      "required": [
+        "bind"
+      ],
+      "properties": {
+        "bind": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": [
+              "string",
+              "integer"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "properties": {
+        "duration": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "curve": {
+          "enum": [
+            "linear",
+            "easeIn",
+            "easeOut",
+            "easeInOut"
+          ]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "feedback": {
+      "type": "object",
+      "properties": {
+        "pressedScale": {
+          "type": "number",
+          "minimum": 0.9,
+          "maximum": 1
+        },
+        "duration": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "motion": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "motion"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "opacity": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "$ref": "#/definitions/bind"
+                }
+              ]
+            },
+            "translateX": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                {
+                  "$ref": "#/definitions/bind"
+                }
+              ]
+            },
+            "translateY": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                {
+                  "$ref": "#/definitions/bind"
+                }
+              ]
+            },
+            "scale": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 4
+                },
+                {
+                  "$ref": "#/definitions/bind"
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "minProperties": 1
+        },
+        "timing": {
+          "$ref": "#/definitions/timing"
+        },
+        "child": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      },
+      "required": [
+        "type",
+        "key",
+        "target",
+        "child"
+      ],
+      "additionalProperties": false
+    },
+    "swipeActions": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "swipeActions"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "child": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/definitions/bind"
+            }
+          ]
+        },
+        "side": {
+          "enum": [
+            "start",
+            "end"
+          ]
+        },
+        "extent": {
+          "type": "number",
+          "minimum": 48,
+          "maximum": 240
+        },
+        "openThreshold": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 0.8
+        },
+        "settle": {
+          "$ref": "#/definitions/timing"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            {
+              "$ref": "#/definitions/bind"
+            }
+          ]
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "pattern": "\\S"
+              },
+              "icon": {
+                "type": "string",
+                "minLength": 1
+              },
+              "event": {
+                "type": "object"
+              },
+              "disabled": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/definitions/bind"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "event"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "type",
+        "key",
+        "extent",
+        "actions",
+        "child"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "actions": {
+                "minItems": 2
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "extent": {
+                "minimum": 96
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "actions": {
+                "minItems": 3
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "extent": {
+                "minimum": 144
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

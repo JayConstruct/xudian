@@ -134,7 +134,7 @@ void main() {
       );
       expect(
         host.instances.values.every(
-          (i) => i.session == null && i.pageReads == null,
+          (i) => i.session == null && i.page?.reads == null,
         ),
         isTrue,
       );

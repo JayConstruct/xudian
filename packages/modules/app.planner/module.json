@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.planner",
     "name": "任务规划",
-    "version": "1.13.2",
-    "hostApi": "^1.47.0",
+    "version": "1.15.1",
+    "hostApi": "^1.49.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -22,7 +22,7 @@
     "dependencies": [
       {
         "moduleId": "app.tasks",
-        "version": "^1.5.1"
+        "version": "^1.7.0"
       }
     ],
     "optionalServices": [
@@ -34,7 +34,8 @@
       }
     ],
     "description": "快速添加任务、查看图形时间表并预览和撤销整体安排。",
-    "author": "JayConstruct"
+    "author": "JayConstruct",
+    "workflowStartup": "lazy"
   },
   "entryPoint": "main.js",
   "pages": [
@@ -2304,5 +2305,51 @@
       ],
       "serviceId": "planner.series.replenish"
     }
-  ]
+  ],
+  "recordContracts": {
+    "journal": {
+      "kind": "timeJournal",
+      "collection": "batches",
+      "fields": {
+        "id": "id",
+        "kind": "kind",
+        "createdAt": "createdAt",
+        "request": "request",
+        "changes": "changes",
+        "undone": "undone",
+        "sequence": "sequence",
+        "undoOccupancy": "undoOccupancy",
+        "undoneAt": "undoneAt"
+      },
+      "settings": {
+        "retainedRecords": 50,
+        "defaultKind": "plan"
+      }
+    },
+    "receipt": {
+      "kind": "timeReceipt",
+      "collection": "receipts",
+      "fields": {
+        "id": "id",
+        "kind": "kind",
+        "request": "request",
+        "createdAt": "createdAt"
+      }
+    },
+    "occurrence": {
+      "kind": "timeOccurrence",
+      "collection": "occurrences",
+      "fields": {
+        "id": "id",
+        "taskId": "taskId",
+        "date": "date",
+        "duration": "estimatedMinutes",
+        "locked": "locked",
+        "status": "status"
+      },
+      "settings": {
+        "activeValue": "confirmed"
+      }
+    }
+  }
 }

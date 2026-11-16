@@ -29,6 +29,8 @@ export const examples = [
   {id:'panel',category:'overlays',title:'操作面板',description:'手机底部面板与宽屏侧边详情。',ref:'ui.panel'},
   {id:'floating',category:'overlays',title:'悬浮窗',description:'在当前页面上方显示可关闭面板。',ref:'floatingPanel'},
   {id:'animation',category:'overlays',title:'过渡动画',description:'淡入、缩放、滑动与重播。',ref:'transition',initial:'fade'},
+  {id:'motion',category:'overlays',title:'属性动画与按压反馈',description:'切换状态时平滑移动、缩放与淡化，按压反馈保持原按钮动作。',ref:'motion',initial:false},
+  {id:'swipeActions',category:'actions',title:'滑动操作',description:'横向滑出动作，纵向继续滚动；复杂内容通过更多操作执行。',ref:'swipeActions',modes:['默认','禁用']},
   {id:'tasks',category:'layout',title:'任务列表',description:'完成、筛选与进度，仅操作模拟任务。',ref:'ui.taskItem@1'},
   {id:'card',category:'layout',title:'内容卡片',description:'标题、说明、控件及操作的组合。',ref:'ui.card@1'},
   {id:'list',category:'layout',title:'列表',description:'添加或移除本地示例条目。',ref:'ui.list@1',initial:3},

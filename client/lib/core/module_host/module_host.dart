@@ -28,86 +28,36 @@ import 'module_package.dart';
 import 'service_directory_resource.dart';
 import 'system_timezone.dart';
 import 'page_workflow_queue.dart';
+import 'script_worker_pair.dart';
 import 'plan_confirmation.dart';
 import 'native_command_approval.dart';
-
-class ServiceRef {
-  const ServiceRef(this.moduleId, this.serviceId, this.major);
-  final String moduleId, serviceId;
-  final int major;
-  factory ServiceRef.parse(Object? value) {
-    final v = object(value, 'ServiceRef');
-    return ServiceRef(
-      string(v['moduleId'], 'moduleId'),
-      string(v['serviceId'], 'serviceId'),
-      v['majorVersion'] as int,
-    );
-  }
-  String get key => '$moduleId/$serviceId@$major';
-  Map<String, Object?> toJson() => {
-    'moduleId': moduleId,
-    'serviceId': serviceId,
-    'majorVersion': major,
-  };
-}
-
-class _PageReplayability {
-  _PageReplayability(this.safe);
-  bool safe;
-  int pendingBridges = 0;
-  void markUnsafe() => safe = false;
-}
-
-/// Native, gesture-scoped review policy. Scripts cannot supply this callback.
-typedef PagePlanReview = bool Function(
-  ServiceRef reference,
-  Object? input,
-  ChangePlan plan,
-  PlanConfirmation? confirmation,
-);
-
-/// Native approval for an exact frozen plan already displayed by the page.
-/// Unlike service-specific gestures this also supports adopted provider plans.
-typedef InlinePagePlanReview = bool Function(
-  ChangePlan plan,
-  PlanConfirmation? confirmation,
-);
+import 'service_ref.dart';
+import 'page_invocation.dart';
+export 'service_ref.dart';
+export 'page_invocation.dart' show PagePlanReview, InlinePagePlanReview;
 
 class ScriptInstance {
   ScriptInstance(this.package, this.actor);
   final ScriptPackage package;
   final ModuleActor actor;
-  JavaScriptWorker? _worker, _workflow;
-  JavaScriptWorker get worker =>
-      _worker ?? (throw StateError('UI packs do not have JavaScript workers'));
-  set worker(JavaScriptWorker value) => _worker = value;
-  JavaScriptWorker get workflow =>
-      _workflow ??
-      (throw StateError('UI packs do not have JavaScript workers'));
-  set workflow(JavaScriptWorker value) => _workflow = value;
-  bool get hasWorkers => _worker != null && _workflow != null;
-  bool _workersStopped = false;
-  Future<JavaScriptWorker>? _loadingWorker, _loadingWorkflow;
-  late Future<JavaScriptWorker> Function() _readyWorker;
+  late final ScriptWorkerPair engines;
+  JavaScriptWorker get worker => package.isUiPack
+      ? (throw StateError('UI packs do not have JavaScript workers'))
+      : engines.current();
+  JavaScriptWorker get workflow => package.isUiPack
+      ? (throw StateError('UI packs do not have JavaScript workers'))
+      : engines.current(workflow: true);
+  bool get hasWorkers => !package.isUiPack && engines.hasBoth;
   void closeWorkers() {
-    _workersStopped = true;
     pageWorkflow.close();
-    _worker?.close();
-    _workflow?.close();
+    if (!package.isUiPack) engines.close();
   }
 
   final pageWorkflow = PageWorkflowQueue();
   Future<void> get workflowTail => pageWorkflow.idle;
   set workflowTail(Future<void> value) => pageWorkflow.waitFor(value);
   SnapshotSession? session;
-  Set<String>? pageReads;
-  bool pagePreparation = false;
-  _PageReplayability? _pageReplayability;
-  PagePlanReview? _pagePlanReview;
-  InlinePagePlanReview? _inlinePagePlanReview;
-  NativeCommandApproval? _formCommandApproval;
-  bool Function()? _commandIsCurrent;
-  void Function(ChangePlan plan)? _pagePlanCommitted;
+  PageInvocation? page;
   final subscriptions = <String, StreamSubscription>{};
   Future<void> tail = Future.value();
   Future<Object?> run(
@@ -120,7 +70,7 @@ class ScriptInstance {
     tail = tail.then((_) async {
       try {
         // Reload only before a new operation. A failed command is never replayed.
-        final current = await _readyWorker();
+        final current = await engines.ready();
         session = snapshot;
         completer.complete(
           await current.invoke(
@@ -601,15 +551,27 @@ class ModuleHost {
       if (publish) instances[package.id] = instance;
       return instance;
     }
-    instance._readyWorker = () => _readyScriptWorker(instance);
+    instance.engines = ScriptWorkerPair(
+      moduleId: package.id,
+      entryPoint: package.definition['entryPoint'] as String,
+      create: (workflow) => JavaScriptWorker(
+        package.scripts,
+        ownerZone: _workerZone,
+        memoryLimit: 32 * 1024 * 1024,
+        host: (method, args) => (_installBatchZone ?? _workerZone).run(
+          () =>
+              _bridge(instance, method, object(args ?? {}), workflow: workflow),
+        ),
+      ),
+      beforeWorkflowRestart: () async {
+        final subscriptions = instance.subscriptions.values.toList();
+        instance.subscriptions.clear();
+        await Future.wait(subscriptions.map((s) => s.cancel()));
+      },
+    );
     try {
-      // Both engines still initialize their own ESM and globals. Load them in
-      // parallel, while keeping activation ordered after module dependencies.
-      await Future.wait([
-        _readyScriptWorker(instance),
-        _readyScriptWorker(instance, workflow: true),
-      ]);
-    } catch (error) {
+      await instance.engines.initialize(lazyWorkflow: package.lazyWorkflow);
+    } catch (_) {
       instance.closeWorkers();
       store.deactivate(package.id);
       rethrow;
@@ -621,77 +583,9 @@ class ModuleHost {
   Future<JavaScriptWorker> _readyScriptWorker(
     ScriptInstance instance, {
     bool workflow = false,
-  }) async {
-    if (_closed || instance._workersStopped) {
-      throw StateError('Module stopped');
-    }
-    final loading = workflow
-        ? instance._loadingWorkflow
-        : instance._loadingWorker;
-    if (loading != null) return loading;
-    final current = workflow ? instance._workflow : instance._worker;
-    if (current != null && !current.closed) return current;
-    final next = _loadScriptWorker(instance, workflow: workflow);
-    if (workflow) {
-      instance._loadingWorkflow = next;
-    } else {
-      instance._loadingWorker = next;
-    }
-    try {
-      return await next;
-    } finally {
-      if (workflow) {
-        instance._loadingWorkflow = null;
-      } else {
-        instance._loadingWorker = null;
-      }
-    }
-  }
-
-  Future<JavaScriptWorker> _loadScriptWorker(
-    ScriptInstance instance, {
-    required bool workflow,
-  }) async {
-    if (workflow && instance._workflow != null) {
-      // Listeners belong to the old ESM globals. Do not leave subscriptions
-      // delivering into the replacement engine or accumulating after failures.
-      final subscriptions = instance.subscriptions.values.toList();
-      instance.subscriptions.clear();
-      await Future.wait(
-        subscriptions.map((subscription) => subscription.cancel()),
-      );
-    }
-    if (_closed || instance._workersStopped) throw StateError('Module stopped');
-    final worker = JavaScriptWorker(
-      instance.package.scripts,
-      ownerZone: _workerZone,
-      memoryLimit: 32 * 1024 * 1024,
-      host: (method, args) => (_installBatchZone ?? _workerZone).run(
-        () => _bridge(instance, method, object(args ?? {}), workflow: workflow),
-      ),
-    );
-    if (workflow) {
-      instance.workflow = worker;
-    } else {
-      instance.worker = worker;
-    }
-    try {
-      await UiLoadTrace.run(
-        'host.worker.load',
-        () => worker.load(instance.package.definition['entryPoint'] as String),
-        arguments: {
-          'moduleId': instance.package.id,
-          'worker': workflow ? 'workflow' : 'computation',
-        },
-      );
-      if (_closed || instance._workersStopped) {
-        throw StateError('Module stopped');
-      }
-      return worker;
-    } catch (_) {
-      worker.close();
-      rethrow;
-    }
+  }) {
+    if (_closed) throw StateError('Module stopped');
+    return instance.engines.ready(workflow: workflow);
   }
 
   Future<Map<String, ScriptPackage>> installedPackages() async => {
@@ -1789,23 +1683,27 @@ class ModuleHost {
                 !identical(instance, instances[moduleId])) {
               return null;
             }
+            // Speculation must not initialize ESM with potential top-level effects.
+            // The first real page request owns lazy initialization.
+            if (readOnly && !instance.hasWorkers) return null;
             final worker = await _readyScriptWorker(instance, workflow: true);
             if (shouldRun?.call() == false ||
                 !identical(instance, instances[moduleId])) {
               return null;
             }
             final reads = onReads == null ? null : <String>{};
-            instance.pageReads = reads;
-            instance.pagePreparation = readOnly;
-            instance._pagePlanReview = readOnly ? null : onReview;
-            instance._inlinePagePlanReview = readOnly ? null : onInlineReview;
-            instance._commandIsCurrent = readOnly ? null : commandIsCurrent;
-            instance._formCommandApproval = null;
-            instance._pagePlanCommitted = readOnly ? null : onCommit;
-            final replayability = _PageReplayability(
+            final replayability = PageReplayability(
               input is Map && input['event'] == null,
             );
-            instance._pageReplayability = replayability;
+            instance.page = PageInvocation(
+              readOnly: readOnly,
+              reads: reads,
+              replayability: replayability,
+              review: readOnly ? null : onReview,
+              inlineReview: readOnly ? null : onInlineReview,
+              commandIsCurrent: readOnly ? null : commandIsCurrent,
+              onCommit: readOnly ? null : onCommit,
+            );
             final value = await UiLoadTrace.run(
               'page.execute',
               () => worker.invoke(handler, input, timeout: null),
@@ -1817,14 +1715,8 @@ class ModuleHost {
             );
             return value;
           } finally {
-            instance.pageReads = null;
-            instance.pagePreparation = false;
-            instance._pageReplayability = null;
-            instance._pagePlanReview = null;
-            instance._inlinePagePlanReview = null;
-            instance._commandIsCurrent = null;
-            instance._formCommandApproval = null;
-            instance._pagePlanCommitted = null;
+            instance.page?.close();
+            instance.page = null;
           }
         }, speculative: readOnly)
         .whenComplete(() => queued?.finish());
@@ -1856,7 +1748,8 @@ class ModuleHost {
     Map<String, Object?> args, {
     bool workflow = false,
   }) {
-    final replayability = workflow ? instance._pageReplayability : null;
+    final invocation = workflow ? instance.page : null;
+    final replayability = invocation?.replayability;
     if (replayability != null) replayability.pendingBridges++;
     return UiLoadTrace.run(
       'page.bridge',
@@ -1866,6 +1759,7 @@ class ModuleHost {
         args,
         workflow: workflow,
         replayability: replayability,
+        invocation: invocation,
       ),
       arguments: {'moduleId': instance.actor.moduleId, 'method': method},
     ).whenComplete(() {
@@ -1878,17 +1772,19 @@ class ModuleHost {
     String method,
     Map<String, Object?> args, {
     bool workflow = false,
-    _PageReplayability? replayability,
+    PageReplayability? replayability,
+    PageInvocation? invocation,
   }) async {
     final actor = instance.actor;
     store.requireActive(actor);
     final session = workflow ? null : instance.session;
     final pagePreparation = workflow
-        ? instance.pagePreparation
+        ? (invocation?.readOnly ?? false)
         : session?.pagePreparation == true;
     // Speculative page preparation must never submit commands, open UI,
     // subscribe, or access the network even if the module has those grants.
     const readOnlyMethods = {
+      'data.contract',
       'data.get',
       'data.query',
       'services.query',
@@ -1915,6 +1811,7 @@ class ModuleHost {
     }
     if (_batchInstalling &&
         ![
+          'data.contract',
           'data.get',
           'data.query',
           'ids.new',
@@ -1931,7 +1828,7 @@ class ModuleHost {
         'Installation validation cannot use external capabilities: $method',
       );
     }
-    final pageReads = workflow ? instance.pageReads : null;
+    final pageReads = workflow ? invocation?.reads : null;
     if (_migrationInstances.contains(actor.moduleId) &&
         !['data.get', 'data.query', 'ids.new', 'clock.now'].contains(method)) {
       throw StateError('Migration cannot use external capabilities');
@@ -1963,6 +1860,12 @@ class ModuleHost {
                     <UiContract>[])
               if (!uiContracts.containsKey(contract.ref)) contract.toJson(),
         ];
+      case 'data.contract':
+        pageReads?.add(actor.moduleId);
+        final contract =
+            instance.package.recordContracts[string(args['id'], 'contract id')];
+        if (contract == null) throw StateError('Unknown record contract');
+        return contract.toJson();
       case 'data.get':
         pageReads?.add(actor.moduleId);
         return store.get(
@@ -2327,7 +2230,7 @@ class ModuleHost {
           actor,
         );
         final commitResult = await commit(actor, committedPlan.id);
-        if (workflow) instance._pagePlanCommitted?.call(committedPlan);
+        if (workflow) invocation?.onCommit?.call(committedPlan);
         return commitResult;
       case 'ui.dialog':
         if (!actor.permissions.contains('ui') &&
@@ -2336,7 +2239,7 @@ class ModuleHost {
         }
         // Opening another form (including a cancelled one) invalidates an
         // earlier submission's capability within this workflow.
-        if (workflow) instance._formCommandApproval = null;
+        if (workflow) invocation?.commandApproval = null;
         final declaration = freezeJson(args['command']);
         final submitted = await interaction?.call(actor, method, {
           for (final entry in args.entries)
@@ -2344,9 +2247,10 @@ class ModuleHost {
         });
         store.requireActive(actor);
         if (workflow &&
-            instance._commandIsCurrent?.call() == true &&
+            invocation?.active == true &&
+            invocation?.commandIsCurrent?.call() == true &&
             submitted is Map) {
-          instance._formCommandApproval = NativeCommandApproval.fromInteraction(
+          invocation?.commandApproval = NativeCommandApproval.fromInteraction(
             declaration,
             submittedValues: object(submitted),
           );
@@ -2358,10 +2262,12 @@ class ModuleHost {
             ? PlanConfirmation.parse(args['confirmation'])
             : null;
         final preparedInvocation = _preparedInvocations[plan];
-        final pageReview = instance._pagePlanReview;
+        final pageReview = invocation?.active == true
+            ? invocation?.review
+            : null;
         // A click is scoped to the next review attempt, including an adopted
         // plan with no direct service invocation to match against.
-        if (workflow) instance._pagePlanReview = null;
+        if (workflow) invocation?.review = null;
         final quickAccepted =
             workflow &&
             preparedInvocation != null &&
@@ -2375,21 +2281,22 @@ class ModuleHost {
         final formAccepted =
             workflow &&
             preparedInvocation != null &&
-            instance._commandIsCurrent?.call() == true &&
-            instance._formCommandApproval?.allows(
+            invocation?.active == true &&
+            invocation?.commandIsCurrent?.call() == true &&
+            invocation?.commandApproval?.allows(
                   reference: preparedInvocation.reference.toJson(),
                   input: preparedInvocation.input,
                   writes: plan.writes,
                   confirmation: confirmation,
                 ) ==
                 true;
-        if (workflow) instance._formCommandApproval = null;
+        if (workflow) invocation?.commandApproval = null;
         final accepted =
             quickAccepted ||
             formAccepted ||
             workflow &&
-                instance._inlinePagePlanReview?.call(plan, confirmation) ==
-                    true ||
+                invocation?.active == true &&
+                invocation?.inlineReview?.call(plan, confirmation) == true ||
             (await interaction?.call(actor, 'ui.review', {
                   'planId': plan.id,
                   'writes': plan.writes,
@@ -2597,7 +2504,11 @@ class ModuleHost {
       }
       for (final page in package.definition['pages'] as List? ?? []) {
         if (object(page)['kind'] == 'container') continue;
-        final value = await isolated.instances[package.id]!.workflow.invoke(
+        final previewWorker = await isolated._readyScriptWorker(
+          isolated.instances[package.id]!,
+          workflow: true,
+        );
+        final value = await previewWorker.invoke(
           object(page)['handler'] as String,
           {
             'state': {},

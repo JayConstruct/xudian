@@ -153,7 +153,11 @@ def main(argv=None):
             raise ValueError('已有更新流程在执行，稍后再运行') from None
         # Re-read after locking, in case another update finished during preflight.
         cache = json.loads(cache_file.read_text()) if cache_file.exists() else {}
+        evidence = ROOT / 'dist/verification' / (datetime.datetime.now(
+            datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ') + '-emulator-update')
+        evidence.mkdir(parents=True, exist_ok=False)
         report = {'startedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  'evidenceDir': str(evidence.relative_to(ROOT)),
                   'serial': args.serial, 'mode': 'modules-only' if args.modules_only else mode,
                   'modulePackagesUpdated': False, 'githubPushed': False, 'completed': False,
                   'steps': [], 'stepSeconds': {}, 'selectedTests': tests,
@@ -276,14 +280,18 @@ def main(argv=None):
             if args.verify_catalog:
                 # This is installation evidence, not a successful UI report.
                 # latest-success remains untouched until acceptance passes.
-                build_report = output / 'catalog-installation.json'
+                build_report = evidence / 'catalog-installation.json'
                 build_report.write_text(json.dumps({
                     'completed': True, 'sourceFingerprint': source_digest,
+                    'evidenceDir': report['evidenceDir'],
                     'installedVersionCode': report['installedVersionCode'],
                     'installedApkSha256': report['installedApkSha256'],
                 }, indent=2) + '\n')
-                acceptance_dir = output / 'catalog-acceptance' / datetime.datetime.now(
-                    datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
+                acceptance_dir = evidence / 'catalog'
+                report['catalogAcceptance'] = {
+                    'completed': False,
+                    'report': str((acceptance_dir / 'results.json').relative_to(ROOT)),
+                }
                 command = ['python3', str(ROOT / 'scripts/module_host/verify_catalog.py'),
                            '--serial', args.serial, '--adb-host', args.adb_host,
                            '--adb-port', str(args.adb_port), '--cold-start',
@@ -303,16 +311,18 @@ def main(argv=None):
                 report['commit'] = commit_files(args.commit, paths)
                 report['steps'].append(phase)
             report['completed'] = True
-            report['totalSeconds'] = round(time.monotonic() - started_at, 3)
-            (output / 'latest-success.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
-            print('\n更新完成：' + str(report['totalSeconds']) + ' 秒')
-            print('记录：.cache/emulator-update/latest-success.json')
         except Exception as error:
             report.update(failedStep=phase, error=str(error))
             raise
         finally:
             report['totalSeconds'] = round(time.monotonic() - started_at, 3)
-            (output / 'latest-attempt.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+            serialized = json.dumps(report, ensure_ascii=False, indent=2) + '\n'
+            (evidence / 'results.json').write_text(serialized)
+            (output / 'latest-attempt.json').write_text(serialized)
+            if report['completed']:
+                (output / 'latest-success.json').write_text(serialized)
+            print('记录：' + str(evidence / 'results.json'), flush=True)
+        print('\n更新完成：' + str(report['totalSeconds']) + ' 秒')
     if args.dev and not args.no_attach:
         # Release the deployment lock before a potentially long debug session.
         debug_env = os.environ.copy()

@@ -7,8 +7,8 @@
   },
   {
     "id": "app.tasks",
-    "asset": "assets/modules/app.tasks-1.6.1.xmodule",
-    "sha256": "4b173829fd006126c56f86d1cd74fbf4d6ae49c3d0977f3f3aabc29914a0cc8d",
+    "asset": "assets/modules/app.tasks-1.7.0.xmodule",
+    "sha256": "f7c8e037c4198f6567fabafb44b14ffe72642e6d9d6361fadf2422e4891ac9cc",
     "default": true
   },
   {
@@ -19,8 +19,8 @@
   },
   {
     "id": "app.ui.examples",
-    "asset": "assets/modules/app.ui.examples-1.4.2.xmodule",
-    "sha256": "f9186446a8c02a4a9b3930a8759e2f989c92c637762d2bc6ac1ac5cb602f64fd",
+    "asset": "assets/modules/app.ui.examples-1.5.0.xmodule",
+    "sha256": "0e336d587491cbf282be1cc41c7d280681c61e7c7602e0f1636a5206333a4919",
     "default": false
   },
   {

@@ -81,6 +81,22 @@ export function control(item,state,forms) {
     {type:'tabs',selectedIndex:['fade','scale','slide'].indexOf(value||'fade'),items:[['fade','淡入'],['scale','缩放'],['slide','滑动']].map(([effect,label])=>({label,event:{type:'animationEffect',effect}}))},
     {type:'row',children:[button(state.animationVisible===false?'显示':'隐藏',{type:'value',key:'animationVisible',value:state.animationVisible===false}),button('重播动画',{type:'replay'},false,'outlined')]},
   ]);
+  if(id==='motion')return column([
+    {type:'motion',key:'demo-motion',target:{opacity:value?.65:1,translateX:value?16:0,translateY:0,scale:value?.94:1},timing:{duration:350,curve:'easeInOut'},
+      child:{type:'card',variant:'outlined',children:[text('状态动画预览'),text(value?'已切换状态':'初始状态')]}},
+    {type:'button',text:'切换动画状态',feedback:{pressedScale:.94,duration:100},event:{...change(id),value:!value}},
+    ui.component('ui.button@1',{props:{label:'公共按钮反馈',feedback:{pressedScale:.94,duration:100}},events:{press:{type:'action',id,action:'公共按钮反馈'}}}),
+    text('快速重复切换可反转动画；减少动画时直接显示目标状态。','muted'),
+  ]);
+  if(id==='swipeActions')return column([
+    {type:'swipeActions',key:'demo-swipe',enabled:!disabled,side:'end',extent:160,openThreshold:.4,settle:{duration:180,curve:'easeOut'},
+      actions:[{label:'编辑',icon:'edit',event:{type:'action',id,action:'滑动编辑'}},{label:'确认',icon:'check',event:{type:'confirm',id}}],
+      child:{type:'card',variant:'outlined',children:[text('向左滑动此卡片'),text('也可使用右侧更多操作')]}},
+    {type:'swipeActions',key:'demo-swipe-fallback',enabled:!disabled,extent:96,
+      actions:[{label:'查看',event:{type:'action',id,action:'菜单回退'}}],
+      child:{type:'richText',text:'这段文字可以选择复制；通过更多操作执行，不抢占选择手势。'}},
+    ...Array.from({length:8},(_,i)=>text('纵向滚动示例 '+(i+1))),
+  ]);
   if(id==='dailyOverview') {
     const date=state.demoDate,day=new Date(date+'T00:00:00Z');
     const days=Array.from({length:5},(_,i)=>{const value=new Date(day.getTime()+(i-2)*86400000);return {date:value.toISOString().slice(0,10),label:['周日','周一','周二','周三','周四','周五','周六'][value.getUTCDay()]};});

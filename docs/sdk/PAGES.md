@@ -2,6 +2,34 @@
 
 [SDK 入口与兼容要求](../MODULE_SDK.md)。各能力的最低宿主 API 在对应小节说明；旧调用的回退与权限边界继续适用。
 
+## API 1.50 的属性动画与滑动操作
+
+声明 `hostApi:'^1.50.0'`。新能力需要包含该实现的 APK；兼容宿主上修改下述参数或事件仅需递增模块版本并更新模块。结构见 [新节点 Schema](../../packages/schemas/ui-motion-v1.schema.json)，可操作示例见 UI 示例模块中的“属性动画与按压反馈”和“滑动操作”。
+
+`motion` 必须有稳定 `key`、单个 `child` 和非空 `target`。目标支持 `opacity`（0～1，默认1）、`translateX/Y`（±4096dp，默认0）、`scale`（0.1～4，默认1）。各目标数值支持现有路径绑定；首次挂载直接显示目标，同身份目标变化从当前位置继续。`timing:{duration:180,curve:'easeOut'}` 使用0～2000整数毫秒和 `linear/easeIn/easeOut/easeInOut`；省略参数使用默认值，显式 null、未知字段或越界值拒绝。目标不变只改 timing 时不重播；布局占位保持原尺寸。透明度不替代可见性，隐藏交互继续使用 `transition.visible`。入场、退出及折叠沿用现有节点。
+
+```javascript
+{type:'motion',key:'selection',
+ target:{scale:state.selected ? .94 : 1,translateX:state.selected ? 16 : 0},
+ timing:{duration:220,curve:'easeInOut'},
+ child:{type:'text',text:'预览'}}
+```
+
+`button.feedback:{pressedScale:.98,duration:100}` 为可选的按钮内部缩放，范围分别为0.9～1、0～300整数毫秒。直接按钮与 `ui.button@1` 的 `props.feedback` 均支持，保持原命中区域、点击、command、interrupt 和输入排队规则。省略时保持旧反馈；自定义 UI 包可继续使用自身样式，不强制消费反馈字段。
+
+`swipeActions` 必须有稳定 `key`、单个 `child`、`extent`（48～240dp）和1～3个 `actions`。动作 `{label,event,icon?,disabled?}` 的 label 非空，event 为原页面事件，icon 使用已知图标；extent 至少为动作数×48。`side:'start'|'end'` 默认 end 并跟随文字方向；`openThreshold` 为0.2～0.8、默认0.4；`settle` 与 timing 相同。`enabled` 默认 true，false 禁用此节点的滑动及动作，不改变 child 自身的操作；enabled、动作 disabled、可选 revision 支持绑定。revision 为模块提供的不透明字符串／整数，变化取消旧交互。
+
+```javascript
+{type:'swipeActions',key:'item:42',extent:96,
+ settle:{duration:180,curve:'easeOut'},
+ actions:[{label:'编辑',icon:'edit',event:{type:'edit',id:'42'}}],
+ child:{type:'card',variant:'outlined',children:[{type:'text',text:'向左滑动'}]}}
+```
+
+只有明确无连续交互的原生内容组合启用横滑；输入、可选文字、嵌套滚动和自定义配方等未知组合保留内容并回退到始终可访问的“更多操作”菜单。宽度或字号导致动作放不下时同样回退。横滑不触发 JS；稳定打开后点击动作才派发一次页面事件，菜单与滑出动作共用执行锁。打开后点击内容只收起；菜单支持键盘、读屏和取消。新动作第一版不接受 command，仍走模块的普通审核流程。
+
+所属滚动区开始滚动、第二指加入、禁用、busy、配置变化、切页、模块升级和后台失活均取消局部交互；旧菜单不能执行变更前的动作。motion 在减少动态效果或页面失活时直接到目标值。新增动效使用局部控制器及页面预算，不逐帧调用脚本；超预算时装饰直接呈现目标，业务操作仍保留。该结构不等于真机帧率保证，性能需单独采样。
+
 ## 页面
 
 宿主 API `^1.45.0` 增加通用内容布局配置，业务字段、分组、文案和事件继续由模块声明：

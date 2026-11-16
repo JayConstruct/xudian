@@ -181,7 +181,9 @@ scripts/update-emulator.sh --serial emulator-5556 --adb-port 5037
 
 `--dry-run` 只打印流程，不连接设备或修改文件。ADB 地址还可通过 `--adb-host` 或环境变量 `XUDIAN_ADB_HOST`、`XUDIAN_ADB_PORT` 设置。`--build-number` 可指定构建号，必须高于设备现有版本，不能与 `--modules-only` 同用。
 
-最近成功和尝试记录分别在 `.cache/emulator-update/latest-success.json`、`latest-attempt.json`，包含各阶段及总耗时、测试范围、缓存复用情况、APK 版本与摘要、模块结果及可选提交 SHA。debug/release 缓存和 APK 也在此目录，已由 Git 忽略。同一工作区同时只允许一个更新流程；进入热重载后会释放更新锁。
+每次实际更新创建 `dist/verification/<UTC时间>-emulator-update/`，`results.json` 保存完整成功或失败结果，包含各阶段及总耗时、测试范围、缓存复用情况、APK 版本与摘要、模块结果及可选提交 SHA。商店验收的安装凭据保存在同目录 `catalog-installation.json`，截图、XML 与页面结果放 `catalog/`；额外测试日志也应归入该轮目录。
+
+`.cache/emulator-update/latest-success.json`、`latest-attempt.json` 保留最近状态，通过 `evidenceDir` 指向完整证据。debug/release 缓存、APK、锁和模块更新状态继续在 `.cache/emulator-update/`，均由 Git 忽略。同一工作区同时只允许一个更新流程；进入热重载后会释放更新锁。记录约定见 [目录规范](REPOSITORY_LAYOUT.md#文档与记录只维护一处)。
 
 步骤失败即停止，记录失败阶段，不继续提交。失败发生在安装之后时，模拟器可能已经更新，脚本不自动回滚。模块更新触发界面检查前请避免同时操作模拟器。
 
