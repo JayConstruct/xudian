@@ -1,0 +1,331 @@
+{
+  "date": "2026-11-16",
+  "status": "published-and-verified",
+  "sourceCommit": "80a8ba956b4f09990289bd28c5062ac588d90c18",
+  "appTag": "v0.2.0-beta.27",
+  "moduleTag": "modules-20261116-ui-runtime",
+  "atomicSourceAndAppTagPush": true,
+  "moduleSourceCommit": "9855355ccd4b7a3edde31ed822f8f6ece65186c9",
+  "checks": {
+    "finalCandidateLocalFlutterRelated": 65,
+    "unchangedFeatureCandidateLocalFlutterRelated": 239,
+    "pythonTooling": 325,
+    "moduleCatalog": 36,
+    "nodePageReads": "passed",
+    "schemaSharedFixtures": 11,
+    "analyze": "passed",
+    "architecture": "passed",
+    "repository": "passed",
+    "docs": "passed",
+    "fullFlutterCI": {
+      "passed": 1916,
+      "shards": [
+        645,
+        645,
+        626
+      ],
+      "failed": 0
+    },
+    "workflows": {
+      "app": {
+        "runId": 43862971434,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/43862971434",
+        "conclusion": "success"
+      },
+      "modules": {
+        "runId": 43860382813,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/43860382813",
+        "conclusion": "success"
+      },
+      "main": {
+        "runId": 43862969752,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/43862969752",
+        "conclusion": "success"
+      }
+    }
+  },
+  "emulator": {
+    "buildNumber": 239,
+    "installedVersionCode": 4239,
+    "apkSha256": "1d9dfd898e0ec365863f1a242c23942612d1bbd62d0df40b2dd31f0f834c0781",
+    "installedApkSha256": "1d9dfd898e0ec365863f1a242c23942612d1bbd62d0df40b2dd31f0f834c0781",
+    "sourceFingerprint": "1e18cec26697823b9f062f5d3593e84ce70def5bec153334d5ec17ead0459fd1",
+    "modules": [
+      {
+        "id": "app.tasks",
+        "name": "任务",
+        "version": "1.7.0",
+        "sha256": "f7c8e037c4198f6567fabafb44b14ffe72642e6d9d6361fadf2422e4891ac9cc",
+        "package": "/home/jerry/my_app/.cache/emulator-update/modules/app.tasks-1.7.0.xmodule",
+        "installationSource": "bundled",
+        "installedSha256": "f7c8e037c4198f6567fabafb44b14ffe72642e6d9d6361fadf2422e4891ac9cc",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.planner",
+        "name": "任务规划",
+        "version": "1.15.1",
+        "sha256": "c00b224635f9e3d0746fedfb63a579bbe52a790fdd8bb6f1a2fd3b8f9e658ddb",
+        "package": "/home/jerry/my_app/.cache/emulator-update/modules/app.planner-1.15.1.xmodule",
+        "installationSource": "local",
+        "installedSha256": "c00b224635f9e3d0746fedfb63a579bbe52a790fdd8bb6f1a2fd3b8f9e658ddb",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.ui.examples",
+        "name": "UI 示例",
+        "version": "1.5.0",
+        "sha256": "0e336d587491cbf282be1cc41c7d280681c61e7c7602e0f1636a5206333a4919",
+        "package": "/home/jerry/my_app/.cache/emulator-update/modules/app.ui.examples-1.5.0.xmodule",
+        "installationSource": "bundled",
+        "installedSha256": "0e336d587491cbf282be1cc41c7d280681c61e7c7602e0f1636a5206333a4919",
+        "status": "already-installed"
+      }
+    ],
+    "versionName": "0.2.0-beta.27",
+    "forceRebuilt": true,
+    "updateCommand": "scripts/update-emulator.sh --force --module app.tasks --module app.planner --module app.ui.examples --verify-catalog --catalog-offline (6 selected test files)"
+  },
+  "deviceAcceptance": {
+    "catalogOnlineOfflineCloseBackReopenColdStart": true,
+    "featureCodeUnchangedSinceBeta26": true,
+    "featureAcceptanceApkSha256": "30b698c7b328167fc1acf677e7a412644bd0d5f66423cc172b6133dafbb254cd",
+    "priorCandidateUiRuntimeSteps": [
+      "final-swipe-reveal",
+      "final-swipe-action",
+      "final-dialog-open",
+      "final-dialog-cancel",
+      "final-dialog-reopen-back",
+      "final-menu-fallback",
+      "final-disabled",
+      "final-swipe-return-reopen",
+      "final-motion-initial",
+      "final-motion-changed",
+      "final-public-feedback",
+      "final-code-open",
+      "final-motion-return-reopen",
+      "final-cold-start"
+    ],
+    "priorCandidatePlannerSteps": [
+      "planner",
+      "day-open",
+      "local-draft",
+      "duration-open",
+      "duration-reopen",
+      "draft-cancelled",
+      "day-reopened",
+      "day-system-back",
+      "planner-menu-open",
+      "planner-menu-reopen",
+      "history-open",
+      "history-reopen",
+      "other-workspace",
+      "planner-return",
+      "planner-cold-start",
+      "day-after-cold-start"
+    ],
+    "businessWritesSubmitted": false,
+    "priorCandidateModuleReadbackAfterColdStart": true,
+    "interruptedDriver": {
+      "exitCode": 143,
+      "result": "no-success-report",
+      "resolvedBy": "complete planner-final rerun"
+    },
+    "sameSignatureDataPreservingUpgrade": true,
+    "dataCleared": false
+  },
+  "publicRelease": {
+    "tag": "v0.2.0-beta.27",
+    "sourceCommit": "80a8ba956b4f09990289bd28c5062ac588d90c18",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.27",
+    "publishedAt": "2026-11-16T12:10:03Z",
+    "prerelease": true,
+    "anonymousDownloadVerified": true,
+    "buildNumber": 169,
+    "fixedCertificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+    "apks": [
+      {
+        "name": "xudian-v0.2.0-beta.27-armeabi-v7a-release.apk",
+        "abi": "armeabi-v7a",
+        "version": "0.2.0-beta.27",
+        "versionCode": 1169,
+        "sha256": "2d74d951be3d080b027c3532087f5da0041437336e4023cffa4e711cd12a1638",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "xudian-v0.2.0-beta.27-arm64-v8a-release.apk",
+        "abi": "arm64-v8a",
+        "version": "0.2.0-beta.27",
+        "versionCode": 2169,
+        "sha256": "83df9fbed998a3a0f185f192ca327da1d7a0c569f8000fcc4590ea7adcdf8dd4",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      },
+      {
+        "name": "xudian-v0.2.0-beta.27-x86_64-release.apk",
+        "abi": "x86_64",
+        "version": "0.2.0-beta.27",
+        "versionCode": 4169,
+        "sha256": "987c0bd9ccf7db3df0d6f53b785dcc5311c2e12ca3db9a3caaf283f0c40ac593",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "signatureVerified": true,
+        "bundledModulesVerified": 6,
+        "signingFilesAbsent": true
+      }
+    ],
+    "armPhysicalDeviceInstalled": false,
+    "emulatorPublicSigningInstalled": false
+  },
+  "publicModules": {
+    "tag": "modules-20261116-ui-runtime",
+    "sourceCommit": "9855355ccd4b7a3edde31ed822f8f6ece65186c9",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261116-ui-runtime",
+    "publishedAt": "2026-11-16T11:44:38Z",
+    "modules": [
+      {
+        "id": "app.planner",
+        "version": "1.15.1",
+        "sha256": "c00b224635f9e3d0746fedfb63a579bbe52a790fdd8bb6f1a2fd3b8f9e658ddb",
+        "size": 76184,
+        "hostApi": "^1.49.0",
+        "anonymousDownloadVerified": true,
+        "sourcePackageIdentical": true
+      },
+      {
+        "id": "app.tasks",
+        "version": "1.7.0",
+        "sha256": "f7c8e037c4198f6567fabafb44b14ffe72642e6d9d6361fadf2422e4891ac9cc",
+        "size": 7968,
+        "hostApi": "^1.49.0",
+        "anonymousDownloadVerified": true,
+        "sourcePackageIdentical": true
+      },
+      {
+        "id": "app.ui.examples",
+        "version": "1.5.0",
+        "sha256": "0e336d587491cbf282be1cc41c7d280681c61e7c7602e0f1636a5206333a4919",
+        "size": 16740,
+        "hostApi": "^1.50.0",
+        "anonymousDownloadVerified": true,
+        "sourcePackageIdentical": true
+      }
+    ],
+    "anonymousDownloadVerified": true
+  },
+  "publicIndexes": {
+    "branch": "module-catalog",
+    "sourceCommit": "80a8ba956b4f09990289bd28c5062ac588d90c18",
+    "indexes": [
+      {
+        "id": "app.ai",
+        "sha256": "50cde969f4b9a0d4d2d141d50367ecab9103b24afeef482e3efa3bbbda4b161c",
+        "versions": 6,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.import.shiguang",
+        "sha256": "797cf68dc8b047a30f0ff1d17b5dbdf0e04111b4259941aeb111e8ec0889d735",
+        "versions": 10,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.planner",
+        "sha256": "2b6366fddcee30a5dfff153cabaca9e614c855b182f04d7a7ee07a2fde4dc73a",
+        "versions": 13,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.schedule",
+        "sha256": "8759cad0e868d6380bedd21804562b3497e18226ac65a46a5e207f3e1dd465d2",
+        "versions": 14,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.tasks",
+        "sha256": "46190b0afe4075e1aa5d9670c300c627ffb350e13488b67f655e0135fec2ff6a",
+        "versions": 8,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.ui.contributions",
+        "sha256": "3208feabdb4dc2f35d2a5fefb0b8dd9fd558bd878915b383d52e6a27e65aba40",
+        "versions": 3,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.ui.examples",
+        "sha256": "43ad2b1bd5bb357eacc1ad4809a76b62a68c6e2f6ae523622e2c8b1bb97d9de2",
+        "versions": 5,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "app.views.today",
+        "sha256": "33ce4f1cf03efe85b07a32eadbf84fbde4946e8cb583e9c31c733ff90b9ee82e",
+        "versions": 8,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      },
+      {
+        "id": "example.ui.compact",
+        "sha256": "821872d6c0cd67bb056dbe810747f7cf539dfa3df67fdc12d0f39c562999c6f9",
+        "versions": 3,
+        "sourceIndexIdentical": true,
+        "anonymousDownloadVerified": true
+      }
+    ],
+    "allNineIndexesIdentical": true
+  },
+  "timings": {
+    "preparationSeconds": null,
+    "preparationNote": "Not separately timed.",
+    "localUpdateSeconds": 347.849,
+    "localStepsSeconds": {
+      "仓库与预装资源检查": 0.052,
+      "静态分析": 4.07,
+      "生产架构检查": 0.332,
+      "模块测试包准备": 0.137,
+      "相关测试": 58.873,
+      "构建": 46.767,
+      "覆盖安装": 1.319,
+      "启动前停止旧进程": 0.165,
+      "启动": 0.1,
+      "模块更新": 113.588,
+      "商店页面验收": 121.861
+    },
+    "ciSeconds": {
+      "app": 465.0,
+      "modules": 16.0,
+      "main": 431.0
+    }
+  },
+  "limitations": [
+    "Public fixed-signature APKs were downloaded and verified; the emulator retains its development signature and existing app data.",
+    "ARM physical-device performance, peak memory, native Windows and TalkBack acceptance were not measured.",
+    "APK updates do not replace independently installed modules."
+  ],
+  "supersededCandidate": {
+    "tag": "v0.2.0-beta.26",
+    "status": "app-ci-failed",
+    "failedTests": 11,
+    "reason": "Outdated gallery, contract and lazy-workflow fixtures; tests corrected without changing feature code.",
+    "record": "release-20261116-beta26.json"
+  },
+  "localEvidence": "dist/verification/releases/release-20261116-beta27/",
+  "localFixtureCorrection": {
+    "failedAttempt": "dist/verification/20261116T115356.603857Z-emulator-update/results.json",
+    "reason": "A legacy gallery assertion disallowed selectable text in the new swipe fallback demo. The updated test requires exactly one richText child inside swipeActions; other demos retain the original restriction.",
+    "finalRelatedTests": 65
+  }
+}
