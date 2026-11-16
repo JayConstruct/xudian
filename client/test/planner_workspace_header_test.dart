@@ -19,6 +19,8 @@ import 'package:task_app/core/ui/workspace_header_action.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
+import 'planner_task_schedule_test.dart' show sourcePackage;
+
 const _adjustKey = ValueKey<(String, Object?)>((
   'workspace-inline-action',
   '调整',
@@ -45,6 +47,8 @@ void main() {
     directory = await Directory.systemTemp.createTemp('planner-header-');
     host = ModuleHost(store: store, directory: directory);
     await host.initialize();
+    final tasks = (await sourcePackage('app.tasks')).definition;
+    final planner = (await sourcePackage('app.planner')).definition;
     await host.install(
       await ScriptPackage.verify(
         await ScriptPackage.build(
@@ -54,13 +58,20 @@ void main() {
               'id': 'test.timeline',
               'name': '规划顶栏测试',
               'version': '1.0.0',
-              'hostApi': '^1.18.0',
+              'hostApi': '^1.49.0',
               'dataVersion': 1,
               'permissions': ['ui'],
               'dependencies': [],
             },
             'entryPoint': 'main.js',
-            'collections': [],
+            'collections': [
+              ...tasks['collections'] as List,
+              ...planner['collections'] as List,
+            ],
+            'recordContracts': {
+              ...object(tasks['recordContracts']),
+              ...object(planner['recordContracts']),
+            },
             'services': [],
             'pages': [
               for (final (page, title, order) in [
@@ -101,7 +112,7 @@ export function render({state={},event,context}) {
       {type:'text',text:'JS render '+state.renders+' event '+(event?.type||'none')},
       ...(!state.history?[{type:'plannerBoard',key:'board',
         days:[{date:'2026-10-20',label:'周二'}],candidates:[],blocks:[],
-        quickAdjustment:{taskModuleId:'app.tasks',applyServiceId:'planner.operation.apply',undoServiceId:'planner.batch.undo'}
+        quickAdjustment:{contract:'time-range/2',records:{subject:'time',journal:'journal',receipt:'receipt',occurrence:'occurrence'},taskModuleId:'test.timeline',applyServiceId:'planner.operation.apply',undoServiceId:'planner.batch.undo'}
       }]:[])
     ]}};
 }

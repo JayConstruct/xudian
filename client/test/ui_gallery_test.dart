@@ -175,9 +175,9 @@ void main() {
         await show(tester, brightness: config.brightness);
         expect(find.text('基础操作'), findsOneWidget);
         expect(find.byType(TextField), findsOneWidget);
-        expect(find.text('38 个基础演示 · 0 个模块注册 UI'), findsOneWidget);
+        expect(find.text('40 个基础演示 · 0 个模块注册 UI'), findsOneWidget);
         expect(find.byType(ListView), findsOneWidget);
-        expect(find.byType(ListTile).evaluate().length, lessThan(38));
+        expect(find.byType(ListTile).evaluate().length, lessThan(40));
         final calls = <Map<String, Object?>>[];
         host.interaction = (_, method, args) async {
           calls.add({'method': method, ...args});
@@ -557,7 +557,7 @@ void main() {
         .where((node) => node['type'] == 'listTile')
         .map((node) => object(node['event'])['id'] as String)
         .toList();
-    expect(ids, hasLength(38));
+    expect(ids, hasLength(40));
     for (final id in ids) {
       await show(tester, demo: id);
       expect(find.textContaining('模块界面无效'), findsNothing, reason: id);

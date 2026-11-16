@@ -251,6 +251,8 @@ void main() {
   test(
     'background loading returns a board even from alternate page state',
     () async {
+      // Background prefetch follows a real page visit for lazy workflows.
+      await page();
       for (final alternate in [
         {'history': true},
         {'chooseAuto': true},
@@ -282,6 +284,8 @@ void main() {
   test(
     'background occupancy and display data preserve business records',
     () async {
+      // Background prefetch follows a real page visit for lazy workflows.
+      await page();
       await command('planner.availability.save', {
         'availability': {
           'timezone': 'Asia/Shanghai',
@@ -379,6 +383,8 @@ void main() {
   test(
     'background display data includes manual and full-day preferences',
     () async {
+      // Background prefetch follows a real page visit for lazy workflows.
+      await page();
       final actor = host.instances['app.planner']!.actor;
       for (final preference in [
         {'mode': 'manual', 'start': '06:30', 'end': '23:00'},

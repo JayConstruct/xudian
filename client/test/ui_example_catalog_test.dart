@@ -127,12 +127,12 @@ void main() {
     expect(code, contains('UI 包可覆盖'));
   });
 
-  test('categorized home links to 38 demos with icon-free rows and code-dialog actions', () async {
+  test('categorized home links to 40 demos with icon-free rows and code-dialog actions', () async {
     final home = await render('page');
     final links = descendants(home['tree'])
         .where((node) => node['type'] == 'listTile')
         .toList();
-    expect(links, hasLength(38));
+    expect(links, hasLength(40));
     expect(links.every((link) => !link.containsKey('icon')), true);
     expect(
       descendants(home['tree']).where((node) => node['type'] == 'grid'),
@@ -152,10 +152,21 @@ void main() {
         object(object((tree['children'] as List).last)['props'])['label'],
         '查看调用方式',
       );
+      // Selectable text is intentional in the swipe menu-fallback example.
       expect(
         descendants(tree).where((node) => node['type'] == 'richText'),
-        isEmpty,
+        id == 'swipeActions' ? hasLength(1) : isEmpty,
       );
+      if (id == 'swipeActions') {
+        expect(
+          descendants(tree).where(
+            (node) =>
+                node['type'] == 'swipeActions' &&
+                object(node['child'])['type'] == 'richText',
+          ),
+          hasLength(1),
+        );
+      }
       await render('demo.$id', event: {'type': 'showCode'});
       expect(calls.last['method'], 'ui.showCode');
       final code = (calls.last['sections'] as List)
