@@ -1,0 +1,270 @@
+{
+  "date": "2026-11-19",
+  "status": "published-and-verified",
+  "sourceCommit": "23b5e51df0264b1a09ff0a72d72fc8328dbf7859",
+  "appTag": "v0.2.0-beta.29",
+  "moduleTag": "modules-20261119-project-directories",
+  "checks": {
+    "originalRelatedFlutterPassed": 465,
+    "finalFocusedFlutterPassed": 27,
+    "fullFlutterCI": {
+      "passed": 1929,
+      "shards": [
+        650,
+        629,
+        650
+      ],
+      "failed": 0
+    },
+    "pythonToolingPassed": 326,
+    "moduleCatalogPassed": 37,
+    "staticAnalysis": "passed",
+    "productionArchitecture": "passed",
+    "repositoryAndDocumentation": "passed",
+    "nodePageReads": "passed",
+    "initialLocalFailure": "The workspace assistant test pinned AI 1.6.0. It now loads the current source fixture and passes.",
+    "githubActions": [
+      {
+        "ref": "main",
+        "id": 44474830310,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/44474830310",
+        "conclusion": "success"
+      },
+      {
+        "ref": "v0.2.0-beta.29",
+        "id": 44474830208,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/44474830208",
+        "conclusion": "success"
+      },
+      {
+        "ref": "modules-20261119-project-directories",
+        "id": 44472845442,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/44472845442",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "emulator": {
+    "serial": "emulator-5554",
+    "versionName": "0.2.0-beta.29",
+    "buildNumber": 259,
+    "installedVersionCode": 4259,
+    "installedApkSha256": "5126abec9fe9961e491759426a9c8e30cb097cb9d32a81551a1d66409b20d8a0",
+    "sourceFingerprint": "6504989fd69fb1bc24ee65d520eab84cefa55d6dbc34ed91b83cff0832dc290b",
+    "modules": [
+      {
+        "id": "app.ai",
+        "version": "1.6.2",
+        "sha256": "39c639bc521d7134c2ae6c6f9cae0fa0387507978905589ab683b14f4950aefa",
+        "installedSha256": "39c639bc521d7134c2ae6c6f9cae0fa0387507978905589ab683b14f4950aefa",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.tasks",
+        "version": "1.11.1",
+        "sha256": "ec52643c010934210bcc37e8c1509418d2b843805ab52ee9c544274907554f86",
+        "installedSha256": "ec52643c010934210bcc37e8c1509418d2b843805ab52ee9c544274907554f86",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.planner",
+        "version": "1.16.0",
+        "sha256": "d82b2d2f2509d059c87bada4404e1a0b361efbeac1f2c7d7c53f9e113601ef41",
+        "installedSha256": "d82b2d2f2509d059c87bada4404e1a0b361efbeac1f2c7d7c53f9e113601ef41",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.schedule",
+        "version": "1.16.6",
+        "sha256": "b2ef5d27e9bdb8271f258832f738ec226bd539750ccbdc8a95f185be2a532d15",
+        "installedSha256": "b2ef5d27e9bdb8271f258832f738ec226bd539750ccbdc8a95f185be2a532d15",
+        "status": "already-installed"
+      }
+    ],
+    "catalogOnlineOfflineBackReopenColdStart": true,
+    "versionPageBackAndReopen": true,
+    "deviceSteps": {
+      "project": [
+        "project-directory",
+        "project-row-menu",
+        "project-settings",
+        "project-ai",
+        "project-return",
+        "project-ai-reopened"
+      ],
+      "settings": [
+        "settings",
+        "layout-settings",
+        "settings-return",
+        "layout-settings-reopened",
+        "installed-version"
+      ],
+      "planner": [
+        "planner",
+        "planner-history",
+        "planner-return",
+        "planner-history-reopened"
+      ],
+      "schedule": [
+        "schedule",
+        "schedule-settings",
+        "schedule-management",
+        "schedule-management-return",
+        "schedule-semester",
+        "schedule-return",
+        "schedule-settings-reopened"
+      ]
+    },
+    "featureAcceptance": {
+      "evidenceDir": "dist/verification/20261119T062320.131396Z-emulator-update",
+      "apkSha256": "ee302c2d51cb4e61bbc34f9fc9b0766c308932a156069ceffcb5ac5ab34c5725",
+      "runtimeUnchangedSinceBeta28": true
+    },
+    "dataPreserved": true,
+    "evidenceDir": "dist/verification/20261119T064406.289255Z-emulator-update"
+  },
+  "publicApp": {
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.29",
+    "publishedAt": "2026-11-19T06:56:29Z",
+    "prerelease": true,
+    "anonymousDownloadsVerified": true,
+    "apks": [
+      {
+        "name": "xudian-v0.2.0-beta.29-armeabi-v7a-release.apk",
+        "versionName": "0.2.0-beta.29",
+        "versionCode": 1172,
+        "abi": "armeabi-v7a",
+        "sha256": "a168823ad118eb6e2c5d593ae3be2dfc610b64b711043de15dd5fee47dc47e56",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "bundledModules": 6
+      },
+      {
+        "name": "xudian-v0.2.0-beta.29-arm64-v8a-release.apk",
+        "versionName": "0.2.0-beta.29",
+        "versionCode": 2172,
+        "abi": "arm64-v8a",
+        "sha256": "31c71b88ca54a2e9843e25291975da2064d911d01208730b05efaee40dcb15c7",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "bundledModules": 6
+      },
+      {
+        "name": "xudian-v0.2.0-beta.29-x86_64-release.apk",
+        "versionName": "0.2.0-beta.29",
+        "versionCode": 4172,
+        "abi": "x86_64",
+        "sha256": "f4ef81480e74374b46c5361d76dcf9ec7cf2058827e62308525bfcad71bf732d",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "bundledModules": 6
+      }
+    ]
+  },
+  "publicModules": {
+    "sourceCommit": "efb220f2a4474fcee863d67252bc31905d2537b9",
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261119-project-directories",
+    "publishedAt": "2026-11-19T06:32:08Z",
+    "anonymousDownloadsVerified": true,
+    "modules": [
+      {
+        "id": "app.ai",
+        "version": "1.6.2",
+        "hostApi": "^1.31.0",
+        "sha256": "39c639bc521d7134c2ae6c6f9cae0fa0387507978905589ab683b14f4950aefa",
+        "size": 12091
+      },
+      {
+        "id": "app.planner",
+        "version": "1.16.0",
+        "hostApi": "^1.49.0",
+        "sha256": "d82b2d2f2509d059c87bada4404e1a0b361efbeac1f2c7d7c53f9e113601ef41",
+        "size": 78775
+      },
+      {
+        "id": "app.schedule",
+        "version": "1.16.6",
+        "hostApi": "^1.34.0",
+        "sha256": "b2ef5d27e9bdb8271f258832f738ec226bd539750ccbdc8a95f185be2a532d15",
+        "size": 37142
+      },
+      {
+        "id": "app.tasks",
+        "version": "1.11.1",
+        "hostApi": "^1.54.0",
+        "sha256": "ec52643c010934210bcc37e8c1509418d2b843805ab52ee9c544274907554f86",
+        "size": 27757
+      }
+    ]
+  },
+  "publicIndexes": {
+    "branch": "module-catalog",
+    "sourceCommit": "efb220f2a4474fcee863d67252bc31905d2537b9",
+    "indexes": [
+      {
+        "id": "app.ai",
+        "sha256": "fd1ce2a46bfaca29030170edae20e77c5ef3aec346434da0bf55fd224930e9b4",
+        "attempts": 1
+      },
+      {
+        "id": "app.import.shiguang",
+        "sha256": "797cf68dc8b047a30f0ff1d17b5dbdf0e04111b4259941aeb111e8ec0889d735",
+        "attempts": 1
+      },
+      {
+        "id": "app.planner",
+        "sha256": "b8bbb9ef56707d0b39f2e01d7cae828f1cb415b78d81f71aa1f28a4a61e2557a",
+        "attempts": 1
+      },
+      {
+        "id": "app.schedule",
+        "sha256": "7334e2f470e9e1890535f9b43d1deff59d5e1b86824d8c459538370cffee54d2",
+        "attempts": 1
+      },
+      {
+        "id": "app.tasks",
+        "sha256": "3badeef2744dc5114b5008a50bbb211aff2c842ffdc69916f6f75df2ee46bef8",
+        "attempts": 1
+      },
+      {
+        "id": "app.ui.contributions",
+        "sha256": "3208feabdb4dc2f35d2a5fefb0b8dd9fd558bd878915b383d52e6a27e65aba40",
+        "attempts": 1
+      },
+      {
+        "id": "app.ui.examples",
+        "sha256": "43ad2b1bd5bb357eacc1ad4809a76b62a68c6e2f6ae523622e2c8b1bb97d9de2",
+        "attempts": 1
+      },
+      {
+        "id": "app.views.today",
+        "sha256": "33ce4f1cf03efe85b07a32eadbf84fbde4946e8cb583e9c31c733ff90b9ee82e",
+        "attempts": 1
+      },
+      {
+        "id": "example.ui.compact",
+        "sha256": "821872d6c0cd67bb056dbe810747f7cf539dfa3df67fdc12d0f39c562999c6f9",
+        "attempts": 1
+      }
+    ]
+  },
+  "publicDirectory": {
+    "pullRequest": "https://github.com/JayConstruct/xudian-modules/pull/1",
+    "mergeCommit": "878949ce0212bf4e3bcd6846a4fe2bd8f0981e1e",
+    "mergedAt": "2026-11-19T06:35:26Z",
+    "validated": true,
+    "sha256": {
+      "catalog.json": "6f4020d4f4563d0cb81eb3bf6baa07f1bd561acd0e58efeb68912086e57e3b7f",
+      "schemas/module-version-index-v1.schema.json": "5c7be4771eaf58e1c7ed206da87a84dbe15cdd27ae9de739f7dc6e778dd1b5a1"
+    }
+  },
+  "limitations": [
+    "The emulator used the existing development signing key. Public fixed-signature APKs were downloaded and verified.",
+    "ARM physical devices and live AI model output were outside the device checks."
+  ],
+  "supersededCandidate": {
+    "tag": "v0.2.0-beta.28",
+    "sourceCommit": "efb220f2a4474fcee863d67252bc31905d2537b9",
+    "githubActions": "https://github.com/JayConstruct/xudian/actions/runs/44472845689",
+    "failedTests": 9,
+    "reason": "Schedule fixtures needed explicit SDK imports. Legacy template and task undo tests needed activity records and full snapshots."
+  },
+  "localEvidence": "dist/verification/releases/release-20261119-beta29/"
+}
