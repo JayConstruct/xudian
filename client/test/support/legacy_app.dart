@@ -2,8 +2,8 @@
 import 'package:task_app/features/ai/ai_module.dart';
 import 'package:task_app/features/declarative_runtime/builtin_declarative_modules.dart';
 import 'package:task_app/features/module_manager/module_manager_module.dart';
-import 'package:task_app/features/projects/projects_module.dart';
-import 'package:task_app/features/ui_examples/ui_examples_module.dart';
+import 'package:task_app/legacy/projects/projects_module.dart';
+import 'package:task_app/legacy/ui_examples/ui_examples_module.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

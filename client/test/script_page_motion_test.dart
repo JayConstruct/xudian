@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
@@ -56,8 +57,13 @@ export function renderLocal({state={},event}) {
       timing:{duration:800,curve:'linear'},child:{type:'text',text:'preview'}},
     {type:'button',text:'toggle',feedback:{pressedScale:.95},event:{type:'toggle'}},
     {type:'swipeActions',key:'local-swipe',extent:160,actions:[{label:'perform',event:{type:'perform'}}],
-      child:{type:'card',variant:'outlined',children:[{type:'text',text:'swipe me'}]}}
+      child:{type:'listTile',title:'swipe me',event:{type:'toggle'}}}
   ]}};
+}
+export function renderRowMenu(input) {
+  const page=renderLocal(input);
+  page.tree.children.at(-1).menuTrigger='longPress';
+  return page;
 }
 export async function render({state={},event,formValues={}}) {
   state={...state};
@@ -165,6 +171,53 @@ export async function render({state={},event,formValues={}}) {
   );
 
   for (final reduced in [false, true]) {
+    testWidgets(
+      'row long press shares menu motion and commits once, reduced=$reduced',
+      (tester) async {
+        await mount(tester, handler: 'renderRowMenu', reduced: reduced);
+        final row = find.text('swipe me');
+        final surface = find.byKey(const ValueKey('workspace-menu-surface'));
+        expect(find.byTooltip('更多操作'), findsNothing);
+        await tester.tap(row);
+        await settle(tester);
+        expect(find.text('renders:2'), findsOneWidget);
+        expect(surface, findsNothing);
+        final gesture = await tester.startGesture(tester.getCenter(row));
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 1));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 60));
+        final fade = tester.widget<FadeTransition>(
+          find.ancestor(of: surface, matching: find.byType(FadeTransition)),
+        );
+        final scale = tester.widget<ScaleTransition>(
+          find.ancestor(of: surface, matching: find.byType(ScaleTransition)),
+        );
+        expect(
+          fade.opacity.value,
+          reduced ? equals(1.0) : inExclusiveRange(0, 1),
+        );
+        expect(
+          scale.scale.value,
+          reduced ? equals(1.0) : inExclusiveRange(.94, 1),
+        );
+        await gesture.up();
+        await tester.pumpAndSettle();
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 60));
+        expect(surface, reduced ? findsNothing : findsOneWidget);
+        await tester.pumpAndSettle();
+        expect(find.text('renders:2'), findsOneWidget);
+        await tester.longPress(row);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('perform'));
+        await settle(tester);
+        expect(find.text('actions:1'), findsOneWidget);
+        expect(find.text('renders:3'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
     testWidgets(
       'bounded scroll page transitions and footer support reduced=$reduced',
       (tester) async {

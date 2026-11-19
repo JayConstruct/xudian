@@ -1,14 +1,14 @@
 [
   {
     "id": "app.ai",
-    "asset": "assets/modules/app.ai-1.5.1.xmodule",
-    "sha256": "78c0c90f8958fdfda0b2722c94ca989b93e490baa00d8dc0c9dbbe385805d714",
+    "asset": "assets/modules/app.ai-1.6.2.xmodule",
+    "sha256": "39c639bc521d7134c2ae6c6f9cae0fa0387507978905589ab683b14f4950aefa",
     "default": true
   },
   {
     "id": "app.tasks",
-    "asset": "assets/modules/app.tasks-1.7.0.xmodule",
-    "sha256": "f7c8e037c4198f6567fabafb44b14ffe72642e6d9d6361fadf2422e4891ac9cc",
+    "asset": "assets/modules/app.tasks-1.11.1.xmodule",
+    "sha256": "ec52643c010934210bcc37e8c1509418d2b843805ab52ee9c544274907554f86",
     "default": true
   },
   {

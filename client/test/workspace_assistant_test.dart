@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -15,6 +14,8 @@ import 'package:task_app/core/ui/ui_registration.dart';
 import 'package:task_app/core/ui/ui_registry.dart';
 import 'package:task_app/core/ui/ui_slot.dart';
 import 'package:task_app/data/app_database.dart';
+
+import 'support/module_fixtures.dart';
 
 Future<ScriptPackage> package(
   String id, {
@@ -87,19 +88,7 @@ void main() {
     'AI contributes a typed workspace entry without a global overlay',
     () async {
       await initialize();
-      final source = Directory('../packages/modules/app.ai');
-      final definition = jsonDecode(
-        await File('${source.path}/module.json').readAsString(),
-      ) as Map<String, dynamic>;
-      final ai = await ScriptPackage.verify(
-        await ScriptPackage.build(definition.cast<String, Object?>(), {
-          'main.js': await File('${source.path}/main.js').readAsString(),
-          'connection.js': await File('${source.path}/connection.js')
-              .readAsString(),
-        }),
-        allowUnsignedLocal: true,
-      );
-      expect(ai.version, '1.5.1');
+      final ai = await sourcePackage('app.ai');
       expect(ai.manifest['hostApi'], '^1.31.0');
       await host.install(ai);
       final registrations = ScriptAppModule(host, ai).ui;

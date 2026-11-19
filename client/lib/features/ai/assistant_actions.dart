@@ -11,7 +11,7 @@ import '../../core/ui/ui_layout_resolver.dart';
 import '../../core/ui/ui_page_host.dart';
 import '../../data/app_database.dart';
 import '../settings/app_preferences.dart';
-import '../settings/settings_page.dart';
+import '../settings/legacy_settings_page.dart';
 import '../settings/ui_layout.dart';
 import '../settings/ui_layout_page.dart';
 import '../tasks/application/providers.dart';
@@ -614,7 +614,7 @@ class AssistantActions {
               requireTool(call.name, grant);
             }
             final page = switch (target) {
-              'settings' => SettingsPage(registry: registry),
+              'settings' => LegacySettingsPage(registry: registry),
               'layout' => UiLayoutPage(registry: registry),
               _ => Scaffold(
                 appBar: AppBar(title: Text(entry!.label)),

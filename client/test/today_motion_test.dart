@@ -1,6 +1,8 @@
-import 'dart:async';
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
+
+import 'support/module_fixtures.dart' show sourcePackage;
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -14,16 +16,7 @@ import 'package:task_app/core/ui/daily_widgets.dart';
 import 'package:task_app/core/ui/script_keyed_list.dart';
 import 'package:task_app/data/app_database.dart';
 
-Future<ScriptPackage> source(String id) async {
-  final path = '../packages/modules/$id';
-  return ScriptPackage.verify(
-    await ScriptPackage.build(
-      object(jsonDecode(await File('$path/module.json').readAsString())),
-      {'main.js': await File('$path/main.js').readAsString()},
-    ),
-    allowUnsignedLocal: true,
-  );
-}
+Future<ScriptPackage> source(String id) => sourcePackage(id);
 
 Future<void> settle(WidgetTester tester) async {
   for (var i = 0; i < 20; i++) {

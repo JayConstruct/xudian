@@ -132,6 +132,14 @@ class PublicationTest(unittest.TestCase):
         self.assertEqual((root / 'scripts/module_catalog/catalog.py').read_bytes(),
                          (root / 'packages/catalog/tools/validate.py').read_bytes())
 
+    def test_directory_seed_schemas_match_canonical_schemas(self):
+        packages = pathlib.Path(__file__).resolve().parents[2] / 'packages'
+        for schema in ('module-catalog-v1.schema.json',
+                       'module-version-index-v1.schema.json'):
+            with self.subTest(schema=schema):
+                self.assertEqual((packages / 'schemas' / schema).read_bytes(),
+                                 (packages / 'catalog/schemas' / schema).read_bytes())
+
     def test_optional_store_metadata_preserves_old_directories(self):
         self.assertIs(self.catalog, validate_catalog(self.catalog))
         self.assertNotIn('category', self.entry)

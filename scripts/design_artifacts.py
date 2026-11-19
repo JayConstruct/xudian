@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage shallow UI drafts and legacy batches; see docs/DESIGN_ARTIFACTS.md."""
+"""Manage shallow UI drafts and legacy batches; see design/README.md."""
 import argparse
 from datetime import datetime
 import hashlib
@@ -29,9 +29,9 @@ def plain_path(value):
 def flat_area(topic):
     if topic == 'styles':
         return UI_DESIGNS / 'styles'
-    if isinstance(topic, str) and re.fullmatch(r'ui-(?:0[1-9]|1[0-9]|2[0-2])', topic):
+    if isinstance(topic, str) and re.fullmatch(r'ui-(?:0[1-9]|1[0-9]|2[0-3])', topic):
         return UI_DESIGNS / 'screens' / topic
-    raise ValueError('浅层主题只接受 styles 或 ui-01 至 ui-22')
+    raise ValueError('浅层主题只接受 styles 或 ui-01 至 ui-23')
 
 
 def batch_path(value):

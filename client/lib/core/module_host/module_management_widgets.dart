@@ -298,6 +298,7 @@ Future<bool> confirmModuleImpact(
     ) ??
     false;
 
+/// Paint the dialog shell before any installed-package or index work begins.
 class ModuleDetailsLoader extends StatefulWidget {
   const ModuleDetailsLoader({
     super.key,

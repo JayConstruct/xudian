@@ -28,7 +28,7 @@ def local_only(name):
             or (len(path.parts) >= 3 and path.parts[:2] in {
                 ('design', 'styles'), ('design', 'screens')}
                 and path.parts[2:] != ('README.md',))
-            or path.parts[0] in {'dist', 'tmp', 'coverage', 'output'}
+            or path.parts[0] in {'dist', 'tmp', 'tasks', 'coverage', 'output'}
             or path.suffix in LOCAL_SUFFIXES
             or path.name in {'local.properties', 'key.properties', '.DS_Store', 'Thumbs.db'}
             or path.name.startswith('.flutter-plugins')

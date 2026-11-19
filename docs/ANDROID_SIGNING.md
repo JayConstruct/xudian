@@ -70,4 +70,4 @@ cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd
 
 既有本机 keystore 位于仓库外 `~/.android-signing/xudian-release.jks`，公开证书为同目录 `xudian-release.der`。临时密码与 alias 文件位于 `~/.config/xudian-signing/credentials.json`；文件权限为 `600`，专用目录为 `700`。恢复时从可信密码管理器或加密备份取得密码，按上方通用流程导入，不重新生成私钥。
 
-初始化记录中 GitHub Environment 已配置，但 tag ruleset 和离线备份未完成；后续需实际核对，不把旧配置记录当作当前可用证明。将临时密码迁入可信密码管理器、验证 keystore 可恢复后，再删除临时密码副本。配置和恢复不得卸载应用或清除现有数据来绕过签名不匹配。历史执行结果见 [签名验收](verification/android-signing-20261020.json)。
+核对 GitHub Environment、标签保护规则及离线备份。将临时密码迁入可信密码管理器、验证 keystore 可恢复后，再删除临时密码副本。遇到签名不匹配时，保留现有安装和数据，使用匹配的签名配置。

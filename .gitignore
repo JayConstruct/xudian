@@ -41,6 +41,7 @@ build/
 *.sqlite-shm
 /coverage/
 /tmp/
+/tasks/
 /dist/
 /output/
 

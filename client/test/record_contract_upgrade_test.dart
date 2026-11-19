@@ -10,7 +10,7 @@ import 'package:task_app/core/module_host/native_time_gestures.dart';
 import 'package:task_app/core/module_host/record_contract.dart';
 import 'package:task_app/data/app_database.dart';
 
-import 'planner_task_schedule_test.dart' show sourcePackage;
+import 'support/module_fixtures.dart' show sourcePackage;
 
 const config = <String, Object?>{
   'contract': 'time-range/2',

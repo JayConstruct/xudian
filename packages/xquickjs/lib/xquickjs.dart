@@ -254,6 +254,7 @@ export const data = Object.freeze({
   contract: id => call('data.contract', {id}),
   get: (collection, id) => call('data.get', {collection, id}),
   query: (collection, options = {}) => call('data.query', {collection, ...options}),
+  migrationHistory: (collection, after = 0) => call('data.migrationHistory', {collection, after}),
   watch: (collection, options, listener) => globalThis.__watch('data.watch', {collection,...options},listener),
 });
 export const services = Object.freeze({

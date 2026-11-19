@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
-    'verify_emulator', Path(__file__).resolve().parents[1] / 'module_host/verify_emulator.py')
+    'emulator_ui', Path(__file__).resolve().parents[1] / 'module_host/emulator_ui.py')
 verify = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(verify)
 

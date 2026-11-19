@@ -22,6 +22,14 @@ abstract final class AppMotion {
   static const enter = Curves.easeOutCubic;
   static const leave = Curves.easeInCubic;
 
+  static AnimationStyle dialogStyle(BuildContext context) => reduced(context)
+      ? AnimationStyle.noAnimation
+      : const AnimationStyle(
+          duration: Duration(milliseconds: 180),
+          reverseDuration: Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+        );
+
   static bool reduced(BuildContext context) =>
       MediaQuery.disableAnimationsOf(context);
 
@@ -34,4 +42,26 @@ abstract final class AppMotion {
           respectHighContrast && MediaQuery.highContrastOf(context)
       ? Duration.zero
       : normal;
+}
+
+/// Geometry for short form and confirmation dialogs; DialogRoute owns the fade.
+class CompactDialogMotion extends StatelessWidget {
+  const CompactDialogMotion({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || AppMotion.reduced(context)) return child;
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final t = AppMotion.enter.transform(animation.value);
+        return Transform.translate(
+          offset: Offset(0, 8 * (1 - t)),
+          child: Transform.scale(scale: .98 + .02 * t, child: child),
+        );
+      },
+    );
+  }
 }

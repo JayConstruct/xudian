@@ -10,8 +10,8 @@ import 'package:task_app/core/ui/ui_slot.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/features/ai/settings/ai_secret_store.dart';
 import 'package:task_app/features/tasks/application/providers.dart';
-import 'package:task_app/features/ui_examples/ui_examples_module.dart';
-import 'package:task_app/features/ui_examples/ui_examples_page.dart';
+import 'package:task_app/legacy/ui_examples/ui_examples_module.dart';
+import 'package:task_app/legacy/ui_examples/ui_examples_page.dart';
 import 'package:task_app/core/ui/ui_page_host.dart';
 
 void main() {

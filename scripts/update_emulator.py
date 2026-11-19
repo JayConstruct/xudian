@@ -268,9 +268,8 @@ def main(argv=None):
                 cache_file.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + '\n')
             if args.module:
                 phase = '模块更新'
-                sys.path.insert(0, str(ROOT / 'scripts/module_host'))
-                from verify_emulator import Emulator
-                from update_emulator_modules import update_modules
+                from module_host.emulator_ui import Emulator
+                from module_host.update_emulator_modules import update_modules
                 emulator = Emulator(args.serial, adb_host=args.adb_host, adb_port=args.adb_port)
                 start = time.monotonic()
                 report['modules'] = update_modules(args.module, emulator, output / 'modules')

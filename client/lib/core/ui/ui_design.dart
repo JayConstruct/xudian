@@ -28,7 +28,7 @@ class AppDesign {
   static const dialogActionsPadding = EdgeInsets.fromLTRB(12, 0, 12, 12);
   static const dialogConstraints = BoxConstraints(minWidth: 280, maxWidth: 760);
 
-  static ThemeData theme(Brightness brightness) {
+  static ThemeData theme(Brightness brightness, {bool haptics = true}) {
     final dark = brightness == Brightness.dark;
     final scheme =
         ColorScheme.fromSeed(seedColor: brand, brightness: brightness).copyWith(
@@ -151,6 +151,7 @@ class AppDesign {
         clipBehavior: Clip.antiAlias,
       ),
       popupMenuTheme: PopupMenuThemeData(
+        enableFeedback: haptics,
         color: scheme.surface,
         elevation: 4,
         shape: AppDesign.smoothShape(radius: AppDesign.selectionRadius),

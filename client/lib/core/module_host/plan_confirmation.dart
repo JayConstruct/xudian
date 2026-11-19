@@ -6,10 +6,14 @@ class PlanConfirmation {
     required this.message,
     required this.confirmLabel,
     this.acknowledgement,
+    this.summaryOnly = false,
+    this.items = const [],
   });
 
   final String title, message, confirmLabel;
   final String? acknowledgement;
+  final bool summaryOnly;
+  final List<({String title, String subtitle})> items;
   static const limits = {
     'title': 120,
     'message': 6000,
@@ -18,7 +22,13 @@ class PlanConfirmation {
   };
 
   factory PlanConfirmation.parse(Object? value) {
-    if (value is! Map || value.keys.any((key) => !limits.containsKey(key))) {
+    if (value is! Map ||
+        value.keys.any(
+          (key) =>
+              key != 'summaryOnly' &&
+              key != 'items' &&
+              !limits.containsKey(key),
+        )) {
       throw const FormatException('Invalid plan confirmation fields');
     }
     String read(String key) {
@@ -31,7 +41,34 @@ class PlanConfirmation {
       return text.trim();
     }
 
+    if (value.containsKey('summaryOnly') && value['summaryOnly'] is! bool) {
+      throw const FormatException('Invalid plan confirmation summaryOnly');
+    }
+    final items = <({String title, String subtitle})>[];
+    if (value.containsKey('items')) {
+      final rows = value['items'];
+      if (value['summaryOnly'] != true || rows is! List || rows.length > 40) {
+        throw const FormatException('Invalid plan confirmation items');
+      }
+      for (final row in rows) {
+        if (row
+            case {
+              'title': final String title,
+              'subtitle': final String subtitle,
+            }
+            when row.length == 2 &&
+                title.trim().isNotEmpty &&
+                title.length <= 300 &&
+                subtitle.length <= 600) {
+          items.add((title: title, subtitle: subtitle));
+        } else {
+          throw const FormatException('Invalid plan confirmation item');
+        }
+      }
+    }
     return PlanConfirmation._(
+      items: List.unmodifiable(items),
+      summaryOnly: value['summaryOnly'] == true,
       title: read('title'),
       message: read('message'),
       confirmLabel: read('confirmLabel'),
@@ -42,6 +79,11 @@ class PlanConfirmation {
   }
 
   Map<String, Object?> toJson() => Map.unmodifiable({
+    if (summaryOnly) 'summaryOnly': true,
+    if (items.isNotEmpty)
+      'items': [
+        for (final row in items) {'title': row.title, 'subtitle': row.subtitle},
+      ],
     'title': title,
     'message': message,
     'confirmLabel': confirmLabel,

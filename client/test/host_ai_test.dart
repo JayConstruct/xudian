@@ -9,7 +9,7 @@ import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 
-import 'planner_task_schedule_test.dart' show sourcePackage;
+import 'support/module_fixtures.dart' show sourcePackage;
 
 void main() {
   late AppDatabase db;
@@ -364,6 +364,90 @@ void main() {
         )['title'],
         '用户之后修改',
       );
+    },
+  );
+  test(
+    'project AI review scopes the batch and writes only after approval',
+    () async {
+      await host.install(await sourcePackage('app.tasks'));
+      final owner = host.instances['app.tasks']!.actor;
+      final creation = await host.prepare(
+        owner,
+        const ServiceRef('app.tasks', 'project.create', 1),
+        {'name': '交付'},
+      );
+      host.review(creation.id, owner);
+      final project = object(await host.commit(owner, creation.id));
+      var approve = false, requests = 0, reviews = 0;
+      host.interaction = (_, method, args) async {
+        if (method == 'grants.request') return true;
+        if (method == 'ui.review') {
+          final confirmation = args['confirmation'];
+          if (confirmation == null) return true;
+          final display = object(confirmation);
+          expect(display['title'], '审核项目拆解');
+          expect(display['message'], contains('审核分类 · 检查附件 · 15 分钟'));
+          reviews++;
+          expect(await store.query(owner, 'tasks', {}), isEmpty);
+          return approve;
+        }
+        if (method == 'http.request') {
+          requests++;
+          return {
+            'status': 200,
+            'body': jsonEncode({
+              'choices': [
+                {
+                  'message': requests.isOdd
+                      ? {
+                          'role': 'assistant',
+                          'content': null,
+                          'tool_calls': [
+                            {
+                              'id': 'draft',
+                              'type': 'function',
+                              'function': {
+                                'name': 'service_0',
+                                'arguments': jsonEncode({
+                                  'projectId': 'model-suggested-id',
+                                  'items': [
+                                    {
+                                      'title': '检查附件',
+                                      'path': ['审核分类'],
+                                      'estimatedMinutes': 15,
+                                    },
+                                  ],
+                                }),
+                              },
+                            },
+                          ],
+                        }
+                      : {'role': 'assistant', 'content': '已生成拆解方案'},
+                },
+              ],
+            }),
+          };
+        }
+        throw StateError('Unexpected bridge $method');
+      };
+      final input = {
+        'context': {
+          'pageId': 'app.ai.projectDraft',
+          'projectId': project['id'],
+          'projectName': '交付',
+        },
+        'event': {'type': 'send'},
+        'formValues': {'message': '拆解交付工作'},
+      };
+      await host.invokePage('app.ai', 'render', input);
+      expect(await store.query(owner, 'tasks', {}), isEmpty);
+      approve = true;
+      await host.invokePage('app.ai', 'render', input);
+      expect(reviews, 2);
+      final task = object((await store.query(owner, 'tasks', {})).single);
+      expect(task['projectId'], project['id']);
+      expect(task['estimatedMinutes'], 15);
+      expect(await store.query(owner, 'projectActivity', {}), hasLength(1));
     },
   );
 }

@@ -244,14 +244,15 @@ void main() {
         .toString();
     final scripts = {...original.scripts};
     final declaration = RegExp(r'export async function queryToday\([^)]*\) \{');
-    final source = scripts['main.js']!;
+    const querySource = 'schedule_queries.js';
+    final source = scripts[querySource]!;
     final matches = declaration.allMatches(source).toList();
     expect(
       matches,
       hasLength(1),
       reason: 'Patch exactly the queryToday handler',
     );
-    scripts['main.js'] = source.replaceFirst(
+    scripts[querySource] = source.replaceFirst(
       declaration,
       "${matches.single.group(0)} return {date:'2030-01-01', teachingWeek:99, items:[]};",
     );

@@ -11,7 +11,7 @@ import 'workspace_header.dart';
 import 'ui_icon.dart';
 import 'native_ui.dart';
 import 'workspace_header_action.dart';
-import 'workspace_header_menu.dart';
+import 'workspace_popup_menu.dart';
 
 /// A module detail route owns its header independently of the workspace below.
 class ModuleDetailPage extends StatefulWidget {
@@ -77,31 +77,6 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
     if (event != null) unawaited(content!.dispatch(event));
   }
 
-  void _openHeaderMenu(WorkspaceHeaderLease? lease, Object? owner) {
-    unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (context) => Dialog(
-          clipBehavior: Clip.antiAlias,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 340,
-              maxHeight: MediaQuery.sizeOf(context).height * .7,
-            ),
-            child: SingleChildScrollView(
-              child: WorkspaceHeaderMenu(
-                controller: header,
-                owner: owner,
-                lease: lease,
-                hostItems: const [],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   List<Widget> _actions(
     BuildContext context,
     WorkspaceHeaderLease? lease,
@@ -134,12 +109,16 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
           },
         ),
       if (actions.any((action) => !inline.contains(action)))
-        NativeUi(
-          child: IconButton(
-            tooltip: '页面菜单',
-            onPressed: () => _openHeaderMenu(lease, content?.owner),
-            icon: const UiIcon(Icons.more_horiz),
-          ),
+        WorkspacePopupMenu(
+          items: const [],
+          onSelected: (_) {},
+          haptics: false,
+          headerController: header,
+          headerLease: lease,
+          headerOwner: content?.owner,
+          inlineActionLabels: {
+            for (final action in inline) '${action['label']}',
+          },
         ),
     ];
   }

@@ -2,6 +2,33 @@
 
 [SDK 入口与兼容要求](../MODULE_SDK.md)。各能力的最低宿主 API 在对应小节说明；旧调用的回退与权限边界继续适用。
 
+## 图标组件
+
+图标源为 `client/lib/core/ui/ui_icons.dart`。`AppIconPainter` 绘制实际路径，`AppIcon` 兼容现有 `IconData`，未映射的原生图标保留原有图形。业务界面使用 `UiIcon` 接入 `ui.icon@1`，选定 UI 包可覆盖图标呈现；UI 包内部的 icon primitive 使用原始绘制组件，避免递归调用。
+
+模块直接使用命名的公共组件，无需引用字体编码：
+
+```js
+ui.component('ui.icon@1', {
+  props: {name: 'calendar', size: 24, semanticLabel: '课表'}
+});
+```
+
+| 场景 | 图标名称 |
+| --- | --- |
+| 页面入口 | `today`、`calendar`、`tasks`、`modules`、`folder`、`inbox` |
+| 通用操作 | `add`、`close`、`more`、`search`、`edit`、`delete`、`copy`、`refresh` |
+| 导航方向 | `left`、`right`、`up`、`down` |
+| 内容与状态 | `info`、`warning`、`error`、`check`、`clock`、`school` |
+| 设置与组织 | `settings`、`sliders`、`transfer`、`history`、`pin`、`unpin` |
+| 工具与浮层 | `ai`、`link`、`code`、`play`、`pause`、`eye`、`download`、`upload` |
+
+API 1.54 提供项目公文包 `briefcase`、带加号的日历 `calendarAdd` 和带减号的日历 `calendarRemove`。
+
+旧模块的 `list`、`projects`、`schedule`、`tune`、`importExport` 等名称继续支持。未提供名称时不绘制占位圆。UI 示例的“文字、图标与分割线”页面显示各场景的可调用名称。
+
+视觉和检查规则见 [界面设计系统](../ui/DESIGN_SYSTEM.md#圆润线性图标)。
+
 ## API 1.2 的顶栏与设置组件
 
 工作区页面声明 `headerMode: "contributed"` 后，可返回：
@@ -105,7 +132,11 @@ UI 示例模块展示 17 个组件示例，支持搜索静态名称／用途／�
 
 内联贡献的脚本返回普通自然高度 `column`，可使用文本、卡片和任务行等节点；不使用 `fillHeight`、`timeGrid`、`ui.page.*` 整页模板或独立纵向滚动节点。宿主将该贡献以嵌入模式渲染；同一贡献移到普通页面槽位后恢复完整页面渲染，用户挂载配置、排序、容量及上下文规则沿用原契约。旧 v1/v2 source 的槽位协议不增加 `inline`。
 
-## API 1.12 的 UI 偏好、提示和过渡动画
+<a id="api-112-的-ui-偏好提示和过渡动画"></a>
+
+## UI 偏好与短暂提示
+
+界面进入、退出和折叠的配置见[动画与手势](../ui/MOTION.md#显示隐藏与折叠)。
 
 声明 `hostApi: "^1.12.0"` 使用以下通用能力。`await ui.preferences.get(key)` 返回当前模块的 JSON 偏好值或 `null`；`await ui.preferences.set(key,value)` 持久保存并返回值，`null` 删除对应项。用于收藏的演示 ID、展示模式等界面偏好；不使用业务集合，不创建审核计划，不改变现有业务写入的审核规则。
 
@@ -119,19 +150,7 @@ await ui.preferences.set('gallery.pinned', [...new Set([...pinned, 'button'])]);
 await ui.notify({message: '已固定到首页', kind: 'success', duration: 3000});
 ```
 
-`ui.notify({message,kind?,duration?})` 显示顶部圆角悬浮 Toast，返回 `null`，带状态图标、自动消失和关闭按钮，页面仍可操作并遵循减少动画设置。message 为 1–200 字符的非空文本，kind 为 `info`（默认）、`success` 或 `error`，error 使用错误色；duration 为 1000–10000 毫秒的整数，默认 3000。不同提示替换当前提示；展示中的相同 message 与 kind 不重播、不延长计时，即使新调用传入不同 duration。关闭开始后再次调用可展示新条目。返回值不等待提示消失；调用无导航或业务数据副作用，权限和执行阶段限制与 UI 偏好相同。原生与脚本共用 `ui.notification@1`，UI、动画、场景边界及真实演示见 [全局 Toast 规范](../design/TOAST.md)。
-
-`transition` 节点包装一个 `child`，effect 为 `fade`（默认）、`scale`、`slide` 或 `page`。`slide` 为向上滑入，`page`（API `^1.32.0`）使用与 App 普通页面一致的横向小幅滑入和淡入（水平位移为宽度的 4%，曲线为 easeOutCubic），适合模块内的页面切换。visible 默认 `true`，切换时播放进出动画；更新字符串／数字 `replayKey` 或更换节点 key 重播。duration 为 100–2000 毫秒整数，`page` 默认 300，其余效果默认 350。宿主保留原内容布局和控件状态，隐藏内容不响应输入且不进入无障碍树；系统或应用“减少动画”直接呈现最终状态。
-
-API `^1.34.0` 增加 `timeRangeTable` 本地表单：节点提供稳定 `key`、`value`、`baseline`。值为 `{durationMinutes:"45",rows:[{id:"1",label:"第 1 节",start:"08:00",end:"08:45",manualEnd:false}]}`，基线使用相同结构。组件在本地处理时长和时间滚轮，修改开始时间时只为未标记手动的结束时间计算同日结果；手动结束时间始终保留。时长修改只作用于后续开始时间编辑，已有行不批量改写。表单回传完整草稿及 `dirty/resetDisabled/saveDisabled/error` 到 `formValues[key]`，编辑不触发页面 handler；固定保存按钮可绑定这些状态。保存时模块仍须重新验证值、数据基线与引用关系，不能信任表单提供的状态标记。
-
-API `^1.33.0` 的 `page` 效果支持 `direction:"forward"|"back"`：切换 `replayKey` 时，前进让目标页横移淡入，返回让当前页按 App 路由的反向时间线横移淡出并露出目标页。同一页面的查询或表单更新不重播；旧页在切换期间不可操作或获得焦点，结束后释放。系统减少动画时立即切换。
-
-```js
-{type: 'transition', key: 'demo', effect: 'slide', visible: true,
- replayKey: state.replay || 0, duration: 350,
- child: {type: 'card', children: [{type: 'text', text: '动画内容'}]}}
-```
+`ui.notify({message,kind?,duration?})` 显示顶部圆角悬浮 Toast，返回 `null`，带状态图标、自动消失和关闭按钮，页面仍可操作并遵循减少动画设置。message 为 1–200 字符的非空文本，kind 为 `info`（默认）、`success` 或 `error`，error 使用错误色；duration 为 1000–10000 毫秒的整数，默认 3000。不同提示替换当前提示；展示中的相同 message 与 kind 不重播、不延长计时，即使新调用传入不同 duration。关闭开始后再次调用可展示新条目。返回值不等待提示消失；调用无导航或业务数据副作用，权限和执行阶段限制与 UI 偏好相同。原生与脚本共用 `ui.notification@1`，UI、动画、场景边界及真实演示见 [全局 Toast 规范](../ui/TOAST.md)。
 
 `ui.button@1` 的 `props.variant` 支持 `tonal`（默认）、`filled`、`outlined` 和 `text`，内置实现及没有显式 variant 的界面包按钮原子节点均使用传入值。
 
@@ -140,7 +159,7 @@ API `^1.33.0` 的 `page` 效果支持 `direction:"forward"|"back"`：切换 `rep
 
 `ui.examples()` 无参数，返回所有已启用 UI 包公开注册的纯声明式示例，字段为 `providerId/ref/category/name/description/props/slots/events/contract`；props、slots、events 默认空对象／空对象／空数组。调用此接口的页面订阅 UI 注册表变化，提供者安装、更新、启停会刷新目录，普通业务页面继续只因业务读取变化刷新。
 
-`{type:'componentExample',providerId,ref,key?,events?}` 展示目录注册的固定样例，并局部采用该提供者界面；events 仅映射样例已声明端口为本页事件，不能覆盖样例 props／slots。此节点不改变全局界面选择，也不扩展普通自定义组件的依赖权限。注册元数据、槽位限制与实际跨模块消费说明见 [UI 组件注册](../UI_COMPONENTS.md#注册组件示例与跨模块消费api-112)。
+`{type:'componentExample',providerId,ref,key?,events?}` 展示目录注册的固定样例，并局部采用该提供者界面；events 仅映射样例已声明端口为本页事件，不能覆盖样例 props／slots。此节点不改变全局界面选择，也不扩展普通自定义组件的依赖权限。注册元数据、槽位限制与实际跨模块消费说明见 [UI 组件注册](../ui/UI_PACKS.md#注册组件示例与跨模块消费api-112)。
 
 ### 可复制的调用方式弹窗（API 1.13）
 
@@ -161,8 +180,14 @@ API 1.13 的默认日期控件使用中文；时间以小时、分钟两列滚�
 
 原生普通页面与控件也通过公共 UI 契约解析所选界面包。新增 `ui.page.native@1`（body）、`ui.chrome.pageHeader@1`（control）、`ui.nativeSection@1`（content）、`ui.nativeTile@1`、`ui.nativeControl@1`、`ui.iconButton@1`、`ui.nativeDialog@1`、`ui.nativeFeedback@1`（control）及 `ui.notification@1`（content）。这些必需槽位由宿主持有并且只能呈现一次；provider 可实际调整包装与布局，输入焦点、控制器、回调、键盘避让及审核流程仍由宿主管理。
 
-公共系统引用的默认 provider 为 `app.ui.default`，它标识内置原生实现。缺失 recipe 按引用回退；恢复与权限审核固定使用此默认实现。旧 @1 引用仍兼容。原生与脚本控件的 UI 包选择机制相同，完整覆盖和 viewport 约束见 [原生页面与默认实现](../UI_COMPONENTS.md#原生页面与默认实现api-115)，默认矢量与包替换规则见 [图标系统](../design/ICON_SYSTEM.md)。
+公共系统引用的默认 provider 为 `app.ui.default`，它标识内置原生实现。缺失 recipe 按引用回退；恢复与权限审核固定使用此默认实现。旧 @1 引用仍兼容。原生与脚本控件的 UI 包选择机制相同，完整覆盖和 viewport 约束见 [原生页面与默认实现](../ui/UI_PACKS.md#原生页面与默认实现api-115)，默认矢量与包替换规则见 [图标系统](#图标组件)。
 
 ## 紧凑日程配置（API 1.44）
 
 API `1.44.0` 为现有 `dayOverview`、`sectionHeader`、`agendaItem`、`taskItem` 增加可选 `compact` 显示配置。`agendaItem` 可声明 `hideTime`、`eyebrow`、`icon`；`taskItem` 可声明 `startTime`、`endTime`、`color` 或 `colorKey`，时间列在窄屏或大字体下自动移到内容上方。任务与规划共用稳定内容配色；组件不查询、排序或修改业务数据。使用这些配置需更新 APK，并声明 `hostApi: "^1.44.0"`；省略配置时保持原组件呈现。
+
+## API 1.51 的菜单按钮与空态
+
+`menuButton` 锚定于当前控件，`text` 显示当前选项，`icon` 指定可选图标。每个 `items` 条目包含 `label`、`event` 和可选 `selected`。宿主用勾选标志显示当前项，选择时派发对应事件，取消时保留选择。
+
+`emptyState` 居中显示 `title`、说明文字 `text` 与可选 `icon`，用于列表无结果时的提示。

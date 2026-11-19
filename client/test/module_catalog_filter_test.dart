@@ -68,7 +68,12 @@ void main() {
         await fixture.add(await makePackage('test.module0', version: '2.0.0'));
         fixture.modules['test.module0']!['category'] = '学习';
         for (var i = 1; i < 6; i++) {
-          await fixture.add(await makePackage('test.module$i'));
+          await fixture.add(
+            await makePackage(
+              'test.module$i',
+              dependencies: i == 4 ? ['test.module0'] : const [],
+            ),
+          );
           fixture.modules['test.module$i']!['category'] = i.isOdd ? '学习' : '效率';
         }
         fixture.sync();
@@ -161,6 +166,22 @@ void main() {
       );
       expect(find.text('找到 6 个模块 · 目录共 6 个'), findsOneWidget);
       expect(find.byType(ModuleCatalogCard).evaluate().length, lessThan(6));
+
+      await tester.enterText(find.byType(TextField), '  TEST.MODULE4  ');
+      await tester.pumpAndSettle();
+      expect(find.text('找到 1 个模块 · 目录共 6 个'), findsOneWidget);
+      expect(find.byType(ModuleCatalogCard), findsOneWidget);
+      await tester.tap(find.text('test.module4'));
+      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      await tester.pump(const Duration(milliseconds: 300));
+      final dependency = find.widgetWithText(ListTile, 'test.module0');
+      await tester.ensureVisible(dependency);
+      await tester.tap(dependency);
+      await waitForCatalog(tester, find.text('1.0.0 · 已启用'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.widgetWithText(TextButton, '关闭'));
+      await tester.pumpAndSettle();
+      expect(find.text('找到 1 个模块 · 目录共 6 个'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

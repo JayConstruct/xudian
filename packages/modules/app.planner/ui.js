@@ -1,6 +1,6 @@
 import {services, ui, clock} from '@xudian/sdk';
 import {add} from './engine.js';
-import {renderPlanner} from './ux.js';
+import {renderPlanner} from './planner_page.js';
 import {renderBatches} from './batch_ui.js';
 
 const ref = id => ({moduleId: 'app.planner', serviceId: 'planner.' + id, majorVersion: 1});
@@ -117,7 +117,7 @@ async function tools({state = {}, event, context = {}, formValues = {}}) {
     children = [
       row('每周可用时间', `${a.timezone} · 默认${a.defaultMinutes}分钟 · 缓冲${a.bufferMinutes}分钟`, {type: 'settings'}),
       row('日期例外', '单独设置某一天的可用时段', {type: 'exception'}),
-      row('添加忙碌时段', '在自动安排中避开手动占用', {type: 'busy'}),
+      row('添加忙碌时段', '记录需要避开的手动占用', {type: 'busy'}),
       ...(a.busy.length ? [row('清除手动忙碌时段', `共${a.busy.length}项，保留其他来源安排`, {type: 'clearBusy'})] : []),
       row('选择已有待办', '保留原任务，补充安排窗口', {type: 'attach'}),
       row('规划规则', '管理单次与持续规则', {type: 'screen', screen: 'rules'}),

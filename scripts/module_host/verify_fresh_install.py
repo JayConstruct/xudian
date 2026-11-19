@@ -25,9 +25,9 @@ import uuid
 import xml.etree.ElementTree as ET
 
 try:
-    from .verify_emulator import Emulator, ROOT, UiSnapshot
+    from .emulator_ui import Emulator, ROOT, UiSnapshot
 except ImportError:
-    from verify_emulator import Emulator, ROOT, UiSnapshot
+    from emulator_ui import Emulator, ROOT, UiSnapshot
 
 
 PACKAGE = 'dev.taskapp.task_app'

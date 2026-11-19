@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/ui/script_motion.dart';
 import 'package:task_app/core/ui/script_swipe_actions.dart';
 import 'package:task_app/core/ui/script_ui_scope.dart';
 import 'package:task_app/core/ui/ui_component.dart';
+import 'package:task_app/core/ui/ui_icons.dart';
 import 'package:task_app/core/ui/ui_pack.dart';
 import 'package:task_app/core/module_host/json_schema.dart';
 
@@ -15,21 +17,78 @@ ScriptSwipeConfig config({
   bool enabled = true,
   String label = '执行',
   Object? revision,
+  bool longPress = false,
+  String? icon,
 }) => ScriptSwipeConfig.parse({
   'type': 'swipeActions',
   'key': 'row',
   'enabled': enabled,
   'extent': 100,
+  if (longPress) 'menuTrigger': 'longPress',
   'revision': ?revision,
   'actions': [
     {
       'label': label,
+      'icon': ?icon,
       'event': {'type': label},
     },
   ],
-}, (_) => null);
+}, appIconData);
 
 void main() {
+  testWidgets(
+    'narrow row menu is keyboard accessible and drops stale actions',
+    (tester) async {
+      final revision = ValueNotifier(0);
+      addTearDown(revision.dispose);
+      final events = <Object?>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomRight,
+              child: SizedBox(
+                width: 90,
+                child: ValueListenableBuilder<int>(
+                  valueListenable: revision,
+                  builder: (_, version, _) => ScriptSwipeActions(
+                    config: config(revision: version, longPress: true),
+                    canSwipe: false,
+                    onAction: (event) async => events.add(event),
+                    child: const Focus(
+                      autofocus: true,
+                      child: SizedBox(height: 60, child: Text('row')),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('更多操作'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      final menu = find.byKey(const ValueKey('workspace-menu-surface'));
+      expect(
+        tester.getBottomRight(menu).dy,
+        lessThanOrEqualTo(tester.getTopLeft(find.text('row')).dy),
+      );
+      revision.value++;
+      await tester.pumpAndSettle();
+      expect(menu, findsNothing);
+      expect(events, isEmpty);
+      await tester.longPress(find.text('row'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('执行'));
+      await tester.pumpAndSettle();
+      expect(events, [
+        {'type': '执行'},
+      ]);
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final fallback in [false, true]) {
     testWidgets(
       'lost pointer on ${fallback ? 'menu fallback' : 'page inactivity'} does not block a new gesture',
@@ -307,7 +366,7 @@ void main() {
                 controller: scroll,
                 children: [
                   ScriptSwipeActions(
-                    config: config(),
+                    config: config(icon: 'calendarAdd'),
                     canSwipe: true,
                     onAction: (_) async {
                       calls++;
@@ -329,6 +388,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(calls, 0);
       expect(find.text('执行').hitTestable(), findsOneWidget);
+      expect(
+        tester
+            .widgetList<CustomPaint>(find.byType(CustomPaint))
+            .map((w) => w.painter)
+            .whereType<AppIconPainter>()
+            .map((painter) => painter.glyph),
+        contains(AppGlyph.calendarAdd),
+      );
       await tester.tap(find.text('执行').hitTestable());
       await tester.pumpAndSettle();
       expect(calls, 1);

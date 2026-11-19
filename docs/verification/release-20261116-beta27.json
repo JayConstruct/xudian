@@ -319,8 +319,7 @@
     "tag": "v0.2.0-beta.26",
     "status": "app-ci-failed",
     "failedTests": 11,
-    "reason": "Outdated gallery, contract and lazy-workflow fixtures; tests corrected without changing feature code.",
-    "record": "release-20261116-beta26.json"
+    "reason": "Outdated gallery, contract and lazy-workflow fixtures; tests corrected without changing feature code."
   },
   "localEvidence": "dist/verification/releases/release-20261116-beta27/",
   "localFixtureCorrection": {

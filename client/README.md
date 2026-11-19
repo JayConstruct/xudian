@@ -20,9 +20,10 @@
 | `lib/data/app_database.dart` | Drift 数据库、迁移与旧表档案 |
 | `assets/modules/catalog.json`、`retired.json` | 随 APK 发布的模块清单、默认状态及退出分发的视图 |
 | `../packages/modules/` | 生产业务代码；课表与拾光单独安装 |
-| `test/`、`test/support/` | 生产链回归与旧行为基准夹具 |
+| `test/` | 宿主与模块回归。规划服务、页面和看板测试集中在 [test/planner/](test/planner/)，在本目录执行 `flutter test --no-pub test/planner` 可运行该组。 |
+| `test/support/` | 跨测试使用的模块、课表、HTTP 服务器及旧行为夹具。 |
 
-`lib/features/` 保留兼容、共用组件及旧行为实现；修改业务前先核对生产模块和调用链。旧测试通过不能替代真实宿主验收。收件箱和项目视图不再分发；退出默认分发的模块首次升级保留数据卸载，处理标记防止后续用户手动恢复被重复卸载。
+`lib/features/` 保留兼容、共用组件及部分旧行为实现；旧项目视图和原生 UI 示例在 `lib/legacy/`，供基准测试使用。修改业务前先核对生产模块和调用链。旧测试通过不能替代真实宿主验收。收件箱和项目视图不再分发；退出默认分发的模块首次升级保留数据卸载，处理标记防止后续用户手动恢复被重复卸载。
 
 ## 数据与调用
 
@@ -40,4 +41,4 @@
 
 在 Android Studio 打开本目录，启动文件选择 `lib/main.dart`。环境、测试和构建命令统一见 [开发指南](../DEVELOPMENT.md)；宿主限制见 [模块宿主](../docs/MODULE_HOST.md)，开发契约见 [SDK](../docs/MODULE_SDK.md)。
 
-当前能力与边界见 [项目首页](../README.md)，历史运行与平台范围见 [验证索引](../docs/VERIFICATION.md)。
+当前能力与边界见 [项目首页](../README.md)，最新验收与平台范围见 [验证索引](../docs/VERIFICATION.md)。

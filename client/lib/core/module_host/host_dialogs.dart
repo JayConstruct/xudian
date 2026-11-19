@@ -1,4 +1,6 @@
 import '../ui/native_ui.dart';
+import '../ui/ui_motion.dart';
+import '../ui/script_content_widgets.dart';
 import '../ui/ui_icon.dart';
 
 import 'package:flutter/material.dart';
@@ -23,6 +25,12 @@ Future<bool> reviewDialog(
   if (confirmation != null && summary != null) {
     return await showDialog<bool>(
           context: context,
+          barrierColor: confirmation.summaryOnly
+              ? Theme.of(context).colorScheme.scrim.withValues(alpha: .4)
+              : null,
+          animationStyle: confirmation.summaryOnly
+              ? AppMotion.dialogStyle(context)
+              : null,
           builder: (context) => UiPackScope(
             defaultOnly: true,
             child: NativeUi(
@@ -96,7 +104,7 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
   Widget build(BuildContext context) {
     final options = widget.confirmation;
     final deletions = widget.summary.count(DataChangeKind.delete);
-    return AlertDialog(
+    final dialog = AlertDialog(
       titlePadding: AppDesign.dialogTitlePadding,
       contentPadding: AppDesign.dialogContentPadding,
       actionsPadding: AppDesign.dialogActionsPadding,
@@ -109,6 +117,64 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(options.message),
+              if (options.items.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final (index, item) in options.items.indexed) ...[
+                          if (index > 0)
+                            const Divider(height: 1, indent: 12, endIndent: 12),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            child: Row(
+                              children: [
+                                const ScriptGlyph(
+                                  icon: Icons.content_paste_outlined,
+                                  tone: 'muted',
+                                  surface: true,
+                                  surfaceSize: 34,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.title,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall,
+                                      ),
+                                      Text(
+                                        item.subtitle,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
               if (deletions > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
@@ -129,14 +195,15 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
                   onChanged: (value) =>
                       setState(() => acknowledged = value == true),
                 ),
-              NativeUi(
-                child: ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: const Text('查看变更详情'),
-                  initiallyExpanded: false,
-                  children: [DataChangeReview(summary: widget.summary)],
+              if (!options.summaryOnly)
+                NativeUi(
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('查看变更详情'),
+                    initiallyExpanded: false,
+                    children: [DataChangeReview(summary: widget.summary)],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -158,6 +225,7 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
         ),
       ],
     );
+    return options.summaryOnly ? CompactDialogMotion(child: dialog) : dialog;
   }
 }
 
@@ -495,6 +563,7 @@ class _HostFormDialogState extends State<HostFormDialog> {
     }
     return TextField(
       controller: controllers[key],
+      readOnly: field['editable'] == false,
       obscureText: field['type'] == 'secret',
       enableSuggestions: field['type'] != 'secret',
       autocorrect: field['type'] != 'secret',
@@ -627,12 +696,15 @@ class _HostFormDialogState extends State<HostFormDialog> {
       },
       fallback: native,
     );
-    return UiComponent(
+    final dialog = UiComponent(
       ref: 'ui.dialog@1',
       props: {'title': widget.title},
       slots: {'content': form},
       fallback: form,
     );
+    return widget.presentation == 'compact'
+        ? CompactDialogMotion(child: dialog)
+        : dialog;
   }
 
   Widget _fieldWrap(Map<String, Object?> field, Widget native) {

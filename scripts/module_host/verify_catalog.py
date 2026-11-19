@@ -9,9 +9,9 @@ import sys
 import time
 
 try:
-    from . import verify_emulator
+    from . import emulator_ui
 except ImportError:
-    import verify_emulator
+    import emulator_ui
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -36,7 +36,7 @@ def find_node(nodes, label, *, contains=False, button=False):
 
 
 def area(node):
-    left, top, right, bottom = verify_emulator.Emulator.bounds(node)
+    left, top, right, bottom = emulator_ui.Emulator.bounds(node)
     return max(0, right - left) * max(0, bottom - top)
 
 
@@ -213,8 +213,8 @@ def main(argv=None):
     output.mkdir(parents=True, exist_ok=args.output is not None)
     if (output / 'results.json').exists():
         parser.error('结果目录已有报告，请使用新目录：' + str(output))
-    verify_emulator.OUT = output
-    emulator = verify_emulator.Emulator(args.serial, adb_host=args.adb_host, adb_port=args.adb_port)
+    emulator_ui.OUT = output
+    emulator = emulator_ui.Emulator(args.serial, adb_host=args.adb_host, adb_port=args.adb_port)
     flow = CatalogAcceptance(emulator, output, module)
     report = {'completed': False, 'steps': flow.steps, 'modifiedBusinessRecords': False,
               'evidenceDir': str(output.relative_to(ROOT) if output.is_relative_to(ROOT)

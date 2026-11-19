@@ -53,6 +53,9 @@ enum AppGlyph {
   clipboard,
   fitness,
   layers,
+  briefcase,
+  calendarAdd,
+  calendarRemove,
 }
 
 IconData? appIconData(Object? name) => switch (name) {
@@ -105,6 +108,9 @@ IconData? appIconData(Object? name) => switch (name) {
   'clipboard' => Icons.content_paste_outlined,
   'fitness' => Icons.fitness_center_outlined,
   'layers' => Icons.layers_outlined,
+  'briefcase' => Icons.work_outline_rounded,
+  'calendarAdd' => Icons.event_available_outlined,
+  'calendarRemove' => Icons.event_busy_outlined,
   _ => null,
 };
 
@@ -334,6 +340,9 @@ AppGlyph? _glyph(IconData icon) {
   if (icon == Icons.content_paste_outlined) return AppGlyph.clipboard;
   if (icon == Icons.fitness_center_outlined) return AppGlyph.fitness;
   if (icon == Icons.layers_outlined) return AppGlyph.layers;
+  if (icon == Icons.work_outline_rounded) return AppGlyph.briefcase;
+  if (icon == Icons.event_available_outlined) return AppGlyph.calendarAdd;
+  if (icon == Icons.event_busy_outlined) return AppGlyph.calendarRemove;
   return null;
 }
 
@@ -504,6 +513,8 @@ class AppIconPainter extends CustomPainter {
     switch (glyph) {
       case AppGlyph.today:
       case AppGlyph.calendar:
+      case AppGlyph.calendarAdd:
+      case AppGlyph.calendarRemove:
         if (selected) {
           canvas.drawRRect(
             RRect.fromRectAndRadius(
@@ -519,12 +530,15 @@ class AppIconPainter extends CustomPainter {
         line(16, 2.8, 16, 6);
         if (glyph == AppGlyph.today) {
           box(7.5, 12, 4, 4, .7);
-        } else {
+        } else if (glyph == AppGlyph.calendar) {
           for (final y in [12.5, 16.5]) {
             for (final x in [7.5, 12.0, 16.5]) {
               dot(x, y, .65);
             }
           }
+        } else {
+          line(8.7, 14.8, 15.3, 14.8);
+          if (glyph == AppGlyph.calendarAdd) line(12, 11.5, 12, 18.1);
         }
       case AppGlyph.tasks:
         box(3.8, 3.8, 16.4, 16.4, 3);
@@ -768,6 +782,21 @@ class AppIconPainter extends CustomPainter {
         route([12, 3, 22, 9, 12, 15, 2, 9], close: true);
         route([2, 13, 12, 19, 22, 13]);
         route([2, 17, 12, 22, 22, 17]);
+      case AppGlyph.briefcase:
+        final handle = Path()
+          ..moveTo(8.2, 7)
+          ..lineTo(8.2, 5.4)
+          ..quadraticBezierTo(8.2, 3.6, 10, 3.6)
+          ..lineTo(14, 3.6)
+          ..quadraticBezierTo(15.8, 3.6, 15.8, 5.4)
+          ..lineTo(15.8, 7);
+        canvas.drawPath(handle, ink);
+        box(3, 7, 18, 13.4, 2.6);
+        final flap = Path()
+          ..moveTo(3, 11.5)
+          ..quadraticBezierTo(12, 15.7, 21, 11.5);
+        canvas.drawPath(flap, ink);
+        line(12, 13.7, 12, 16);
     }
     canvas.restore();
   }

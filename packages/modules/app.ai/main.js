@@ -1,15 +1,17 @@
 import {data,services,ui,http,grants,packages} from '@xudian/sdk';
 import {connectionValue,editConnection,chooseModel,connectionTree,requestJson,providerName} from './connection.js';
 const ref=id=>({moduleId:'app.ai',serviceId:id,majorVersion:1});
-let cancelled=false,requestId=null,currentGrant=null,authorizationRequired=false,pendingHistory=null;
+let cancelled=false,requestId=null,currentGrant=null,authorizationRequired=false;
+const pendingHistory=new Map();
 const button=(text,event,extra={})=>({type:'button',text,event,variant:'text',...extra});
 async function persistUndo(undo) { const plan=await services.prepare(undo.ref,undo.input);if(!await ui.review(plan.planId)) return false;await services.commit(plan.planId);if(currentGrant)currentGrant.remainingWrites--;return true; }
 async function persist(id,input) { const p=await services.prepare(ref(id),input); if(await ui.review(p.planId)) return services.commit(p.planId); }
-async function checkpoint(state,messages) {
+async function checkpoint(conversationId,state,messages) {
   state.messages=messages;
-  pendingHistory={messages,lastUndo:state.lastUndo||null,receipts:state.receipts||[],operationStatus:state.operationStatus||''};
+  const receipt={conversationId,messages,lastUndo:state.lastUndo||null,receipts:state.receipts||[],operationStatus:state.operationStatus||''};
+  pendingHistory.set(conversationId,receipt);
   try {
-    if(await persist('ai.history.save',pendingHistory)) { pendingHistory=null;delete state.historyStatus;return true; }
+    if(await persist('ai.history.save',receipt)) { pendingHistory.delete(conversationId);delete state.historyStatus;return true; }
     state.historyStatus='历史保存已取消，操作回执仅保留在当前会话；请勿重复执行已提交操作。';
   } catch(error) { state.historyStatus='历史保存失败，操作回执仅保留在当前会话；请勿重复执行已提交操作。'+error.message; }
   return false;
@@ -26,9 +28,14 @@ function authorizationError(error) {
   return error.message||'操作失败';
 }
 async function requestAuthorization(toolServices) {
-  const grant=await grants.request({scopes:toolServices.map(service=>`${service.moduleId}/${service.id}@${service.major}`)});
+  const scopes=new Set();
+  for (const service of toolServices) {
+    scopes.add(`${service.moduleId}/${service.id}@${service.major}`);
+    if (service.tool.undo?.serviceId) scopes.add(`${service.moduleId}/${service.tool.undo.serviceId}@${service.major}`);
+  }
+  const grant=await grants.request({scopes:[...scopes]});
   if(!grant) { authorizationRequired=true;throw new Error('未获得工具授权，请重新申请工具授权；未自动重放写入。'); }
-  currentGrant={...grant,remainingWrites:grant.writeLimit};authorizationRequired=false;
+  currentGrant={...grant,scopes,remainingWrites:grant.writeLimit};authorizationRequired=false;
 }
 function committedSummary(receipts) {
   if(!receipts.length) return '本轮未提交业务写入。';
@@ -42,9 +49,9 @@ export async function savePreferences({advanced}) {
   if(typeof advanced!=='boolean') throw new Error('工作模式无效');
   return {writes:[{collection:'preferences',id:'default',value:{id:'default',advanced}}],events:[],result:{advanced}};
 }
-export async function saveHistory({messages,lastUndo=null,receipts=[],operationStatus=''}) {
+export async function saveHistory({conversationId='conversation',messages,lastUndo=null,receipts=[],operationStatus=''}) {
   if(!Array.isArray(messages)||!Array.isArray(receipts)||typeof operationStatus!=='string'||lastUndo!==null&&(typeof lastUndo!=='object'||Array.isArray(lastUndo))) throw new Error('历史记录无效');
-  return {writes:[{collection:'history',id:'conversation',value:{id:'conversation',messages:messages.slice(-100),lastUndo,receipts,operationStatus}}],events:[],result:{id:'conversation'}};
+  return {writes:[{collection:'history',id:conversationId,value:{id:conversationId,messages:messages.slice(-100),lastUndo,receipts,operationStatus}}],events:[],result:{id:conversationId}};
 }
 export async function cancel() {
   cancelled=true;
@@ -83,17 +90,43 @@ function proposal(text) {
   if(!v.definition||!v.files) throw new Error('高级模式需输出 definition 和 files');
   return v;
 }
+function outlineReview(plan, projectName, items) {
+  const folders=new Map(plan.writes.filter(w=>w.collection==='projectFolders').map(w=>[w.id,w.value]));
+  const tasks=plan.writes.filter(w=>w.collection==='tasks'&&!w.before).map(w=>w.value);
+  const rows=tasks.map((task,index)=>[
+    (items[index]?.path||[]).map(name=>name.trim()).join(' / '),
+    task.title,task.estimatedMinutes?task.estimatedMinutes+' 分钟':'未估时',
+  ].filter(Boolean).join(' · '));
+  return {title:'审核项目拆解',message:[
+    projectName+' · 将新增 '+tasks.length+' 项任务',
+    ...(folders.size?['新增分类 '+[...folders.values()].map(folder=>folder.name).join('、')]:[]),...rows,
+    '保存后可在项目中挑选要安排的任务。',
+  ].join('\n').slice(0,6000),confirmLabel:'确认创建'};
+}
+function undoWrite(service, plan, result) {
+  const collection=service.tool.undo?.collection;
+  if(collection) return plan.writes.find(w=>w.moduleId===service.moduleId&&w.collection===collection&&w.id===result?.id&&w.before);
+  if(plan.writes.length===1&&plan.writes[0].before)return plan.writes[0];
+}
 export async function render({state={},event,formValues={},context={}}) {
   state={...state}; let sent=false;
   let connection=await data.get('connections','default');
-  const history=pendingHistory||await data.get('history','conversation');
-  if(pendingHistory) state.historyStatus='操作回执尚未持久保存，仅保留在当前会话；请勿重复执行已提交操作。';
+  const projectDraft=context.pageId==='app.ai.projectDraft'&&context.projectId&&context.projectName;
+  const conversationId=projectDraft?'project:'+context.projectId+':'+(context.folderId||''):'conversation';
+  const unsaved=pendingHistory.get(conversationId);
+  const history=unsaved||await data.get('history',conversationId);
+  if(unsaved) state.historyStatus='操作回执尚未持久保存，仅保留在当前会话；请勿重复执行已提交操作。';
   let messages=history?.messages || state.messages || [];
   if(history&&'lastUndo' in history) { if(history.lastUndo)state.lastUndo=history.lastUndo;else delete state.lastUndo; }
   state.receipts=history?.receipts||state.receipts||[];
   state.operationStatus=history?.operationStatus||state.operationStatus||'';
   const preferences=await data.get('preferences','default');
   state.advanced=preferences?.advanced ?? state.advanced ?? false;
+
+  const seed=projectDraft&&!state.projectDraftInitialized;
+  const isTool=service=>service.tool&&service.moduleId!=='app.ai'&&
+    (!projectDraft||service.moduleId==='app.tasks'&&service.id==='project.outline');
+  if(projectDraft){state.projectDraftInitialized=true;state.advanced=false;}
   if(event?.type==='settings') await ui.navigate('app.ai.settings');
   if(event?.type==='configure') {
     state.connectionSettings=true;
@@ -137,15 +170,15 @@ export async function render({state={},event,formValues={},context={}}) {
   if(event?.type==='undo'&&state.lastUndo) {
     try {
       requireAuthorization();
-      if(await persistUndo(state.lastUndo)) { delete state.lastUndo;state.operationStatus='上次操作已撤销。';await checkpoint(state,messages); }
+      if(await persistUndo(state.lastUndo)) { delete state.lastUndo;state.operationStatus='上次操作已撤销。';await checkpoint(conversationId,state,messages); }
       else state.operationStatus='撤销审核已取消，操作尚未撤销，可再次点击撤销。';
     } catch(error) { const message=authorizationError(error);if(!authorizationRequired)throw error;state.operationStatus=message; }
   }
   if(event?.type==='authorize') {
-    try { cancelled=false;await requestAuthorization((await services.directory()).filter(service=>service.tool&&service.moduleId!=='app.ai'));state.operationStatus='工具授权已重新申请。未重放任何操作；请先核对已提交结果，再发送仅包含未完成操作的新指令。'; }
+    try { cancelled=false;await requestAuthorization((await services.directory()).filter(isTool));state.operationStatus='工具授权已重新申请。未重放任何操作；请先核对已提交结果，再发送仅包含未完成操作的新指令。'; }
     catch(error) { state.operationStatus=authorizationError(error); }
   }
-  if(event?.type==='clear' && await persist('ai.history.save',{messages:[],lastUndo:state.lastUndo||null,receipts:state.receipts})) { pendingHistory=null;messages=[]; state.messages=[]; }
+  if(event?.type==='clear' && await persist('ai.history.save',{conversationId,messages:[],lastUndo:state.lastUndo||null,receipts:state.receipts})) { pendingHistory.delete(conversationId);messages=[]; state.messages=[]; }
   if(event?.type==='installSource') {
     const p=await packages.prepare(proposal(formValues.moduleSource||state.moduleSource||''));
     await packages.review(p.id);
@@ -154,7 +187,7 @@ export async function render({state={},event,formValues={},context={}}) {
     if(!connection?.endpoint||!connection.model) throw new Error('请先配置 AI 连接');
     const text=(formValues.message||event.value||'').trim(); if(!text) throw new Error('请输入消息');
     cancelled=false;
-    const directory=await services.directory(),toolServices=directory.filter(s=>s.tool&&s.moduleId!=='app.ai');
+    const directory=await services.directory(),toolServices=directory.filter(isTool);
     const modelTools=toolServices.map((s,i)=>({type:'function',function:{name:`service_${i}`,description:s.tool.description||s.id,parameters:s.input}}));
     const system=state.advanced?
       '你为序点生成可安装的 JavaScript 模块。只输出 JSON {definition, files}。definition: formatVersion=3, manifest含id、name、version（三段数字）、hostApi="^1.0.0"、dataVersion=1、permissions、dependencies。entryPoint="main.js"，collections是{id,schema}数组，pages是{id,title,handler,entry:{id,opening:"workspace",placement:"main"}}数组，services是{id,major:1,handler,kind:"query"或"command",input:JSON Schema,output:JSON Schema}数组。files映射main.js等路径到JavaScript源码。仅可import包内文件和@xudian/sdk。SDK有data.get/query、services.query/prepare/commit、ui.dialog/review、clock.today/now、ids.new。命令返回{writes:[{collection,id,value}],events:[],result}，写入仅本模块集合。render({state,event,context,formValues})返回{state,tree}，tree是column,row,text,card,button,input,list,timeGrid等组件。button包含text和event对象，input包含key和text。高级更新必须增加版本。不要读取系统或联网。已启用服务目录：'+JSON.stringify(directory):
@@ -172,14 +205,16 @@ export async function render({state={},event,formValues={},context={}}) {
         if(++calls>24) throw new Error('已达到24次工具调用限制');
         check(); const index=Number((call.function?.name||'').replace('service_','')),service=toolServices[index];
         if(!service) throw new Error('模型请求了未知工具');
-        const input=JSON.parse(call.function.arguments||'{}'),fingerprint=canonical([service.moduleId,service.id,input]);
+        const proposed=JSON.parse(call.function.arguments||'{}');
+        const input=projectDraft?{projectId:context.projectId,folderId:context.folderId||null,items:proposed.items}:proposed;
+        const fingerprint=canonical([service.moduleId,service.id,input]);
         if(toolsSeen.has(call.id)&&toolsSeen.get(call.id)!==fingerprint) throw new Error('工具调用ID内容变化');
         toolsSeen.set(call.id,fingerprint);
         let result;
         if(cache.has(fingerprint)) result=cache.get(fingerprint);
         else {
           requireAuthorization();
-          if(!currentGrant) {
+          if(!currentGrant?.scopes.has(`${service.moduleId}/${service.id}@${service.major}`)) {
             await requestAuthorization(toolServices);
           }
           requireAuthorization();
@@ -187,13 +222,15 @@ export async function render({state={},event,formValues={},context={}}) {
           if(service.kind==='query') result=await services.query(target,input);
           else {
             const plan=await services.prepare(target,input);
-            if(await ui.review(plan.planId)) { check();requireAuthorization(); const committingGrant=currentGrant;result=await services.commit(plan.planId);
+            const confirmation=projectDraft?outlineReview(plan,context.projectName,input.items):undefined;
+            if(await ui.review(plan.planId,confirmation)) { check();requireAuthorization(); const committingGrant=currentGrant;result=await services.commit(plan.planId);
               committingGrant.remainingWrites--;
               delete state.lastUndo;
-              if(service.tool.undo&&plan.writes.length===1&&plan.writes[0].before) state.lastUndo={ref:{...target,serviceId:service.tool.undo.serviceId},input:undoInput(service.tool.undo.input,{input,result,before:plan.writes[0].before})};
+              const edit=service.tool.undo?undoWrite(service,plan,result):null;
+              if(edit)state.lastUndo={ref:{...target,serviceId:service.tool.undo.serviceId},input:undoInput(service.tool.undo.input,{input,result,before:edit.before,after:edit.value})};
               state.receipts=[...state.receipts,{callId:call.id,moduleId:service.moduleId,serviceId:service.id,result,undo:state.lastUndo||null}];
               cache.set(fingerprint,result);
-              if(!await checkpoint(state,[...previousMessages,{role:'user',content:text},{role:'assistant',content:committedSummary(state.receipts)+'\n后续步骤尚未完成，请勿重复执行已提交操作。'}])) throw new Error('操作回执未保存，已停止后续步骤。');
+              if(!await checkpoint(conversationId,state,[...previousMessages,{role:'user',content:text},{role:'assistant',content:committedSummary(state.receipts)+'\n后续步骤尚未完成，请勿重复执行已提交操作。'}])) throw new Error('操作回执未保存，已停止后续步骤。');
               check();
               if(result?.navigate) await ui.navigate(result.navigate);
             }
@@ -209,7 +246,7 @@ export async function render({state={},event,formValues={},context={}}) {
     const summary=state.receipts.length||failure?committedSummary(state.receipts):'';
     reply=[failure?`${state.receipts.length?'部分完成':'未完成'}：${failure}。后续步骤未完成，未自动重试；请勿重复发送已提交操作。`:reply,summary,declined?`${declined} 项操作取消审核，未执行。`:''].filter(Boolean).join('\n');
     messages=[...previousMessages,{role:'user',content:text},{role:'assistant',content:reply}];
-    await checkpoint(state,messages);
+    await checkpoint(conversationId,state,messages);
     sent=true;
     if(state.advanced&&!failure) { state.moduleSource=JSON.stringify(proposal(reply),null,2); const p=await packages.prepare(proposal(reply)); await packages.review(p.id); }
   }
@@ -228,7 +265,13 @@ export async function render({state={},event,formValues={},context={}}) {
   if(state.operationStatus) children.push({type:'text',text:state.operationStatus,style:'muted'});
   if(state.historyStatus) children.push({type:'text',text:state.historyStatus,style:'muted'});
   if(authorizationRequired) children.push(button('重新申请工具授权',{type:'authorize'}));
-  if(!messages.length) children.push({type:'card',children:[
+  if(projectDraft)children.unshift(
+    {type:'listTile',icon:'folder',title:context.projectName,subtitle:context.projectPath||'项目直属'},
+    {type:'divider'},
+    {type:'sectionHeader',title:'项目任务'},
+    {type:'text',text:'可以描述希望达成的结果，以及要按哪些阶段拆分。',style:'muted'},
+  );
+  if(!projectDraft&&!messages.length) children.push({type:'card',children:[
     {type:'text',text:state.advanced?'描述要生成或更新的模块':'有什么需要我帮忙的？',style:'heading'},
     {type:'text',text:connection?.model?'可以直接聊天，或让我协助查看任务与安排。':'点击右上角设置，连接模型后开始对话。',style:'muted'}
   ]});
@@ -236,7 +279,10 @@ export async function render({state={},event,formValues={},context={}}) {
   for(const [index,message] of messages.entries()) children.push({type:'chatMessage',key:`message:${index}`,role:message.role,label:message.role==='user'?'你':'AI 助手',text:message.content});
   const footer={type:'messageComposer',key:'message',text:state.advanced?'描述要生成或更新的模块…':'输入消息…',event:{type:'send'},interrupt:'cancel'};
   if(state.advanced) children.push({type:'disclosure',key:'moduleSourceSection',text:'模块源码',children:[{type:'sourceEditor',key:'moduleSource',text:'模块 definition 与源码 JSON',value:state.moduleSource||'',multiline:true},button('审核并安装源码',{type:'installSource'})]});
-  return {state,clearForms:sent?['message']:[],replaceForms:state.advanced?{moduleSource:state.moduleSource||''}:{},tree:{type:'column',compact:true,spacing:12,followEnd:messages.length,header:{type:'pageHeader',title:'AI 助手',subtitle:connection?.model?`${state.advanced?'高级模式':'普通聊天'} · ${connection.model}`:'尚未配置模型',actions:[{icon:'settings',label:'AI 设置',event:{type:'settings'}}]},children,footer}};
+  return {state,clearForms:sent?['message']:[],replaceForms:seed?{message:'帮我把'+context.projectName+'的工作拆成几项任务，按分类列出，并估算每项耗时。'}:state.advanced?{moduleSource:state.moduleSource||''}:{},...(projectDraft?{header:{title:'用 AI 拆解项目',compact:true,actions:[{icon:'settings',label:'AI 设置',event:{type:'settings'},presentation:'inline'}]}}:{}),tree:{
+    type:'column',compact:true,spacing:12,followEnd:messages.length,
+    ...(!projectDraft?{header:{type:'pageHeader',title:'AI 助手',subtitle:connection?.model?`${state.advanced?'高级模式':'普通聊天'} · ${connection.model}`:'尚未配置模型',actions:[{icon:'settings',label:'AI 设置',event:{type:'settings'}}]}}:{}),
+    children,footer}};
 }
 export async function renderSettings(args) {
   return render({...args,context:{...args.context,aiSettings:true}});

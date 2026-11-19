@@ -3,9 +3,9 @@
   "manifest": {
     "id": "app.tasks",
     "name": "任务",
-    "version": "1.7.0",
-    "hostApi": "^1.49.0",
-    "dataVersion": 1,
+    "version": "1.11.1",
+    "hostApi": "^1.54.0",
+    "dataVersion": 2,
     "permissions": [
       "ui",
       "clock.today",
@@ -17,7 +17,33 @@
     "author": "JayConstruct"
   },
   "entryPoint": "main.js",
-  "pages": [],
+  "pages": [
+    {
+      "id": "app.tasks.projects",
+      "title": "项目",
+      "handler": "projectPage",
+      "headerMode": "contributed",
+      "icon": "briefcase",
+      "entry": {
+        "id": "app.tasks.projects",
+        "opening": "workspace",
+        "placement": "main",
+        "order": 25
+      }
+    },
+    {
+      "id": "app.tasks.directory",
+      "title": "项目目录",
+      "handler": "projectPage",
+      "headerMode": "contributed"
+    },
+    {
+      "id": "app.tasks.projectTask",
+      "title": "任务详情",
+      "handler": "projectPage",
+      "headerMode": "contributed"
+    }
+  ],
   "collections": [
     {
       "id": "tasks",
@@ -82,6 +108,40 @@
         },
         "additionalProperties": true
       }
+    },
+    {
+      "id": "projectFolders",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
+      "id": "projectActivity",
+      "schema": {
+        "type": "object",
+        "required": [
+          "id",
+          "projectId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
     }
   ],
   "services": [
@@ -129,6 +189,9 @@
             "type": "string"
           },
           "includeCompleted": {
+            "type": "boolean"
+          },
+          "includeProjectName": {
             "type": "boolean"
           }
         }
@@ -178,6 +241,9 @@
               "type": "string"
             },
             "includeCompleted": {
+              "type": "boolean"
+            },
+            "includeProjectName": {
               "type": "boolean"
             }
           }
@@ -285,6 +351,23 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "folderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "importance": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "targetDate": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -307,6 +390,23 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 120
+            },
+            "folderId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "importance": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "targetDate": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         }
@@ -405,6 +505,12 @@
           },
           "locked": {
             "type": "boolean"
+          },
+          "folderId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -505,6 +611,12 @@
             },
             "locked": {
               "type": "boolean"
+            },
+            "folderId": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         }
@@ -711,7 +823,8 @@
           }
         },
         "undo": {
-          "serviceId": "task.updateFields",
+          "serviceId": "task.restore",
+          "collection": "tasks",
           "input": {
             "id": {
               "bind": [
@@ -719,32 +832,15 @@
                 "id"
               ]
             },
-            "expectedValues": {
+            "expected": {
               "bind": [
-                "result"
+                "after"
               ]
             },
-            "changes": {
-              "beforeChangedFields": true,
-              "includeWhenChanged": {
-                "plannedDate": [
-                  "plannedStartAt",
-                  "plannedEndAt",
-                  "plannedTimezone"
-                ],
-                "dueDate": [
-                  "dueAt",
-                  "dueTimezone"
-                ],
-                "dueAt": [
-                  "dueDate",
-                  "dueTimezone"
-                ],
-                "dueTimezone": [
-                  "dueDate",
-                  "dueAt"
-                ]
-              }
+            "value": {
+              "bind": [
+                "before"
+              ]
             }
           }
         }
@@ -831,7 +927,8 @@
           }
         },
         "undo": {
-          "serviceId": "task.setCompleted",
+          "serviceId": "task.restore",
+          "collection": "tasks",
           "input": {
             "id": {
               "bind": [
@@ -839,48 +936,44 @@
                 "id"
               ]
             },
-            "expectedValues": {
+            "expected": {
               "bind": [
-                "result"
+                "after"
               ]
             },
-            "completed": {
+            "value": {
               "bind": [
-                "before",
-                "completedAt"
-              ],
-              "boolean": true
-            },
-            "actualCompletedOn": {
-              "bind": [
-                "before",
-                "actualCompletedOn"
-              ],
-              "nullIfMissing": true,
-              "when": {
-                "bind": [
-                  "before",
-                  "completedAt"
-                ],
-                "boolean": true
-              }
-            },
-            "completedTimezone": {
-              "bind": [
-                "before",
-                "completedTimezone"
-              ],
-              "nullIfMissing": true,
-              "when": {
-                "bind": [
-                  "before",
-                  "completedAt"
-                ],
-                "boolean": true
-              }
+                "before"
+              ]
             }
           }
         }
+      }
+    },
+    {
+      "id": "task.undoCompletion",
+      "major": 1,
+      "handler": "taskUndoCompletion",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "expectedUpdatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
       }
     },
     {
@@ -942,6 +1035,512 @@
           "null"
         ]
       }
+    },
+    {
+      "id": "project.folders",
+      "major": 1,
+      "handler": "folderList",
+      "kind": "query",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "array"
+      },
+      "tool": {
+        "name": "project_folders",
+        "description": "读取项目目录和项目内分类",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "project.folder.save",
+      "major": 1,
+      "handler": "folderSave",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "project_folder_save",
+        "description": "创建分类，或按版本修改分类名称和所属位置",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "expectedUpdatedAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "projectId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "parentId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "project.edit",
+      "major": 1,
+      "handler": "projectEdit",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "folderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "importance": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "targetDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "completedOn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "expectedUpdatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "project_edit",
+        "description": "修改项目分类、目标、重要性或实际完成日期",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "expectedUpdatedAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "folderId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "importance": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "targetDate": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "completedOn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "expectedUpdatedAt"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "project.pick",
+      "major": 1,
+      "handler": "projectPick",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "expectedUpdatedAt": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "expectedUpdatedAt"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 200
+          }
+        },
+        "required": [
+          "projectId",
+          "queued",
+          "tasks"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "project.pick.undo",
+      "major": 1,
+      "handler": "projectUndoPick",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "expectedUpdatedAt": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "expectedUpdatedAt"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 200
+          },
+          "undoId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "projectId",
+          "tasks",
+          "undoId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      }
+    },
+    {
+      "id": "project.moveTask",
+      "major": 1,
+      "handler": "projectMoveTasks",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "folderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "expectedUpdatedAt",
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "project_moveTask",
+        "description": "将现有任务移入项目或分类",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "expectedUpdatedAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "projectId": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "folderId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "expectedUpdatedAt",
+            "projectId"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "project.outline",
+      "major": 1,
+      "handler": "projectOutline",
+      "kind": "command",
+      "input": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "folderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 0,
+                  "maxItems": 20
+                },
+                "notes": {
+                  "type": "string"
+                },
+                "estimatedMinutes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "title"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "projectId",
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object"
+      },
+      "tool": {
+        "name": "project_outline",
+        "description": "在已有项目中一次生成可审核的分类与任务。path 是相对分类名称数组，相同路径共享分类；创建后由用户手选进入待安排。",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "folderId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "path": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 0,
+                    "maxItems": 20
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "estimatedMinutes": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "title"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 100
+            }
+          },
+          "required": [
+            "projectId",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      }
     }
   ],
   "recordContracts": {
@@ -963,5 +1562,8 @@
         "archived": "archivedAt"
       }
     }
+  },
+  "migrations": {
+    "1": "migrateProjectActivity"
   }
 }

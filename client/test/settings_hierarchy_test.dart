@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:task_app/core/app_updates/startup_updates.dart';
 import 'package:task_app/core/module_host/host_settings_page.dart';
 import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
@@ -15,6 +16,13 @@ import 'package:task_app/data/providers.dart';
 import 'package:task_app/features/settings/app_preferences.dart';
 import 'package:task_app/features/settings/appearance_settings_page.dart';
 import 'package:task_app/features/settings/ui_layout_page.dart';
+
+class _AvailableUpdates extends StartupUpdates {
+  @override
+  StartupUpdateState build() => const StartupUpdateState(
+    modules: ModuleUpdateSummary({'test.module': '模块 2.0.0'}),
+  );
+}
 
 class _FailingPreferences extends AppPreferencesController {
   @override
@@ -42,10 +50,18 @@ void main() {
     await database.close();
   });
 
-  Future<void> show(WidgetTester tester, {bool dark = false}) async {
+  Future<void> show(
+    WidgetTester tester, {
+    bool dark = false,
+    bool updates = false,
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWith((_) async => database)],
+        overrides: [
+          databaseProvider.overrideWith((_) async => database),
+          if (updates)
+            startupUpdatesProvider.overrideWith(_AvailableUpdates.new),
+        ],
         child: MaterialApp(
           theme: ThemeData(
             useMaterial3: true,
@@ -101,6 +117,43 @@ void main() {
     },
   );
 
+  testWidgets('settings keeps live statuses readable across layout changes', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view.physicalSize = const Size(412, 916);
+    await show(tester, dark: true, updates: true);
+    final home = tester.element(find.byType(HostSettingsPage));
+    ProviderScope.containerOf(home)
+        .read(uiAnnotationProvider.notifier)
+        .setEnabled(true);
+    await tester.pumpAndSettle();
+    Offset position(String text) => tester.getTopLeft(find.text(text));
+    expect(position('外观与交互').dy, position('布局与导航').dy);
+    expect(position('应用与数据').dy, greaterThan(position('个性化').dy));
+    expect(
+      tester.getSize(find.widgetWithText(ListTile, '模块与连接')).height,
+      closeTo(62, .1),
+    );
+    expect(find.text('有更新'), findsOneWidget);
+    expect(find.text('标注已开启'), findsOneWidget);
+    expect(find.text('常用入口'), findsNothing);
+    tester.view.physicalSize = const Size(1120, 760);
+    await tester.pumpAndSettle();
+    expect(position('外观与交互').dx, position('布局与导航').dx);
+    expect(position('应用与数据').dy, position('个性化').dy);
+    expect(position('应用与数据').dx, greaterThan(position('个性化').dx));
+    tester.view.physicalSize = const Size(320, 640);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+    await tester.pumpAndSettle();
+    expect(position('布局与导航').dy, greaterThan(position('外观与交互').dy));
+    expect(position('有更新').dy, greaterThan(position('检查应用与模块更新').dy));
+    expect(tester.takeException(), isNull);
+  });
+
   for (final wide in [false, true]) {
     testWidgets(
       'categories and appearance persist on ${wide ? 'desktop dark' : '320px large text'}',
@@ -131,7 +184,7 @@ void main() {
         });
         await tester.pageBack();
         await tester.pumpAndSettle();
-        expect(find.textContaining('深色 ·'), findsOneWidget);
+        expect(find.text('当前主题 · 深色'), findsOneWidget);
         await tap(tester, '辅助工具');
         await tap(tester, '界面标注模式');
         final container = ProviderScope.containerOf(
@@ -140,7 +193,7 @@ void main() {
         expect(container.read(uiAnnotationProvider), isTrue);
         await tester.pageBack();
         await tester.pumpAndSettle();
-        expect(find.text('界面标注已开启'), findsOneWidget);
+        expect(find.text('标注已开启'), findsOneWidget);
         await tap(tester, '模块与连接');
         expect(find.text('模块管理与恢复'), findsOneWidget);
         await tester.pageBack();
@@ -202,11 +255,10 @@ void main() {
         );
       }
       await show(tester);
-      final labels = tester
-          .widgetList<ListTile>(find.byType(ListTile))
-          .map((tile) => (tile.title as Text).data)
-          .toList();
-      expect(labels.indexOf('第二个入口'), lessThan(labels.indexOf('第一个入口')));
+      expect(
+        tester.getTopLeft(find.text('第二个入口')).dy,
+        lessThan(tester.getTopLeft(find.text('第一个入口')).dy),
+      );
       expect(find.text('专属选项'), findsNothing);
       await tap(tester, '第二个入口');
       expect(find.text('上下文：保留'), findsOneWidget);

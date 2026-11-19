@@ -43,6 +43,8 @@ def select_tests(changes, modules=(), *, first_run=False):
         changes = []
     critical = ('client/pubspec.', 'packages/xquickjs/', 'client/lib/data/', 'client/lib/core/modules/',
                 'client/lib/core/module_host/module_host.dart',
+                'client/lib/core/module_host/module_host_installation.dart',
+                'client/lib/core/module_host/module_host_services.dart',
                 'client/lib/core/module_host/collection_store.dart',
                 'client/lib/core/module_host/module_package.dart')
     if any(name.startswith(critical) for name in changes):
@@ -52,6 +54,12 @@ def select_tests(changes, modules=(), *, first_run=False):
     if any(name.startswith('client/lib/core/module_host/') for name in changes):
         tests.update(['test/schedule_layout_test.dart', 'test/ui_pack_script_page_test.dart',
                       'test/shiguang_school_picker_test.dart'])
+    if any(name.startswith('client/lib/core/module_host/planner_board') for name in changes):
+        tests.update(['test/planner/planner_board_test.dart',
+                      'test/planner/planner_display_gestures_test.dart'])
+    if any(name.startswith('client/lib/core/module_host/script_page') for name in changes):
+        tests.update(['test/script_page_motion_test.dart',
+                      'test/script_page_timeline_integration_test.dart'])
     if any(name.startswith('client/lib/features/settings/') for name in changes):
         tests.add('test/settings_test.dart')
     if any(name.startswith(('client/lib/features/tasks/', 'client/lib/features/ai/')) for name in changes):

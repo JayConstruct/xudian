@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.planner",
     "name": "任务规划",
-    "version": "1.15.1",
+    "version": "1.16.0",
     "hostApi": "^1.49.0",
     "dataVersion": 1,
     "permissions": [
@@ -22,7 +22,7 @@
     "dependencies": [
       {
         "moduleId": "app.tasks",
-        "version": "^1.7.0"
+        "version": "^1.8.0"
       }
     ],
     "optionalServices": [
@@ -33,7 +33,7 @@
         "kind": "query"
       }
     ],
-    "description": "快速添加任务、查看图形时间表并预览和撤销整体安排。",
+    "description": "快速添加任务、查看图形时间表，手动调整安排并保留操作历史。",
     "author": "JayConstruct",
     "workflowStartup": "lazy"
   },
@@ -656,35 +656,6 @@
       },
       "output": {
         "type": "object"
-      },
-      "tool": {
-        "name": "planner_plan_preview",
-        "description": "任务规划：plan.preview",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "startDate": {
-              "type": "string"
-            },
-            "days": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 28
-            },
-            "selectedIds": {
-              "type": "array",
-              "maxItems": 200,
-              "items": {
-                "type": "string"
-              }
-            },
-            "overrides": {
-              "type": "object"
-            }
-          },
-          "required": [],
-          "additionalProperties": false
-        }
       }
     },
     {
@@ -710,26 +681,6 @@
       },
       "output": {
         "type": "object"
-      },
-      "tool": {
-        "name": "planner_batch_apply",
-        "description": "任务规划：batch.apply",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "batchKey": {
-              "type": "string"
-            },
-            "preview": {
-              "type": "object"
-            }
-          },
-          "required": [
-            "batchKey",
-            "preview"
-          ],
-          "additionalProperties": false
-        }
       }
     },
     {

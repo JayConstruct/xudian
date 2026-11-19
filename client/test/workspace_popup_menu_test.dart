@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:task_app/app/workspace_popup_menu.dart';
+import 'package:task_app/core/ui/workspace_popup_menu.dart';
 import 'package:task_app/core/ui/ui_icon.dart';
 import 'package:task_app/core/ui/workspace_header.dart';
 

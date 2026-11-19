@@ -48,7 +48,6 @@ scripts/start-emulator.sh --refresh-rate 120
 
 只有 ADB 中目标设备消失、Windows 中目标旧进程退出后才重新启动。若目标 offline、无法核对名称、名称不符、ADB 查询失败、控制台认证/目标核对失败、关闭失败或退出超时，停止操作；无法安全关闭时保留诊断错误，不启动重复进程。不带刷新率时使用 `-no-snapshot-load`，只跳过快照加载，退出仍允许保存 Quick Boot 快照。`--timeout` 分别限制关闭阶段和 Android 启动等待；后备控制台调用受关闭阶段剩余时间限制。
 
-2026-10-30 已通过真实冷启动、管道取消及复用检查，并核对新旧进程、启动标识和应用数据，详见 [冷启动验证记录](verification/EMULATOR_COLD_BOOT.md)。
 
 `--refresh-rate` 接受 30～240 Hz 的整数，包括 120 和 165；指定时新进程附加 `-vsync-rate HZ -no-snapshot`，不修改 AVD 配置、不加载或保存 Quick Boot 快照。此参数只改变 Android 客体的刷新节拍，保持原有分辨率和清晰度；主机显示器当前刷新率会限制窗口实际呈现，测量 120 / 165fps 时应使用至少对应刷新率的主机屏幕。未加 `--cold-boot` 时，已运行设备仅核对 `ro.boot.qemu.vsync`，不匹配或无法读取时会报错，提示强制冷启动。未指定参数时保留原有启动和复用行为。
 
@@ -56,36 +55,9 @@ scripts/start-emulator.sh --refresh-rate 120
 
 即使 `ro.boot.qemu.vsync=120`、`supportedModes` 为 120Hz，Android 的默认刷新率策略仍可能使 `mActiveRenderFrameRate` 和 `mDisplayModeSpecs` 的 render 上限保持 60Hz。`--lock-refresh-rate` 必须与 `--refresh-rate` 一起使用；脚本先读取 Android 当前用户和两项设置原值，再保存恢复脚本到 `.cache/emulator-start/refresh-端口-随机标识.sh`，随后设置并读回核对 `peak_refresh_rate` / `min_refresh_rate`。终端会打印 `bash 恢复脚本路径`；原值为 `null` 时恢复脚本删除该覆盖值，而非写入字符串 `null`。只读失败时不写设置；写入或核对失败时保留恢复脚本并报错，不宣告就绪。
 
-锁定设置跨模拟器重启持续生效，不会在脚本结束时自动恢复，且不能保证应用实际帧率。实验结束后对同一设备执行打印的恢复命令；多次锁定生成多份记录，按操作的逆序恢复可回到最初的设置。未加 `--lock-refresh-rate` 时脚本不修改 Android 刷新率策略。也可以继续手动记录和调整：
+锁定设置跨模拟器重启持续生效，不会在脚本结束时自动恢复，且不能保证应用实际帧率。实验结束后对同一设备执行打印的恢复命令；多次锁定生成多份记录，按操作的逆序恢复可回到最初的设置。未加 `--lock-refresh-rate` 时脚本不修改 Android 刷新率策略。
 
-```bash
-peak_before="$(adb -s emulator-5554 shell settings --user current get system peak_refresh_rate | tr -d '\r')"
-min_before="$(adb -s emulator-5554 shell settings --user current get system min_refresh_rate | tr -d '\r')"
-mkdir -p dist/verification
-refresh_record="dist/verification/refresh-settings-$(date +%Y%m%d-%H%M%S).txt"
-printf 'peak_refresh_rate=%s\nmin_refresh_rate=%s\n' "$peak_before" "$min_before" > "$refresh_record"
-adb -s emulator-5554 shell settings --user current put system peak_refresh_rate 120
-adb -s emulator-5554 shell settings --user current put system min_refresh_rate 120
-adb -s emulator-5554 shell dumpsys display
-adb -s emulator-5554 shell dumpsys SurfaceFlinger --latency
-```
-
-保留原值记录及调整前后的显示模式输出，与本次性能结果一并保存。调整后核对应用实际 render rate 为约 120Hz，SurfaceFlinger 的周期约为 8,333,333ns，并测量动画实际帧数；其他策略仍可能限速，不能仅凭设置成功就认定达到 120fps。实验结束后恢复两项原值，原值为 `null` 表示未设置，应删除覆盖值，不能写入字符串 `null`：
-
-```bash
-if [[ "$peak_before" == null ]]; then
-  adb -s emulator-5554 shell settings --user current delete system peak_refresh_rate
-else
-  adb -s emulator-5554 shell settings --user current put system peak_refresh_rate "$peak_before"
-fi
-if [[ "$min_before" == null ]]; then
-  adb -s emulator-5554 shell settings --user current delete system min_refresh_rate
-else
-  adb -s emulator-5554 shell settings --user current put system min_refresh_rate "$min_before"
-fi
-```
-
-恢复命令使用同一终端中的原值变量；若换了终端，先根据保存的记录恢复这两个变量。随后再核对显示策略；需要恢复客体 60Hz 时，退出模拟器后按前述命令冷启动。
+实际帧率需结合 `dumpsys display`、`dumpsys SurfaceFlinger --latency` 和动画帧数测量，不能仅凭设置成功认定达到目标帧率。
 
 ADB 默认连接 `127.0.0.1:5037`，支持 `XUDIAN_ADB_HOST`（本机 loopback）和 `XUDIAN_ADB_PORT`。不同端口启动后，更新脚本也需指定对应 `--serial` 和 `--adb-port`。启动超时或连接失败会报错，不继续更新；新启动的模拟器保留运行，可排查后重试。在 Codex 沙箱中启动 Windows 窗口需申请在沙箱外执行同一脚本。
 

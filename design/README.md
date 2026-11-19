@@ -1,54 +1,53 @@
 # UI 设计入口
 
-独立 V2 的图片与文本设计输入见 [V2 设计总稿](../docs/design/v2/README.md)：汇集当前四页截图优化稿、19 张实际截图、视觉规范、26 页流程及便携下载包。以下选稿与实现状态描述现有应用，不代表 V2 已实现。
+日程基础布局采用[现有界面融合稿](styles/20261030-023219-917453-c-current-ui-fusion-v02.png)，批量任务管理采用[管理页选稿](screens/ui-04/20261103-162137-563384-batch-management-mobile-light-v02.png)。两处已有实现与模拟器验收。原稿和批次链接需要本机设计材料。
 
 ## 选稿与实现状态
 
-继续现有 Flutter/Dart 宿主与 JavaScript/QuickJS 模块。唯一获选基准为 [C · 旧版视觉融合 v02](styles/20261030-013221-184495-c-legacy-fusion-v02.png)，其 [完整提示词](styles/20261030-013221-184495-c-legacy-fusion-v02.prompt.txt) 与 [选定批次](styles/.batches/20261030-013221-184495/README.md) 保留来源及摘要。
+整体视觉基准为[融合方案 v02](styles/20261030-013221-184495-c-legacy-fusion-v02.png)。选定原因与摘要见[批次清单](styles/.batches/20261030-013221-184495/README.md)，生成输入见[完整提示词](styles/20261030-013221-184495-c-legacy-fusion-v02.prompt.txt)。日程稿另有自己的[修订记录](styles/.batches/20261030-023219-917453/README.md)和[提示词](styles/20261030-023219-917453-c-current-ui-fusion-v02.prompt.txt)。
 
-另有基于当前模拟器截图的 [现有 UI 融合修订 v02](styles/20261030-023219-917453-c-current-ui-fusion-v02.png)、[提示词](styles/20261030-023219-917453-c-current-ui-fusion-v02.prompt.txt) 和 [批次](styles/.batches/20261030-023219-917453/README.md)。修订稿未替代原获选基准；日程基础布局与相关操作已参考该修订实现并完成模拟器验证，见 [日程验证](../docs/verification/DAILY_FUSION_UI.md)。规划页及整套方案尚未完成，不能把局部验收当作整体实现。
+## 风格来源
 
-页面编号、设计顺序和关键状态见 [UI 清单](PLAN.md)。本节维护选稿和实现范围，其他入口引用本节。
+今天页的低饱和画布、柔和表面、蓝紫强调色与圆润线性图标取自早期参考图。原图可在 Git 标签 `v0.2.0-beta.27` 的 `docs/design/soft-minimal-today-reference.png` 查阅，生成工具与提示词未知。
 
-UI-04 的新增批量管理子界面已按用户选定的 [管理 v02](screens/ui-04/20261103-162137-563384-batch-management-mobile-light-v02.png) 实现并完成本轮模拟器验证，见[批量管理验收](../docs/verification/BATCH_TASK_MANAGEMENT.md)。它继承当前视觉，不替换整套风格基准，也不代表其他规划页重设计已经完成。
+普通内容以标题、留白和细分隔线分组，时间网格和真实卡片保留自身结构；阴影与模糊集中用于浮层和导航。浅深色主题保持相同信息层级，界面包与用户配色继续生效。
 
-## 项目与设计目录
+底部导航的悬浮胶囊结构参考 FlClash v0.8.99，沿用序点配色和 [线性图标](../docs/ui/DESIGN_SYSTEM.md#圆润线性图标)。连续跟手、取消、减少动画及可访问激活由宿主负责，导航不能遮挡页面末尾操作。
 
-```text
-client/                       现有 Flutter/Dart 宿主、平台工程与测试
-packages/modules/             现有 JavaScript 功能模块及界面包
-packages/schemas/             现行模块与页面契约
-design/
-├── README.md                 本入口
-├── PLAN.md                   页面清单与设计顺序
-├── styles/                   唯一方案原图及同名完整提示词
-│   └── .batches/<批次>/      清单、来源与决策
-└── screens/                  后续按页面编号保存细化稿
-    └── ui-01/                实际开始该页设计时创建
-        └── .batches/<批次>/  本轮来源与决策
-```
+## 稿件存储与校验
 
-运行源码保持原位；构建、打包和模拟器流程继续使用现有脚本。业务页面通过模块声明与宿主通用组件表达，边界见 [当前架构](../docs/DESIGN.md) 与 [模块 SDK](../docs/MODULE_SDK.md)。
+大幅新增或修改 UI 时，按[协作约定中的设计审核流程](../AGENTS.md#大幅新增或修改-ui)提交单界面图稿。将用户最终确认的各张图记录为本批次选稿，供实现和模拟器截图逐张对照。
 
-## 唯一方案与来源
+临时比较配色、布局或交互时，把图片放在本机的 `design/styles/` 或对应的 `design/screens/ui-XX/`，用文件名说明用途，例如 `ui-04-keyboard-layout.png`。试稿可以直接修改或清理，无需建批次。
 
-原图文件名：`20261030-013221-184495-c-legacy-fusion-v02.png`。批次清单已设为 `selected`，保留该原图，不另存选定副本。
+### 采用、交付或需要复现的稿件
 
-批次中的旧版实际截图、主题与图标资料是选图的来源，不是其他候选方案。已删除候选的历史输入路径和摘要仅用于追溯，不表示文件仍存在。实现范围以本页“选稿与实现状态”和对应验收记录为准。
+选作实现依据、准备交付或明确要求复现时，为相关稿件建立批次。已知要复现的稿件从生成时保留原图、实际提示词和参考来源。试稿后来获选时，使用已有原始材料归档。原始输入已丢失的图片可作为视觉参考，注明已知来源和缺失信息。
 
-## 后续稿件
-
-在该方案基础上细化页面时，图片直接放在 `design/screens/ui-XX/`，完整提示词与图片并列；先创建独立批次：
+在仓库根目录按稿件用途选择一条命令。
 
 ```bash
-python3 scripts/design_artifacts.py new ui-01 --brief '基于已选融合 v02，细化日程首页与关键状态'
+python3 scripts/design_artifacts.py new styles --brief '本轮需求与比较范围'
+python3 scripts/design_artifacts.py new ui-01 --brief 'UI-01 日程首页：目标、关键状态与参考内容'
 ```
 
-使用返回的完整批次编号作为文件名前缀，同轮修订递增 `v01`、`v02`，不覆盖原图。输入、来源与决策保存在该批次的 `references/`、`notes/`；清单记录实际工具和选择理由。完成后运行：
+命令返回 `.batches/<批次>/` 目录。按其中 README 给出的前缀，将原图和同名 `.prompt.txt` 放在风格或页面目录下，例如 `<批次>-mobile-dark-keyboard-v01.png`。同一稿件的修订递增为 `v02`。从工作区外复制原图时核对源文件与副本的 SHA-256。
+
+在 `manifest.json` 填写实际使用的工具和参考来源。参考材料放在批次的 `references/`，衍生预览放在 `notes/previews/`。获选时将 `status` 设为 `selected`，在 `selection` 记录原图文件名 `source` 和理由 `reason`，多张选稿使用数组。
+
+归档完成或修订后，对同一批次先生成索引，再核对文件与摘要。页面稿使用对应的 `design/screens/ui-XX/.batches/<实际批次>`。
 
 ```bash
-python3 scripts/design_artifacts.py index design/screens/ui-01/.batches/<实际批次>
-python3 scripts/design_artifacts.py check design/screens/ui-01/.batches/<实际批次>
+python3 scripts/design_artifacts.py index design/styles/.batches/<实际批次>
+python3 scripts/design_artifacts.py check design/styles/.batches/<实际批次>
 ```
 
-原图、提示词、批次为本机材料，不提交 Git；本入口、清单及顶层目录说明可以提交。历史 `dist/design/` 保留已有记录。完整规则见 [设计稿规范](../docs/DESIGN_ARTIFACTS.md)。
+原图、提示词、参考材料与批次保存在本机。需要随文档提交的获选副本放在 `docs/design/selected/`，附来源、批次、摘要、选用理由和实现／验收状态。
+
+### 历史、删除与验收
+
+旧 `schemaVersion: 1` 的 `dist/design/<topic>/<batch>/` 继续支持 index/check，保留 references/drafts/selected/notes 和原清单；其他既有主题的 new 命令保持兼容。新 UI 统一用 styles 或 ui-01 至 ui-23，不再创建 app-ui-* 旧目录。
+
+移动已归档稿件时，记录原路径、新路径与 SHA-256，并修复引用。按要求删除归档稿件时，记录文件名、摘要和删除原因。
+
+参考使用合成内容或授权且必要的材料，排除账号、密钥及私有数据。获选稿的实现状态以代码为准，设备验收状态以 `dist/verification/` 的实测结果为准。

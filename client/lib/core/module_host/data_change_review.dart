@@ -103,6 +103,7 @@ class DataChangeSummary {
                 'id',
                 'before',
                 'value',
+                'commitTimestamps',
               }.contains(key),
             ) ||
             !raw.containsKey('before') ||
@@ -118,6 +119,17 @@ class DataChangeSummary {
               (record is! Map<String, Object?> || record['id'] != raw['id'])) {
             return null;
           }
+        }
+        final timestamps = raw['commitTimestamps'];
+        if (timestamps != null &&
+            (timestamps is! List ||
+                timestamps.any(
+                  (field) =>
+                      field is! String ||
+                      raw['value'] is! Map ||
+                      (raw['value'] as Map)[field] is! String,
+                ))) {
+          return null;
         }
         if (!identities.add(
           jsonEncode([

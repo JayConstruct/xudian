@@ -221,7 +221,8 @@ def check_architecture(root=ROOT):
         source = path.read_text()
         relative = path.relative_to(lib).as_posix()
         violations.extend(check_business_semantics(relative, source))
-        if re.search(r'features/(tasks|projects|ai|declarative_runtime|module_manager)/', relative):
+        if relative.startswith('legacy/') or re.search(
+                r'features/(tasks|projects|ai|declarative_runtime|module_manager)/', relative):
             violations.append(f'Legacy business runtime reachable: {relative}')
         if relative not in LEGACY_ARCHIVES and business_identities.search(source):
             violations.append(f'Business module identity special case: {relative}')

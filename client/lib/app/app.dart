@@ -54,8 +54,8 @@ class XudianApp extends ConsumerWidget {
       supportedLocales: const [Locale('zh', 'CN')],
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
-      theme: AppDesign.theme(Brightness.light),
-      darkTheme: AppDesign.theme(Brightness.dark),
+      theme: AppDesign.theme(Brightness.light, haptics: preferences.haptics),
+      darkTheme: AppDesign.theme(Brightness.dark, haptics: preferences.haptics),
       themeMode: preferences.themeMode,
       builder: (context, child) {
         final media = MediaQuery.of(context);

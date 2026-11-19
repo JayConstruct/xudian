@@ -87,6 +87,7 @@ class WorkflowTest(unittest.TestCase):
         self.assertIsNone(workflow.select_tests(['client/lib/data/app_database.dart']))
         self.assertIsNone(workflow.select_tests(['client/pubspec.lock']))
         self.assertIsNone(workflow.select_tests(['packages/xquickjs/src/bridge.c']))
+        self.assertIsNone(workflow.select_tests(['client/lib/core/module_host/module_host_services.dart']))
         chosen = workflow.select_tests(['client/lib/app/app_shell.dart'])
         self.assertIn('test/schedule_layout_test.dart', chosen)
         self.assertIn('test/ui_pack_chrome_test.dart', chosen)
@@ -94,6 +95,13 @@ class WorkflowTest(unittest.TestCase):
         self.assertIsNotNone(chosen)
         self.assertIn('test/schedule_ux_test.dart', chosen)
         self.assertIsNone(workflow.select_tests([], ['unknown.module']))
+
+    def test_extracted_page_and_board_sources_select_their_regressions(self):
+        chosen = workflow.select_tests(['client/lib/core/module_host/planner_board_scroll.dart',
+                                        'client/lib/core/module_host/script_page_timeline.dart'])
+        self.assertIn('test/planner/planner_board_test.dart', chosen)
+        self.assertIn('test/planner/planner_display_gestures_test.dart', chosen)
+        self.assertIn('test/script_page_timeline_integration_test.dart', chosen)
 
 
 if __name__ == '__main__':

@@ -2,11 +2,15 @@
 
 [SDK 入口与兼容要求](../MODULE_SDK.md)。各能力的最低宿主 API 在对应小节说明；旧调用的回退与权限边界继续适用。
 
-## 规划模块 1.12：优先时间点
+<a id="规划模块-112优先时间点"></a>
+
+## 优先时间点
 
 批量创建及系列编辑的 `rules` 接受可选 `preferredTime: 'HH:mm'`；传 `null` 可清除，归一化存储时省略空字段。它必须位于 `timeWindow` 内，且开始后能完整容纳 `estimatedMinutes`。每个候选日期先尝试该精确分钟，再按离该点最近的顺序尝试原5分钟候选，同距取较早时间；未设置保持原算法。日期排序、重复间隔、实际可用时段、冲突及缓冲继续生效；手动指定和锁定位置优先，不移动已有实例。无需新增宿主组件，仍要求 API `^1.45.0`。
 
-## 规划模块 1.11：批量任务管理
+<a id="规划模块-111批量任务管理"></a>
+
+## 批量任务管理
 
 `app.planner.batches` 为完整子路由，列表、详情、规则预览及嵌入新建表单均由模块声明。使用宿主 API `^1.45.0` 的通用卡片、图标、徽标、搜索、筛选页签及固定底栏；改变这些宿主组件须更新 APK。
 
@@ -23,7 +27,11 @@
 
 状态、规则、补齐及取消命令沿用 `services.prepare` → `ui.review` → `services.commit`。`revision` 是查询返回的完整不透明版本依据，调用方不得自行构造；操作键写持久回执，防止重复提交。批量取消记录可撤销历史，恢复任务前检查新增的任务、课程和手动占用，避免重新激活冲突时段。
 
-### API 1.24 规划交互原型
+## 看板与时间轴组件
+
+<a id="api-124-规划交互原型"></a>
+
+### 看板输入与移动事件
 
 `ui.panel(pageId, context, {adaptive:true, wide:'center'})` 在手机仍用底部面板，在宽屏使用居中弹窗；未传 `wide` 时保留侧边面板。面板保存后可通过 `ui.navigate` 返回工作区并关闭面板。
 
@@ -34,8 +42,6 @@
 - `blocks` 可附带真实来源提供的 `location` 与 `teacher` 文本；空间足够时地点优先、教师其次，未提供时省略，不从任意任务描述推断地点。`schedule.query.busy@1` 可选返回这两个字段，来自本次课程实例的地点和教师（包含调课覆盖），不改变只读来源及时间语义。
 - 候选选择事件保留 `selectEvent.id` 并附加布尔 `value`。移动事件包含 `id,start,end,intent,targetId?,snapMinutes`，`intent` 可为 `move/swap/insert`，并不代表业务校验已通过。
 - `options` 支持 `minColumnWidth,startMinute,endMinute,pixelsPerMinute,initialMinute,candidateLabel`；每日显示区间仅影响渲染。`previewBlocks/previewLabel` 可展示脚本计算的变更预览。
-
-早期 app.planner 1.1.0 使用此原型：快速添加、任务详情、移动与交换及整体撤销；插入顺延和高级生成器仍待后续实施，参见 [第一阶段记录](../verification/PLANNER_UX_STAGE1.md)。
 
 
 ### API 1.25 规划拖动预览与时长调整
@@ -55,10 +61,10 @@
 - `intent` 增加 `resize`：保留原开始，移动末端，仍只发一次完整起止事件。固定／只读块没有末端手柄。边缘横纵自动滚动与手指速度分离；退出、取消或销毁时停止。
 - 交换在本地先显示保留各自时长的双位置几何预览，随后可由服务校验结果替换。预览只是提示，最终提交仍须重新校验，不能根据 `valid` 客户端标志直接写入。
 
-app.planner 1.2.0 用 `planner.operation.inspect` 提供轻量只读结果；使用 task 1.5.1 的单调编辑时间戳与轻量版本令牌阻止旧草稿覆盖。图形拖动仍走既有审核流程。详情见 [第二阶段记录](../verification/PLANNER_UX_STAGE2.md)。
 
+<a id="规划模块13候选分页与移动时长"></a>
 
-### 规划模块1.3：候选分页与移动时长
+### 候选分页与移动时长
 
 `planner.board.get` 增加 `candidateOffset`（默认0）、`candidateLimit`（默认100，范围1–200）、`onlyDeadline`（默认false）。输出 `candidateTotal/candidateOffset/candidateLimit/hasMoreCandidates`；只对待安排候选先过滤、稳定排序、再分页，`scheduled/busy` 不受影响。候选的选择标识跨页保留，最终排程服务会再次验证所有选中标识。只传回当前页候选与显示范围内已安排任务的轻量版本依据；服务内部候选构建仍会扫描任务和规则。
 
@@ -66,7 +72,7 @@ app.planner 1.2.0 用 `planner.operation.inspect` 提供轻量只读结果；使
 
 看板原生组件现在缓存按日局部碰撞组的几何索引，按横纵可见窗口及缓冲区构建任务块；已开始手势的源控件保留到释放，避免滚动时销毁。密集组只聚合本组，选择清单使用按需构建；业务校验仍读取完整占用，不能因任务未渲染而忽略冲突。
 
-撤销在原有快照校验之外，先验证恢复的起止位置是否与新任务、课程或手动占用冲突；失败时整体不写入。仅撤销描述、删除新建任务等不会新增占用的变更不要求排程检查。详见 [第三阶段记录](../verification/PLANNER_UX_STAGE3.md)。
+撤销在原有快照校验之外，先验证恢复的起止位置是否与新任务、课程或手动占用冲突；失败时整体不写入。仅撤销描述、删除新建任务等不会新增占用的变更不要求排程检查。
 
 ### API 1.35 连续日期与紧凑规划界面
 
@@ -96,6 +102,19 @@ app.planner 1.2.0 用 `planner.operation.inspect` 提供轻量只读结果；使
 
 宿主 API `^1.41.0` 支持规划区块的 `appearance: {borderStyle:'dashed', titleDecoration:'lineThrough', cornerIcon:'slash', badgeText:'已取消'}`。各属性独立可选，`cornerIcon` 也接受 `'check'`；这些字段不推断任务状态，不更改原时段、标题内容或交互授权。虚线轮廓、角标及标签不改变文字布局；角标避让时间，状态标签空间不足时收起，状态仍进入无障碍说明。`selectionNote` 为选中面板增加模块提供的说明；`selectionLayout:'inlineActions'` 在仅有一个 `actions` 操作时，将该操作与“查看详情”并排显示，多操作保留原布局。`occupiesTime:false` 保留区块显示，同时在本地空闲提示与日列表重叠预览中释放时段，最终安排仍由服务验证。需要更新 APK 并声明 `hostApi:'^1.41.0'`。
 
+## API 1.46 的规划缩放与详情
+
+`plannerBoard.options.pinchZoom` 可声明 `{event, min: .75, max: 3}` 开启双指纵向缩放，默认关闭。宿主实时以双指中心保持时间锚点，结束发出声明事件及 `pixelsPerMinute`；模块保存偏好，并回传 `options.pixelsPerMinute`。单指继续滚动，缩放不修改任何任务。菜单缩放仍可使用。宿主 API 范围必须声明 `^1.46.0`。
+
+`blocks` 可声明 `showLocation`、`showTeacher`（默认 true）控制卡片辅助文字；`selectionDetails: [{label, value}]` 为选中后的通用详情行，缺失/空值不显示。`showSelectionSource`、`showSelectionGaps` 默认 true，可隐藏选中详情的来源、空闲时段。字段选择、文案和持久化由模块负责，标题、时间及操作不受影响。
+
+规划看板拖动和端点调整统一5分钟增量，长按停留与横移不改变精度。手工输入的非整5分钟起点保留偏移；手动编辑仍可指定任意分钟。
+
+## API 1.47 的规划拖动意图范围
+
+`plannerBoard.options.allowedIntents` 可声明允许的 `move`、`swap`、`insert`、`resize` 意图。省略时保留原协议；显式列表不含某意图时不会生成该操作，未开放的悬停意图回到允许的普通移动／占用校验，无法移动的课程、固定和已完成目标不会提出交换。规划模块声明 `['move','swap','resize']`，避免触发尚未开放的插入顺延。使用此配置需声明 `hostApi:'^1.47.0'` 并更新 APK。
+
+当日列表的课程卡片复用 `showLocation` / `showTeacher` 配置，隐藏的字段不占空行。日列表拖放按5分钟定位并报告 `snapMinutes:5`，手动编辑仍支持任意分钟。双指操作在组件禁用或配置移除时取消，不提交偏好，迟到焦点回调不再影响新视口。
 
 ## 日编辑面板配置
 

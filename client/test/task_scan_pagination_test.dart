@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'support/module_fixtures.dart' show sourcePackage;
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
@@ -57,18 +59,7 @@ void main() {
     host = ModuleHost(store: store, directory: directory);
     host.clockNow = () => DateTime.utc(2026, 10, 8, 12);
     await host.initialize();
-    final source = Directory('../packages/modules/app.tasks');
-    await host.install(
-      await ScriptPackage.verify(
-        await ScriptPackage.build(
-          object(
-            jsonDecode(await File('${source.path}/module.json').readAsString()),
-          ),
-          {'main.js': await File('${source.path}/main.js').readAsString()},
-        ),
-        allowUnsignedLocal: true,
-      ),
-    );
+    await host.install(await sourcePackage('app.tasks'));
     actor = host.instances['app.tasks']!.actor;
     await db.transaction(() async {
       for (var i = 0; i < 10005; i++) {

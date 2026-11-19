@@ -211,3 +211,70 @@ class ScriptTabChoices extends StatelessWidget {
     );
   }
 }
+
+/// Adjacent lazy list entries share one outline without mounting the whole group.
+class ScriptGroupedRow extends StatelessWidget {
+  const ScriptGroupedRow({
+    super.key,
+    required this.position,
+    required this.child,
+  });
+  final String position;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final first = position == 'first' || position == 'only';
+    final last = position == 'last' || position == 'only';
+    final radius = BorderRadius.vertical(
+      top: Radius.circular(first ? 18 : 0),
+      bottom: Radius.circular(last ? 18 : 0),
+    );
+    final side = BorderSide(
+      color: scheme.outlineVariant.withValues(alpha: .62),
+    );
+    return Padding(
+      padding: EdgeInsets.only(top: first ? 4 : 0, bottom: last ? 6 : 0),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: radius,
+          ),
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              border: Border(
+                left: side,
+                right: side,
+                top: first ? side : BorderSide.none,
+                bottom: last ? side : BorderSide.none,
+              ),
+              borderRadius: radius,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Material(type: MaterialType.transparency, child: child),
+                if (!last)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
+                      start: 58,
+                      end: 12,
+                    ),
+                    child: Divider(
+                      height: 1,
+                      thickness: 0.7,
+                      color: side.color,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

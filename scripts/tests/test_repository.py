@@ -55,6 +55,7 @@ class RepositoryTest(unittest.TestCase):
                      'client/android/local.properties', 'dist/report.json', 'user.sqlite',
                      'output/imagegen/draft.png', 'output/imagegen/draft.prompt.txt',
                      'output/imagegen/draft.proposal.md',
+                     'tasks/active/import/probe.py', 'tasks/archive/2026-11-19-import/results.json',
                      'design/styles/draft.png', 'design/styles/draft.prompt.txt',
                      'design/styles/.batches/20261029-230000-000001/manifest.json',
                      'design/screens/ui-01/page.png']:

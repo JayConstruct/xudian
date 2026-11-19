@@ -2,33 +2,14 @@
 
 [SDK 入口与兼容要求](../MODULE_SDK.md)。各能力的最低宿主 API 在对应小节说明；旧调用的回退与权限边界继续适用。
 
-## API 1.50 的属性动画与滑动操作
+<a id="api-146-的规划缩放与详情"></a>
+<a id="api-147-的规划拖动意图范围"></a>
+规划看板的专用配置见[双指缩放与选中详情](PLANNER.md#api-146-的规划缩放与详情)和[拖动意图范围](PLANNER.md#api-147-的规划拖动意图范围)。
 
-声明 `hostApi:'^1.50.0'`。新能力需要包含该实现的 APK；兼容宿主上修改下述参数或事件仅需递增模块版本并更新模块。结构见 [新节点 Schema](../../packages/schemas/ui-motion-v1.schema.json)，可操作示例见 UI 示例模块中的“属性动画与按压反馈”和“滑动操作”。
+<a id="api-150-的属性动画与滑动操作"></a>
+<a id="api-119-的可折叠过渡"></a>
 
-`motion` 必须有稳定 `key`、单个 `child` 和非空 `target`。目标支持 `opacity`（0～1，默认1）、`translateX/Y`（±4096dp，默认0）、`scale`（0.1～4，默认1）。各目标数值支持现有路径绑定；首次挂载直接显示目标，同身份目标变化从当前位置继续。`timing:{duration:180,curve:'easeOut'}` 使用0～2000整数毫秒和 `linear/easeIn/easeOut/easeInOut`；省略参数使用默认值，显式 null、未知字段或越界值拒绝。目标不变只改 timing 时不重播；布局占位保持原尺寸。透明度不替代可见性，隐藏交互继续使用 `transition.visible`。入场、退出及折叠沿用现有节点。
-
-```javascript
-{type:'motion',key:'selection',
- target:{scale:state.selected ? .94 : 1,translateX:state.selected ? 16 : 0},
- timing:{duration:220,curve:'easeInOut'},
- child:{type:'text',text:'预览'}}
-```
-
-`button.feedback:{pressedScale:.98,duration:100}` 为可选的按钮内部缩放，范围分别为0.9～1、0～300整数毫秒。直接按钮与 `ui.button@1` 的 `props.feedback` 均支持，保持原命中区域、点击、command、interrupt 和输入排队规则。省略时保持旧反馈；自定义 UI 包可继续使用自身样式，不强制消费反馈字段。
-
-`swipeActions` 必须有稳定 `key`、单个 `child`、`extent`（48～240dp）和1～3个 `actions`。动作 `{label,event,icon?,disabled?}` 的 label 非空，event 为原页面事件，icon 使用已知图标；extent 至少为动作数×48。`side:'start'|'end'` 默认 end 并跟随文字方向；`openThreshold` 为0.2～0.8、默认0.4；`settle` 与 timing 相同。`enabled` 默认 true，false 禁用此节点的滑动及动作，不改变 child 自身的操作；enabled、动作 disabled、可选 revision 支持绑定。revision 为模块提供的不透明字符串／整数，变化取消旧交互。
-
-```javascript
-{type:'swipeActions',key:'item:42',extent:96,
- settle:{duration:180,curve:'easeOut'},
- actions:[{label:'编辑',icon:'edit',event:{type:'edit',id:'42'}}],
- child:{type:'card',variant:'outlined',children:[{type:'text',text:'向左滑动'}]}}
-```
-
-只有明确无连续交互的原生内容组合启用横滑；输入、可选文字、嵌套滚动和自定义配方等未知组合保留内容并回退到始终可访问的“更多操作”菜单。宽度或字号导致动作放不下时同样回退。横滑不触发 JS；稳定打开后点击动作才派发一次页面事件，菜单与滑出动作共用执行锁。打开后点击内容只收起；菜单支持键盘、读屏和取消。新动作第一版不接受 command，仍走模块的普通审核流程。
-
-所属滚动区开始滚动、第二指加入、禁用、busy、配置变化、切页、模块升级和后台失活均取消局部交互；旧菜单不能执行变更前的动作。motion 在减少动态效果或页面失活时直接到目标值。新增动效使用局部控制器及页面预算，不逐帧调用脚本；超预算时装饰直接呈现目标，业务操作仍保留。该结构不等于真机帧率保证，性能需单独采样。
+页面出现、折叠、切换、按压、长按菜单和侧滑的配置与示例见[动画与手势](../ui/MOTION.md)。
 
 ## 页面
 
@@ -45,17 +26,19 @@
 
 使用这些配置须更新 APK 并声明 `hostApi:'^1.45.0'`，独立模块不能向旧宿主发送不支持的布局节点。
 
+API 1.52 新增 `groupItem {position, child}`。相邻行以 `first/middle/last` 拼成圆角列表，独立行使用 `only`。行可直接作为滚动列表的子项，以稳定 key 保留交互和延迟构建。`listTile.iconTone` 给前导图标加语义底色。双行副标题可用 `metaIcon` 在第二行旁显示图标。工作区顶栏可用 `header.titleStyle: "large"` 放大首页标题。`checkbox.detail` 在行尾显示辅助文字，勾选时局部高亮。`text.style: "metric"` 使用大号数值文字，`menuButton.variant: "tonal"` 给菜单按钮加浅色底，`emptyState.iconSurface` 给空态图标加底色。表单 `presentation: "compact"` 使用短弹窗过渡。
+
 宿主 API `^1.37.0` 提供 `segmented {items:[{label,event}],selectedIndex}`、
 `formSection {title,action?:{text,event},children}`、`notice {text,tone}`、
 `choiceCard {title,subtitle,selected,event}`。`card.tone` 支持 `soft`／`selected`，
 `listTile` 支持 `selected` 与 `trailingAccent`；搜索输入可声明 `showSearchIcon:false`。
 
-宿主 API `1.43.0` 增加根页面配置 `pageTransition:{direction:"forward"|"back",duration?:260}`，以 `scrollKey`（回退为根 `key`）作为页面身份，在滚动区域与固定底栏外协调前进、返回过渡；同页输入不重播，减少动画模式立即切换。`queueInputActions:true` 允许输入刷新期间接受一次操作、等待最新输入回传后执行，并在真实提交期间禁用动作；未声明时保持旧页面交互约定。`formCache:{preferenceKey,fields:[字段名]}` 将白名单字段即时写入模块自己的 UI 偏好，越过输入防抖与页面关闭；后续页面工作流等待已有缓存写入完成。模块负责读取、恢复和创建成功后的清理，宿主保留现有容量与权限限制，失败显示可重试提示。`footerMessage` 可声明通知节点，固定显示在底栏上方并通过无障碍实时播报，不改变 `planReview` 的原生确认结构。模块负责页面身份、方向、文案和业务规则；宿主负责有界视口、旧页退出、交互隔离、表单回写与尺寸动画。使用新配置需更新 APK 并声明 `hostApi:"^1.43.0"`。
+宿主 API `^1.43.0` 的`queueInputActions:true` 允许输入刷新期间接受一次操作、等待最新输入回传后执行，并在真实提交期间禁用动作；未声明时保持旧页面交互约定。`formCache:{preferenceKey,fields:[字段名]}` 将白名单字段即时写入模块自己的 UI 偏好，越过输入防抖与页面关闭；后续页面工作流等待已有缓存写入完成。模块负责读取、恢复和创建成功后的清理，宿主保留现有容量与权限限制，失败显示可重试提示。`footerMessage` 可声明通知节点，固定显示在底栏上方并通过无障碍实时播报，不改变 `planReview` 的原生确认结构。模块负责页面身份、方向、文案和业务规则；宿主负责有界视口、旧页退出、交互隔离、表单回写与尺寸动画。使用新配置需更新 APK 并声明 `hostApi:"^1.43.0"`。
 
 宿主 API `^1.42.0` 新增 `listTile.trailingAction:{icon,label,event,disabled?,tonal?}`，用于行内独立的添加、修改或移除按钮；`label` 为必填的无障碍名称，按钮事件不触发行本身的 `event`，页面执行中与行禁用时一同禁用。与 `trailing` 状态文字可并用，窄屏和大字号下保留可操作区域。共享图标新增 `location`、`hourglass`（别名 `duration`）、`lock`、`description`（别名 `notes`）、`repeat`、`priority`（别名 `flag`）。使用这些新能力须更新 APK 并声明 `hostApi:'^1.42.0'`。
 根节点 `scrollKey` 为子页面分别保留滚动位置，详情／面板顶栏支持标准 `header.actions`。
 草稿跨子页面同步使用 `replaceForms`；`clearForms` 用于真正清空，而非重新填入草稿。
-完整任务新建流程见 [任务新建与持续规划](../design/TASK_CREATION.md)。
+完整任务新建流程见 [任务新建与持续规划](../features/TASK_CREATION.md)。
 
 API 1.6 增加 `ui.component(ref, options)` 纯构造函数，返回 `{type:'component',ref,...options}` 节点。options 支持稳定 key、props、slots 和 events；events 把公共事件端口映射到原业务事件，例如 `events:{press:{type:'save'}}`。`await ui.catalog()` 返回当前可用公共契约目录，包含 ref、propsSchema、requiredSlots 和 events。仅展示目录不授予跨模块权限。未知独有组件应声明提供者依赖；系统公共组件不依赖特定风格包。
 
@@ -75,19 +58,9 @@ API 1.1 的 `toolbar` 使用 title/event 显示居中可点击标题，leading/t
 
 contributions 通过宿主公开槽位提供入口；kind 为 content 时内嵌声明式内容，其他贡献默认显示面板启动入口。页面可以声明 entry 或 entries，使多个稳定入口指向同一页面；context.pageId 由宿主注入。页面可公开 slots，由已有布局设置挂载其他模块入口。入口模块/页面 ID 和窄/宽布局配置持续保留。
 
-## API 1.19 的可折叠过渡
+## 时间范围表单
 
-`transition` 新增可选布尔字段 `collapse`，默认 `false` 保持原来隐藏后仍占位的行为。声明 `hostApi: '^1.19.0'` 并设置 `collapse: true`，宿主在 `visible` 改变时渐变内容和高度；收起完成后内容离屏且不占高度，控件仍保留原 Element、输入草稿和选择。隐藏开始即撤出焦点、点击和无障碍遍历，重新展开不自动请求键盘。普通数据刷新不会重播；减少动画直接切到最终可见状态，快速反转从当前高度继续。通用默认时长保持 350ms，快速添加显式使用 220ms。
-
-```js
-{type: 'transition', key: 'quick-add', collapse: true,
- visible: !!state.quickExpanded, duration: 220,
- child: {type: 'column', children: [
-   {type: 'input', key: 'quickTitle', text: '添加任务…', event: {type: 'add'}}
- ]}}
-```
-
-宿主自然高度 `column` 将唯一子节点 key 提升到最外层间距包装，插入、删除同级行时保留控件状态；重复 key 不提升，保持旧节点兼容。该保证不扩展到未声明重排索引的惰性列表。日程的内联贡献使用此自然高度路径，快速添加与业务审核、提交及输入清空逻辑独立。任务完成提示仅在审核通过且提交成功后显示，提示展示失败不改变业务提交结果。
+API `^1.34.0` 增加 `timeRangeTable` 本地表单：节点提供稳定 `key`、`value`、`baseline`。值为 `{durationMinutes:"45",rows:[{id:"1",label:"第 1 节",start:"08:00",end:"08:45",manualEnd:false}]}`，基线使用相同结构。组件在本地处理时长和时间滚轮，修改开始时间时只为未标记手动的结束时间计算同日结果；手动结束时间始终保留。时长修改只作用于后续开始时间编辑，已有行不批量改写。表单回传完整草稿及 `dirty/resetDisabled/saveDisabled/error` 到 `formValues[key]`，编辑不触发页面 handler；固定保存按钮可绑定这些状态。保存时模块仍须重新验证值、数据基线与引用关系，不能信任表单提供的状态标记。
 
 ## API 1.20 的稳定列表与提交反馈
 
@@ -110,18 +83,18 @@ contributions 通过宿主公开槽位提供入口；kind 为 content 时内嵌�
 
 `duration` 控制退出时长，为 100–2000ms 的整数，默认 220ms；`spacing` 为 0–48 的有限数字，默认 12。UI 包仍可替换每个行组件，列表只负责稳定身份与通用呈现，不调用业务服务。这是视觉差量更新，服务查询、脚本执行和跨桥传输仍按既有刷新流程完成；不是 SQLite 或跨桥的局部更新协议。日程 `app.views.today 1.6.2` 使用此节点，在任务创建、完成的审核提交成功后提供反馈；快速添加仍使用独立的可折叠 `transition`。
 
+## 交互和外部操作
 
-## API 1.46 的规划缩放与详情
+`ui.navigate(pageId,context)`、`ui.panel(pageId,context)`、`ui.dialog({title,fields})` 使用宿主交互；表单支持 text/multiline、number、date/datetime、boolean、select/multiSelect 与安全输入；可声明 required/maxLength，非法输入留在对话框中。`ui.review(planId)` 展示真实写集和结果，宿主控制最终确认。当前合法计划先展示增改删摘要与记录前后对比，完整原始计划可展开；未知结构回退原始审核。取消不提交，过期快照仍由提交校验拒绝，规则见 [实际数据审核](../ui/DATA_CHANGE_REVIEW.md)。
 
-`plannerBoard.options.pinchZoom` 可声明 `{event, min: .75, max: 3}` 开启双指纵向缩放，默认关闭。宿主实时以双指中心保持时间锚点，结束发出声明事件及 `pixelsPerMinute`；模块保存偏好，并回传 `options.pixelsPerMinute`。单指继续滚动，缩放不修改任何任务。菜单缩放仍可使用。宿主 API 范围必须声明 `^1.46.0`。
+宿主API `^1.27.0` 支持 `ui.review(planId, {title, message, confirmLabel, acknowledgement?})`，将日常操作显示为简洁确认框。标题、说明和按钮文字由模块从当前已校验预览生成，宿主绑定原冻结计划并负责最终确认；真实写集与完整前后值收进“查看变更详情”，存在真实删除时仍显示删除提醒。`acknowledgement` 是可选的风险确认文字，初始未勾选，勾选前确认按钮不可用，适合“安排超出截止”等需要明确接受的情况。不能用该参数绕过准备、权限、审核或提交前快照检查；未知计划结构继续回退原始审核。所有参数是非空纯文本，长度上限分别为120／6000／48／1000，未知参数拒绝；省略第二个参数保持原审核行为。
 
-`blocks` 可声明 `showLocation`、`showTeacher`（默认 true）控制卡片辅助文字；`selectionDetails: [{label, value}]` 为选中后的通用详情行，缺失/空值不显示。`showSelectionSource`、`showSelectionGaps` 默认 true，可隐藏选中详情的来源、空闲时段。字段选择、文案和持久化由模块负责，标题、时间及操作不受影响。
+宿主 API `^1.33.0` 支持根节点 `planReview:{planId,eventType}` 配合 `footer:{type:"row",children:[...按钮]}`：宿主读取当前调用者的冻结计划，固定展示实际增改删数量及可打开的完整详情，并接管对应确认按钮。只有用户点击该原生按钮，才对当前页面、当前计划的一次 `ui.review` 授权，随后仍通过 `services.commit` 校验权限和数据快照。正文中的同名脚本事件、不同计划、重复请求、失效页面及需要额外风险勾选的确认继续使用普通审核。仅声明字段不会授权。确认和取消始终位于滚动内容之外。
 
-规划看板拖动和端点调整统一5分钟增量，长按停留与横移不改变精度。手工输入的非整5分钟起点保留偏移；手动编辑仍可指定任意分钟。
+宿主 API `^1.38.0` 支持 `button.command`、`taskItem.command`、输入框提交的 `input.command`，以及规划区块 `actions[].command`。格式为 `{ref:{moduleId,serviceId,majorVersion},input:{...完整命令输入}}`，输入允许使用现有 `{bind:['formValues',字段名]}` 绑定。用户实际点击原生按钮、勾选框或提交输入框时，宿主冻结当时的输入，只对当前页面工作流中第一次 `ui.review` 的相同服务版本及完整规范输入授予一次确认；脚本自行触发同名事件或声明 `command` 不会授权。冻结写集必须恰有一条非删除 upsert；物理删除、`deletedAt`／`deleted:true` 软删除、多条写入、额外风险勾选、输入错配及重复请求仍展示确认。`services.prepare` 的权限、数据基线和 `services.commit` 的验证保持不变。
 
+原生表单 `ui.dialog` 也支持 `command:{ref,input:固定输入,fields:{服务输入字段名:'表单输出字段key'}}`。用户提交后，宿主把映射的原始表单结果合并到固定输入并冻结，供同一工作流下一次审核精确匹配；取消、缺失输出字段、离开页面或下一工作流均不能复用。模块若需要转换输入，应将转换结果在提交前明确表达，或沿用普通审核，不能把不同的实际输入作为同一次确认。
 
-## API 1.47 的规划拖动意图范围
+`ui.navigate` 指向可用工作区时，宿主关闭覆盖工作区的详情路由和模态面板，再激活目标并传递上下文；目标不可用时保留当前页面。目标模块随后打开的确认详情页直接显示，不需要用户手动返回工作区。`ui.panel` 继续打开面板，不切换工作区。
 
-`plannerBoard.options.allowedIntents` 可声明允许的 `move`、`swap`、`insert`、`resize` 意图。省略时保留原协议；显式列表不含某意图时不会生成该操作，未开放的悬停意图回到允许的普通移动／占用校验，无法移动的课程、固定和已完成目标不会提出交换。规划模块声明 `['move','swap','resize']`，避免触发尚未开放的插入顺延。使用此配置需声明 `hostApi:'^1.47.0'` 并更新 APK。
-
-当日列表的课程卡片复用 `showLocation` / `showTeacher` 配置，隐藏的字段不占空行。日列表拖放按5分钟定位并报告 `snapMinutes:5`，手动编辑仍支持任意分钟。双指操作在组件禁用或配置移除时取消，不提交偏好，迟到焦点回调不再影响新视口。
+跨宿主调用被拒绝时，脚本捕获的 Error 的 `message` 和 `String(error)` 提供业务正文，去除重复异常前缀与调用堆栈；原始异常文本保存在 `error.diagnostic` 供诊断使用，不应展示给用户。未捕获的页面异常也以业务正文和重试操作显示，原始异常仍供宿主诊断。

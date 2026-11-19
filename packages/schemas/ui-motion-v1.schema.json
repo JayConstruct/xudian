@@ -189,6 +189,9 @@
             }
           ]
         },
+        "menuTrigger": {
+          "enum": ["button", "longPress"]
+        },
         "side": {
           "enum": [
             "start",

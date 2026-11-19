@@ -1,0 +1,328 @@
+import 'native_ui.dart';
+import 'ui_icon.dart';
+import 'workspace_header.dart';
+import 'workspace_header_menu.dart';
+
+import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' show SemanticsRole;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'ui_design.dart';
+
+/// The workspace menu animates as one surface, with a dismissible scrim.
+class WorkspacePopupMenu extends StatefulWidget {
+  const WorkspacePopupMenu({
+    super.key,
+    required this.items,
+    required this.onSelected,
+    this.haptics = true,
+    this.reduceMotion = false,
+    this.headerController,
+    this.headerOwner,
+    this.headerLease,
+    this.inlineActionLabels = const {},
+    this.longPressChild,
+    this.enabled = true,
+  });
+
+  final List<PopupMenuEntry<int>> items;
+  final ValueChanged<int> onSelected;
+  final bool haptics;
+  final bool reduceMotion;
+  final WorkspaceHeaderController? headerController;
+  final Object? headerOwner;
+  final WorkspaceHeaderLease? headerLease;
+  final Set<String> inlineActionLabels;
+
+  /// A row can open the same popup from its bounds on long press.
+  final Widget? longPressChild;
+  final bool enabled;
+
+  @override
+  State<WorkspacePopupMenu> createState() => _WorkspacePopupMenuState();
+}
+
+class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
+  _WorkspaceMenuRoute? _route;
+
+  Future<void> _showMenu() async {
+    if (_route != null || !widget.enabled) return;
+    final navigator = Navigator.of(context);
+    final button = context.findRenderObject()! as RenderBox;
+    final overlay = navigator.overlay!.context.findRenderObject()! as RenderBox;
+    final themes = InheritedTheme.capture(from: context, to: navigator.context);
+    final localizations = MaterialLocalizations.of(context);
+    var anchor =
+        button.localToGlobal(Offset.zero, ancestor: overlay) & button.size;
+    final route = _WorkspaceMenuRoute(
+      items: widget.items,
+      headerController: widget.headerController,
+      headerOwner: widget.headerOwner,
+      headerLease: widget.headerLease,
+      inlineActionLabels: widget.inlineActionLabels,
+      themes: themes,
+      menuLabel: localizations.popupMenuLabel,
+      dismissLabel: localizations.modalBarrierDismissLabel,
+      reduceMotion:
+          widget.reduceMotion || MediaQuery.disableAnimationsOf(context),
+      anchor: () {
+        if (button.attached && overlay.attached) {
+          anchor =
+              button.localToGlobal(Offset.zero, ancestor: overlay) &
+              button.size;
+        }
+        return anchor;
+      },
+    );
+    setState(() => _route = route);
+    if (widget.haptics) unawaited(HapticFeedback.lightImpact());
+    final selected = await navigator.push<int>(route);
+    // Row actions may open a dialog or navigate. Restore the underlying
+    // script page's focus and active state before delivering the selection.
+    if (mounted && widget.longPressChild != null) await route.completed;
+    if (!mounted) return;
+    setState(() => _route = null);
+    if (selected != null && widget.enabled) widget.onSelected(selected);
+  }
+
+  @override
+  void dispose() {
+    // A row can be removed or replaced while its menu is on top.
+    final route = _route;
+    if (widget.longPressChild != null && route != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (route.isActive) route.navigator?.removeRoute(route);
+      });
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final child = widget.longPressChild;
+    if (child != null) {
+      return CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.contextMenu): _showMenu,
+          const SingleActivator(LogicalKeyboardKey.f10, shift: true): _showMenu,
+        },
+        child: MergeSemantics(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: widget.enabled ? _showMenu : null,
+            child: child,
+          ),
+        ),
+      );
+    }
+    return Semantics(
+      expanded: _route != null,
+      child: NativeUi(
+        child: IconButton(
+          tooltip: '页面菜单',
+          style: IconButton.styleFrom(
+            minimumSize: const Size.square(kMinInteractiveDimension),
+            fixedSize: const Size.square(kMinInteractiveDimension),
+            padding: EdgeInsets.zero,
+            shape: const CircleBorder(),
+            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+            backgroundColor: Theme.of(context).colorScheme.surface
+                .withValues(alpha: MediaQuery.highContrastOf(context) ? 1 : .8),
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant.withValues(
+                alpha: MediaQuery.highContrastOf(context) ? 1 : .45,
+              ),
+            ),
+          ),
+          icon: const UiIcon(Icons.more_horiz_rounded, size: 22),
+          onPressed: _showMenu,
+          // Opening feedback is provided once, using the app's haptic preference.
+          enableFeedback: false,
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkspaceMenuRoute extends PopupRoute<int> {
+  _WorkspaceMenuRoute({
+    required this.items,
+    required this.themes,
+    required this.menuLabel,
+    required this.dismissLabel,
+    required this.reduceMotion,
+    required this.anchor,
+    this.headerController,
+    this.headerOwner,
+    this.headerLease,
+    this.inlineActionLabels = const {},
+  }) : super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop);
+
+  final List<PopupMenuEntry<int>> items;
+  final CapturedThemes themes;
+  final String menuLabel;
+  final String dismissLabel;
+  final bool reduceMotion;
+  final WorkspaceHeaderController? headerController;
+  final Object? headerOwner;
+  final WorkspaceHeaderLease? headerLease;
+  final Set<String> inlineActionLabels;
+  final Rect Function() anchor;
+
+  @override
+  Duration get transitionDuration =>
+      reduceMotion ? Duration.zero : const Duration(milliseconds: 180);
+
+  @override
+  Duration get reverseTransitionDuration =>
+      reduceMotion ? Duration.zero : const Duration(milliseconds: 120);
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  Color get barrierColor => const Color(0x1F000000);
+
+  @override
+  String get barrierLabel => dismissLabel;
+
+  @override
+  Widget buildModalBarrier() {
+    void dismissMenu() {
+      // Tapping outside dismisses the surface; system Back still uses the
+      // submenu's PopScope to return through its levels.
+      if (isCurrent) navigator?.pop();
+    }
+
+    if (!offstage) {
+      return AnimatedModalBarrier(
+        color: animation!.drive(
+          ColorTween(
+            begin: barrierColor.withValues(alpha: 0),
+            end: barrierColor,
+          ).chain(CurveTween(curve: barrierCurve)),
+        ),
+        dismissible: barrierDismissible,
+        semanticsLabel: barrierLabel,
+        barrierSemanticsDismissible: semanticsDismissible,
+        onDismiss: dismissMenu,
+      );
+    }
+    return ModalBarrier(
+      dismissible: barrierDismissible,
+      semanticsLabel: barrierLabel,
+      barrierSemanticsDismissible: semanticsDismissible,
+      onDismiss: dismissMenu,
+    );
+  }
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final media = MediaQuery.of(context);
+    final direction = Directionality.of(context);
+    final curved = animation.drive(CurveTween(curve: Curves.easeOutCubic));
+    return CustomSingleChildLayout(
+      delegate: _WorkspaceMenuLayout(
+        anchor(),
+        media.padding + media.viewInsets,
+        direction,
+      ),
+      child: FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: curved.drive(Tween(begin: .94, end: 1.0)),
+          alignment: direction == TextDirection.ltr
+              ? Alignment.topRight
+              : Alignment.topLeft,
+          child: themes.wrap(
+            Builder(
+              builder: (context) {
+                final theme = Theme.of(context);
+                return Semantics(
+                  role: SemanticsRole.menu,
+                  scopesRoute: true,
+                  namesRoute: true,
+                  explicitChildNodes: true,
+                  label: menuLabel,
+                  child: Material(
+                    key: const ValueKey('workspace-menu-surface'),
+                    color:
+                        theme.popupMenuTheme.color ?? theme.colorScheme.surface,
+                    elevation: theme.popupMenuTheme.elevation ?? 8,
+                    shape: AppDesign.smoothShape(radius: 20),
+                    clipBehavior: Clip.antiAlias,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: IntrinsicWidth(
+                        child: headerController == null
+                            ? ListBody(children: items)
+                            : WorkspaceHeaderMenu(
+                                controller: headerController!,
+                                owner: headerOwner,
+                                lease: headerLease,
+                                inlineActionLabels: inlineActionLabels,
+                                hostItems: items,
+                              ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkspaceMenuLayout extends SingleChildLayoutDelegate {
+  _WorkspaceMenuLayout(this.anchor, this.padding, this.direction);
+
+  final Rect anchor;
+  final EdgeInsets padding;
+  final TextDirection direction;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final width = math.max(0.0, constraints.maxWidth - padding.horizontal - 16);
+    return BoxConstraints(
+      minWidth: math.min(196, width),
+      maxWidth: math.min(280, width),
+      maxHeight: math.max(0, constraints.maxHeight - padding.vertical - 16),
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final x = direction == TextDirection.ltr
+        ? anchor.right - childSize.width
+        : anchor.left;
+    final below = anchor.bottom + 4;
+    final above = anchor.top - 4 - childSize.height;
+    final limit = size.height - padding.bottom - childSize.height - 8;
+    return Offset(
+      x.clamp(
+        padding.left + 8,
+        size.width - padding.right - childSize.width - 8,
+      ),
+      (below > limit && above >= padding.top + 8 ? above : below).clamp(
+        padding.top + 8,
+        size.height - padding.bottom - childSize.height - 8,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_WorkspaceMenuLayout oldDelegate) =>
+      anchor != oldDelegate.anchor ||
+      padding != oldDelegate.padding ||
+      direction != oldDelegate.direction;
+}

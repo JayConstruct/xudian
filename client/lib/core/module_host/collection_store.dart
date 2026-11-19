@@ -36,6 +36,7 @@ class SnapshotSession {
   SnapshotSession(this.caller, this.requestId);
   final ModuleActor caller;
   final String requestId;
+  final String operationId = const Uuid().v4();
   final Map<String, int> records = {}, collections = {};
   final Map<String, Object?> nativeReads = {};
   final Map<String, Map<String, Object?>> writes = {};
@@ -275,6 +276,36 @@ class CollectionStore {
     );
   }
 
+  Future<List<Object?>> migrationHistory(
+    ModuleActor actor,
+    String collection,
+    int after,
+  ) async {
+    await definition(actor, collection);
+    if (after < 0) throw const FormatException('Invalid history cursor');
+    final rows = await sql(
+      '''SELECT rowid AS sequence,entity_id,before_value,after_value,created_at,plan_id
+      FROM host_operations WHERE module_id=? AND collection=? AND rowid>?
+      ORDER BY rowid LIMIT 128''',
+      [actor.moduleId, collection, after],
+    );
+    return [
+      for (final row in rows)
+        {
+          'sequence': row['sequence'],
+          'id': row['entity_id'],
+          'planId': row['plan_id'],
+          'at': row['created_at'],
+          'before': row['before_value'] == null
+              ? null
+              : jsonDecode(row['before_value'] as String),
+          'after': row['after_value'] == null
+              ? null
+              : jsonDecode(row['after_value'] as String),
+        },
+    ];
+  }
+
   Future<List<Object?>> query(
     ModuleActor actor,
     String collection,
@@ -385,6 +416,17 @@ class CollectionStore {
       final name = string(write['collection'], 'write.collection');
       final id = string(write['id'], 'write.id');
       final value = write['value'];
+      final timestamps = write['commitTimestamps'] == null
+          ? const <String>[]
+          : (write['commitTimestamps'] as List).cast<String>();
+      for (final field in timestamps) {
+        if (field == 'id' ||
+            value is! Map ||
+            value[field] is! String ||
+            DateTime.tryParse(value[field] as String) == null) {
+          throw const FormatException('Invalid commit timestamp field');
+        }
+      }
       final definition = await this.definition(actor, name);
       if (value != null) {
         validateSchema(value, object(definition['schema']));
@@ -401,6 +443,7 @@ class CollectionStore {
         'collection': name,
         'id': id,
         'value': freezeJson(value),
+        if (timestamps.isNotEmpty) 'commitTimestamps': timestamps,
         'before': session.writes.containsKey(key.key)
             ? session.writes[key.key]!['before']
             : before,
@@ -504,6 +547,7 @@ class CollectionStore {
     ModuleActor caller, {
     required void Function(ChangePlan) authorize,
     bool audit = true,
+    DateTime Function()? clock,
   }) async {
     final p = plan(id, caller);
     final fingerprint = canonicalJson(p.content);
@@ -566,10 +610,20 @@ class CollectionStore {
         );
       }
       final touched = <String>{};
+      final committedAt = (clock?.call() ?? DateTime.now())
+          .toUtc()
+          .toIso8601String();
       for (final raw in p.writes) {
         final w = object(raw);
         final key = [w['moduleId'], w['space'], w['collection'], w['id']];
-        final value = w['value'];
+        final timestampFields = w['commitTimestamps'] as List? ?? [];
+        final value = timestampFields.isEmpty
+            ? w['value']
+            : {
+                ...object(w['value']),
+                for (final field in timestampFields)
+                  field as String: committedAt,
+              };
         for (final resource in _nativeResources.values) {
           if (resource.ownsWrite(w)) await resource.applyWrite(db, w);
         }
@@ -590,6 +644,9 @@ class CollectionStore {
         final actor = _actors[w['moduleId']]!;
         final def = await definition(actor, w['collection'] as String);
         if (value != null) {
+          if (timestampFields.isNotEmpty) {
+            validateSchema(value, object(def['schema']));
+          }
           for (final index in def['indexes'] as List? ?? []) {
             final spec = object(index);
             final indexed = canonicalJson([
@@ -662,7 +719,7 @@ class CollectionStore {
               w['id'],
               w['before'] == null ? null : canonicalJson(w['before']),
               value == null ? null : canonicalJson(value),
-              DateTime.now().toUtc().toIso8601String(),
+              committedAt,
               deviceId,
               counter,
             ],

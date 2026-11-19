@@ -138,6 +138,65 @@ void main() {
   );
 
   testWidgets(
+    'sibling tab reversal preserves opacity and deactivates the outgoing controls',
+    (tester) async {
+      final selected = ValueNotifier(0);
+      addTearDown(selected.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder(
+              valueListenable: selected,
+              builder: (context, index, child) => ScriptTransition(
+                effect: 'page',
+                navigationDirection: index == 0 ? 'previous' : 'next',
+                replayKey: index,
+                fillViewport: true,
+                duration: const Duration(milliseconds: 220),
+                child: Text('tab $index'),
+              ),
+            ),
+          ),
+        ),
+      );
+      double opacity(int i) => tester
+          .widget<Opacity>(
+            find
+                .ancestor(
+                  of: find.text('tab $i'),
+                  matching: find.byType(Opacity),
+                )
+                .first,
+          )
+          .opacity;
+      selected.value = 1;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 75));
+      final previous = opacity(0);
+      expect(previous, inExclusiveRange(0, 1));
+      selected.value = 0;
+      await tester.pump();
+      expect(opacity(0), closeTo(previous, .005));
+      expect(
+        tester
+            .widget<IgnorePointer>(
+              find
+                  .ancestor(
+                    of: find.text('tab 1'),
+                    matching: find.byType(IgnorePointer),
+                  )
+                  .first,
+            )
+            .ignoring,
+        isTrue,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('tab 1'), findsNothing);
+      expect(opacity(0), 1);
+    },
+  );
+
+  testWidgets(
     'reduced page navigation swaps immediately without retaining the source',
     (tester) async {
       final page = ValueNotifier((name: 'home', direction: 'forward'));

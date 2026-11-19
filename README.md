@@ -2,11 +2,9 @@
 
 面向 Android 与 Windows 的模块化个人任务管理 App，使用 Flutter/Dart、Riverpod、Drift/SQLite 和 QuickJS。当前采用 **v3 脚本模块宿主**：宿主提供导航、界面、数据和权限服务，业务通过独立 `.xmodule` 包运行。
 
-UI 选稿、实现范围与页面设计顺序统一见 [设计入口](design/README.md)。
-
 源码仓库：[JayConstruct/xudian](https://github.com/JayConstruct/xudian)。
 
-App 支持从“设置 → 关于序点 → 检查更新”查询 GitHub 正式发布，也可开启测试通道接收测试版，查看更新说明并打开下载页。更新规则和正式签名发布流程见 [App 更新](docs/APP_UPDATES.md)。
+App 支持从“设置 → 关于序点 → 检查更新”查询 GitHub 正式发布，也可开启测试通道接收测试版，查看更新说明并打开下载页。更新规则见 [安装与更新](docs/INSTALLATION.md#检查-app-更新)，发布流程见 [Android 发布版本与资产](docs/RELEASE_WORKFLOW.md#android-发布版本与资产)。
 
 首次安装 Android App 并从模块商店安装功能，见 [安装指南](docs/INSTALLATION.md)。[Android Actions](https://github.com/JayConstruct/xudian/actions/workflows/android.yml) 自动检查源码并构建 ARMv7、ARM64 和 x86_64 APK。
 
@@ -40,13 +38,10 @@ scripts/update-emulator.sh --dev
 
 | 想了解什么 | 入口 |
 | --- | --- |
-| 风格稿、页面稿与设计顺序 | [设计入口](design/README.md) |
+| 日程、任务、课表与 AI 怎么用 | [按功能查阅](docs/README.md#功能使用) |
+| UI 规范、动画和操作反馈怎么实现 | [UI 与动画](docs/README.md#ui-与动画) |
 | 开发、测试、构建与模拟器更新 | [开发指南](DEVELOPMENT.md) |
-| 生产代码从哪里开始看 | [客户端说明](client/README.md) |
-| 当前架构与后续设计边界 | [架构](docs/DESIGN.md) |
-| 剩余任务、状态与关闭条件 | [统一待办](docs/BACKLOG.md) |
+| 宿主、模块和发布包分别在哪里 | [目录与提交清单](docs/REPOSITORY_LAYOUT.md) · [客户端代码入口](client/README.md#代码入口) |
+| 宿主、模块与数据边界 | [架构](docs/ARCHITECTURE.md) |
+| 本版待核验事项 | [统一待办](docs/BACKLOG.md) |
 | 课表、拾光、SDK、发布及平台指南 | [文档导航](docs/README.md) |
-
-## 源码与资料
-
-宿主在 `client/`，业务模块在 `packages/modules/`，协议与固定依赖在 `packages/`；设计入口为 `design/`，现行说明与历史记录在 `docs/`。完整目录、生成文件及本机材料的提交边界见 [目录规范](docs/REPOSITORY_LAYOUT.md)，已发布模块的保留规则见 [发布目录](releases/README.md)。

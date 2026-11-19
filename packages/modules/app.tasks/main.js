@@ -1,12 +1,12 @@
 import {data,ids,clock,services,ui,extensions} from '@xudian/sdk';
+import {cleanTitle, validDate, nextUpdatedAt, check, canonical} from './task_values.js';
+import {validateFolder, projectFields, buildOutline, records} from './projects.js';
+import {completionRound, recordTaskActivity, scheduleChanged, undoActivity} from './project_activity.js';
+export {migrateProjectActivity} from './project_migration.js';
+export {folderList, folderSave, projectEdit, projectPick, projectUndoPick, projectMoveTasks} from './projects.js';
+export {projectPage} from './project_page.js';
+export const projectOutline=input=>buildOutline(input,newTask);
 const ref=id=>({moduleId:'app.tasks',serviceId:id,majorVersion:1});
-function cleanTitle(value,max,label) { if(typeof value!=='string'||!value.trim()||value.trim().length>max) throw new Error(`${label}需为1–${max}个字符`); return value.trim(); }
-function validDate(value) {
-  if(value==null) return;
-  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)||Number(value.slice(0,4))<1) throw new Error('日期格式必须为 YYYY-MM-DD');
-  const date=new Date(value+'T00:00:00Z');
-  if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value) throw new Error('日期不存在');
-}
 function utc(value,label='时间') {
   if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/.test(value))throw new Error(`${label}必须为 UTC 时间`);
   validDate(value.slice(0,10));
@@ -91,7 +91,7 @@ export async function taskDayCounts({dates,includeCompleted=false}) {
   }
   return {today,days};
 }
-export async function taskList({filter,projectId,view='all',today,date,query='',offset=0,limit=10000,includeCompleted=false}={}) {
+export async function taskList({filter,projectId,includeProjectName=false,view='all',today,date,query='',offset=0,limit=10000,includeCompleted=false}={}) {
   if(!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>10000) throw new Error('分页参数无效');
   const conditions=[];
   if(filter)conditions.push(filter);
@@ -122,16 +122,20 @@ export async function taskList({filter,projectId,view='all',today,date,query='',
     }
   } else tasks=await data.query('tasks',{...options,offset,limit});
   const extra=await extensions.queryMany(tasks.filter(t=>!t.deletedAt).map(t=>({moduleId:'app.tasks',collection:'tasks',id:t.id})));
-  return tasks.map(t=>({...t,completed:!!t.completedAt,archived:!!t.archivedAt,deleted:!!t.deletedAt,fields:extra.valuesById[t.id]||{},fieldDefinitions:extra.definitions}));
+  const names=includeProjectName&&tasks.some(t=>t.projectId)?new Map((await projectList()).map(p=>[p.id,p.name])):null;
+  return tasks.map(t=>({...t,...(names?.has(t.projectId)?{projectName:names.get(t.projectId)}:{}),completed:!!t.completedAt,archived:!!t.archivedAt,deleted:!!t.deletedAt,fields:extra.valuesById[t.id]||{},fieldDefinitions:extra.definitions}));
 }
-export async function projectList() { return (await data.query('projects')).filter(p=>!p.archivedAt); }
-export async function projectCreate({name}) {
-  const now=await clock.now(),value={id:await ids.new(),name:cleanTitle(name,120,'项目名称'),createdAt:now,updatedAt:now,archivedAt:null};
+export async function projectList() { return (await records('projects')).filter(p=>!p.archivedAt); }
+export async function projectCreate(input) {
+  const fields=await projectFields(input);
+  const now=await clock.now(),value={id:await ids.new(),...fields,createdAt:now,updatedAt:now,archivedAt:null};
   return {writes:[{collection:'projects',id:value.id,value}],events:[{type:'project.created',entity:{moduleId:'app.tasks',collection:'projects',id:value.id}}],result:{id:value.id}};
 }
-export async function taskCreate(input) {
+async function newTask(input) {
   const title=cleanTitle(input.title,300,'任务标题'),p=input.priority??0; priority(p); validDate(input.dueDate); validDate(input.plannedDate);
-  if(input.projectId) { const project=await data.get('projects',input.projectId); if(!project||project.archivedAt) throw new Error('项目不可用'); }
+  const project=input.projectId?await data.get('projects',input.projectId):null;
+  if(input.projectId&&(!project||project.archivedAt))throw new Error('项目不可用');
+  if(input.folderId) await validateFolder(input.folderId,input.projectId);
   if(input.parentTaskId) {
     const parent=await data.get('tasks',input.parentTaskId);
     if(!parent||parent.deletedAt||parent.archivedAt) throw new Error('父任务不可用');
@@ -139,25 +143,25 @@ export async function taskCreate(input) {
   }
   const now=await clock.now(),value={id:await ids.new(),title,projectId:input.projectId||null,parentTaskId:input.parentTaskId||null,notes:notes(input.notes??''),priority:p,
     dueDate:input.dueDate||null,plannedDate:input.plannedDate||null,completedAt:null,archivedAt:null,deletedAt:null,createdAt:now,updatedAt:now};
+  if(project){
+    value.folderId=input.folderId||null;
+    value.projectQueued=!!input.plannedStartAt;
+    value.joinedInRound=completionRound(project);
+  }
   for(const k of extraFields)value[k]=input[k]??null;
   value.actualCompletedOn=null;value.completedTimezone=null;
   value.locked=input.locked??false;if(typeof value.locked!=='boolean')throw new Error('固定时间必须为布尔值');
   await normalizePlan(value,input);await normalizeDeadline(value,input);
   value.initialDeadline=deadline(value);value.deadlineHistory=[];
-  return {writes:[{collection:'tasks',id:value.id,value}],events:[{type:'task.created',entity:{moduleId:'app.tasks',collection:'tasks',id:value.id}}],result:value};
+  return value;
+}
+export async function taskCreate(input) {
+  const value=await newTask(input),writes=[];
+  await recordTaskActivity(writes,value,'join',input._host.operationId);
+  writes.unshift({collection:'tasks',id:value.id,value});
+  return {writes,events:[{type:'task.created',entity:{moduleId:'app.tasks',collection:'tasks',id:value.id}}],result:value};
 }
 function snapshot(t) { return Object.fromEntries(['id','title','notes','priority','dueDate','plannedDate','projectId','parentTaskId','completedAt','archivedAt','deletedAt','updatedAt',...extraFields].map(k=>[k,t[k]??null])); }
-function canonical(v) { const stable=x=>Array.isArray(x)?x.map(stable):x&&typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,stable(x[k])])):x;return JSON.stringify(stable(v)); }
-// Keep the optimistic token advancing even when writes share a clock tick.
-async function nextUpdatedAt(previous) {
-  const now=await clock.now(),prior=Date.parse(previous||'');
-  return Number.isFinite(prior)&&prior>=Date.parse(now)?new Date(prior+1).toISOString():now;
-}
-async function check(input) {
-  const t=await data.get('tasks',input.id); if(!t||t.deletedAt) throw new Error('任务已不可用');
-  if(input.expectedUpdatedAt&&t.updatedAt!==input.expectedUpdatedAt||input.expectedValues&&Object.entries(input.expectedValues).some(([k,v])=>canonical(v)!==canonical(t[k]??null))) throw new Error('任务已被其他操作修改，请重新生成方案');
-  return t;
-}
 export async function taskUpdate(input) {
   const t=await check(input),changes={...input.changes};
   for(const k of Object.keys(changes)) if(!['title','notes','priority',...deadlineFields,'plannedDate',...precisionFields,'estimatedMinutes','executionExpiresOn','locked'].includes(k)) throw new Error(`不支持修改字段：${k}`);
@@ -167,6 +171,7 @@ export async function taskUpdate(input) {
   if('priority' in changes) priority(changes.priority);
   if('dueDate' in changes) validDate(changes.dueDate); if('plannedDate' in changes) validDate(changes.plannedDate);
   const value=await normalizeDeadline(await normalizePlan({...t,...changes},changes),changes);
+  if(t.projectId && (value.plannedStartAt || t.plannedStartAt)) value.projectQueued=true;
   if(t.locked&&changes.locked!==false&&['plannedDate',...precisionFields,'estimatedMinutes'].some(k=>canonical(t[k]??null)!==canonical(value[k]??null)))throw new Error('任务时间已固定，请先解除固定');
   if(canonical(deadline(t))!==canonical(deadline(value))) {
     value.initialDeadline=t.initialDeadline??deadline(t);
@@ -175,7 +180,9 @@ export async function taskUpdate(input) {
   const fields=Object.keys(value).filter(k=>canonical(t[k]??null)!==canonical(value[k]??null));
   if(!fields.length)return {writes:[],events:[],result:snapshot(t)};
   value.updatedAt=await nextUpdatedAt(t.updatedAt);
-  return {writes:[{collection:'tasks',id:t.id,value}],events:[{type:'task.updated',entity:{moduleId:'app.tasks',collection:'tasks',id:t.id},fields}],result:snapshot(value)};
+  const writes=[{collection:'tasks',id:t.id,value}];
+  if(scheduleChanged(t,value))await recordTaskActivity(writes,value,'schedule',input._host.operationId);
+  return {writes,events:[{type:'task.updated',entity:{moduleId:'app.tasks',collection:'tasks',id:t.id},fields}],result:snapshot(value)};
 }
 export async function taskComplete(input) {
   const t=await check(input);if(typeof input.completed!=='boolean')throw new Error('completed必须为布尔值');
@@ -196,7 +203,25 @@ export async function taskComplete(input) {
   if(canonical(value)===canonical(t))return {writes:[],events:[],result:snapshot(t)};
   value.updatedAt=await nextUpdatedAt(t.updatedAt);
   const type=input.completed?(t.completedAt?'task.completionCorrected':'task.completed'):'task.reopened';
-  return {writes:[{collection:'tasks',id:t.id,value}],events:[{type,entity:{moduleId:'app.tasks',collection:'tasks',id:t.id}}],result:snapshot(value)};
+  const writes=[{collection:'tasks',id:t.id,value}];
+  value.completionUndo={
+    completedAt:t.completedAt??null,actualCompletedOn:t.actualCompletedOn??null,
+    completedTimezone:t.completedTimezone??null,activity:t.projectActivity?.completion??null,
+    revision:value.updatedAt,
+  };
+  if(!!t.completedAt!==!!value.completedAt)await recordTaskActivity(writes,value,'completion',input._host.operationId);
+  return {writes,events:[{type,entity:{moduleId:'app.tasks',collection:'tasks',id:t.id}}],result:snapshot(value)};
+}
+export async function taskUndoCompletion(input) {
+  const current=await check(input),undo=current.completionUndo;
+  if(!undo||current.updatedAt!==undo.revision||current.archivedAt)throw Error('任务已变化，无法撤销完成操作');
+  const {completedAt,actualCompletedOn,completedTimezone}=undo;
+  const value={...current,completedAt,actualCompletedOn,completedTimezone,updatedAt:await nextUpdatedAt(current.updatedAt)};
+  if(current.projectActivity)value.projectActivity={...current.projectActivity,completion:undo.activity};
+  delete value.completionUndo;
+  const writes=[{collection:'tasks',id:current.id,value}];
+  await undoActivity(writes,current,value,['completion']);
+  return {writes,events:[{type:'task.restored',entity:{moduleId:'app.tasks',collection:'tasks',id:current.id}}],result:snapshot(value)};
 }
 export async function taskRange({startAt,endAt}) {
   startAt=utc(startAt);endAt=utc(endAt);if(endAt<=startAt)throw new Error('时间范围无效');
@@ -210,7 +235,15 @@ export async function taskRestore({id,expected,value}) {
   const current=await data.get('tasks',id);
   if(canonical(current)!==canonical(expected))throw new Error('任务已被其他操作修改，无法撤销');
   if(canonical(current)===canonical(value))return {writes:[],events:[],result:value};
-  return {writes:[{collection:'tasks',id,value}],events:[{type:value===null?'task.deleted':'task.restored',entity:{moduleId:'app.tasks',collection:'tasks',id}}],result:value};
+  const writes=[{collection:'tasks',id,value}];
+  const kinds=value===null?Object.keys(current.projectActivity||{}):[
+    ...(current.projectId!==value.projectId?['join']:[]),
+    ...(scheduleChanged(current,value)?['schedule']:[]),
+    ...(!!current.completedAt!==!!value.completedAt?['completion']:[]),
+    ...(!!current.projectQueued!==!!value.projectQueued?['queue']:[]),
+  ];
+  await undoActivity(writes,current,value,kinds);
+  return {writes,events:[{type:value===null?'task.deleted':'task.restored',entity:{moduleId:'app.tasks',collection:'tasks',id}}],result:value};
 }
 export async function render({state={},event}) {
   if(event?.type==='new') {

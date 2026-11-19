@@ -44,7 +44,7 @@ class CatalogAcceptanceTest(unittest.TestCase):
     def test_scroll_stops_when_the_view_no_longer_moves(self):
         scrollable = node(scrollable='true')
         self.emulator.snapshot.return_value.nodes = [scrollable]
-        self.emulator.bounds = catalog.verify_emulator.Emulator.bounds
+        self.emulator.bounds = catalog.emulator_ui.Emulator.bounds
         with self.assertRaisesRegex(RuntimeError, '滚动后找不到'):
             self.flow.scroll_to('商店设置')
         self.assertEqual(self.emulator.adb.call_count, 1)
@@ -95,7 +95,7 @@ class CatalogEvidenceTest(unittest.TestCase):
 
         def step(name, action):
             flow.steps.append({'name': name})
-            (catalog.verify_emulator.OUT / 'details.xml').write_text('<hierarchy/>')
+            (catalog.emulator_ui.OUT / 'details.xml').write_text('<hierarchy/>')
             if failed:
                 raise RuntimeError('page verification failed')
 
@@ -103,8 +103,8 @@ class CatalogEvidenceTest(unittest.TestCase):
         with patch.object(catalog, 'ROOT', self.root), \
                 patch.object(catalog, 'snapshot', return_value={}), \
                 patch.object(catalog, 'fingerprint', return_value='source'), \
-                patch.object(catalog.verify_emulator, 'Emulator', return_value=emulator), \
-                patch.object(catalog.verify_emulator, 'OUT'), \
+                patch.object(catalog.emulator_ui, 'Emulator', return_value=emulator), \
+                patch.object(catalog.emulator_ui, 'OUT'), \
                 patch.object(catalog, 'CatalogAcceptance', return_value=flow):
             if failed:
                 with self.assertRaisesRegex(RuntimeError, 'page verification failed'):
@@ -149,7 +149,7 @@ class CatalogEvidenceTest(unittest.TestCase):
         output = self.root / 'dry-run'
         before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*'))
         with patch.object(catalog, 'ROOT', self.root), \
-                patch.object(catalog.verify_emulator, 'Emulator') as emulator:
+                patch.object(catalog.emulator_ui, 'Emulator') as emulator:
             self.assertEqual(catalog.main(['--dry-run', '--output', str(output)]), 0)
         emulator.assert_not_called()
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*')))

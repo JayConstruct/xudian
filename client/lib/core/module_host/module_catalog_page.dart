@@ -4,7 +4,6 @@ import '../ui/ui_design.dart';
 import '../../app/app_toast.dart';
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,8 +23,13 @@ import '../ui/ui_composition.dart';
 import 'host_api.dart';
 import 'script_detail_page.dart';
 import 'module_install_review_dialog.dart';
+import 'module_download_dialog.dart';
 
 export 'module_install_review_dialog.dart';
+export 'module_download_dialog.dart';
+
+part 'module_catalog_listing.dart';
+part 'module_catalog_details_dialog.dart';
 
 Future<Map<String, InstalledCatalogModule>> _installed(
   ModuleHost host, {
@@ -190,240 +194,6 @@ void _openModule(BuildContext context, ModuleHost host, String id) {
   );
 }
 
-class ModuleDownloadDialog extends StatefulWidget {
-  const ModuleDownloadDialog({
-    super.key,
-    required this.client,
-    required this.modules,
-    this.offline = false,
-  });
-  final ModuleCatalogClient client;
-  final List<ResolvedCatalogModule> modules;
-  final bool offline;
-  @override
-  State<ModuleDownloadDialog> createState() => _ModuleDownloadDialogState();
-}
-
-class _ModuleDownloadDialogState extends State<ModuleDownloadDialog> {
-  DownloadCancellation cancellation = DownloadCancellation();
-  final packages = <ScriptPackage>[];
-  String? failure;
-  ResolvedCatalogModule? current;
-  ModuleDownloadStage stage = ModuleDownloadStage.preparing;
-  int received = 0, total = 0;
-  bool running = true;
-  bool attemptActive = false;
-
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(download);
-  }
-
-  @override
-  void dispose() {
-    cancellation.cancel();
-    super.dispose();
-  }
-
-  Future<void> download() async {
-    if (!mounted || attemptActive) return;
-    attemptActive = true;
-    final token = DownloadCancellation();
-    setState(() {
-      running = true;
-      failure = null;
-      cancellation = token;
-    });
-    try {
-      for (final item in widget.modules.skip(packages.length)) {
-        if (!mounted || token.isCancelled) return;
-        setState(() {
-          current = item;
-          stage = ModuleDownloadStage.preparing;
-          received = 0;
-          total = item.release?.size ?? 0;
-        });
-        final package = await item.loadPackage(
-          widget.client,
-          cancellation: token,
-          offline: widget.offline,
-          onStage: (value) {
-            if (mounted && !token.isCancelled) {
-              setState(() => stage = value);
-            }
-          },
-          onProgress: (count, size) {
-            if (mounted && !token.isCancelled) {
-              setState(() {
-                received = count;
-                total = size;
-              });
-            }
-          },
-        );
-        if (!mounted || token.isCancelled) return;
-        setState(() => packages.add(package));
-      }
-      if (mounted && !token.isCancelled) Navigator.pop(context, packages);
-    } catch (error) {
-      if (mounted && !token.isCancelled) {
-        setState(() {
-          failure =
-              error is SocketException &&
-                  error.message.contains('Failed host lookup')
-              ? '无法解析下载服务器地址，请检查网络或 DNS 后重试。\n$error'
-              : '$error';
-          running = false;
-        });
-      }
-    } finally {
-      attemptActive = false;
-    }
-  }
-
-  String get stageLabel => switch (stage) {
-    ModuleDownloadStage.preparing => '准备下载',
-    ModuleDownloadStage.downloading => '下载中',
-    ModuleDownloadStage.retrying => '网络连接失败，正在等待自动重试…',
-    ModuleDownloadStage.verifying => '校验中',
-    ModuleDownloadStage.saving => '保存已验证模块',
-    ModuleDownloadStage.ready => '准备安装',
-  };
-
-  // This measures package bytes, not verification or the install transaction.
-  double? get overallProgress {
-    if (widget.modules.isEmpty ||
-        widget.modules.any((item) => (item.release?.size ?? 0) <= 0)) {
-      return null;
-    }
-    final size = widget.modules.fold<int>(
-      0,
-      (sum, item) => sum + item.release!.size,
-    );
-    final complete = widget.modules
-        .take(packages.length)
-        .fold<int>(0, (sum, item) => sum + item.release!.size);
-    return ((complete +
-                (packages.length < widget.modules.length ? received : 0)) /
-            size)
-        .clamp(0.0, 1.0);
-  }
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !running,
-    child: NativeUi(
-      child: AlertDialog(
-        titlePadding: AppDesign.dialogTitlePadding,
-        contentPadding: AppDesign.dialogContentPadding,
-        actionsPadding: AppDesign.dialogActionsPadding,
-        title: const Text('下载并验证模块'),
-        content: SizedBox(
-          width: 620,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  failure == null ? stageLabel : '下载或校验失败',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                if (current != null) Text(current!.name),
-                const SizedBox(height: 8),
-                if (running)
-                  NativeUi(
-                    child: LinearProgressIndicator(
-                      value:
-                          stage == ModuleDownloadStage.downloading && total > 0
-                          ? (received / total).clamp(0.0, 1.0)
-                          : null,
-                      semanticsLabel: '当前模块：$stageLabel',
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                if (stage == ModuleDownloadStage.downloading || failure != null)
-                  Text(
-                    total > 0
-                        ? '${_readableBytes(received)} / ${_readableBytes(total)}'
-                        : '已下载 ${_readableBytes(received)}',
-                  ),
-                Text('已完成 ${packages.length}/${widget.modules.length} 个模块'),
-                if (overallProgress case final progress?) ...[
-                  const SizedBox(height: 8),
-                  Text('整体下载进度 ${(progress * 100).floor()}%'),
-                  NativeUi(
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      semanticsLabel: '整体下载进度',
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                const Text('全部模块包验证完成后，将统一确认安装和权限。'),
-                if (failure != null) ...[
-                  const SizedBox(height: 8),
-                  SelectableText(
-                    failure!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                  const Text('已完成的模块会保留，重试将从当前模块继续。'),
-                ],
-                NativeUi(
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: const Text('模块与下载来源'),
-                    children: [
-                      for (final item in widget.modules)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('${item.name} · ${item.version}'),
-                              Text(item.description),
-                              SelectableText(
-                                item.release?.url.toString() ?? '本地已验证模块包',
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          NativeUi(
-            child: TextButton(
-              onPressed: () {
-                cancellation.cancel();
-                Navigator.pop(context);
-              },
-              child: Text(running ? '取消下载' : '关闭'),
-            ),
-          ),
-          if (!running)
-            NativeUi(
-              child: FilledButton(onPressed: download, child: const Text('重试')),
-            ),
-        ],
-      ),
-    ),
-  );
-}
-
-String _readableBytes(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-}
-
 class ModuleCatalogPage extends ConsumerStatefulWidget {
   const ModuleCatalogPage({super.key, required this.host});
   final ModuleHost host;
@@ -432,7 +202,8 @@ class ModuleCatalogPage extends ConsumerStatefulWidget {
 }
 
 class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
-  ModuleCatalog? catalog;
+  _CatalogListing? listing;
+  ModuleCatalog? get catalog => listing?.catalog;
   final indexes =
       <
         ({
@@ -503,14 +274,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
   void recordIndex(String id, ModuleVersionIndex index) {
     loadedIndexes[id] = index;
     latestVersions.remove(id);
-    final latest = index.versions
-        .where(
-          (version) =>
-              !Version.parse(version.version).isPreRelease &&
-              VersionConstraint.parse(version.manifest['hostApi'] as String)
-                  .allows(hostApiVersion),
-        )
-        .firstOrNull;
+    final latest = _latestStableVersion(index);
     if (latest != null) latestVersions[id] = latest;
     indexFailures.remove(id);
   }
@@ -529,8 +293,9 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
       }
     }
     indexFailures.clear();
-    catalog = result;
-    if (!result.modules.values.any((item) => item.category == category)) {
+    final updated = _CatalogListing(result);
+    listing = updated;
+    if (!updated.categories.contains(category)) {
       category = '全部分类';
     }
   }
@@ -672,7 +437,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     if (!mounted) return;
     ref.invalidate(moduleCatalogClientProvider);
     setState(() {
-      catalog = null;
+      listing = null;
       offline = false;
       repository = next;
     });
@@ -710,19 +475,22 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
   Future<void> details(String id) async {
     setState(() => busy = true);
     try {
-      final next = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => ModuleDetailsLoader(
-          title: catalog?.modules[id]?.name ?? id,
-          load: () => _detailsContent(id, dialogContext),
-        ),
-      );
-      if (next != null && mounted) {
-        if (next.startsWith('install:')) {
-          await install(next.substring('install:'.length));
-        } else {
-          await details(next);
+      var selectedId = id;
+      while (mounted) {
+        final target = selectedId;
+        final next = await showDialog<_CatalogDetailsAction>(
+          context: context,
+          builder: (dialogContext) => ModuleDetailsLoader(
+            title: catalog?.modules[target]?.name ?? target,
+            load: () => _detailsContent(target, dialogContext),
+          ),
+        );
+        if (next == null || !mounted) return;
+        if (next.install) {
+          await install(next.id);
+          return;
         }
+        selectedId = next.id;
       }
     } catch (error) {
       if (mounted) setState(() => failure = '$error');
@@ -751,108 +519,22 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
             if (entry.value.package.dependencies.contains(id))
               '${entry.key}（${entry.value.enabled ? '已启用' : '已停用'}）',
         ],
-        onDependency: (dependency) => Navigator.pop(dialogContext, dependency),
+        onDependency: (dependency) => Navigator.pop<_CatalogDetailsAction>(
+          dialogContext,
+          (id: dependency, install: false),
+        ),
       );
     }
     final item = catalog?.modules[id];
     if (item == null) throw StateError('目录未收录模块：$id');
     final index = loadedIndexes[id] ?? await indexFor(item);
-    final versions = index.versions
-        .where(
-          (version) =>
-              !Version.parse(version.version).isPreRelease &&
-              VersionConstraint.parse(version.manifest['hostApi'] as String)
-                  .allows(hostApiVersion),
-        )
-        .toList();
-    if (versions.isEmpty) throw StateError('没有兼容当前宿主的稳定版本：$id');
-    final version = versions.first;
+    final version = _latestStableVersion(index);
+    if (version == null) throw StateError('没有兼容当前宿主的稳定版本：$id');
     if (!mounted) throw StateError('模块商店已关闭');
-    return NativeUi(
-      child: AlertDialog(
-        title: Text(item.name),
-        titlePadding: AppDesign.dialogTitlePadding,
-        contentPadding: AppDesign.dialogContentPadding,
-        actionsPadding: AppDesign.dialogActionsPadding,
-        content: SizedBox(
-          width: 620,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(item.description),
-                const SizedBox(height: 12),
-                SelectableText('模块 ID：${item.id}'),
-                Text('版本：${version.version} · 可安装'),
-                Text('作者：${item.author.isEmpty ? '作者未提供' : item.author}'),
-                SelectableText('发布仓库：${item.repository}'),
-                SelectableText('下载来源：${version.url}'),
-                Text('宿主兼容性：${version.manifest['hostApi']}'),
-                Text(
-                  '权限：${(version.manifest['permissions'] as List? ?? []).join('、')}',
-                ),
-                const Text('模块依赖（点击查看）'),
-                for (final raw
-                    in version.manifest['dependencies'] as List? ?? [])
-                  NativeUi(
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        raw is String ? raw : '${object(raw)['moduleId']}',
-                      ),
-                      subtitle: Text(
-                        raw is String ? '任意兼容版本' : '${object(raw)['version']}',
-                      ),
-                      trailing: const UiIcon(Icons.chevron_right),
-                      onTap: () => Navigator.pop(
-                        dialogContext,
-                        raw is String ? raw : object(raw)['moduleId'],
-                      ),
-                    ),
-                  ),
-                const Text('服务依赖（点击查看）'),
-                for (final raw in manifestServiceRequirements(version.manifest))
-                  NativeUi(
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('${object(raw)['moduleId']}'),
-                      subtitle: Text(
-                        '${object(raw)['serviceId']} @ ${object(raw)['majorVersion']} ${object(raw)['kind'] ?? ''}',
-                      ),
-                      trailing: const UiIcon(Icons.chevron_right),
-                      onTap: object(raw)['moduleId'] == 'app.host'
-                          ? () => showHostService(dialogContext, raw)
-                          : () => Navigator.pop(
-                              dialogContext,
-                              object(raw)['moduleId'],
-                            ),
-                    ),
-                  ),
-                Text(
-                  '历史版本：${index.versions.map((entry) => entry.version).join('、')}',
-                ),
-                const SizedBox(height: 12),
-                const Text('安装前验证摘要、身份与包格式，并展示签名状态和完整依赖计划。'),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          NativeUi(
-            child: TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('关闭'),
-            ),
-          ),
-          NativeUi(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, 'install:$id'),
-              child: const Text('解析依赖并安装'),
-            ),
-          ),
-        ],
-      ),
+    return _CatalogListingDetailsDialog(
+      item: item,
+      index: index,
+      version: version,
     );
   }
 
@@ -868,19 +550,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
             Version.parse(installed.package.version);
   }
 
-  bool matches(CatalogModule item) {
-    final query = searchController.text.trim().toLowerCase();
-    if (query.isNotEmpty &&
-        ![
-          item.name,
-          item.description,
-          item.author,
-          item.id,
-          item.repository,
-        ].any((value) => value.toLowerCase().contains(query))) {
-      return false;
-    }
-    if (category != '全部分类' && item.category != category) return false;
+  bool _matchesStatus(CatalogModule item) {
     final installed = installations.containsKey(item.id);
     return switch (filter) {
       '推荐' => item.featured,
@@ -984,19 +654,11 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final modules =
-        (catalog?.modules.values ?? <CatalogModule>[]).where(matches).toList()
-          ..sort((a, b) {
-            final recommended = (b.featured ? 1 : 0).compareTo(
-              a.featured ? 1 : 0,
-            );
-            return recommended != 0 ? recommended : a.name.compareTo(b.name);
-          });
-    final categories =
-        (catalog?.modules.values.map((item) => item.category).toSet() ??
-                <String>{})
-            .toList()
-          ..sort();
+    final candidates = listing?.matching(searchController.text, category);
+    final modules = filter == '全部'
+        ? candidates?.toList() ?? const <CatalogModule>[]
+        : candidates?.where(_matchesStatus).toList() ?? const <CatalogModule>[];
+    final categories = listing?.categories ?? const <String>[];
     return NativeUi(
       child: Scaffold(
         appBar: AppBar(
@@ -1173,5 +835,3 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     );
   }
 }
-
-/// Paint the dialog shell before any installed-package or index work begins.

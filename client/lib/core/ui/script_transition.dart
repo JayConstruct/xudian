@@ -215,6 +215,8 @@ class _ScriptPageExchangeState extends State<_ScriptPageExchange>
     controller.duration = widget.duration;
     if (widget.pageKey == oldWidget.pageKey) return;
     back = widget.direction == 'back';
+    final reversingTab =
+        isTab && outgoing != null && outgoingKey == widget.pageKey;
     outgoing = null;
     outgoingKey = oldWidget.pageKey;
     if (reduced) {
@@ -222,7 +224,7 @@ class _ScriptPageExchangeState extends State<_ScriptPageExchange>
     } else if (back) {
       controller.reverse(from: 1);
     } else {
-      controller.forward(from: 0);
+      controller.forward(from: reversingTab ? 1 - controller.value : 0);
     }
     outgoing = reduced ? null : oldWidget.child;
   }
@@ -264,20 +266,60 @@ class _ScriptPageExchangeState extends State<_ScriptPageExchange>
     );
   }
 
-  @override
-  Widget build(BuildContext context) => Stack(
-    fit: widget.fillViewport ? StackFit.expand : StackFit.passthrough,
-    children: [
-      if (!back && outgoing != null) _outgoing(animate: false),
-      _page(
-        widget.child,
-        widget.pageKey,
-        active: true,
-        animate: !back && !reduced,
-      ),
-      if (back && outgoing != null) _outgoing(animate: true),
-    ],
+  bool get isTab =>
+      widget.direction == 'next' || widget.direction == 'previous';
+
+  Widget _tab(Widget child, bool incoming) => AnimatedBuilder(
+    animation: controller,
+    child: child,
+    builder: (context, child) {
+      final t = Curves.easeInOut.transform(controller.value);
+      final sign =
+          (widget.direction == 'previous' ? -1 : 1) *
+          (Directionality.of(context) == TextDirection.rtl ? -1 : 1);
+      return Opacity(
+        opacity: incoming ? t : 1 - t,
+        child: Transform.translate(
+          offset: Offset(10 * sign * (incoming ? 1 - t : -t), 0),
+          child: child,
+        ),
+      );
+    },
   );
+
+  @override
+  Widget build(BuildContext context) {
+    if (isTab && !reduced) {
+      return ClipRect(
+        child: Stack(
+          fit: widget.fillViewport ? StackFit.expand : StackFit.passthrough,
+          children: [
+            if (outgoing != null)
+              Positioned.fill(
+                child: _tab(
+                  _page(outgoing!, outgoingKey, active: false),
+                  false,
+                ),
+              ),
+            _tab(_page(widget.child, widget.pageKey, active: true), true),
+          ],
+        ),
+      );
+    }
+    return Stack(
+      fit: widget.fillViewport ? StackFit.expand : StackFit.passthrough,
+      children: [
+        if (!back && outgoing != null) _outgoing(animate: false),
+        _page(
+          widget.child,
+          widget.pageKey,
+          active: true,
+          animate: !back && !reduced,
+        ),
+        if (back && outgoing != null) _outgoing(animate: true),
+      ],
+    );
+  }
 
   Widget _outgoing({required bool animate}) => Positioned.fill(
     child: ClipRect(

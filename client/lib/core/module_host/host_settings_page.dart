@@ -11,6 +11,7 @@ import '../../features/settings/configuration_export_page.dart';
 import '../../features/settings/appearance_settings_page.dart';
 import '../../features/settings/settings_tools_page.dart';
 import '../../features/settings/settings_widgets.dart';
+import '../../features/settings/settings_home.dart';
 import '../../features/settings/app_update_page.dart';
 import '../../features/settings/update_settings_page.dart';
 import '../app_updates/startup_updates.dart';
@@ -20,7 +21,6 @@ import '../modules/module_registry.dart';
 import '../app_updates/github_app_updates.dart';
 import '../ui/app_repository_links.dart';
 import '../ui/ui_annotation.dart';
-import '../ui/ui_component.dart';
 import '../ui/ui_composition.dart';
 import '../ui/ui_layout_resolver.dart';
 import '../ui/ui_page_host.dart';
@@ -56,6 +56,7 @@ class HostSettingsPage extends ConsumerWidget {
     final profile = (ref.watch(uiLayoutProvider).asData?.value ?? UiLayout())
         .profile(MediaQuery.sizeOf(context).width >= 820);
     final annotation = ref.watch(uiAnnotationProvider);
+    final hasUpdates = ref.watch(startupUpdatesProvider).hasUpdates;
     void open(Widget page) =>
         Navigator.push<void>(context, MaterialPageRoute(builder: (_) => page));
     return ListenableBuilder(
@@ -68,112 +69,87 @@ class HostSettingsPage extends ConsumerWidget {
               !entry.content &&
               profile.mountFor(entry).placement == UiPlacement.settings,
         );
-        final sections = SettingsList(
-          children: [
-            const SettingsNote('按分类调整应用，也可从常用入口直接打开模块页面。'),
-            SettingsGroup(
-              title: '个性化',
-              children: [
-                SettingsEntry(
-                  title: '外观与交互',
-                  subtitle: preferences.when(
-                    data: (value) =>
-                        '${appearanceThemeLabel(value.themeMode)} · 界面风格与交互反馈',
-                    loading: () => '正在读取外观设置…',
-                    error: (_, _) => '读取失败，进入后重试',
-                  ),
-                  icon: Icons.palette_outlined,
-                  protected: true,
-                  onTap: () => open(AppearanceSettingsPage(registry: registry)),
-                ),
-                SettingsEntry(
-                  title: '布局与导航',
-                  subtitle: '入口位置、页面内容与手机和电脑布局',
-                  icon: Icons.dashboard_customize_outlined,
-                  protected: true,
-                  onTap: () => open(
-                    UiLayoutPage(
+        return SettingsHome(
+          appearance: SettingsFeatureCard(
+            appearance: true,
+            title: '外观与交互',
+            subtitle: preferences.when(
+              data: (value) =>
+                  '当前主题 · ${appearanceThemeLabel(value.themeMode)}',
+              loading: () => '正在读取外观设置…',
+              error: (_, _) => '读取失败，进入后重试',
+            ),
+            onTap: () => open(AppearanceSettingsPage(registry: registry)),
+          ),
+          layout: SettingsFeatureCard(
+            title: '布局与导航',
+            subtitle: '入口位置与页面布局',
+            onTap: () => open(
+              UiLayoutPage(
+                registry: registry,
+                initialDesktop: MediaQuery.sizeOf(context).width >= 820,
+              ),
+            ),
+          ),
+          management: [
+            SettingsHomeEntry(
+              title: '模块与连接',
+              subtitle: '模块管理、商店与连接配置',
+              icon: Icons.grid_view_outlined,
+              protected: true,
+              onTap: () => open(ModuleSettingsPage(registry: registry)),
+            ),
+            SettingsHomeEntry(
+              title: '更新设置',
+              subtitle: '检查应用与模块更新',
+              status: hasUpdates ? '有更新' : null,
+              icon: Icons.refresh,
+              protected: true,
+              onTap: () => open(const UpdateSettingsPage()),
+            ),
+            SettingsHomeEntry(
+              title: '导出所有配置',
+              subtitle: '备份设置、偏好与连接配置',
+              icon: Icons.download_outlined,
+              protected: true,
+              onTap: () => open(const ConfigurationExportPage()),
+            ),
+          ],
+          support: [
+            SettingsHomeEntry(
+              title: '辅助工具',
+              subtitle: '界面标注与显示诊断',
+              status: annotation ? '标注已开启' : null,
+              icon: Icons.build_outlined,
+              onTap: () => open(const SettingsToolsPage()),
+            ),
+            SettingsHomeEntry(
+              title: '关于序点',
+              subtitle: '应用版本与项目地址',
+              icon: Icons.info_outline_rounded,
+              onTap: () => open(const AboutSettingsPage()),
+            ),
+          ],
+          shortcuts: [
+            for (final entry in shortcuts)
+              SettingsHomeEntry(
+                title: entry.label,
+                icon: entry.icon,
+                onTap: () => open(
+                  ModuleDetailPage(
+                    registry: registry,
+                    pageId: entry.pageId,
+                    pageContext: profile.mountFor(entry).context,
+                    title: entry.label,
+                    child: UiPageHost(
                       registry: registry,
-                      initialDesktop: MediaQuery.sizeOf(context).width >= 820,
+                      pageId: entry.pageId,
+                      pageContext: profile.mountFor(entry).context,
                     ),
                   ),
                 ),
-              ],
-            ),
-            SettingsGroup(
-              title: '功能与支持',
-              children: [
-                SettingsEntry(
-                  title: '更新设置',
-                  subtitle: ref.watch(startupUpdatesProvider).hasUpdates
-                      ? '发现可用更新，点击查看'
-                      : '启动时检查 App 与模块更新',
-                  icon: Icons.system_update_rounded,
-                  protected: true,
-                  onTap: () => open(const UpdateSettingsPage()),
-                ),
-                SettingsEntry(
-                  title: '模块与连接',
-                  subtitle: '模块管理、商店与模块提供的设置',
-                  icon: Icons.extension_outlined,
-                  protected: true,
-                  onTap: () => open(ModuleSettingsPage(registry: registry)),
-                ),
-                SettingsEntry(
-                  title: '导出所有配置',
-                  subtitle: '保存应用设置、模块偏好与连接配置',
-                  icon: Icons.file_download_outlined,
-                  protected: true,
-                  onTap: () => open(const ConfigurationExportPage()),
-                ),
-                SettingsEntry(
-                  title: '辅助工具',
-                  subtitle: annotation ? '界面标注已开启' : '界面标注与问题反馈辅助',
-                  icon: Icons.build_outlined,
-                  onTap: () => open(const SettingsToolsPage()),
-                ),
-                SettingsEntry(
-                  title: '关于序点',
-                  subtitle: '应用信息、项目地址与模块仓库',
-                  icon: Icons.info_outline_rounded,
-                  onTap: () => open(const AboutSettingsPage()),
-                ),
-              ],
-            ),
-            if (shortcuts.isNotEmpty)
-              SettingsGroup(
-                title: '常用入口',
-                children: [
-                  for (final entry in shortcuts)
-                    SettingsEntry(
-                      title: entry.label,
-                      icon: entry.icon,
-                      onTap: () => open(
-                        ModuleDetailPage(
-                          registry: registry,
-                          pageId: entry.pageId,
-                          pageContext: profile.mountFor(entry).context,
-                          title: entry.label,
-                          child: UiPageHost(
-                            registry: registry,
-                            pageId: entry.pageId,
-                            pageContext: profile.mountFor(entry).context,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
               ),
           ],
-        );
-        return DetailPage(
-          title: '设置',
-          child: UiComponent(
-            ref: 'ui.page.settings@1',
-            props: const {'title': '设置'},
-            slots: {'sections': sections},
-            fallback: sections,
-          ),
         );
       },
     );

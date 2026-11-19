@@ -46,9 +46,9 @@ class DesignArtifactsTest(unittest.TestCase):
         self.assertNotIn(second.name, '\n'.join(file['path'] for file in files))
 
     def test_page_paths_missing_prompt_and_digest_changes(self):
-        batch = design.new_batch('ui-03', 'new task')
+        batch = design.new_batch('ui-23', 'project progress')
         image = self.image(batch)
-        self.assertEqual(image.parent, self.root / 'design/screens/ui-03')
+        self.assertEqual(image.parent, self.root / 'design/screens/ui-23')
         _, before = design.inspect_batch(batch)
         image.write_bytes(b'changed fixture')
         _, after = design.inspect_batch(batch)
@@ -87,6 +87,8 @@ class DesignArtifactsTest(unittest.TestCase):
         (batch / 'notes/leak').symlink_to(outside)
         with self.assertRaisesRegex(ValueError, '符号链接'):
             design.inspect_batch(batch)
+        with self.assertRaisesRegex(ValueError, '浅层主题'):
+            design.new_batch('ui-24', 'unregistered page')
         with self.assertRaisesRegex(ValueError, '浅层主题'):
             design.new_batch('ui-99', 'invalid page')
 

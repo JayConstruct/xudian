@@ -1,6 +1,6 @@
 import {services, ui, ids} from '@xudian/sdk';
 import {renderCreation} from './creation.js';
-import {renderTaskDetail} from './ux.js';
+import {renderTaskDetail} from './task_detail_page.js';
 
 const ref = id => ({moduleId: 'app.planner', serviceId: 'planner.' + id, majorVersion: 1});
 const query = (id, input = {}) => services.query(ref(id), input);

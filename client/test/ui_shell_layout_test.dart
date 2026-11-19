@@ -14,7 +14,7 @@ import 'package:task_app/features/module_manager/module_manager_page.dart';
 import 'package:task_app/features/settings/ui_layout.dart';
 import 'package:task_app/features/tasks/application/providers.dart';
 import 'package:task_app/features/tasks/quick_task_input.dart';
-import 'package:task_app/features/ui_examples/ui_examples_page.dart';
+import 'package:task_app/legacy/ui_examples/ui_examples_page.dart';
 
 class _Secrets implements AiSecretStore {
   @override

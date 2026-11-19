@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 
 import 'script_motion.dart';
 import 'script_ui_scope.dart';
+import 'ui_icon.dart';
 import 'ui_motion.dart';
+import 'workspace_popup_menu.dart';
 
 class ScriptSwipeAction {
   const ScriptSwipeAction(this.label, this.event, this.icon, this.disabled);
@@ -20,13 +22,14 @@ class ScriptSwipeConfig {
   ScriptSwipeConfig({
     required this.enabled,
     required this.end,
+    this.longPressMenu = false,
     required this.extent,
     required this.threshold,
     required this.timing,
     required this.actions,
     required this.identity,
   });
-  final bool enabled, end;
+  final bool enabled, end, longPressMenu;
   final double extent, threshold;
   final ScriptTiming timing;
   final List<ScriptSwipeAction> actions;
@@ -40,6 +43,7 @@ class ScriptSwipeConfig {
       'key',
       'enabled',
       'side',
+      'menuTrigger',
       'extent',
       'openThreshold',
       'settle',
@@ -50,7 +54,11 @@ class ScriptSwipeConfig {
     final enabled = spec.containsKey('enabled') ? spec['enabled'] : true;
     final side = spec.containsKey('side') ? spec['side'] : 'end';
     final revision = spec['revision'];
+    final trigger = spec.containsKey('menuTrigger')
+        ? spec['menuTrigger']
+        : 'button';
     if (enabled is! bool ||
+        !['button', 'longPress'].contains(trigger) ||
         !['start', 'end'].contains(side) ||
         spec.containsKey('revision') &&
             revision is! String &&
@@ -100,6 +108,7 @@ class ScriptSwipeConfig {
     return ScriptSwipeConfig(
       enabled: enabled,
       end: side == 'end',
+      longPressMenu: trigger == 'longPress',
       extent: extent,
       threshold: spec.containsKey('openThreshold')
           ? uiNumber(spec['openThreshold'], .2, .8, 'openThreshold')
@@ -320,7 +329,9 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
         builder: (context, constraints) {
           final width = constraints.maxWidth;
           final narrow = width < 96;
-          final bodyWidth = narrow ? width : width - 48;
+          final bodyWidth = narrow || widget.config.longPressMenu
+              ? width
+              : width - 48;
           final nextGeometry = Size(
             bodyWidth,
             MediaQuery.textScalerOf(context).scale(1),
@@ -331,43 +342,37 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
           geometry = nextGeometry;
           final swipe = _fits(bodyWidth);
           if (!swipe) pointers.clear();
-          final more = MenuAnchor(
-            controller: menu,
-            childFocusNode: menuFocus,
-            onOpen: () {
-              controller.value = 0;
-              resources?.release(this);
-              _own();
-            },
-            onClose: () => resources?.forget(this),
-            menuChildren: [
-              for (final action in widget.config.actions)
-                MenuItemButton(
-                  onPressed: enabled && !action.disabled
-                      ? () => unawaited(_dispatch(action, identity))
-                      : null,
-                  leadingIcon: action.icon == null ? null : Icon(action.icon),
-                  child: Text(action.label),
-                ),
-            ],
-            builder: (_, menuController, _) => IconButton(
-              focusNode: menuFocus,
-              tooltip: '更多操作',
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              onPressed: enabled
-                  ? () {
-                      if (menuController.isOpen) {
-                        menuController.close();
-                      } else {
-                        menuController.open();
-                      }
-                    }
-                  : null,
-              icon: const Icon(Icons.more_horiz),
-            ),
-          );
+          Widget content = widget.child;
+          if (widget.config.longPressMenu) {
+            final actions = widget.config.actions;
+            content = WorkspacePopupMenu(
+              key: ValueKey(identity),
+              longPressChild: widget.child,
+              enabled: enabled,
+              haptics: PopupMenuTheme.of(context).enableFeedback ?? true,
+              items: [
+                for (final (index, action) in actions.indexed)
+                  PopupMenuItem<int>(
+                    value: index,
+                    enabled: !action.disabled,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Row(
+                      children: [
+                        if (action.icon != null) ...[
+                          UiIcon(action.icon, size: 20),
+                          const SizedBox(width: 10),
+                        ],
+                        Flexible(child: Text(action.label)),
+                      ],
+                    ),
+                  ),
+              ],
+              onSelected: (index) =>
+                  unawaited(_dispatch(actions[index], identity)),
+            );
+          }
           final body = !swipe
-              ? widget.child
+              ? content
               : Listener(
                   onPointerDown: (event) {
                     if (!enabled) return;
@@ -387,7 +392,7 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
                     onHorizontalDragCancel: enabled ? _close : null,
                     child: AnimatedBuilder(
                       animation: controller,
-                      child: widget.child,
+                      child: content,
                       builder: (_, child) {
                         final open =
                             controller.value == 1 &&
@@ -400,48 +405,85 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
                         return ClipRect(
                           child: Stack(
                             children: [
-                              PositionedDirectional(
-                                top: 0,
-                                bottom: 0,
-                                start: widget.config.end ? null : 0,
-                                end: widget.config.end ? 0 : null,
-                                width: widget.config.extent,
-                                child: ExcludeSemantics(
-                                  excluding: !open,
-                                  child: ExcludeFocus(
-                                    excluding: !open,
-                                    child: IgnorePointer(
-                                      ignoring: !open || !enabled,
-                                      child: Row(
-                                        children: [
-                                          for (final action
-                                              in widget.config.actions)
-                                            Expanded(
-                                              child: TextButton(
-                                                onPressed:
-                                                    enabled && !action.disabled
-                                                    ? () => unawaited(
-                                                        _dispatch(
-                                                          action,
-                                                          identity,
-                                                        ),
-                                                      )
-                                                    : null,
-                                                child: Text(action.label),
-                                              ),
-                                            ),
-                                        ],
+                              if (controller.value > 0)
+                                PositionedDirectional(
+                                  top: 0,
+                                  bottom: 0,
+                                  start: widget.config.end ? null : 0,
+                                  end: widget.config.end ? 0 : null,
+                                  width: widget.config.extent,
+                                  child: ClipRect(
+                                    clipper: _SwipeRevealClipper(
+                                      controller.value,
+                                      fromRight: sign < 0,
+                                    ),
+                                    child: ExcludeSemantics(
+                                      excluding: !open,
+                                      child: ExcludeFocus(
+                                        excluding: !open,
+                                        child: IgnorePointer(
+                                          ignoring: !open || !enabled,
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              for (final action
+                                                  in widget.config.actions)
+                                                Expanded(
+                                                  child: TextButton(
+                                                    style: TextButton.styleFrom(
+                                                      shape:
+                                                          const RoundedRectangleBorder(),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 4,
+                                                          ),
+                                                      backgroundColor:
+                                                          Theme.of(context)
+                                                              .colorScheme
+                                                              .surfaceContainerHigh,
+                                                    ),
+                                                    onPressed:
+                                                        enabled &&
+                                                            !action.disabled
+                                                        ? () => unawaited(
+                                                            _dispatch(
+                                                              action,
+                                                              identity,
+                                                            ),
+                                                          )
+                                                        : null,
+                                                    child: Column(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .center,
+                                                      children: [
+                                                        if (action.icon != null)
+                                                          UiIcon(
+                                                            action.icon,
+                                                            size: 16,
+                                                          ),
+                                                        Text(action.label),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              Transform.translate(
-                                offset: Offset(
-                                  sign *
-                                      widget.config.extent *
-                                      controller.value,
-                                  0,
+                              ClipRect(
+                                clipper: _SwipeRevealClipper(
+                                  1 -
+                                      controller.value *
+                                          widget.config.extent /
+                                          bodyWidth,
+                                  fromRight: sign > 0,
                                 ),
                                 child: Stack(
                                   children: [
@@ -472,6 +514,42 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
                     ),
                   ),
                 );
+          if (widget.config.longPressMenu) return body;
+          final more = MenuAnchor(
+            controller: menu,
+            childFocusNode: menuFocus,
+            onOpen: () {
+              controller.value = 0;
+              resources?.release(this);
+              _own();
+            },
+            onClose: () => resources?.forget(this),
+            menuChildren: [
+              for (final action in widget.config.actions)
+                MenuItemButton(
+                  onPressed: enabled && !action.disabled
+                      ? () => unawaited(_dispatch(action, identity))
+                      : null,
+                  leadingIcon: action.icon == null ? null : UiIcon(action.icon),
+                  child: Text(action.label),
+                ),
+            ],
+            builder: (_, menuController, _) => IconButton(
+              focusNode: menuFocus,
+              tooltip: '更多操作',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              onPressed: enabled
+                  ? () {
+                      if (menuController.isOpen) {
+                        menuController.close();
+                      } else {
+                        menuController.open();
+                      }
+                    }
+                  : null,
+              icon: const Icon(Icons.more_horiz),
+            ),
+          );
           return narrow
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -504,4 +582,26 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
     controller.dispose();
     super.dispose();
   }
+}
+
+class _SwipeRevealClipper extends CustomClipper<Rect> {
+  const _SwipeRevealClipper(this.fraction, {required this.fromRight});
+
+  final double fraction;
+  final bool fromRight;
+
+  @override
+  Rect getClip(Size size) {
+    final width = size.width * fraction;
+    return Rect.fromLTWH(
+      fromRight ? size.width - width : 0,
+      0,
+      width,
+      size.height,
+    );
+  }
+
+  @override
+  bool shouldReclip(_SwipeRevealClipper oldClipper) =>
+      oldClipper.fraction != fraction || oldClipper.fromRight != fromRight;
 }

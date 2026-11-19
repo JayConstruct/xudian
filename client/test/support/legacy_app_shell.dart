@@ -5,7 +5,7 @@ import 'package:task_app/features/module_manager/builtin_module_controller.dart'
 import 'package:task_app/features/module_manager/module_manager_page.dart';
 import 'package:task_app/features/tasks/application/providers.dart';
 import 'package:task_app/features/tasks/quick_task_input.dart';
-import 'package:task_app/features/settings/settings_page.dart';
+import 'package:task_app/features/settings/legacy_settings_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -245,7 +245,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     Navigator.push<void>(
       context,
       MaterialPageRoute(
-        builder: (_) => SettingsPage(
+        builder: (_) => LegacySettingsPage(
           registry: widget.registry,
           onOpenEntry: (entry) {
             Navigator.pop(context);

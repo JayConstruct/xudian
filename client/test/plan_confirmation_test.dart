@@ -135,6 +135,40 @@ void main() {
   );
 
   testWidgets(
+    'summary-only review keeps cancellation, acknowledgement and deletion warning',
+    (tester) async {
+      bool? accepted;
+      await _show(
+        tester,
+        _details(deletion: true),
+        options: {
+          ..._options,
+          'summaryOnly': true,
+          'items': [
+            {'title': '选中的任务', 'subtitle': '所属分类 · 20 分钟'},
+          ],
+          'acknowledgement': '确认',
+        },
+        onResult: (value) => accepted = value,
+      );
+      expect(find.text('选中的任务'), findsOneWidget);
+      expect(find.text('所属分类 · 20 分钟'), findsOneWidget);
+      expect(find.text('查看变更详情'), findsNothing);
+      expect(find.byType(DataChangeReview), findsNothing);
+      expect(find.text('将删除 1 条记录，请核对后确认。'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, '应用调整'))
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(accepted, isFalse);
+    },
+  );
+
+  testWidgets(
     'overdue acknowledgement starts unchecked and gates the same confirmation button',
     (tester) async {
       bool? accepted;

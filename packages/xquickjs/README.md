@@ -24,8 +24,10 @@ create no polling timers; host replies and subscription events use the same noti
 path. Two workers still execute their own ESM initialization and retain separate globals;
 activation and transaction semantics are unchanged.
 
-The host loads the two independent engines concurrently and waits for both before
-publishing an activated module. A failed request is never replayed. On the next
+By default, the host loads both engines concurrently before activating a module.
+With `workflowStartup: "lazy"`, activation loads only the computation engine; the
+workflow engine starts on its first foreground page or interrupt call. Read-only
+prefetch does not initialize it. A failed request is never replayed. On the next
 operation, the host replaces a closed engine, reloads its ESM, and removes the old
 workflow's subscriptions. Disabling or stopping a module prevents recovery. A
 closed worker retains its original exception so later calls preserve the cause.

@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.ai",
     "name": "AI 助手",
-    "version": "1.5.1",
+    "version": "1.6.2",
     "hostApi": "^1.31.0",
     "dataVersion": 1,
     "permissions": [
@@ -92,7 +92,14 @@
       "handler": "saveHistory",
       "kind": "command",
       "input": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        }
       },
       "output": {
         "type": "object"
@@ -144,6 +151,12 @@
         "opening": "detail",
         "placement": "settings"
       }
+    },
+    {
+      "id": "app.ai.projectDraft",
+      "title": "用 AI 拆解项目",
+      "handler": "render",
+      "headerMode": "contributed"
     }
   ],
   "interruptHandlers": [

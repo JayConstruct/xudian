@@ -223,15 +223,6 @@ class ScriptFeedbackButton extends StatefulWidget {
 
 class _ScriptFeedbackButtonState extends State<ScriptFeedbackButton> {
   final states = WidgetStatesController();
-  @override
-  void initState() {
-    super.initState();
-    states.addListener(_changed);
-  }
-
-  void _changed() {
-    if (mounted) setState(() {});
-  }
 
   @override
   void dispose() {
@@ -243,19 +234,22 @@ class _ScriptFeedbackButtonState extends State<ScriptFeedbackButton> {
   Widget build(BuildContext context) {
     final scope = ScriptUiScope.maybeOf(context);
     final active = scope?.active ?? true;
-    final child = ScriptMotion(
-      target: ScriptMotionValue(
-        scale:
-            active &&
-                widget.onPressed != null &&
-                states.value.contains(WidgetState.pressed)
-            ? widget.feedback.scale
-            : 1,
-      ),
-      timing: ScriptTiming(duration: widget.feedback.duration),
-      child: widget.child,
-    );
     final press = active ? widget.onPressed : null;
+    // The button can update its states during a route change. Only its
+    // contents depend on the pressed scale.
+    final child = ValueListenableBuilder<Set<WidgetState>>(
+      valueListenable: states,
+      child: widget.child,
+      builder: (_, value, content) => ScriptMotion(
+        target: ScriptMotionValue(
+          scale: press != null && value.contains(WidgetState.pressed)
+              ? widget.feedback.scale
+              : 1,
+        ),
+        timing: ScriptTiming(duration: widget.feedback.duration),
+        child: content!,
+      ),
+    );
     return switch (widget.variant) {
       'text' => TextButton(
         onPressed: press,
