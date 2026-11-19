@@ -53,10 +53,11 @@ void main() {
           'main.js':
               original.scripts['main.js']! +
               r'''
-const initialTable = await data.get('timetables','t');
+import {data as migrationData} from '@xudian/sdk';
+const initialTable = await migrationData.get('timetables','t');
 if (initialTable?.name !== '课表') throw new Error('initialization lost transaction');
 export async function zoneMigration() {
-  const t = await data.get('timetables','t');
+  const t = await migrationData.get('timetables','t');
   return {writes:[{collection:'timetables',id:'t',value:{...t,name:'迁移后的课表'}}],events:[],result:{ok:true}};
 }
 ''',

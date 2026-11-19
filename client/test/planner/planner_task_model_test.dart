@@ -193,9 +193,7 @@ void main() {
       'changes': {'notes': '新描述'},
     });
     expect(
-      object(
-        object(object(state['lastUndo'])['input'])['expectedValues'],
-      )['notes'],
+      object(object(object(state['lastUndo'])['input'])['expected'])['notes'],
       '新描述',
     );
     await undo(state);
@@ -273,6 +271,7 @@ void main() {
     final updated = await raw(created['id']);
     expect(updated['dueAt'], isNull);
     expect(updated['dueTimezone'], 'Asia/Shanghai');
+    expect(updated['deadlineHistory'], hasLength(1));
     for (final key in [
       'plannedStartAt',
       'plannedEndAt',
@@ -285,7 +284,7 @@ void main() {
     final restored = await raw(created['id']);
     expect(deadline(restored), deadline(created));
     expect(restored['initialDeadline'], created['initialDeadline']);
-    expect(restored['deadlineHistory'], hasLength(2));
+    expect(restored['deadlineHistory'], created['deadlineHistory']);
     await command('task.updateFields', {
       'id': created['id'],
       'changes': {
@@ -443,7 +442,13 @@ void main() {
       );
       final current = await raw(created['id']);
       expect(
-        {...current}..remove('updatedAt'),
+        object(current['completionUndo'])['revision'],
+        reopened['updatedAt'],
+      );
+      expect(
+        {...current}
+          ..remove('updatedAt')
+          ..remove('completionUndo'),
         {...expectedUndo}..remove('updatedAt'),
       );
       await expectLater(

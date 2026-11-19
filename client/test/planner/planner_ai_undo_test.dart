@@ -142,23 +142,22 @@ void main() {
       'title': 'precise',
       ...precise,
     });
+    final before = await raw(created['id']);
     final state = await editWithAi('task.updateFields', {
       'id': created['id'],
       'changes': {'plannedDate': '2026-10-12'},
     });
-    expect((await raw(created['id']))['plannedStartAt'], isNull);
-    final changes = object(
-      object(object(state['lastUndo'])['input'])['changes'],
-    );
-    expect(changes, {
-      'plannedDate': '2026-10-11',
-      for (final key in precise.keys) key: created[key],
+    final after = await raw(created['id']);
+    expect(after['plannedStartAt'], isNull);
+    final reversal = object(state['lastUndo']);
+    expect(object(reversal['ref'])['serviceId'], 'task.restore');
+    expect(reversal['input'], {
+      'id': created['id'],
+      'expected': after,
+      'value': before,
     });
     await undo(state);
-    final restored = await raw(created['id']);
-    for (final key in ['plannedDate', ...precise.keys]) {
-      expect(restored[key], created[key]);
-    }
+    expect(await raw(created['id']), before);
   });
 
   test('generic AI undo restores corrected completion date and timezone while preserving audit timestamp', () async {
@@ -192,69 +191,63 @@ void main() {
     }
   });
 
-  test('generic AI undo of first completion reopens without completion-date arguments', () async {
-    final created = await command('task.create', {'title': 'pending'});
-    final state = await editWithAi('task.setCompleted', {
-      'id': created['id'],
-      'completed': true,
-      'actualCompletedOn': '2026-10-09',
-      'completedTimezone': 'UTC',
-    });
-    final input = object(object(state['lastUndo'])['input']);
-    expect(input['completed'], false);
-    expect(input.containsKey('actualCompletedOn'), false);
-    expect(input.containsKey('completedTimezone'), false);
-    await undo(state);
-    final restored = await raw(created['id']);
-    expect(restored['completedAt'], isNull);
-    expect(restored['actualCompletedOn'], isNull);
-    expect(restored['completedTimezone'], isNull);
-  });
+  test(
+    'generic AI undo of first completion restores the uncompleted record',
+    () async {
+      final created = await command('task.create', {'title': 'pending'});
+      final before = await raw(created['id']);
+      final state = await editWithAi('task.setCompleted', {
+        'id': created['id'],
+        'completed': true,
+        'actualCompletedOn': '2026-10-09',
+        'completedTimezone': 'UTC',
+      });
+      final input = object(object(state['lastUndo'])['input']);
+      expect(input['value'], before);
+      expect(object(input['expected'])['actualCompletedOn'], '2026-10-09');
+      await undo(state);
+      expect(await raw(created['id']), before);
+    },
+  );
 
-  test('legacy completion metadata and missing precision fields undo as explicit nullable values', () async {
-    final created = await command('task.create', {
-      'title': 'legacy',
-      'plannedDate': '2026-10-08',
-    });
-    final legacy = {...created, 'completedAt': '2026-10-08T06:00:00.000Z'};
-    for (final key in [
-      ...precise.keys,
-      'actualCompletedOn',
-      'completedTimezone',
-    ]) {
-      legacy.remove(key);
-    }
-    await command('task.restore', {
-      'id': created['id'],
-      'expected': created,
-      'value': legacy,
-    });
-    var state = await editWithAi('task.setCompleted', {
-      'id': created['id'],
-      'completed': true,
-      'actualCompletedOn': '2026-10-09',
-      'completedTimezone': 'UTC',
-    });
-    final completionUndo = object(object(state['lastUndo'])['input']);
-    expect(completionUndo.containsKey('actualCompletedOn'), true);
-    expect(completionUndo['actualCompletedOn'], isNull);
-    expect(completionUndo['completedTimezone'], isNull);
-    await undo(state);
-    var restored = await raw(created['id']);
-    expect(restored['completedAt'], legacy['completedAt']);
-    expect(restored['actualCompletedOn'], isNull);
-    expect(restored['completedTimezone'], isNull);
-    state = await editWithAi('task.updateFields', {
-      'id': created['id'],
-      'changes': {'plannedDate': '2026-10-09'},
-    });
-    await undo(state);
-    restored = await raw(created['id']);
-    expect(restored['plannedDate'], '2026-10-08');
-    for (final key in precise.keys) {
-      expect(restored[key], isNull);
-    }
-  });
+  test(
+    'undo preserves missing precision and completion fields on legacy records',
+    () async {
+      final created = await command('task.create', {
+        'title': 'legacy',
+        'plannedDate': '2026-10-08',
+      });
+      final legacy = {...created, 'completedAt': '2026-10-08T06:00:00.000Z'};
+      for (final key in [
+        ...precise.keys,
+        'actualCompletedOn',
+        'completedTimezone',
+      ]) {
+        legacy.remove(key);
+      }
+      await command('task.restore', {
+        'id': created['id'],
+        'expected': created,
+        'value': legacy,
+      });
+      var state = await editWithAi('task.setCompleted', {
+        'id': created['id'],
+        'completed': true,
+        'actualCompletedOn': '2026-10-09',
+        'completedTimezone': 'UTC',
+      });
+      final completionUndo = object(object(state['lastUndo'])['input']);
+      expect(completionUndo['value'], legacy);
+      await undo(state);
+      expect(await raw(created['id']), legacy);
+      state = await editWithAi('task.updateFields', {
+        'id': created['id'],
+        'changes': {'plannedDate': '2026-10-09'},
+      });
+      await undo(state);
+      expect(await raw(created['id']), legacy);
+    },
+  );
 
   test('generic precision undo rejects later user modifications', () async {
     final created = await command('task.create', {

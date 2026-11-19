@@ -410,7 +410,16 @@ void main() {
       const ServiceRef('example.plan', 'template.exam', 1),
       {'templateId': 'exam', 'parameters': {}},
     );
-    expect(p.writes, hasLength(4));
+    expect(
+      p.writes.map((write) => object(write)['collection']),
+      unorderedEquals([
+        'projects',
+        'tasks',
+        'tasks',
+        'projectActivity',
+        'fieldValues',
+      ]),
+    );
     expect(
       await store.query(host.instances['app.tasks']!.actor, 'tasks', {}),
       isEmpty,
@@ -424,6 +433,15 @@ void main() {
     );
     expect(all, hasLength(2));
     expect(object(all.first)['projectId'], object(p.result)['projectId']);
+    final activity = await store.query(
+      host.instances['app.tasks']!.actor,
+      'projectActivity',
+      {},
+    );
+    expect(
+      object(activity.single)['contributions'],
+      unorderedEquals([for (final task in all) 'join:${object(task)['id']}']),
+    );
     expect(await store.query(actor, 'fieldValues', {}), hasLength(1));
   });
   test('invalid last template step leaves every participating collection untouched', () async {

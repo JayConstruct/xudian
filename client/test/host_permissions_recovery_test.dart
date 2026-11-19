@@ -273,7 +273,7 @@ void main() {
     await host.install(
       await update(
         '1.9.2',
-        "\nexport async function migrate(){const t=await data.get('timetables','t');return {writes:[{collection:'timetables',id:'t',value:{...t,name:'迁移之后'}}],events:[],result:{ok:true}};}",
+        "\nimport {data} from '@xudian/sdk';\nexport async function migrate(){const t=await data.get('timetables','t');return {writes:[{collection:'timetables',id:'t',value:{...t,name:'迁移之后'}}],events:[],result:{ok:true}};}",
       ),
     );
     await expectLater(
