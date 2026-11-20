@@ -2,17 +2,20 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:task_app/core/module_host/script_page.dart';
 import 'package:task_app/core/module_host/planner_board.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
+import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/performance/ui_load_trace.dart';
 import 'package:task_app/core/ui/workspace_header.dart';
 import 'package:task_app/core/ui/workspace_popup_menu.dart';
 import 'package:task_app/data/app_database.dart';
+import 'package:task_app/data/providers.dart';
 
 import '../support/module_fixtures.dart' show table;
 
@@ -495,6 +498,13 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        builder: (_, child) => ProviderScope(
+          overrides: [
+            databaseProvider.overrideWith((_) => db),
+            moduleHostProvider.overrideWith((_) => host),
+          ],
+          child: child!,
+        ),
         home: Scaffold(
           appBar: withMenu
               ? AppBar(

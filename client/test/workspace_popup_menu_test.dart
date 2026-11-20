@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/ui/workspace_popup_menu.dart';
 import 'package:task_app/core/ui/ui_icon.dart';
@@ -153,6 +154,7 @@ void main() {
       publish();
       await tester.pumpWidget(
         MaterialApp(
+          builder: (_, child) => ProviderScope(child: child!),
           home: Scaffold(
             appBar: AppBar(
               actions: [
@@ -350,6 +352,7 @@ void main() {
       var hostCalls = 0;
       await tester.pumpWidget(
         MaterialApp(
+          builder: (_, child) => ProviderScope(child: child!),
           home: Scaffold(
             appBar: AppBar(
               actions: [
@@ -476,6 +479,7 @@ Widget _queuedMenuApp(
   Object owner,
   WorkspaceHeaderLease lease,
 ) => MaterialApp(
+  builder: (_, child) => ProviderScope(child: child!),
   home: Scaffold(
     appBar: AppBar(
       actions: [

@@ -96,6 +96,11 @@ void main() {
       ),
     );
     await fixtures.settleNative(tester);
+    final restore = find.text('恢复随客户端发布的模块');
+    await tester.ensureVisible(restore);
+    await tester.tap(restore);
+    await fixtures.settleNative(tester);
+    expect(find.text('恢复内置模块'), findsOneWidget);
     final button = find.text('安装 / 恢复');
     await tester.ensureVisible(button);
     await tester.tap(button);
@@ -106,7 +111,7 @@ void main() {
     await fixtures.settleNative(tester);
     expect(find.text('确认模块安装计划'), findsOneWidget);
     // The review groups the module name and install action into separate rows.
-    final review = find.byType(AlertDialog);
+    final review = find.byType(ModuleBatchReviewDialog);
     expect(
       find.descendant(of: review, matching: find.text('恢复测试模块')),
       findsWidgets,
