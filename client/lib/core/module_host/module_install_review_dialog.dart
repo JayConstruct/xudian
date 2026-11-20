@@ -1,10 +1,12 @@
+import '../../features/settings/settings_widgets.dart';
+import '../ui/ui_surfaces.dart' show DetailPage;
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
 import '../module_catalog/module_catalog.dart';
 import '../ui/native_ui.dart';
-import '../ui/ui_design.dart';
 import 'module_package.dart';
 
 /// The summary and the full plan share the resolver's immutable selection.
@@ -267,48 +269,46 @@ class ModuleBatchReviewDialog extends StatelessWidget {
         .toList();
     return NativeUi(
       protected: true,
-      child: AlertDialog(
-        titlePadding: AppDesign.dialogTitlePadding,
-        contentPadding: AppDesign.dialogContentPadding,
-        actionsPadding: AppDesign.dialogActionsPadding,
-        title: const Text('确认模块安装计划'),
-        content: SizedBox(
-          width: 620,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_summary),
-                _heading(context, '你选择的模块'),
-                for (final item in selected) _module(context, item),
-                if (dependencies.isNotEmpty) ...[
-                  _heading(context, '自动加入的依赖'),
-                  for (final item in dependencies) _module(context, item),
-                ],
-                _heading(context, '权限与影响'),
-                for (final item in [...selected, ...dependencies])
-                  _permissions(context, item),
-                const Text('按依赖顺序统一执行；失败时恢复原版本、数据和启用状态。'),
-                _details(context),
-              ],
-            ),
+      child: DetailPage(
+        title: '确认模块安装计划',
+        child: SettingsList(
+          footer: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('取消'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('确认安装'),
+                ),
+              ),
+            ],
           ),
+          children: [
+            SettingsSummary(
+              label: '安装计划',
+              title: _summary,
+              detail: selected.map((i) => i.name).join('、'),
+              icon: Icons.download_outlined,
+            ),
+            _heading(context, '你选择的模块'),
+            for (final item in selected) _module(context, item),
+            if (dependencies.isNotEmpty) ...[
+              _heading(context, '自动加入的依赖'),
+              for (final item in dependencies) _module(context, item),
+            ],
+            _heading(context, '权限与影响'),
+            for (final item in [...selected, ...dependencies])
+              _permissions(context, item),
+            const Text('按依赖顺序统一执行；失败时恢复原版本、数据和启用状态。'),
+            _details(context),
+          ],
         ),
-        actions: [
-          NativeUi(
-            child: TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
-            ),
-          ),
-          NativeUi(
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('确认安装'),
-            ),
-          ),
-        ],
       ),
     );
   }

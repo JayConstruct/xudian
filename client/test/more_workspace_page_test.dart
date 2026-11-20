@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/app/more_workspace_page.dart';
 import 'package:task_app/core/ui/ui_composition.dart';
@@ -20,12 +21,14 @@ void main() {
       UiEntryRegistration? opened;
       var settingsCalls = 0;
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: MoreWorkspacePage(
-              entries: entries,
-              onOpen: (entry) => opened = entry,
-              onSettings: () => settingsCalls++,
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MoreWorkspacePage(
+                entries: entries,
+                onOpen: (entry) => opened = entry,
+                onSettings: () => settingsCalls++,
+              ),
             ),
           ),
         ),
@@ -51,12 +54,14 @@ void main() {
   testWidgets('empty More keeps settings reachable', (tester) async {
     var settingsCalls = 0;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: MoreWorkspacePage(
-            entries: const [],
-            onOpen: (_) {},
-            onSettings: () => settingsCalls++,
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: MoreWorkspacePage(
+              entries: const [],
+              onOpen: (_) {},
+              onSettings: () => settingsCalls++,
+            ),
           ),
         ),
       ),

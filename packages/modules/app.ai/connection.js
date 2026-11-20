@@ -22,7 +22,7 @@ export function connectionValue(connection) {
 
 export async function editConnection(previous,provider,persist) {
   const same=previous&&(previous.provider||'openai')===provider;
-  const values=await ui.dialog({title:providerName({provider}),fields:[
+  const values=await ui.dialog({title:providerName({provider}),presentation:'sheet',submitLabel:'保存连接',fields:[
     {key:'endpoint',label:'服务地址',value:same?previous.endpoint:provider==='cliproxyapi'?'http://127.0.0.1:8317/v1':'',required:true,maxLength:2048},
     {key:'model',label:'模型 ID（可留空，保存后获取模型）',value:same?previous.model:'',maxLength:256},
     {key:'keyMode',label:'API Key',type:'select',value:same&&previous.credential?'keep':'replace',required:true,options:[
@@ -80,20 +80,21 @@ export async function chooseModel(connection,lifecycle,persist) {
 export function connectionTree(connection,status) {
   const button=(text,type,extra={})=>({type:'button',text,event:{type},variant:'text',...extra});
   const children=[
-    {type:'card',children:[{type:'listTile',icon:'link',title:connection?providerName(connection):'选择模型服务',subtitle:'支持 OpenAI 兼容接口与 CLIProxyAPI',event:{type:'configureService'}}]},
+    {type:'card',children:[{type:'listTile',icon:'link',title:'模型服务',subtitle:connection?providerName(connection):'选择 OpenAI 兼容接口或 CLIProxyAPI',event:{type:'configureService'}}]},
+    {type:'sectionHeader',title:'连接配置'},
     {type:'card',children:[
-      {type:'listTile',title:'接口地址',subtitle:connection?.endpoint||'尚未配置',event:{type:'configureCurrent'}},
+      {type:'listTile',icon:'link',title:'服务地址',subtitle:connection?.endpoint||'尚未配置',event:{type:'configureCurrent'}},
       {type:'divider'},
-      {type:'listTile',title:'API Key',subtitle:connection?.credential?'已安全保存 · 点击更换':'尚未配置',event:{type:'configureCurrent'}},
+      {type:'listTile',icon:'key',title:'API Key',subtitle:connection?.credential?'已安全保存 · 点击更换':'尚未配置',event:{type:'configureCurrent'}},
       {type:'divider'},
-      {type:'listTile',title:'模型',subtitle:connection?.model||'保存连接后获取并选择',...(connection?{event:{type:'chooseModel'}}:{})}
+      {type:'listTile',icon:'ai',title:'模型',subtitle:connection?.model||'保存连接后获取并选择',...(connection?{event:{type:'chooseModel'}}:{})}
     ]},
     {type:'text',text:'密钥保存在系统安全存储，模块无法读取密钥正文。',style:'muted'}
   ];
-  if(connection) children.push({type:'row',children:[button('获取并选择模型','chooseModel'),button('测试连接','testConnection',{variant:'outlined'})]});
+  if(connection) children.push({type:'card',children:[{type:'listTile',icon:'list',title:'获取并选择模型',event:{type:'chooseModel'}},{type:'divider'},{type:'listTile',icon:'link',title:'测试连接',event:{type:'testConnection'}}]});
   if(status) children.push({type:'text',text:status,style:'muted'});
   children.push(button(connection?'编辑连接':'配置连接','configureCurrent',{variant:'filled'}));
-  children.push({type:'disclosure',text:'连接帮助',children:[
+  children.push({type:'disclosure',presentation:'sheet',text:'连接帮助',children:[
     {type:'text',text:'支持服务根地址、/v1 地址或完整聊天地址。CLIProxyAPI 默认端口 8317，请填写客户端 API Key。模型 ID 以服务返回的列表为准。',style:'muted'},
     {type:'text',text:'远程服务使用 HTTPS。本机代理可用 HTTP；Android 的 127.0.0.1 指向设备自身，连接电脑上的代理需要先转发端口。',style:'muted'},
     button('取消当前操作','cancel',{interrupt:'cancel'})

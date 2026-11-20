@@ -1,0 +1,597 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "dataVersion": 1,
+    "defaultInstall": false,
+    "dependencies": [],
+    "description": "红色公共控件验收包。叠层标记列表行和标签栏，滑杆标记输入，三角标记按钮。",
+    "hostApi": "^1.54.0",
+    "id": "diagnostic.ui.coverage",
+    "kind": "uiPack",
+    "name": "公共控件验收（红色）",
+    "permissions": [],
+    "version": "1.1.1"
+  },
+  "collections": [],
+  "services": [],
+  "pages": [],
+  "uiPack": {
+    "contractVersion": 1,
+    "tokens": {
+      "light": {
+        "primary": "#B71E31",
+        "canvas": "#FAD8D9",
+        "surface": "#FFF1F0",
+        "onSurface": "#32161A",
+        "outline": "#996166"
+      },
+      "dark": {
+        "primary": "#FF9A9F",
+        "canvas": "#281519",
+        "surface": "#3B2025",
+        "onSurface": "#FFE4E3",
+        "outline": "#AD777D"
+      }
+    },
+    "components": {
+      "ui.agendaItem@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.button@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "play", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.card@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.checkbox@1": {
+        "tree": {
+          "children": [
+            {
+              "type": "primitive",
+              "name": "padding",
+              "props": {"padding": 6},
+              "children": [
+                {
+                  "name": "icon",
+                  "props": {"color": "#D84448", "name": "sliders", "size": 10},
+                  "type": "primitive"
+                }
+              ]
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.dateInput@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.dateRangeInput@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.dateTimeInput@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.dayOverview@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.dialog@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.divider@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.empty@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.entityRow@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "layers", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "column",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.error@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.filters@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.floatingPanel@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.icon@1": {
+        "tree": {
+          "name": "icon",
+          "props": {
+            "color": "#D84448",
+            "name": "layers",
+            "selected": {"bind": ["props", "selected"]},
+            "semanticLabel": {"bind": ["props", "semanticLabel"]},
+            "size": {"bind": ["props", "size"]}
+          },
+          "type": "primitive"
+        }
+      },
+      "ui.iconButton@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.input@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "column",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.list@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.listTile@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "layers", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "column",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.loading@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.multiSelect@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.nativeControl@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.nativeDialog@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.nativeFeedback@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.nativeSection@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.nativeTile@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "layers", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "column",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.notification@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.numberInput@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "column",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.panel@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.progress@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.section@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.sectionHeader@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.select@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.slider@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.tabs@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "layers", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "column",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.tag@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.taskItem@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.text@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.timeGrid@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.timeInput@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "sliders", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.toggle@1": {
+        "tree": {
+          "children": [
+            {
+              "type": "primitive",
+              "name": "padding",
+              "props": {"padding": 6},
+              "children": [
+                {
+                  "name": "icon",
+                  "props": {"color": "#D84448", "name": "sliders", "size": 10},
+                  "type": "primitive"
+                }
+              ]
+            },
+            {"type": "base"}
+          ],
+          "name": "wrap",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      }
+    },
+    "templates": {
+      "ui.page.detail@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.page.form@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.page.list@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.page.native@1": {
+        "tree": {
+          "children": [
+            {
+              "name": "icon",
+              "props": {"color": "#D84448", "name": "layers", "size": 10},
+              "type": "primitive"
+            },
+            {"type": "base"}
+          ],
+          "name": "column",
+          "props": {"spacing": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.page.settings@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.page.timeGrid@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      }
+    },
+    "chrome": {
+      "ui.chrome.bottomNav@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.chrome.header@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.chrome.pageHeader@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      },
+      "ui.chrome.sidebar@1": {
+        "tree": {
+          "children": [{"type": "base"}],
+          "name": "padding",
+          "props": {"padding": 0},
+          "type": "primitive"
+        }
+      }
+    }
+  }
+}

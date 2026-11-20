@@ -16,8 +16,14 @@ export async function saveTimetable({timetable,expectedTimetable}) {
   }
   return {writes:[{collection:'timetables',id:value.id,value}],events:[{type:'schedule.updated',timetableId:value.id}],result:{id:value.id}};
 }
-export async function saveCourse({course,meeting,orphanPolicy}) {
+export async function saveCourse({course,meeting,orphanPolicy,expectedCourse,expectedMeeting}) {
   const {t,courses,meetings,changes}=await snapshot(course.timetableId),writes=[];
+  if(expectedCourse&&JSON.stringify(normalized(courses.find(c=>c.id===course.id)))!==JSON.stringify(normalized(expectedCourse))) {
+    throw new Error('课程已在其他页面修改或删除，请关闭后重新打开');
+  }
+  if(expectedMeeting&&JSON.stringify(normalized(meetings.find(m=>m.id===meeting?.id)))!==JSON.stringify(normalized(expectedMeeting))) {
+    throw new Error('周期安排已在其他页面修改或删除，请关闭后重新打开');
+  }
   const value={...course,id:course.id || await ids.new()};
   if(!value.name?.trim()||value.name.length>120) throw new Error('请输入课程名称（最多120字）');
   value.name=value.name.trim(); writes.push({collection:'courses',id:value.id,value});

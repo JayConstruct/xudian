@@ -14,13 +14,15 @@ import 'package:task_app/core/ui/ui_layout_resolver.dart';
 import 'package:task_app/core/ui/ui_page_host.dart';
 import 'package:task_app/core/ui/ui_registration.dart';
 import 'package:task_app/data/app_database.dart';
+import 'package:task_app/features/settings/settings_widgets.dart';
 import 'package:task_app/features/settings/ui_layout.dart';
 import 'package:task_app/features/settings/ui_layout_page.dart';
 import 'package:task_app/features/settings/ui_layout_preview.dart';
 import 'package:task_app/features/tasks/application/providers.dart';
 
 Future<void> _openAdvancedEditor(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('高级编辑'));
+  await tester.ensureVisible(find.text('高级编辑'));
+  await tester.tap(find.text('高级编辑'));
   await tester.pumpAndSettle();
 }
 
@@ -241,10 +243,15 @@ void main() {
           matching: find.byType(Scrollable),
         ),
       );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('补充上下文')),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('补充上下文'));
       await tester.pumpAndSettle();
       final projectField = find.descendant(
-        of: find.byType(AlertDialog),
+        of: find.byType(SettingsSheet),
         matching: find.byWidgetPredicate(
           (widget) =>
               widget is DropdownButtonFormField<String> &&
@@ -272,7 +279,7 @@ void main() {
         tester.element(find.byKey(const ValueKey('layout-inspector'))),
       ).pop();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('保存'));
+      await tester.tap(find.text('保存布局'));
       await tester.pumpAndSettle();
       expect(
         container
@@ -734,6 +741,11 @@ void main() {
             .onPressed,
         isNull,
       );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('移到指定项之后')),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('移到指定项之后'));
       await tester.pumpAndSettle();
       expect(find.text('第二页'), findsOneWidget);
@@ -747,9 +759,19 @@ void main() {
       await tester.tap(find.text('第三页'));
       await tester.pumpAndSettle();
       expect(find.text('分组顺序 · 3 / 3'), findsOneWidget);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('置顶')),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('置顶'));
       await tester.pumpAndSettle();
       expect(find.text('分组顺序 · 1 / 3'), findsOneWidget);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('置底')),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('置底'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('移到指定项之前'));
@@ -815,9 +837,14 @@ void main() {
       expect(find.textContaining('模块固定槽位'), findsOneWidget);
       expect(
         tester
-            .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '调整位置'))
-            .onPressed,
-        isNull,
+            .widget<SettingsEntry>(
+              find.ancestor(
+                of: find.text('调整位置'),
+                matching: find.byType(SettingsEntry),
+              ),
+            )
+            .enabled,
+        isFalse,
       );
       expect(
         tester
@@ -827,9 +854,14 @@ void main() {
       );
       expect(
         tester
-            .widget<TextButton>(find.widgetWithText(TextButton, '补充上下文'))
-            .onPressed,
-        isNull,
+            .widget<SettingsEntry>(
+              find.ancestor(
+                of: find.text('补充上下文'),
+                matching: find.byType(SettingsEntry),
+              ),
+            )
+            .enabled,
+        isFalse,
       );
       await tester.ensureVisible(find.text('添加入口或内容'));
       await tester.tap(find.text('添加入口或内容'));
@@ -1260,7 +1292,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('右上角菜单'));
+    await tester.tap(find.text('编排入口'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('zone-header')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('layout-row-test.host.entry')));
     await tester.pumpAndSettle();
@@ -1268,7 +1302,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('恢复此项默认'));
     await tester.pumpAndSettle();
-    expect(find.text('查看变更（1）'), findsOneWidget);
     expect(find.text('恢复此项默认'), findsNothing);
     expect(
       container
@@ -1282,6 +1315,8 @@ void main() {
     );
     Navigator.of(tester.element(find.byKey(const ValueKey('layout-inspector'))))
         .pop();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('查看变更（1）'));
     await tester.pumpAndSettle();
@@ -1834,6 +1869,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    await _openAdvancedEditor(tester);
     await tester.tap(find.byTooltip('电脑 / 宽屏'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -1864,9 +1900,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('底部导航'));
+    await tester.tap(find.text('编排入口'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('test.host.entry')));
+    await tester.tap(find.byKey(const ValueKey('palette-test.host.entry')));
     await tester.pumpAndSettle();
     expect(
       tester

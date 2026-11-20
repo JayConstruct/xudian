@@ -1,8 +1,35 @@
 # UI 设计入口
 
-日程基础布局采用[现有界面融合稿](styles/20261030-023219-917453-c-current-ui-fusion-v02.png)，批量任务管理采用[管理页选稿](screens/ui-04/20261103-162137-563384-batch-management-mobile-light-v02.png)。两处已有实现与模拟器验收。原稿和批次链接需要本机设计材料。
+[页面与设计稿映射表](PAGES.md)按功能分类排列。找到中文界面名称，点击对应状态即可打开本机图片。同一页面可引用多个目录中的图。
+
+## 按页面查询
+
+以下命令从仓库根目录运行。
+
+```bash
+python3 scripts/design_artifacts.py query 外观设置
+python3 scripts/design_artifacts.py query 设置首页 课表 项目目录
+python3 scripts/design_artifacts.py query --category 项目推进
+python3 scripts/design_artifacts.py query --category 课表与教务 --pending
+python3 scripts/design_artifacts.py query --pending
+python3 scripts/design_artifacts.py query 新建任务 课表 --json
+```
+
+`--category` 限定查找范围，可与页面名、`--pending`、`--json` 组合。运行 `query --help` 可查看全部分类，含空格的名称需加引号，例如 `--category "AI 助手"`。
+
+名称、常用别名、稳定英文标识和旧编号均可查。优先精确匹配，其次按名称或标识包含的文字查找。传入多个名称会合并结果并去重；不传名称列出全表。`--pending` 可与名称组合，只返回有待完善说明的页面。批量查询遇到未知名称仍输出已找到的结果，并以非零状态退出。仅检出 Git 文件时也可查映射，本机缺少的图片会标注“本机缺图”。
+
+## 维护页面名称与待完善项
+
+在 [PAGES.md](PAGES.md) 一页一行。标识使用稳定的小写英文短词，页面名称采用界面标题，同名入口加上功能范围，例如“项目内新建任务”。页面改名时保留标识，旧称可放进别名栏，多个别名用“、”分隔。
+
+新增页面时按主要用途填写一个功能分类，并放入表中对应的一组。例如，学期设置归入“课表与教务”，项目内的 AI 拆解归入“项目推进”。跨功能共用的入口、审核和视觉基准归入“全局与通用”。
+
+每张图用 `[状态](相对图片路径)` 登记，同页多张用 `<br>` 分开。页面改稿后更新受影响状态的链接，其他状态的选稿继续保留。草稿和历史图在状态名中注明。待完善栏写具体缺口；补齐后更新链接并移除已完成事项，空栏填“—”。选稿理由和摘要仍在批次清单中维护。可用 `python3 scripts/check_docs.py --check-local` 检查本机图片链接。
 
 ## 选稿与实现状态
+
+日程基础布局与批量任务管理已按映射表中的选稿实现，并通过模拟器验收。
 
 整体视觉基准为[融合方案 v02](styles/20261030-013221-184495-c-legacy-fusion-v02.png)。选定原因与摘要见[批次清单](styles/.batches/20261030-013221-184495/README.md)，生成输入见[完整提示词](styles/20261030-013221-184495-c-legacy-fusion-v02.prompt.txt)。日程稿另有自己的[修订记录](styles/.batches/20261030-023219-917453/README.md)和[提示词](styles/20261030-023219-917453-c-current-ui-fusion-v02.prompt.txt)。
 
@@ -18,7 +45,7 @@
 
 大幅新增或修改 UI 时，按[协作约定中的设计审核流程](../AGENTS.md#大幅新增或修改-ui)提交单界面图稿。将用户最终确认的各张图记录为本批次选稿，供实现和模拟器截图逐张对照。
 
-临时比较配色、布局或交互时，把图片放在本机的 `design/styles/` 或对应的 `design/screens/ui-XX/`，用文件名说明用途，例如 `ui-04-keyboard-layout.png`。试稿可以直接修改或清理，无需建批次。
+临时比较配色、布局或交互时，把图片放在本机的 `design/styles/` 或对应的功能目录，用文件名说明用途，例如 `design/batch-tasks/keyboard-layout.png`。试稿可以直接修改或清理，无需建批次。
 
 ### 采用、交付或需要复现的稿件
 
@@ -28,14 +55,14 @@
 
 ```bash
 python3 scripts/design_artifacts.py new styles --brief '本轮需求与比较范围'
-python3 scripts/design_artifacts.py new ui-01 --brief 'UI-01 日程首页：目标、关键状态与参考内容'
+python3 scripts/design_artifacts.py new --page settings --brief '设置首页的布局与交互状态'
 ```
 
-命令返回 `.batches/<批次>/` 目录。按其中 README 给出的前缀，将原图和同名 `.prompt.txt` 放在风格或页面目录下，例如 `<批次>-mobile-dark-keyboard-v01.png`。同一稿件的修订递增为 `v02`。从工作区外复制原图时核对源文件与副本的 SHA-256。
+新页面沿用 `new --page <功能名>`，例如 `weekly-review`，目录按需创建。命令返回该目录下的 `.batches/<批次>/`。按其中 README 给出的前缀，将原图和同名 `.prompt.txt` 放在风格或页面目录下，例如 `<批次>-mobile-dark-keyboard-v01.png`。同一稿件的修订递增为 `v02`。从工作区外复制原图时核对源文件与副本的 SHA-256。
 
 在 `manifest.json` 填写实际使用的工具和参考来源。参考材料放在批次的 `references/`，衍生预览放在 `notes/previews/`。获选时将 `status` 设为 `selected`，在 `selection` 记录原图文件名 `source` 和理由 `reason`，多张选稿使用数组。
 
-归档完成或修订后，对同一批次先生成索引，再核对文件与摘要。页面稿使用对应的 `design/screens/ui-XX/.batches/<实际批次>`。
+归档完成或修订后，对同一批次先生成索引，再核对文件与摘要。设置页的批次路径为 `design/settings/.batches/<实际批次>`。
 
 ```bash
 python3 scripts/design_artifacts.py index design/styles/.batches/<实际批次>
@@ -46,7 +73,9 @@ python3 scripts/design_artifacts.py check design/styles/.batches/<实际批次>
 
 ### 历史、删除与验收
 
-旧 `schemaVersion: 1` 的 `dist/design/<topic>/<batch>/` 继续支持 index/check，保留 references/drafts/selected/notes 和原清单；其他既有主题的 new 命令保持兼容。新 UI 统一用 styles 或 ui-01 至 ui-23，不再创建 app-ui-* 旧目录。
+历史审核记录中的 `design/screens/ui-XX/` 链接通向本机相应的功能目录。旧命令中的页面编号也可继续使用，例如 `new ui-20` 将批次建在 `design/settings/`。其他工作区尚未迁移的页面批次仍可在原位置执行 `index` 和 `check`。
+
+旧 `schemaVersion: 1` 的 `dist/design/<topic>/<batch>/` 继续支持 index/check，保留 references/drafts/selected/notes 和原清单；旧主题的 `new <主题>` 命令保持兼容。
 
 移动已归档稿件时，记录原路径、新路径与 SHA-256，并修复引用。按要求删除归档稿件时，记录文件名、摘要和删除原因。
 

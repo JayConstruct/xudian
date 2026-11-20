@@ -58,7 +58,8 @@ class RepositoryTest(unittest.TestCase):
                      'tasks/active/import/probe.py', 'tasks/archive/2026-11-19-import/results.json',
                      'design/styles/draft.png', 'design/styles/draft.prompt.txt',
                      'design/styles/.batches/20261029-230000-000001/manifest.json',
-                     'design/screens/ui-01/page.png']:
+                     'design/screens/ui-01/page.png', 'design/ui-20/page.png',
+                     'design/settings/.batches/20261120-001608-406068/manifest.json']:
             with self.subTest(name=name):
                 errors = repository.check_repository(self.root, self.tracked + [name])
                 self.assertTrue(any('Local-only file' in error for error in errors))

@@ -39,7 +39,13 @@ class ScriptAppModule implements AppModule {
     final handler = contribution['handler'] as String;
     final label = contribution['label'] as String? ?? package.title;
     if (slot == UiSlot.workspaceAssistant) {
+      final sourcePages = (package.definition['pages'] as List? ?? [])
+          .map(object)
+          .where((p) => p['handler'] == handler);
       return WorkspaceAssistantRegistration(
+        pageId: sourcePages.length == 1
+            ? sourcePages.single['id'] as String
+            : null,
         id: id,
         label: label,
         supports: (moduleIds) => host.directoryServices().any((raw) {
@@ -102,6 +108,12 @@ class ScriptAppModule implements AppModule {
         container: page['kind'] == 'container',
         retainPosition: page['retainPosition'] == true,
         headerMode: headerMode as String,
+        navigationPreview: page['navigationPreview'] is Map
+            ? object(page['navigationPreview'])
+            : null,
+        menuSourcePage: page['menuSourcePage'] as String?,
+        settingsLabels: (page['settingsLabels'] as List? ?? []).cast<String>(),
+        settingsPath: page['settingsPath'] as String?,
         initializesRuntimeContext: page['initializesRuntimeContext'] == true,
         requiredContext: (page['requiredContext'] as List? ?? [])
             .cast<String>(),
@@ -115,6 +127,7 @@ class ScriptAppModule implements AppModule {
           moduleId: package.id,
           handler: page['handler'] as String,
           embedded: UiPageContentScope.inlineOf(buildContext),
+          settingsStyle: UiPageContentScope.settingsOf(buildContext),
           pageContext: {
             if (package.definition['derivedFrom'] != null)
               'legacyPageId':

@@ -179,7 +179,11 @@ void main() {
         await _settleNative(tester);
         Finder field(String label) => find.byWidgetPredicate(
           (widget) =>
-              widget is TextField && widget.decoration?.labelText == label,
+              widget is TextField &&
+              (widget.decoration?.labelText == label ||
+                  widget.decoration?.hintText == label ||
+                  label == '教务登录网址' &&
+                      widget.keyboardType == TextInputType.url),
         );
         Future<void> tap(String label) async {
           await tester.ensureVisible(find.text(label));
@@ -270,8 +274,9 @@ void main() {
           (widget) => widget is DailySectionHeader && widget.title == '搜索结果',
         );
         expect(resultHeader, findsOneWidget);
-        expect(tester.widget<DailySectionHeader>(resultHeader).count, 1);
-        expect(find.text('第 1/1 页'), findsOneWidget);
+        expect(tester.widget<DailySectionHeader>(resultHeader).count, '1 所学校');
+        expect(tester.widget<DailySectionHeader>(resultHeader).countAtEnd, isTrue);
+        expect(find.text('第 1/1 页'), findsNothing);
         expect(find.textContaining('进入教务系统后点击开始导入'), findsNothing);
         await tap('安徽财经大学');
         expectTitle('安徽财经大学');
@@ -279,6 +284,8 @@ void main() {
           tester.widget<TextField>(field('教务登录网址')).controller!.text,
           'http://vpn.aufe.edu.cn',
         );
+        await tap('原始源码');
+        expectTitle('原始源码');
         expect(
           find.byWidgetPredicate(
             (widget) =>
@@ -287,6 +294,7 @@ void main() {
           ),
           findsOneWidget,
         );
+        await back();
         await tap('安徽财经大学校内入口');
         expectTitle('安徽财经大学');
         expect(
@@ -296,10 +304,15 @@ void main() {
         await tap('关于与致谢');
         expectTitle('关于与致谢');
         expect(find.text('致谢'), findsOneWidget);
-        for (final url in [
-          'https://github.com/ShiGuangSchedule/shiguang_warehouse',
-          'https://github.com/ShiGuangSchedule/shiguangschedule',
+        for (final (label, url) in [
+          (
+            '拾光学校适配脚本仓库',
+            'https://github.com/ShiGuangSchedule/shiguang_warehouse',
+          ),
+          ('拾光课表项目', 'https://github.com/ShiGuangSchedule/shiguangschedule'),
         ]) {
+          await tap(label);
+          expectTitle(label);
           expect(
             find.byWidgetPredicate(
               (widget) =>
@@ -308,7 +321,9 @@ void main() {
             ),
             findsOneWidget,
           );
+          await back();
         }
+        await tap('MIT 开源许可');
         final license = find.byWidgetPredicate(
           (widget) =>
               widget is SelectableText &&
@@ -334,9 +349,12 @@ void main() {
         await tester.enterText(search, 'school-does-not-exist-xyz');
         await _settleNative(tester);
         expect(find.text('没有找到学校'), findsOneWidget);
-        await tap('尝试通用系统导入');
+        final general = find.widgetWithText(ListTile, '通用系统导入');
+        await tester.ensureVisible(general);
+        await tester.tap(general);
+        await _settleNative(tester);
         expectTitle('通用系统导入');
-        expect(find.byType(ListTile), findsNWidgets(4));
+        expect(find.byType(ListTile), findsNWidgets(6));
         await back();
         expectTitle('选择学校');
         expect(

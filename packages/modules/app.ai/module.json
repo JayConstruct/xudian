@@ -3,7 +3,7 @@
   "manifest": {
     "id": "app.ai",
     "name": "AI 助手",
-    "version": "1.6.2",
+    "version": "1.7.1",
     "hostApi": "^1.31.0",
     "dataVersion": 1,
     "permissions": [
@@ -150,7 +150,12 @@
         "label": "AI 助手",
         "opening": "detail",
         "placement": "settings"
-      }
+      },
+      "settingsLabels": [
+        "模型连接",
+        "工作模式",
+        "清空对话记录"
+      ]
     },
     {
       "id": "app.ai.projectDraft",

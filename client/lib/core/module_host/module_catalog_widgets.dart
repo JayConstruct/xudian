@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../ui/native_ui.dart';
+import '../../features/settings/settings_widgets.dart';
 import '../ui/ui_icon.dart';
 import '../ui/ui_design.dart';
 
@@ -12,107 +12,132 @@ class ModuleCatalogFilters extends StatelessWidget {
     required this.categories,
     required this.onStatusChanged,
     required this.onCategoryChanged,
+    this.resultLabel = '模块目录',
+    this.count = 0,
   });
 
-  final String status, category;
+  static const statuses = ['全部', '推荐', '可更新', '已安装', '未安装'];
+  final String status, category, resultLabel;
+  final int count;
   final List<String> categories;
   final ValueChanged<String> onStatusChanged, onCategoryChanged;
 
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodyMedium;
-    final labels = ['状态：$status', '分类：$category'];
-    double labelWidth(String label) {
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: style),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-      )..layout();
-      final width = painter.width + 46;
-      painter.dispose();
-      return width;
-    }
+  Widget _statusLabel(String option) => Text(
+    option,
+    key: ValueKey('catalog-status-$option'),
+    semanticsLabel: '筛选安装状态：$option',
+  );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final controls = [
-          _selector(context, 'status', labels[0], status, const [
-            '全部',
-            '推荐',
-            '已安装',
-            '未安装',
-            '可更新',
-          ], onStatusChanged),
-          _selector(context, 'category', labels[1], category, [
-            '全部分类',
-            ...categories,
-          ], onCategoryChanged),
-        ];
-        final halfWidth = (constraints.maxWidth - 8) / 2;
-        if (labels.every((label) => labelWidth(label) <= halfWidth)) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Future<void> _pickCategory(BuildContext context) async {
+    final next = await showSettingsModal<String>(
+      context: context,
+      useGlobalStyle: true,
+      builder: (context) => SettingsSheet(
+        title: const Text('模块分类'),
+        expandedActions: true,
+        content: SingleChildScrollView(
+          child: SettingsGroupSurface(
+            dividerIndent: SettingsListTileTheme.horizontalPadding,
             children: [
-              Expanded(child: controls[0]),
-              const SizedBox(width: 8),
-              Expanded(child: controls[1]),
+              for (final option in ['全部分类', ...categories])
+                ListTile(
+                  title: Text(option),
+                  selected: option == category,
+                  selectedColor: Theme.of(context).colorScheme.onSurface,
+                  trailing: option == category
+                      ? UiIcon(
+                          Icons.check_rounded,
+                          size: 19,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      : null,
+                  onTap: () => Navigator.pop(context, option),
+                ),
             ],
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [controls[0], const SizedBox(height: 8), controls[1]],
-        );
-      },
+          ),
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
     );
+    if (context.mounted && next != null) onCategoryChanged(next);
   }
 
-  Widget _selector(
-    BuildContext context,
-    String id,
-    String label,
-    String value,
-    List<String> options,
-    ValueChanged<String> onSelected,
-  ) => PopupMenuButton<String>(
-    key: ValueKey('catalog-filter-$id'),
-    tooltip: id == 'status' ? '筛选安装状态' : '筛选模块分类',
-    initialValue: value,
-    position: PopupMenuPosition.under,
-    onSelected: onSelected,
-    itemBuilder: (_) => [
-      for (final option in options)
-        PopupMenuItem<String>(value: option, child: Text(option)),
-    ],
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: DecoratedBox(
-        decoration: ShapeDecoration(
-          shape: AppDesign.smoothShape(
-            radius: AppDesign.compactRadius,
-            side: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
-          ),
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final scale = MediaQuery.textScalerOf(context).scale(13);
+            if (constraints.maxWidth < 5 * (3 * scale + 8)) {
+              return Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final option in statuses)
+                    ChoiceChip(
+                      label: _statusLabel(option),
+                      selected: option == status,
+                      onSelected: (_) => onStatusChanged(option),
+                    ),
+                ],
+              );
+            }
+            return SettingsSegments<String>(
+              key: const ValueKey('catalog-filter-status'),
+              segments: [
+                for (final option in statuses)
+                  ButtonSegment(value: option, label: _statusLabel(option)),
+              ],
+              selected: status,
+              onChanged: onStatusChanged,
+            );
+          },
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodyMedium,
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(child: SettingsHeading('$resultLabel · $count')),
+            Flexible(
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  key: const ValueKey('catalog-filter-category'),
+                  onPressed: () => _pickCategory(context),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, 40),
+                    padding: const EdgeInsetsDirectional.only(start: 8),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: const TextStyle(fontSize: 13),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      UiIcon(Icons.tune, size: 17, color: colors.primary),
+                      const SizedBox(width: 4),
+                      Flexible(child: Text(category, textAlign: TextAlign.end)),
+                      UiIcon(
+                        Icons.expand_more,
+                        size: 17,
+                        color: colors.primary,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
-              const UiIcon(Icons.arrow_drop_down, size: 20),
-            ],
-          ),
+            ),
+          ],
         ),
-      ),
-    ),
-  );
+      ],
+    );
+  }
 }
 
 class ModuleCatalogCard extends StatelessWidget {
@@ -123,15 +148,18 @@ class ModuleCatalogCard extends StatelessWidget {
     required this.status,
     required this.version,
     required this.action,
+    this.icon = Icons.extension_outlined,
     this.featured = false,
     this.onDetails,
     this.onAction,
     this.secondaryActions = const [],
     this.unavailableHint,
+    this.grouped = false,
   });
 
   final String name, description, status, version, action;
-  final bool featured;
+  final IconData icon;
+  final bool featured, grouped;
   final VoidCallback? onDetails, onAction;
   final List<Widget> secondaryActions;
   final String? unavailableHint;
@@ -139,88 +167,118 @@ class ModuleCatalogCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final largeText = MediaQuery.textScalerOf(context).scale(14) > 21;
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: Semantics(
-        button: onDetails != null,
-        label: '查看 $name 详情',
-        child: InkWell(
-          onTap: onDetails,
+    final stackActions = largeText || secondaryActions.isNotEmpty;
+    final actionButton = FilledButton.tonal(
+      onPressed: onAction,
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(48, 30),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        shape: AppDesign.smoothShape(radius: 11),
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      child: Text(action),
+    );
+    final statusLabel = '$status · $version';
+    final showStatus = unavailableHint != null || secondaryActions.isNotEmpty;
+    final tile = Semantics(
+      button: onDetails != null,
+      label: '查看 $name 详情\n$statusLabel',
+      child: InkWell(
+        onTap: onDetails,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    SettingsGlyph(icon, size: 40, radius: 13),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(name, style: theme.textTheme.titleMedium),
-                    ),
-                    const SizedBox(width: 8),
-                    const ExcludeSemantics(
-                      child: UiIcon(Icons.chevron_right, size: 20),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  maxLines: largeText ? null : 2,
-                  overflow: largeText ? null : TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (featured)
-                      Text(
-                        '推荐',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.primary,
+                      child: Tooltip(
+                        message: featured ? '推荐 · $statusLabel' : statusLabel,
+                        excludeFromSemantics: true,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              description,
+                              maxLines: largeText ? null : 1,
+                              overflow: largeText
+                                  ? null
+                                  : TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    Text(
-                      '$status · $version',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
                     ),
+                    if (!stackActions) ...[
+                      const SizedBox(width: 8),
+                      actionButton,
+                    ],
                   ],
                 ),
-                if (unavailableHint != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    unavailableHint!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
+                if (showStatus)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
+                      start: 52,
+                      top: 4,
+                    ),
+                    child: Text(statusLabel, style: theme.textTheme.bodySmall),
+                  ),
+                if (unavailableHint != null)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
+                      start: 52,
+                      top: 4,
+                    ),
+                    child: Text(
+                      unavailableHint!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.error,
+                      ),
                     ),
                   ),
-                ],
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    NativeUi(
-                      child: FilledButton.tonal(
-                        onPressed: onAction,
-                        child: Text(action),
-                      ),
-                    ),
-                    ...secondaryActions,
-                  ],
-                ),
+                if (stackActions)
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    children: [actionButton, ...secondaryActions],
+                  ),
               ],
             ),
           ),
         ),
       ),
+    );
+    return Material(
+      color: grouped ? Colors.transparent : colors.surface,
+      shape: grouped
+          ? null
+          : AppDesign.smoothShape(
+              radius: 19,
+              side: BorderSide(color: colors.outlineVariant),
+            ),
+      clipBehavior: grouped ? Clip.none : Clip.antiAlias,
+      child: tile,
     );
   }
 }
@@ -272,10 +330,12 @@ class ModuleCatalogSliverGrid extends StatelessWidget {
     super.key,
     required this.itemCount,
     required this.itemBuilder,
+    this.groupedItemBuilder,
   });
 
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
+  final IndexedWidgetBuilder? groupedItemBuilder;
 
   @override
   Widget build(BuildContext context) => SliverLayoutBuilder(
@@ -289,6 +349,23 @@ class ModuleCatalogSliverGrid extends StatelessWidget {
       final columns = ((availableWidth + spacing) / (320 * scale + spacing))
           .floor()
           .clamp(1, 3);
+      if (columns == 1 && groupedItemBuilder != null && itemCount > 0) {
+        final colors = Theme.of(context).colorScheme;
+        return DecoratedSliver(
+          decoration: ShapeDecoration(
+            color: colors.surface,
+            shape: AppDesign.smoothShape(
+              radius: 19,
+              side: BorderSide(color: colors.outlineVariant),
+            ),
+          ),
+          sliver: SliverList.separated(
+            itemCount: itemCount,
+            itemBuilder: groupedItemBuilder!,
+            separatorBuilder: (_, _) => const SettingsDivider(indent: 66),
+          ),
+        );
+      }
       final rowCount = (itemCount / columns).ceil();
       return SliverList.builder(
         itemCount: rowCount,

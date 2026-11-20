@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.schedule",
     "name": "大学课表",
-    "version": "1.16.6",
-    "hostApi": "^1.34.0",
+    "version": "1.17.2",
+    "hostApi": "^1.55.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -170,7 +170,114 @@
         }
       ],
       "retainPosition": true,
-      "headerMode": "contributed"
+      "headerMode": "contributed",
+      "navigationPreview": {
+        "title": "第 7 周",
+        "columns": [
+          {
+            "id": "mon",
+            "title": "一",
+            "subtitle": "11-16"
+          },
+          {
+            "id": "tue",
+            "title": "二",
+            "subtitle": "11-17"
+          },
+          {
+            "id": "wed",
+            "title": "三",
+            "subtitle": "11-18"
+          },
+          {
+            "id": "thu",
+            "title": "四",
+            "subtitle": "11-19"
+          },
+          {
+            "id": "fri",
+            "title": "五",
+            "subtitle": "11-20"
+          }
+        ],
+        "rows": [
+          {
+            "id": "1",
+            "title": "1",
+            "subtitle": "08:00"
+          },
+          {
+            "id": "2",
+            "title": "2",
+            "subtitle": "08:55"
+          },
+          {
+            "id": "3",
+            "title": "3",
+            "subtitle": "10:00"
+          },
+          {
+            "id": "4",
+            "title": "4",
+            "subtitle": "10:55"
+          },
+          {
+            "id": "5",
+            "title": "5",
+            "subtitle": "14:00"
+          },
+          {
+            "id": "6",
+            "title": "6",
+            "subtitle": "14:55"
+          }
+        ],
+        "blocks": [
+          {
+            "column": "mon",
+            "start": 0,
+            "end": 2,
+            "title": "高等数学",
+            "subtitle": "教学楼 101"
+          },
+          {
+            "column": "tue",
+            "start": 2,
+            "end": 4,
+            "title": "大学英语",
+            "subtitle": "综合楼 203"
+          },
+          {
+            "column": "wed",
+            "start": 0,
+            "end": 2,
+            "title": "线性代数",
+            "subtitle": "教学楼 302"
+          },
+          {
+            "column": "thu",
+            "start": 2,
+            "end": 4,
+            "title": "程序设计",
+            "subtitle": "实验楼"
+          },
+          {
+            "column": "fri",
+            "start": 0,
+            "end": 2,
+            "title": "大学物理",
+            "subtitle": "理科楼"
+          }
+        ],
+        "menu": [
+          "切换课表",
+          "回到本周",
+          "今日课程",
+          "课表设置",
+          "显示设置"
+        ],
+        "assistant": true
+      }
     },
     {
       "id": "app.schedule.settings",
@@ -182,35 +289,48 @@
         "id": "app.schedule.settings.entry",
         "opening": "detail",
         "placement": "settings"
-      }
+      },
+      "menuSourcePage": "app.schedule.home",
+      "settingsLabels": [
+        "课表管理",
+        "学期设置",
+        "作息设置",
+        "显示设置",
+        "导入与备份"
+      ]
     },
     {
       "id": "app.schedule.semester",
       "title": "学期设置",
       "icon": "calendar",
       "handler": "render",
-      "retainPosition": true
+      "retainPosition": true,
+      "settingsPath": "课表设置"
     },
     {
       "id": "app.schedule.periods",
       "title": "作息设置",
       "icon": "calendar",
       "handler": "render",
-      "retainPosition": true
+      "retainPosition": true,
+      "settingsPath": "课表设置"
     },
     {
       "id": "app.schedule.display",
       "title": "显示设置",
       "icon": "settings",
       "handler": "render",
-      "retainPosition": true
+      "retainPosition": true,
+      "settingsPath": "课表设置"
     },
     {
       "id": "app.schedule.courses",
       "title": "课程管理",
       "icon": "calendar",
       "handler": "render",
-      "retainPosition": true
+      "retainPosition": true,
+      "headerMode": "contributed",
+      "settingsPath": "课表设置"
     },
     {
       "id": "app.schedule.changes",
@@ -232,14 +352,16 @@
           "kind": "entries",
           "public": true
         }
-      ]
+      ],
+      "settingsPath": "课表 › 右上角菜单 › 课表设置"
     },
     {
       "id": "app.schedule.timetables",
       "title": "课表管理",
       "icon": "calendar",
       "handler": "render",
-      "retainPosition": true
+      "retainPosition": true,
+      "settingsPath": "课表设置"
     },
     {
       "id": "app.schedule.today",

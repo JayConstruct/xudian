@@ -33,6 +33,8 @@ class UiContract {
   };
 }
 
+const _controlVariants = ['text', 'outlined', 'filled', 'tonal'];
+
 const Map<String, Object?> uiCommonPropsSchema = {
   'type': 'object',
   'properties': {
@@ -46,10 +48,7 @@ const Map<String, Object?> uiCommonPropsSchema = {
       'type': ['string', 'null'],
     },
     'disabled': {'type': 'boolean'},
-    'variant': {
-      'type': 'string',
-      'enum': ['text', 'outlined', 'filled', 'tonal'],
-    },
+    'variant': {'type': 'string', 'enum': _controlVariants},
     'key': {'type': 'string'},
     'selectedIndex': {'type': 'integer'},
     'empty': {'type': 'boolean'},
@@ -64,7 +63,6 @@ final Map<String, UiContract> uiContracts = Map.unmodifiable({
     'section',
     'divider',
     'tag',
-    'tabs',
     'filters',
     'loading',
     'empty',
@@ -74,6 +72,19 @@ final Map<String, UiContract> uiContracts = Map.unmodifiable({
     'entityRow',
   ])
     'ui.$name@1': UiContract('ui.$name@1'),
+  'ui.tabs@1': UiContract(
+    'ui.tabs@1',
+    propsSchema: {
+      'type': 'object',
+      'properties': {
+        ...uiCommonPropsSchema['properties'] as Map<String, Object?>,
+        'variant': {
+          'type': 'string',
+          'enum': const [..._controlVariants, 'pills', 'underline'],
+        },
+      },
+    },
+  ),
   'ui.button@1': UiContract(
     'ui.button@1',
     events: ['press'],

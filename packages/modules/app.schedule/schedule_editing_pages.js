@@ -1,6 +1,6 @@
 import {data,ui,clock} from '@xudian/sdk';
-import {normalizeWeeks,addDays,weekday} from './calendar.js';
-import {customCourseColor} from './colors.js';
+import {addDays,weekday} from './calendar.js';
+import {courseValues,orphanPolicies,saveCourseValues} from './course_management.js';
 import {snapshot,currentOccurrence} from './schedule_queries.js';
 import {command} from './schedule_commands.js';
 import {field,text} from './page_controls.js';
@@ -27,12 +27,13 @@ export async function handleEditing({t,state,event,selectTimetable}) {
   if(event?.type==='course') {
     if(!t) throw new Error('先创建课表');
     const current=event.course?.id?await data.get('courses',event.course.id):event.course,meeting=event.meeting?.id?await data.get('meetings',event.meeting.id):event.meeting;
-    const values=await ui.dialog({title:current?'编辑课程与安排':'添加课程',fields:[field('name','课程名称',current?.name),field('code','课程代码',current?.code),field('color','颜色 #RRGGBB（留空自动）',current?customCourseColor(current):''),field('notes','备注',current?.notes,'multiline'),
-      field('weekday','星期（1–7）',String(meeting?.weekday||1),'number'),field('startPeriod','开始节次',String(meeting?.startPeriod||1),'number'),field('endPeriod','结束节次',String(meeting?.endPeriod||2),'number'),
-      field('weeks','周次（例如1-16单、1,4,8-10）',meeting?.weeks.join(',')||`1-${t.totalWeeks}`),field('teacher','教师',meeting?.teacher),field('location','地点',meeting?.location),
-      field('orphanPolicy','失效调课处理','ask','select',[{value:'ask',label:'有失效调课时阻止保存'},{value:'discard',label:'撤销失效调课'},{value:'extra',label:'保留为临时课程'}])]});
-    if(values) await command('schedule.course.save',{course:{...current,id:current?.id,timetableId:t.id,name:values.name,code:values.code,color:values.color,colorMode:values.color?.trim()?'custom':'auto',notes:values.notes},
-      meeting:{...meeting,id:meeting?.id,timetableId:t.id,weekday:Number(values.weekday),startPeriod:Number(values.startPeriod),endPeriod:Number(values.endPeriod),weeks:normalizeWeeks(values.weeks,t.totalWeeks),teacher:values.teacher,location:values.location},orphanPolicy:values.orphanPolicy});
+    if(event.course?.id&&!current||event.meeting?.id&&!meeting)throw new Error('课程或周期安排已不存在');
+    const initial=courseValues(t,current,meeting);
+    const values=await ui.dialog({title:current?'编辑课程与安排':'添加课程',fields:[field('name','课程名称',initial.name),field('code','课程代码',initial.code),field('color','颜色 #RRGGBB（留空自动）',initial.color),field('notes','备注',initial.notes,'multiline'),
+      field('weekday','星期（1–7）',initial.weekday,'number'),field('startPeriod','开始节次',initial.startPeriod,'number'),field('endPeriod','结束节次',initial.endPeriod,'number'),
+      field('weeks','周次（例如1-16单、1,4,8-10）',initial.weeks),field('teacher','教师',initial.teacher),field('location','地点',initial.location),
+      field('orphanPolicy','失效调课处理',initial.orphanPolicy,'select',orphanPolicies)]});
+    if(values) await saveCourseValues(t,current,meeting,values);
   }
   if(event?.type==='editOccurrence'||event?.type==='extra') {
     const item=event.item;
@@ -69,25 +70,13 @@ export async function renderOccurrence({t,state,context,children}) {
   return {state,tree:{type:'column',children}};
 }
 
-export async function renderCoursesAndChanges({page,t,state,children}) {
-  if(page==='app.schedule.courses') {
-    const {courses,meetings}=await snapshot(t.id);
-    children.push({type:'sectionHeader',title:'课程与安排',count:courses.length,action:{label:'添加课程',icon:'add',event:{type:'course'}}});
-    if(!courses.length)children.push(text('还没有课程，添加课程后配置上课安排。'));
-    for(const course of courses) {
-      const arrangements=meetings.filter(m=>m.courseId===course.id);
-      children.push(group(course.name,[text([course.code,course.notes].filter(Boolean).join(' · ')),...arrangements.map(m=>({type:'disclosure',key:'arrangement:'+m.id,text:`星期${m.weekday} · 第 ${m.startPeriod}–${m.endPeriod} 节`,children:[
-        text(`${m.weeks.join(',')} 周 · ${m.location||'未填地点'} · ${m.teacher||'未填教师'}`),listTile('编辑安排',null,'schedule',{type:'course',course,meeting:m}),listTile('删除安排',null,'history',{type:'delete',collection:'meetings',id:m.id})
-      ]})),listTile('增加安排',null,'schedule',{type:'course',course}),listTile('删除课程',null,'history',{type:'delete',collection:'courses',id:course.id})]));
-    }
-  } else if(page==='app.schedule.changes') {
-    const {courses,meetings,changes}=await snapshot(t.id);
-    children.push({type:'sectionHeader',title:'单次课程变更',count:changes.length,action:{label:'临时加课',icon:'add',event:{type:'extra'}}});
-    if(!changes.length)children.push(text('暂无单次调课记录。点击周视图中的课程可查看与调整本次上课。'));
-    for(const change of changes) {
-      const course=courses.find(c=>c.id===(change.courseId||meetings.find(m=>m.id===change.meetingId)?.courseId));
-      children.push(group(course?.name||'单次课程变更',[text(`${change.originalDate} → ${change.kind==='cancel'?'取消':change.date}${change.kind==='extra'?' · 临时课':''}`),listTile('撤销变更',null,'history',{type:'delete',collection:'occurrenceChanges',id:change.id})]));
-    }
+export async function renderChanges({t,state,children}) {
+  const {courses,meetings,changes}=await snapshot(t.id);
+  children.push({type:'sectionHeader',title:'单次课程变更',count:changes.length,action:{label:'临时加课',icon:'add',event:{type:'extra'}}});
+  if(!changes.length)children.push(text('暂无单次调课记录。点击周视图中的课程可查看与调整本次上课。'));
+  for(const change of changes) {
+    const course=courses.find(c=>c.id===(change.courseId||meetings.find(m=>m.id===change.meetingId)?.courseId));
+    children.push(group(course?.name||'单次课程变更',[text(`${change.originalDate} → ${change.kind==='cancel'?'取消':change.date}${change.kind==='extra'?' · 临时课':''}`),listTile('撤销变更',null,'history',{type:'delete',collection:'occurrenceChanges',id:change.id})]));
   }
   return {state,tree:{type:'column',children}};
 }

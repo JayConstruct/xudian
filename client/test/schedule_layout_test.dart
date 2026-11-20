@@ -366,7 +366,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('课表设置'));
       await _settleNative(tester);
-      expect(find.text('概览'), findsOneWidget);
+      expect(find.text('课程与安排'), findsOneWidget);
       expect(find.text('课表配置'), findsOneWidget);
 
       await tester.tap(find.text('学期设置'));
@@ -404,8 +404,22 @@ void main() {
         await tester.ensureVisible(find.text(destination.key));
         await tester.tap(find.text(destination.key));
         await _settleNative(tester);
-        if (destination.key == '课程管理' || destination.key == '调课记录') {
-          // Add actions use accessible icon buttons, without visible labels.
+        if (destination.key == '课程管理') {
+          final add = find.widgetWithText(FilledButton, '添加课程');
+          expect(add, findsOneWidget);
+          await tester.tap(add);
+          await _settleNative(tester);
+          expect(find.text('周期安排'), findsOneWidget);
+          expect(find.text('课程名称'), findsOneWidget);
+          await tester.tap(find.widgetWithText(OutlinedButton, '取消'));
+          await _settleNative(tester);
+          expect(add, findsOneWidget);
+          await tester.tap(add);
+          await _settleNative(tester);
+          await tester.binding.handlePopRoute();
+          await _settleNative(tester);
+          expect(add, findsOneWidget);
+        } else if (destination.key == '调课记录') {
           final action = find.byTooltip(destination.value);
           expect(action, findsOneWidget);
           await tester.ensureVisible(action);
@@ -573,12 +587,16 @@ void main() {
     final settings = await render({
       'context': {'pageId': 'app.schedule.settings'},
     });
-    expect(
-      objects(object(settings['tree'])['children'])
-          .expand((group) => objects(group['children']))
-          .any((child) => child['title'] == '第二课表'),
-      isTrue,
-    );
+    bool containsTimetableTitle(Object? node) {
+      if (node is List) return node.any(containsTimetableTitle);
+      if (node is Map) {
+        return node['title'] == '第二课表' ||
+            node.values.any(containsTimetableTitle);
+      }
+      return false;
+    }
+
+    expect(containsTimetableTitle(settings['tree']), isTrue);
     final resumed = await render({
       'state': first['state'],
       'context': {

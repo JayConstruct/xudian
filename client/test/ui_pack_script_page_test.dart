@@ -17,6 +17,7 @@ import 'package:task_app/core/ui/workspace_header.dart';
 import 'package:task_app/core/ui/ui_pack_providers.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
+import 'package:task_app/features/settings/settings_widgets.dart';
 
 void main() {
   late AppDatabase db;
@@ -65,6 +66,19 @@ export function renderDisclosure({state={},event}) {
     {type:'button',text:'确认安排',event:{type:'confirm'}},
     ...(event?.type==='confirm'?[{type:'text',text:'已确认'}]:[])
   ]}};
+}
+export function renderSettings({state={},context={}}) {
+  const children=[
+    {type:'sectionHeader',title:'连接'},
+    {type:'card',children:[
+      {type:'listTile',title:'模型',icon:'settings'},
+      {type:'divider',height:6},
+      {type:'listTile',title:'地址',icon:'settings'}
+    ]},
+    {type:'text',text:'设置说明'}
+  ];
+  while(children.length<context.count) children.push({type:'text',text:'其他设置'});
+  return {state,tree:{type:'column',children}};
 }
 export async function renderConversation({state={},event,formValues={}}) {
   const messages=state.messages||Array.from({length:16},(_,i)=>'历史消息 '+i);
@@ -115,6 +129,7 @@ export async function render({state={},event,context={}}) {
     WidgetTester tester, {
     bool active = true,
     bool waitForRender = true,
+    bool settingsStyle = false,
     Map<String, Object?> pageContext = const {},
     WorkspaceHeaderController? headers,
     String handler = 'render',
@@ -123,6 +138,7 @@ export async function render({state={},event,context={}}) {
       host: host,
       moduleId: 'test.page',
       handler: handler,
+      settingsStyle: settingsStyle,
       pageContext: pageContext,
     );
     if (headers != null) {
@@ -149,6 +165,40 @@ export async function render({state={},event,context={}}) {
     );
     if (waitForRender) await settle(tester);
     return ProviderScope.containerOf(tester.element(find.byType(ScriptPage)));
+  }
+
+  for (final count in [50, 51]) {
+    testWidgets('settings geometry and declared divider at $count rows', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        handler: 'renderSettings',
+        settingsStyle: true,
+        pageContext: {'count': count},
+      );
+      final group = find.byType(SettingsGroupSurface);
+      final heading = find.byType(SettingsHeading);
+      final divider = tester.widget<Divider>(
+        find.descendant(of: group, matching: find.byType(Divider)),
+      );
+      final frame = tester.getRect(group);
+      expect(
+        frame.top - tester.getBottomLeft(heading).dy,
+        SettingsGroup.headingGap,
+      );
+      expect(
+        tester.getTopLeft(find.text('设置说明')).dy - frame.bottom,
+        SettingsGroup.spacing,
+      );
+      expect(divider.height, 6);
+      expect(
+        tester.getTopLeft(find.text('模型')).dx - frame.left,
+        divider.indent,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   }
 
   testWidgets(

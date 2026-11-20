@@ -191,6 +191,10 @@ class UiPageRegistration extends UiRegistration {
     this.quickAddDefaults = const {},
     this.headerMode = 'standard',
     this.initializesRuntimeContext = false,
+    this.menuSourcePage,
+    this.settingsPath,
+    this.settingsLabels = const [],
+    this.navigationPreview,
   }) : super(UiSlot.workspacePage);
 
   final String id;
@@ -207,6 +211,10 @@ class UiPageRegistration extends UiRegistration {
 
   /// The container renders its initializer before mounting date contributions.
   final bool initializesRuntimeContext;
+  final String? menuSourcePage, settingsPath;
+  final List<String> settingsLabels;
+  bool get isSettingsPage => settingsPath != null || settingsLabels.isNotEmpty;
+  final Map<String, Object?>? navigationPreview;
 }
 
 class UiEntryRegistration extends UiRegistration {
@@ -265,10 +273,18 @@ class UiPageContentScope extends InheritedWidget {
   const UiPageContentScope({
     super.key,
     required this.inline,
+    this.settingsStyle = false,
     required super.child,
   });
 
   final bool inline;
+  final bool settingsStyle;
+
+  static bool settingsOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<UiPageContentScope>()
+          ?.settingsStyle ??
+      false;
 
   static bool inlineOf(BuildContext context) =>
       context
@@ -278,5 +294,5 @@ class UiPageContentScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(UiPageContentScope oldWidget) =>
-      inline != oldWidget.inline;
+      inline != oldWidget.inline || settingsStyle != oldWidget.settingsStyle;
 }

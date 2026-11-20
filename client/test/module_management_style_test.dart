@@ -13,6 +13,7 @@ import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/host_manager_page.dart';
 import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/module_catalog_widgets.dart';
+import 'package:task_app/features/settings/settings_widgets.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_management_widgets.dart';
 import 'package:task_app/core/module_host/module_package.dart';
@@ -171,18 +172,20 @@ void main() {
         ),
       ),
     );
-    for (final id in ['status', 'category']) {
-      final control = find.byKey(ValueKey('catalog-filter-$id'));
-      final box = tester.widget<DecoratedBox>(
-        find.descendant(of: control, matching: find.byType(DecoratedBox)).first,
-      );
-      final decoration = box.decoration as ShapeDecoration;
-      expect(decoration.shape, isA<RoundedSuperellipseBorder>());
-      expect(
-        (decoration.shape as RoundedSuperellipseBorder).borderRadius,
-        BorderRadius.circular(AppDesign.compactRadius),
-      );
-    }
+    final segments = find.byType(SettingsSegments<String>);
+    final box = tester.widget<DecoratedBox>(
+      find.descendant(of: segments, matching: find.byType(DecoratedBox)).first,
+    );
+    final decoration = box.decoration as ShapeDecoration;
+    expect(decoration.shape, isA<RoundedSuperellipseBorder>());
+    expect(
+      (decoration.shape as RoundedSuperellipseBorder).borderRadius,
+      BorderRadius.circular(AppDesign.controlRadius),
+    );
+    await tester.tap(find.text('全部分类'));
+    await tester.pumpAndSettle();
+    expect(find.text('模块分类'), findsOneWidget);
+    expect(find.byType(SettingsGroupSurface), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -307,7 +310,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.tap(find.byTooltip('模块操作'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('预览 UI 包'));
       await tester.pump();

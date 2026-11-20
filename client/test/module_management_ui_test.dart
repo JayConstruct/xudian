@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_catalog/module_catalog.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/module_catalog_page.dart';
+import 'package:task_app/core/module_host/module_catalog_widgets.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/host_manager_page.dart';
@@ -128,7 +129,7 @@ void main() {
       expect(find.text(name), findsOneWidget);
       expect(find.text('1.0.0 · 已卸载，数据保留'), findsOneWidget);
       for (final cancel in [true, false]) {
-        await tester.tap(find.byType(PopupMenuButton<String>));
+        await tester.tap(find.byTooltip('模块操作'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('彻底删除数据与历史'));
         await settleNative(tester);
@@ -189,7 +190,15 @@ void main() {
           ),
         ),
       );
-      expect(find.text('作者未提供说明'), findsOneWidget);
+      expect(find.text('正方通用课程导入模块'), findsOneWidget);
+      expect(find.text('1.0.0 · 已停用'), findsOneWidget);
+      final description = find.byTooltip('作者未提供说明');
+      expect(description, findsOneWidget);
+      await tester.longPress(description);
+      await tester.pumpAndSettle();
+      expect(find.text('作者未提供说明', findRichText: true), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       final context = tester.element(find.byType(ModuleSummaryTile));
       final confirmation = confirmModuleImpact(
@@ -200,8 +209,11 @@ void main() {
         dataEffect: '数据保留',
       );
       await tester.pumpAndSettle();
+      expect(find.text('private.foundation'), findsOneWidget);
       expect(find.text('private.compat'), findsOneWidget);
       expect(find.text('private.schedule'), findsOneWidget);
+      await tester.ensureVisible(find.text('数据保留'));
+      expect(find.text('数据保留').hitTestable(), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
@@ -478,7 +490,7 @@ void main() {
             await waitForNativeWidget(tester, find.text(importerName));
             final importerCard = find.ancestor(
               of: find.text(importerName),
-              matching: find.byType(Card),
+              matching: find.byType(ModuleCatalogCard),
             );
             final openImporter = find.descendant(
               of: importerCard,

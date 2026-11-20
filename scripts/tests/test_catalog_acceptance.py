@@ -25,12 +25,37 @@ class CatalogAcceptanceTest(unittest.TestCase):
         search = node(text='', **{'class': 'android.widget.EditText', 'hint': '搜索模块 ID'})
         self.assertIs(catalog.find_node([search], '搜索模块 ID'), search)
 
+    def test_launch_waits_for_flutter_home_without_sending_back_during_startup(self):
+        self.emulator.adb.return_value = 'Status: ok'
+        self.emulator.nodes.side_effect = [[], [node(text='打开设置')]]
+        with patch.object(catalog.time, 'sleep'):
+            self.flow.launch_home()
+        self.assertEqual(self.emulator.nodes.call_count, 2)
+        self.assertTrue(all('keyevent' not in call.args
+                            for call in self.emulator.adb.call_args_list))
+
     def test_close_uses_visible_button_instead_of_full_screen_dismiss_barrier(self):
         close = node(**{'class': 'android.widget.Button', 'content-desc': '关闭'})
         barrier = node(**{'class': 'android.view.View', 'content-desc': '关闭',
                           'bounds': '[0,0][1080,2400]'})
         self.assertIs(catalog.find_node([close, barrier], '关闭', button=True), close)
         self.assertIsNone(catalog.find_node([barrier], '关闭', button=True))
+
+    def test_sheet_close_uses_footer_and_offline_settings_uses_toolbar(self):
+        handle = node(**{'class': 'android.widget.Button', 'content-desc': '关闭',
+                         'bounds': '[440,250][580,385]'})
+        footer = node(**{'class': 'android.widget.Button', 'content-desc': '关闭',
+                         'bounds': '[850,2080][1028,2220]'})
+        self.assertIs(catalog.find_node([footer, handle], '关闭', button=True), footer)
+        settings = node(**{'class': 'android.widget.Button', 'content-desc': '商店设置'})
+        banner = node(**{'content-desc': '正在浏览缓存。可在商店设置中恢复联网。'})
+        self.emulator.snapshot.return_value.nodes = [settings, banner]
+        switch = node(text='离线浏览缓存', checkable='true', checked='true')
+        self.flow.scroll_to = Mock(return_value=switch)
+        self.flow.wait = Mock()
+        self.flow.set_offline(False)
+        self.assertEqual([args.args[0] for args in self.emulator.tap_node.call_args_list],
+                         [settings, switch])
 
     def test_disabled_and_clipped_nodes_are_not_tapped(self):
         disabled = node(text='关闭', enabled='false', **{'class': 'android.widget.Button'})

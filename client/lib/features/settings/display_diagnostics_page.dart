@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../app/app_toast.dart';
 import '../../app/design_system.dart';
 import '../../core/ui/native_ui.dart';
+import 'settings_widgets.dart';
 
 /// Only display measurements are exported. No repository or preferences access.
 class DisplayDiagnostics {
@@ -94,18 +95,67 @@ class _DisplayDiagnosticsPageState extends State<DisplayDiagnosticsPage>
   String _insets(EdgeInsets insets) =>
       '左 ${_number(insets.left)}，上 ${_number(insets.top)}，右 ${_number(insets.right)}，下 ${_number(insets.bottom)}';
 
-  Widget _measurement(BuildContext context, String title, String value) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 4),
-            SelectableText(value),
-          ],
+  Widget _measurement(String title, String value, {bool inline = false}) =>
+      Builder(
+        builder: (context) {
+          final label = Semantics(container: true, child: Text(title));
+          final reading = SelectableText(
+            value,
+            style: ListTileTheme.of(context).subtitleTextStyle,
+          );
+          return ListTile(
+            minTileHeight: inline ? 50 : 62,
+            title: inline
+                ? Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 3,
+                    children: [label, reading],
+                  )
+                : label,
+            subtitle: inline ? null : reading,
+          );
+        },
+      );
+
+  Future<void> _showInsets(BuildContext context) => showModalBottomSheet<void>(
+    useSafeArea: true,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: AppDesign.canvas(context),
+    barrierColor: const Color(0x5C161722),
+    context: context,
+    builder: (context) {
+      final media = MediaQueryData.fromView(
+        View.of(context),
+        platformData: MediaQuery.of(context),
+      );
+      return SettingsSheet(
+        title: Semantics(
+          header: true,
+          child: Text(
+            '安全区与遮挡',
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontSize: 21, fontWeight: FontWeight.w700),
+          ),
+        ),
+        content: SingleChildScrollView(
+          child: SettingsGroupSurface(
+            dividerIndent: 16,
+            children: [
+              _measurement('当前安全区 padding（逻辑像素）', _insets(media.padding)),
+              _measurement(
+                '视图安全区 viewPadding（逻辑像素）',
+                _insets(media.viewPadding),
+              ),
+              _measurement('键盘等遮挡 viewInsets（逻辑像素）', _insets(media.viewInsets)),
+            ],
+          ),
         ),
       );
+    },
+  );
 
   Future<void> _copy(DisplayDiagnostics diagnostics) async {
     await Clipboard.setData(ClipboardData(text: diagnostics.json));
@@ -122,80 +172,86 @@ class _DisplayDiagnosticsPageState extends State<DisplayDiagnosticsPage>
     return DetailPage(
       title: '显示与布局信息',
       titleMaxLines: 2,
+      settingsStyle: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final contentWidth = (constraints.maxWidth - 32).clamp(
-            0.0,
-            double.infinity,
-          );
+          const horizontalPadding = AppDesign.pageGutter;
+          final contentWidth = (constraints.maxWidth - 2 * horizontalPadding)
+              .clamp(0.0, double.infinity);
           final diagnostics = DisplayDiagnostics.capture(
             view: view,
             media: media,
             availableWidth: constraints.maxWidth,
             contentWidth: contentWidth,
           );
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          return SettingsList(
+            horizontalPadding: horizontalPadding,
+            footer: NativeUi(
+              child: FilledButton.icon(
+                onPressed: () => _copy(diagnostics),
+                icon: const Icon(Icons.copy_outlined),
+                label: const Text('复制诊断 JSON'),
+              ),
+            ),
             children: [
-              const Text('用于高级问题反馈。信息随当前视图更新，可由你主动复制；不会自动上传，也不包含草稿、业务数据或密钥。'),
-              const SizedBox(height: 12),
-              NativeUi(
-                child: FilledButton(
-                  onPressed: () => _copy(diagnostics),
-                  child: const Text('复制诊断 JSON'),
-                ),
+              SettingsSummary(
+                label: '当前逻辑视口',
+                title: _size(media.size),
+                detail: '逻辑像素 · 随窗口实时更新',
+                icon: Icons.aspect_ratio_rounded,
               ),
-              const SizedBox(height: 20),
-              _measurement(
-                context,
-                'Flutter 平台视图尺寸（px）',
-                _size(view.physicalSize),
+              SettingsGroup(
+                title: '视图与布局',
+                dividerIndent: 16,
+                children: [
+                  _measurement(
+                    'Flutter 平台视图尺寸（px）',
+                    _size(view.physicalSize),
+                    inline: true,
+                  ),
+                  _measurement(
+                    '当前视图像素比',
+                    _number(view.devicePixelRatio),
+                    inline: true,
+                  ),
+                  _measurement(
+                    '视图像素换算的逻辑尺寸',
+                    _size(view.physicalSize / view.devicePixelRatio),
+                    inline: true,
+                  ),
+                  _measurement(
+                    '页面 / 内容宽度',
+                    '${_number(constraints.maxWidth)} / ${_number(contentWidth)}',
+                    inline: true,
+                  ),
+                ],
               ),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 16),
-                child: Text(
-                  '这是当前 Flutter 视图的像素尺寸，不代表设备面板的物理分辨率。窗口、系统显示设置和嵌入布局可能影响测量。',
-                ),
+              SettingsGroup(
+                title: '边距与字号',
+                dividerIndent: 16,
+                children: [
+                  SettingsEntry(
+                    title: '安全区与遮挡',
+                    subtitle: 'padding、viewPadding、viewInsets',
+                    icon: Icons.fullscreen,
+                    onTap: () => _showInsets(context),
+                  ),
+                  ListTile(
+                    minTileHeight: 62,
+                    title: const Text('实际字号样本（逻辑像素）'),
+                    subtitle: Wrap(
+                      spacing: 12,
+                      children: [
+                        for (final size in [12.0, 14.0, 24.0])
+                          Text(
+                            '${size.toInt()} → ${_number(media.textScaler.scale(size))}',
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              _measurement(context, '当前视图像素比', _number(view.devicePixelRatio)),
-              _measurement(
-                context,
-                '视图像素换算的逻辑尺寸',
-                _size(view.physicalSize / view.devicePixelRatio),
-              ),
-              _measurement(context, 'MediaQuery 逻辑视口', _size(media.size)),
-              _measurement(
-                context,
-                '页面容器可用宽度（逻辑像素）',
-                _number(constraints.maxWidth),
-              ),
-              _measurement(context, '内容可用宽度（扣除页面左右留白）', _number(contentWidth)),
-              _measurement(
-                context,
-                '当前安全区 padding（逻辑像素）',
-                _insets(media.padding),
-              ),
-              _measurement(
-                context,
-                '视图安全区 viewPadding（逻辑像素）',
-                _insets(media.viewPadding),
-              ),
-              _measurement(
-                context,
-                '键盘等遮挡 viewInsets（逻辑像素）',
-                _insets(media.viewInsets),
-              ),
-              const Text(
-                '实际字号样本（逻辑像素）',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              for (final size in [12.0, 14.0, 24.0])
-                Text(
-                  '${size.toInt()} → ${_number(media.textScaler.scale(size))}',
-                ),
-              const SizedBox(height: 8),
-              const Text('样本直接使用 TextScaler.scale，不假设缩放比例恒定。本页不会更改系统或应用的显示设置。'),
+              const SettingsNote('字号样本不假设缩放比例恒定。视图像素反映当前窗口，复制内容仅含显示指标。'),
             ],
           );
         },

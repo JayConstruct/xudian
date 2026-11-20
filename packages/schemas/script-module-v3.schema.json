@@ -286,6 +286,115 @@
               "type": "object"
             }
           },
+          "settingsLabels": {"type":"array","items":{"type":"string"}},
+          "settingsPath": {
+            "type": "string"
+          },
+          "menuSourcePage": {
+            "type": "string"
+          },
+          "navigationPreview": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "menu": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "assistant": {
+                "type": "boolean"
+              },
+              "columns": {
+                "type": "array",
+                "maxItems": 80,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string"
+                    },
+                    "column": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "integer"
+                    },
+                    "end": {
+                      "type": "integer"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "rows": {
+                "type": "array",
+                "maxItems": 80,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string"
+                    },
+                    "column": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "integer"
+                    },
+                    "end": {
+                      "type": "integer"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "blocks": {
+                "type": "array",
+                "maxItems": 80,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string"
+                    },
+                    "column": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "integer"
+                    },
+                    "end": {
+                      "type": "integer"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
           "headerMode": {
             "enum": [
               "standard",

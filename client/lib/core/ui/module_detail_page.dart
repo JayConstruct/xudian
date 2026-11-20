@@ -208,6 +208,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                   ),
                 )
               : DetailPage(
+                  settingsStyle: page?.isSettingsPage ?? false,
                   title:
                       spec?['title'] as String? ??
                       (lease?.isActive() == true
@@ -215,14 +216,22 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                           : widget.title ?? page?.title ?? '页面不可用'),
                   titleMaxLines: page?.headerMode == 'date' ? 3 : 1,
                   compactHeader: spec?['compact'] == true,
-                  leading: spec?['backIcon'] == 'chevron'
+                  minHeaderHeight: (spec?['minHeight'] as num?)?.toDouble(),
+                  leading: spec?['backIcon'] != null
                       ? IconButton(
-                          tooltip: MaterialLocalizations.of(context)
-                              .backButtonTooltip,
+                          tooltip: spec?['backIcon'] == 'close'
+                              ? MaterialLocalizations.of(context)
+                                    .cancelButtonLabel
+                              : MaterialLocalizations.of(context)
+                                    .backButtonTooltip,
                           onPressed: hasInternalBack
                               ? _back
                               : () => Navigator.maybePop(context),
-                          icon: const UiIcon(Icons.chevron_left),
+                          icon: UiIcon(
+                            spec?['backIcon'] == 'close'
+                                ? Icons.close_rounded
+                                : Icons.chevron_left,
+                          ),
                         )
                       : hasInternalBack
                       ? BackButton(onPressed: _back)

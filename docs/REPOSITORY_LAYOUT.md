@@ -18,7 +18,7 @@
 | `packages/catalog/` | 可独立发布的模块商店目录、收录格式及校验工具。[目录说明](../packages/catalog/README.md) |
 | `module-index/`、`releases/modules/` | 作者版本索引及其引用的全部不可变发布包。[发布包保留规则](../releases/README.md) |
 | `scripts/`、`.github/workflows/` | 本地开发、检查与 CI。`scripts/module_host/` 提供宿主和打包工具，`scripts/module_catalog/` 管理作者发布，`scripts/tests/` 保存工具回归。 |
-| `scripts/verification/` | 课表与拾光导入的设备复验脚本。从仓库根目录运行 `python3 -m scripts.verification.<脚本名>`。 |
+| `scripts/verification/` | 课表与拾光导入的设备复验脚本。各脚本适用的版本、样例数据和运行方式见[设备复验脚本索引](../scripts/verification/README.md)。 |
 | `design/` | 现行选稿、视觉来源和稿件存放规则见[设计入口](../design/README.md)。原稿与批次留在本机。 |
 | `docs/` | [专题导航](README.md)。`features/` 说明各项功能的使用与行为，`ui/` 保存界面、动画与反馈规范，`sdk/` 按能力说明接口，`design/` 保存精选参考图，`releases/` 与 `verification/` 保存最新发布和验收记录。 |
 
@@ -40,7 +40,7 @@
 | `dist/releases/app/<版本>/` | 本机 APK 发布暂存，包括原包、摘要、来源提交与报告 |
 | `dist/releases/modules/<发布标签>/` | 本机模块发布暂存，每个标签独立目录，不代替 Git 中的不可变发布包 |
 | `dist/verification/<时间>-<主题>/` | 每轮完整结果、日志、截图与必要快照；既有专题／批次目录按历史路径保留 |
-| `design/styles/`、`design/screens/ui-XX/` | 本机风格稿和页面稿。临时试稿按用途命名，采用、交付或要求复现的稿件按[设计稿规范](../design/README.md#稿件存储与校验)归档 |
+| `design/<功能名>/`、`design/styles/` | 本机页面稿按功能直属 `design/`（如 `settings/`、`timetable/`），风格稿集中在 `styles/`。按页面名称找图见[页面与设计稿映射表](../design/PAGES.md)，归档见[设计稿规范](../design/README.md#稿件存储与校验) |
 | `dist/design/<主题>/<批次>/` | 保留历史批次和旧清单，新 UI 使用根目录 design，见 [稿件存储与校验](../design/README.md#稿件存储与校验) |
 | `dist/archive/` | 历史交付目录、旧整理备份与旧目录仓库检出，保留各自上下文 |
 | `tasks/active/<任务名>/` | 当前任务的本机材料。例如，课表导入排查使用 `tasks/active/schedule-import/`，下次会话继续使用同一目录 |
@@ -53,7 +53,7 @@
 
 ## 文档与记录只维护一处
 
-- 当前规则在对应专题维护，剩余任务及状态统一在 [BACKLOG](BACKLOG.md)；规则或状态未变时无需为每轮工作改写它们。根目录不另建交接记录。
+- 当前规则在对应专题维护，实现与设备验收待办统一在 [BACKLOG](BACKLOG.md)，页面设计缺口在[设计稿映射表](../design/PAGES.md)；规则或状态未变时无需为每轮工作改写它们。根目录不另建交接记录。
 - [版本与验证记录](VERIFICATION.md)保留当前公开发布和最近一次设备验收。发布时更新本版说明、结构化报告和[文档导航](README.md)的版本入口。常规文档、测试和目录检查的结果记在当次交付说明或 CI 中。
 - 设备验收记录写明日期、实装版本与摘要、实测操作、结果、已知限制和证据路径。公开记录使用仓库相对路径，省去用户业务数据及账号密钥。
 - 更新脚本将本轮设备验收结果写入 `dist/verification/<UTC时间>-emulator-update/results.json`。商店截图和报告在同目录的 `catalog/` 下。可通过 `.cache/emulator-update/latest-*.json` 的 `evidenceDir` 找到详细记录。

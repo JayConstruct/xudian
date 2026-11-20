@@ -3,7 +3,12 @@ import {validateTimetable} from './calendar.js';
 import {snapshot} from './schedule_queries.js';
 import {command} from './schedule_commands.js';
 import {button,go,text} from './page_controls.js';
-import {defaultPeriods,periodDraft,semesterDraft,resetPeriodDraft,resetSemesterDraft,scheduleRowHeight,scheduleShowWeekends,periodError,periodDraftDirty,periodBaselineMatches,periodTableValue,periodTableBaseline,hydratePeriodDraft,periodDraftTimetable,periodDraftError,appendPeriods,timeMinutes,timeString,listTile,group} from './view_helpers.js';
+import {defaultPeriods,periodDraft,semesterDraft,resetPeriodDraft,resetSemesterDraft,scheduleRowHeight,scheduleShowWeekends,periodError,periodDraftDirty,periodBaselineMatches,periodTableValue,periodTableBaseline,hydratePeriodDraft,periodDraftTimetable,periodDraftError,appendPeriods,timeMinutes,timeString,listTile} from './view_helpers.js';
+
+function group(title, rows) {
+  const children=rows.flatMap((row,i)=>i?[{type:'divider'},row]:[row]);
+  return {type:'column',compact:true,spacing:4,children:[...(title?[{type:'sectionHeader',title}]:[]),{type:'card',children}]};
+}
 
 export async function updateSemester({t,state,event,formValues}) {
   const draft=semesterDraft(t);
@@ -79,14 +84,12 @@ export async function updatePeriods({t,state,event,formValues}) {
 
 export async function renderSettings({t,timetables,state,children}) {
   const counts=t?await snapshot(t.id):{courses:[],meetings:[],changes:[]};
-  children.push(group('概览',[
+  children.push(group(null,[
     listTile(t?.name||'还没有课表',t?`${t.firstMonday} 起 · ${t.totalWeeks} 周`:'新建或导入课表后开始使用','calendar',t?{type:'chooseTimetable'}:{type:'navigate',page:'timetables'}),
-    listTile('课程与安排',`${counts.courses.length} 门课程 · ${counts.meetings.length} 个周期安排 · ${counts.changes.length} 条调课`,'school',null,''),
-    go('今日课程','today','查看今天的课程与上课时间','calendar')
+    listTile('课程与安排',`${counts.courses.length} 门课程 · ${counts.meetings.length} 个周期安排 · ${counts.changes.length} 条调课`,'school',null,'')
   ]));
   children.push(group('课表配置',[go('学期设置','semester','名称、学期日期、周数与高级设置','tune'),go('作息设置','periods',t?`${t.periods.length} 个节次，按上午、下午和晚间编辑`:'设置各节次起止时间','schedule'),go('显示设置','display',t?`${scheduleShowWeekends(t)?'显示周末':'仅工作日'} · 课表总高度 ${48+t.periods.length*scheduleRowHeight(t)}`:'周末显示与课表总高度','tune'),go('课表管理','timetables',`${timetables.length} 张课表，可切换、新建或删除`,'list')]));
-  children.push(group('课程与调课',[go('课程管理','courses','课程信息与周期上课安排','school'),go('调课记录','changes','取消、移动与临时加课','history')]));
-  children.push(group('数据管理',[go('导入与备份','imports','JSON 备份与教务导入','importExport'),listTile('添加示例课表','独立课表，每天 3 门课程；重复添加会保留现有内容','school',{type:'createDemo'})]));
+  children.push(group('课程与数据',[go('今日课程','today','查看今天的课程与上课时间','calendar'),go('课程管理','courses','课程信息与周期上课安排','school'),go('调课记录','changes','取消、移动与临时加课','history'),go('导入与备份','imports','JSON 备份与教务导入','importExport'),listTile('添加示例课表','独立课表，每天 3 门课程；重复添加会保留现有内容','school',{type:'createDemo'})]));
   return {state,tree:{type:'column',children}};
 }
 
@@ -97,9 +100,10 @@ export function renderTimetables({t,timetables,state,children}) {
 }
 
 export function renderSemester({t,state,event,children}) {
-  const draft=semesterDraft(t),labels={name:'课表名称',firstMonday:'第一教学周周一（YYYY-MM-DD）',totalWeeks:'总教学周数',displayWeekStart:'显示起始（1=周一，7=周日）'};
+  const draft=semesterDraft(t),labels={name:'课表名称',firstMonday:'第一教学周周一（YYYY-MM-DD）',totalWeeks:'总教学周数'};
   children.push({type:'sectionHeader',title:'学期信息',subtitle:t.name});
   for(const [key,label] of Object.entries(labels))children.push({type:'input',key:`semester.${t.id}.${key}`,text:label,value:draft.values[key],onChangeEvent:{type:'semesterField',field:key}});
+  children.push({type:'sectionHeader',title:'每周起始日'},{type:'segmented',selectedIndex:draft.values.displayWeekStart==='7'?1:0,items:[{label:'周一起始',event:{type:'semesterField',field:'displayWeekStart',value:'1'}},{label:'周日起始',event:{type:'semesterField',field:'displayWeekStart',value:'7'}}]});
   children.push(listTile(state.timezoneAdvanced?'收起高级设置':'高级设置','课表时间基准',null,{type:'toggleTimezone'}));
   if(state.timezoneAdvanced)children.push({type:'input',key:`semester.${t.id}.timezone`,text:'课表时区',value:draft.values.timezone,onChangeEvent:{type:'semesterField',field:'timezone'}},text('修改时区会影响课程对应的实际时间，保存前请核对。'));
   const dirty=JSON.stringify(draft.values)!==draft.baseline;
@@ -107,15 +111,21 @@ export function renderSemester({t,state,event,children}) {
   if(dirty)children.push(text('尚未保存。离开页面后草稿会保留，保存前会审核实际变更。'));
   if(draft.error)children.push(text(draft.error));
   const replaceForms=event?.type==='resetSemester'||event?.type==='chooseTimetable'?Object.fromEntries(Object.entries(draft.values).map(([key,value])=>[`semester.${t.id}.${key}`,value])):{};
-  return {state,replaceForms,tree:{type:'column',children,...(dirty?{footer:{type:'row',children:[button('重新载入',{type:'resetSemester'}),button('保存学期设置',{type:'saveSemester'})]}}:{})}};
+  return {state,replaceForms,tree:{type:'column',children,footer:{type:'row',children:[{...button('重新载入',{type:'resetSemester'}),disabled:!dirty},{...button('保存学期设置',{type:'saveSemester'}),disabled:!dirty}]}}};
 }
 
 export function renderPeriods({t,state,children}) {
   const draft=periodDraft(t),dirty=periodDraftDirty(draft),validation=periodDraftError(t,draft),key=`periods.table.${t.id}`;
   state.periodsDraft={...draft,dirty,error:draft.error||validation};
   const value={...periodTableValue(draft),dirty,saveDisabled:!dirty||!!validation,resetDisabled:!dirty,error:validation};
-  children.push(text(`${t.name} · ${draft.periods.length} 个节次`));
-  children.push({type:'timeRangeTable',key,value,baseline:periodTableBaseline(draft)});
+  children.push(group(null,[listTile('当前课表',t.name,'calendar',null,'')]));
+  const groups=[{label:'上午',ids:[]},{label:'下午',ids:[]},{label:'晚间',ids:[]}];
+  for(const row of draft.periods) {
+    const start=timeMinutes(row.start);
+    groups[start<720?0:start<1080?1:2].ids.push(String(row.number));
+  }
+  children.push({type:'timeRangeTable',key,value,baseline:periodTableBaseline(draft),groups:groups.filter(g=>g.ids.length)});
+
   if(draft.error)children.push(text(draft.error));
   children.push(group('节次与模板',[
     listTile('添加节次','按每节时长在末尾增加节次','schedule',{type:'addPeriod'}),

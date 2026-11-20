@@ -39,6 +39,7 @@ scripts/update-emulator.sh --dev
 | 想了解什么 | 入口 |
 | --- | --- |
 | 日程、任务、课表与 AI 怎么用 | [按功能查阅](docs/README.md#功能使用) |
+| 各页面的 UI 设计稿在哪里 | [页面与设计稿映射表](design/PAGES.md) · [查询命令](design/README.md#按页面查询) |
 | UI 规范、动画和操作反馈怎么实现 | [UI 与动画](docs/README.md#ui-与动画) |
 | 开发、测试、构建与模拟器更新 | [开发指南](DEVELOPMENT.md) |
 | 宿主、模块和发布包分别在哪里 | [目录与提交清单](docs/REPOSITORY_LAYOUT.md) · [客户端代码入口](client/README.md#代码入口) |

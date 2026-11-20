@@ -1,4 +1,5 @@
 import 'ui_icon.dart';
+import 'script_form_controls.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -232,6 +233,7 @@ class TemporalInput extends StatelessWidget {
     this.maxDate,
     this.isCurrent,
     this.legacyDateTime = false,
+    this.externalLabel = false,
   });
   final TemporalInputKind kind;
   final String label;
@@ -239,7 +241,7 @@ class TemporalInput extends StatelessWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final ValueChanged<Object?> onChanged;
-  final bool enabled, clearable, editable, legacyDateTime;
+  final bool enabled, clearable, editable, legacyDateTime, externalLabel;
   final String? errorText, helperText, minDate, maxDate;
   final bool Function()? isCurrent;
 
@@ -302,16 +304,38 @@ class TemporalInput extends StatelessWidget {
         ),
       ],
     );
-    final decoration = InputDecoration(
-      labelText: label,
-      enabled: enabled,
-      errorText: validation,
-      helperText: helperText,
-      helperMaxLines: 3,
-      suffixIcon: actions,
-    );
+    final decoration =
+        (externalLabel
+                ? AppDesign.outlinedField(context)
+                : const InputDecoration())
+            .copyWith(
+              labelText: externalLabel ? null : label,
+              enabled: enabled,
+              errorText: validation,
+              helperText: helperText,
+              helperMaxLines: 3,
+              suffixIcon: actions,
+            );
+    if (externalLabel && !editable && kind == TemporalInputKind.date) {
+      final date = parseInputDate(currentValue);
+      final display = date == null
+          ? currentValue?.toString() ?? ''
+          : MaterialLocalizations.of(context).formatFullDate(date);
+      return ScriptFieldLabel(
+        label: label,
+        child: InkWell(
+          onTap: enabled ? choose : null,
+          borderRadius: BorderRadius.circular(AppDesign.compactRadius),
+          child: InputDecorator(
+            decoration: decoration,
+            isEmpty: !hasValue,
+            child: Text(display.isEmpty ? '点击选择' : display),
+          ),
+        ),
+      );
+    }
     if (controller != null) {
-      return TextField(
+      final field = TextField(
         controller: controller,
         focusNode: focusNode,
         enabled: enabled,
@@ -320,6 +344,9 @@ class TemporalInput extends StatelessWidget {
         decoration: decoration,
         onChanged: (text) => onChanged(text.isEmpty ? null : text),
       );
+      return externalLabel
+          ? ScriptFieldLabel(label: label, child: field)
+          : field;
     }
     final display = value is Map
         ? '${(value as Map)['start']} 至 ${(value as Map)['end']}'

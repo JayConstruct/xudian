@@ -1,4 +1,4 @@
-import '../../core/ui/ui_icon.dart';
+import 'settings_focus.dart';
 import '../../core/ui/native_ui.dart';
 
 import 'package:flutter/material.dart';
@@ -46,44 +46,86 @@ class _AppearanceSettingsPageState
     }
   }
 
-  Future<void> _chooseTheme(AppPreferences preferences) async {
-    final mode = await showModalBottomSheet<ThemeMode>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SectionHeading(title: '外观主题'),
-              for (final mode in ThemeMode.values)
-                NativeUi(
-                  child: ListTile(
-                    title: Text(appearanceThemeLabel(mode)),
-                    selected: mode == preferences.themeMode,
-                    trailing: mode == preferences.themeMode
-                        ? const UiIcon(Icons.check_rounded)
-                        : null,
-                    onTap: () => Navigator.pop(context, mode),
+  Widget _themeCard(ThemeMode mode, AppPreferences preferences) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final selected = mode == preferences.themeMode;
+    return Expanded(
+      child: Semantics(
+        selected: selected,
+        button: true,
+        enabled: !saving,
+        child: Material(
+          color: selected ? colors.primaryContainer : colors.surface,
+          shape: AppDesign.smoothShape(
+            radius: 17,
+            side: BorderSide(
+              color: selected ? colors.primary : colors.outlineVariant,
+              width: selected ? 1.4 : .8,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: saving
+                ? null
+                : () => _update(preferences.copyWith(themeMode: mode)),
+            child: Stack(
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 105),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 15, 8, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Center(child: _ThemePreview(mode: mode)),
+                        const SizedBox(height: 11),
+                        Text(
+                          appearanceThemeLabel(mode),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-            ],
+                if (selected)
+                  PositionedDirectional(
+                    top: 6,
+                    end: 6,
+                    child: ExcludeSemantics(
+                      child: DecoratedBox(
+                        decoration: ShapeDecoration(
+                          color: colors.primary,
+                          shape: const CircleBorder(),
+                        ),
+                        child: SizedBox.square(
+                          dimension: 15,
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: colors.onPrimary,
+                            size: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
     );
-    if (mode != null && mounted) {
-      await _update(preferences.copyWith(themeMode: mode));
-    }
   }
 
   @override
   Widget build(BuildContext context) => UiPackScope(
     child: DetailPage(
       title: '外观与交互',
+      settingsStyle: true,
       child: ref
           .watch(appPreferencesProvider)
           .when(
@@ -98,17 +140,30 @@ class _AppearanceSettingsPageState
             ),
             data: (preferences) => SettingsList(
               children: [
-                const SettingsNote('调整整体外观和操作反馈。修改后自动保存。'),
+                SettingsAnchor(
+                  '外观主题',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SettingsHeading('外观主题'),
+                      const SizedBox(height: 10),
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          spacing: 8,
+                          children: [
+                            for (final mode in ThemeMode.values)
+                              _themeCard(mode, preferences),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const SettingsNote('主题和交互偏好会自动保存。'),
+                    ],
+                  ),
+                ),
                 SettingsGroup(
-                  title: '外观',
                   children: [
-                    SettingsEntry(
-                      title: '外观主题',
-                      subtitle: appearanceThemeLabel(preferences.themeMode),
-                      icon: Icons.brightness_6_outlined,
-                      enabled: !saving,
-                      onTap: () => _chooseTheme(preferences),
-                    ),
                     SettingsEntry(
                       title: '界面风格',
                       subtitle: '全局风格、模块专属界面与恢复默认',
@@ -127,29 +182,40 @@ class _AppearanceSettingsPageState
                 SettingsGroup(
                   title: '交互反馈',
                   children: [
-                    NativeUi(
-                      child: SwitchListTile(
-                        secondary: const UiIcon(Icons.animation_rounded),
-                        title: const Text('减少动画'),
-                        subtitle: const Text('减少位移与按压动效；系统减少动画偏好始终生效'),
-                        value: preferences.reduceMotion,
-                        onChanged: saving
-                            ? null
-                            : (value) => _update(
-                                preferences.copyWith(reduceMotion: value),
-                              ),
+                    SettingsAnchor(
+                      '减少动画',
+                      child: NativeUi(
+                        child: SwitchListTile(
+                          secondary: const SettingsGlyph(
+                            Icons.animation_rounded,
+                          ),
+                          title: const Text('减少动画'),
+                          subtitle: const Text('减少位移与按压动效；系统减少动画偏好始终生效'),
+                          value: preferences.reduceMotion,
+                          onChanged: saving
+                              ? null
+                              : (value) => _update(
+                                  preferences.copyWith(reduceMotion: value),
+                                ),
+                        ),
                       ),
                     ),
-                    NativeUi(
-                      child: SwitchListTile(
-                        secondary: const UiIcon(Icons.vibration_rounded),
-                        title: const Text('触感反馈'),
-                        subtitle: const Text('切换底部导航时轻触振动'),
-                        value: preferences.haptics,
-                        onChanged: saving
-                            ? null
-                            : (value) =>
-                                  _update(preferences.copyWith(haptics: value)),
+                    SettingsAnchor(
+                      '触感反馈',
+                      child: NativeUi(
+                        child: SwitchListTile(
+                          secondary: const SettingsGlyph(
+                            Icons.vibration_rounded,
+                          ),
+                          title: const Text('触感反馈'),
+                          subtitle: const Text('切换底部导航时轻触振动'),
+                          value: preferences.haptics,
+                          onChanged: saving
+                              ? null
+                              : (value) => _update(
+                                  preferences.copyWith(haptics: value),
+                                ),
+                        ),
                       ),
                     ),
                   ],
@@ -157,6 +223,54 @@ class _AppearanceSettingsPageState
               ],
             ),
           ),
+    ),
+  );
+}
+
+class _ThemePreview extends StatelessWidget {
+  const _ThemePreview({required this.mode});
+
+  final ThemeMode mode;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 64,
+    height: 45,
+    clipBehavior: Clip.antiAlias,
+    foregroundDecoration: BoxDecoration(
+      border: Border.all(color: const Color(0xff9699a2), width: .8),
+      borderRadius: BorderRadius.circular(7),
+    ),
+    decoration: BoxDecoration(borderRadius: BorderRadius.circular(7)),
+    child: Row(
+      children: [
+        for (final dark in [mode == ThemeMode.dark, mode != ThemeMode.light])
+          Expanded(
+            child: ColoredBox(
+              color: dark ? const Color(0xff32343a) : const Color(0xfffcfcf8),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(7, 14, 3, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 5,
+                  children: [
+                    for (final width in [15.0, 10.0])
+                      Container(
+                        width: width,
+                        height: 2,
+                        decoration: BoxDecoration(
+                          color: dark
+                              ? const Color(0xffd6d6dd)
+                              : const Color(0xff888b94),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     ),
   );
 }

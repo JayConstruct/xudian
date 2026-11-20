@@ -6,7 +6,8 @@ import {field,go,text} from './page_controls.js';
 import {listTile} from './view_helpers.js';
 import {renderSettings,renderTimetables,renderSemester,renderPeriods,updateSemester,updatePeriods} from './schedule_settings_pages.js';
 import {renderGrid,updateDisplay} from './schedule_grid_page.js';
-import {handleEditing,renderOccurrence,renderCoursesAndChanges} from './schedule_editing_pages.js';
+import {handleEditing,renderOccurrence,renderChanges} from './schedule_editing_pages.js';
+import {renderCourseManagement} from './course_management.js';
 import {handleImport,renderImports} from './schedule_import_page.js';
 import {renderToday} from './today_page.js';
 
@@ -64,7 +65,7 @@ export async function render({state={},context={},event,formValues={}}) {
   if(t && page==='app.schedule.semester') await updateSemester({t,state,event,formValues});
   if(t && gridPage) await updateDisplay({t,state,event});
   if(t && page==='app.schedule.periods') await updatePeriods({t,state,event,formValues});
-  await handleEditing({t,state,event,selectTimetable});
+  if(page!=='app.schedule.courses'||event?.type!=='course')await handleEditing({t,state,event,selectTimetable});
   await handleImport({page,t,state,context,event,selectTimetable});
 
   timetables=await data.query('timetables');
@@ -78,13 +79,15 @@ export async function render({state={},context={},event,formValues={}}) {
   if(page==='app.schedule.timetables') return renderTimetables({t,timetables,state,children});
   if(!t) {
     children.push(text('创建课表或导入 JSON 备份后开始使用'),listTile('新建课表','默认12节作息','calendar',{type:'newTimetable'}),go('导入与备份','imports','导入 JSON 备份','importExport'));
-    return {state,...(page==='app.schedule.home'?{header:{title:'课表',actions:[{label:'课表设置',event:{type:'navigate',page:'settings'}}]}}:{}),tree:{type:'column',children}};
+    const header=page==='app.schedule.home'?{title:'课表',actions:[{label:'课表设置',event:{type:'navigate',page:'settings'}}]}:page==='app.schedule.courses'?{title:'课程管理'}:undefined;
+    return {state,...(header?{header}:{}),tree:{type:'column',children}};
   }
   state.timetableId=t.id;
   if(page==='app.schedule.semester') return renderSemester({t,state,event,children});
   if(page==='app.schedule.periods') return renderPeriods({t,state,children});
   if(page==='app.schedule.occurrence') return renderOccurrence({t,state,context,children});
-  if(page==='app.schedule.courses'||page==='app.schedule.changes') return renderCoursesAndChanges({page,t,state,children});
+  if(page==='app.schedule.courses') return renderCourseManagement({t,state,event,formValues,children});
+  if(page==='app.schedule.changes') return renderChanges({t,state,children});
   if(page==='app.schedule.today') return renderToday({t,state,children});
   return renderGrid({t,state});
 }

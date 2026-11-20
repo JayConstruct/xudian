@@ -90,11 +90,11 @@ void main() {
     expect(find.text(purpose).hitTestable(), findsOneWidget);
     expect(tester.widget<Text>(find.text(name)).maxLines, isNull);
     expect(tester.widget<Text>(find.text(purpose)).maxLines, isNull);
-    expect(find.text('可安装 · 1.0.0').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('可安装 · 1.0.0').hitTestable(), findsOneWidget);
     expect(find.text('安装').hitTestable(), findsOneWidget);
     expect(find.text('查看详情'), findsNothing);
     expect(find.bySemanticsLabel(RegExp('查看 $name 详情')), findsOneWidget);
-      semantics.dispose();
+    semantics.dispose();
     await tester.tap(find.text('安装'));
     expect(installs, 1);
     expect(details, 0);

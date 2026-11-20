@@ -446,7 +446,12 @@ def _open_bundled_restore(emulator, module, nodes):
     for _ in range(60):
         labels = _labels(emulator, nodes)
         _check_host_error(labels)
-        in_restore_section |= '恢复随客户端发布的模块' in labels
+        restore = _find(emulator, nodes, ['恢复随客户端发布的模块'])
+        if restore is not None and restore.get('clickable') == 'true' and not in_restore_section:
+            emulator.tap_node(restore)
+            nodes = emulator.nodes()
+            labels = _labels(emulator, nodes)
+        in_restore_section |= '恢复内置模块' in labels or '恢复随客户端发布的模块' in labels
         if in_restore_section:
             identities = [node for node in nodes if emulator.label(node) == module['id']]
             candidates = []
@@ -499,23 +504,25 @@ def update_modules(module_ids, emulator, output_dir, *, allowed_added_permission
         nodes = emulator.nodes()
         # manager() taps the route; its first accessibility snapshot can still
         # describe the settings page while the transition is completing.
-        for _ in range(4):
-            if (_find(emulator, nodes, ['模块管理']) is not None
-                    and _find(emulator, nodes, ['导入 .xmodule']) is not None):
+        for _ in range(6):
+            if _find(emulator, nodes, ['模块管理']) is not None:
                 break
-            nodes = emulator.nodes()
-        for _ in range(10):
-            button = _find(emulator, nodes, ['导入 .xmodule'])
-            if button is not None:
-                break
-            _swipe(emulator, nodes, down=False)
             nodes = emulator.nodes()
         else:
-            raise RuntimeError('模块管理中找不到导入按钮：' + str(_labels(emulator, nodes)))
+            raise RuntimeError('未进入模块管理')
         if module['id'] in bundled:
             _open_bundled_restore(emulator, module, nodes)
             module['installationSource'] = 'bundled'
         else:
+            nodes = _scroll_to_top(emulator, nodes, description='模块管理列表')
+            for _ in range(25):
+                button = _find(emulator, nodes, ['导入 .xmodule'])
+                if button is not None:
+                    break
+                _swipe(emulator, nodes)
+                nodes = emulator.nodes()
+            else:
+                raise RuntimeError('模块管理中找不到导入按钮：' + str(_labels(emulator, nodes)))
             emulator.tap_node(button)
             _select_download(emulator, filename)
             module['installationSource'] = 'local'

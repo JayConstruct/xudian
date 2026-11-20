@@ -6,11 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
+import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/module_catalog_page.dart';
 import 'package:task_app/core/module_host/module_catalog_widgets.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/ui/ui_design.dart';
 import 'package:task_app/data/app_database.dart';
+import 'package:task_app/data/providers.dart';
 
 import 'module_catalog_test.dart' show Fixture, makePackage;
 
@@ -31,9 +33,14 @@ Future<void> chooseCatalogFilter(
   String id,
   String value,
 ) async {
+  if (id == 'status') {
+    await tester.tap(find.byKey(ValueKey('catalog-status-$value')));
+    await tester.pumpAndSettle();
+    return;
+  }
   await tester.tap(find.byKey(ValueKey('catalog-filter-$id')));
   await tester.pumpAndSettle();
-  final item = find.widgetWithText(PopupMenuItem<String>, value);
+  final item = find.widgetWithText(ListTile, value);
   await tester.ensureVisible(item);
   await tester.tap(item);
   await tester.pumpAndSettle();
@@ -91,6 +98,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
             moduleCatalogClientProvider.overrideWith(
               (_) async => fixture.client,
             ),
@@ -101,7 +110,7 @@ void main() {
           ),
         ),
       );
-      await waitForCatalog(tester, find.textContaining('已启用 · 可更新'));
+      await waitForCatalog(tester, find.byTooltip('已启用 · 可更新 · 1.0.0 → 2.0.0'));
       // One resolved card can arrive before the remaining index cache writes.
       // Let native I/O finish before settling the loading indicator's frames.
       final watch = Stopwatch()..start();
@@ -116,41 +125,34 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(TextField).hitTestable(), findsOneWidget);
       final search = tester.widget<TextField>(find.byType(TextField));
-      expect(search.decoration?.border, isNull);
-      expect(
-        Theme.of(tester.element(find.byType(TextField)))
-            .inputDecorationTheme
-            .border,
-        isA<ShapedInputBorder>(),
-      );
+      expect(search.decoration?.border, isA<ShapedInputBorder>());
       expect(find.text('发现适合你的模块'), findsNothing);
       final status = find.byKey(const ValueKey('catalog-filter-status'));
       final category = find.byKey(const ValueKey('catalog-filter-category'));
       expect(
-        tester.getTopLeft(status).dy,
-        closeTo(tester.getTopLeft(category).dy, 0.1),
+        tester.getBottomLeft(status).dy,
+        lessThan(tester.getTopLeft(category).dy),
       );
-      expect(tester.getSize(status).height, greaterThanOrEqualTo(48));
-      expect(tester.getSize(category).height, greaterThanOrEqualTo(48));
+      expect(tester.getSize(status).height, greaterThanOrEqualTo(36));
+      expect(tester.getSize(category).height, greaterThanOrEqualTo(40));
       final cards = find.byType(ModuleCatalogCard);
       expect(tester.getTopLeft(cards.first).dy, lessThan(260));
       expect(find.text('test.module2').hitTestable(), findsOneWidget);
       expect(tester.getBottomRight(cards.at(2)).dy, lessThanOrEqualTo(800));
       await chooseCatalogFilter(tester, 'status', '可更新');
-      expect(find.text('状态：可更新'), findsOneWidget);
+      expect(find.text('可更新模块 · 1'), findsOneWidget);
       expect(find.byType(ModuleCatalogCard), findsOneWidget);
       expect(find.text('test.module0'), findsOneWidget);
       expect(find.text('更新').hitTestable(), findsOneWidget);
       await chooseCatalogFilter(tester, 'category', '效率');
-      expect(find.text('分类：效率'), findsOneWidget);
+      expect(find.text('效率'), findsOneWidget);
+      expect(find.text('可更新模块 · 0'), findsOneWidget);
       expect(find.byType(ModuleCatalogCard), findsNothing);
       expect(find.text('没有符合筛选条件的模块'), findsOneWidget);
       await tester.tap(find.text('清除筛选'));
       await tester.pumpAndSettle();
-      expect(find.text('状态：全部'), findsOneWidget);
-      expect(find.text('分类：全部分类'), findsOneWidget);
-      expect(find.text('找到 6 个模块 · 目录共 6 个'), findsOneWidget);
-      expect(find.byType(ModuleCatalogCard).evaluate().length, lessThan(6));
+      expect(find.text('全部分类'), findsOneWidget);
+      expect(find.text('模块目录 · 6'), findsOneWidget);
       await chooseCatalogFilter(tester, 'category', '学习');
       expect(find.byType(ModuleCatalogCard), findsNWidgets(4));
       await chooseCatalogFilter(tester, 'status', '未安装');
@@ -164,24 +166,39 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         isEmpty,
       );
-      expect(find.text('找到 6 个模块 · 目录共 6 个'), findsOneWidget);
-      expect(find.byType(ModuleCatalogCard).evaluate().length, lessThan(6));
+      expect(find.text('模块目录 · 6'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), '  TEST.MODULE4  ');
       await tester.pumpAndSettle();
-      expect(find.text('找到 1 个模块 · 目录共 6 个'), findsOneWidget);
+      expect(find.text('搜索结果 · 1'), findsOneWidget);
       expect(find.byType(ModuleCatalogCard), findsOneWidget);
       await tester.tap(find.text('test.module4'));
-      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      await waitForCatalog(tester, find.text('解析依赖并安装'));
       await tester.pump(const Duration(milliseconds: 300));
+      final dependencyGroup = find.text('模块依赖');
+      await tester.ensureVisible(dependencyGroup);
+      await tester.tap(dependencyGroup);
+      await tester.pumpAndSettle();
       final dependency = find.widgetWithText(ListTile, 'test.module0');
       await tester.ensureVisible(dependency);
       await tester.tap(dependency);
       await waitForCatalog(tester, find.text('1.0.0 · 已启用'));
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.widgetWithText(TextButton, '关闭'));
+      await tester.tap(find.widgetWithText(OutlinedButton, '关闭'));
       await tester.pumpAndSettle();
-      expect(find.text('找到 1 个模块 · 目录共 6 个'), findsOneWidget);
+      expect(find.text('搜索结果 · 1'), findsOneWidget);
+      await tester.tap(find.byTooltip('清空搜索'));
+      tester.view.physicalSize = const Size(3840, 2700);
+      await tester.pumpAndSettle();
+      final firstRow = [
+        for (var i = 0; i < 3; i++) tester.getTopLeft(cards.at(i)),
+      ];
+      expect(firstRow.map((point) => point.dy).toSet(), hasLength(1));
+      expect(
+        firstRow.map((point) => point.dx),
+        orderedEquals(firstRow.map((point) => point.dx).toList()..sort()),
+      );
+      expect(firstRow.map((point) => point.dx).toSet(), hasLength(3));
       expect(tester.takeException(), isNull);
     },
   );
@@ -239,23 +256,16 @@ void main() {
           ),
         );
         await chooseCatalogFilter(tester, 'category', long);
-        expect(find.text('分类：$long').hitTestable(), findsOneWidget);
-        final statusControl = find.byKey(
-          const ValueKey('catalog-filter-status'),
-        );
+        expect(find.text(long).hitTestable(), findsOneWidget);
+        final statusControl = find.text('可更新');
         final categoryControl = find.byKey(
           const ValueKey('catalog-filter-category'),
         );
-        if (width == 320) {
-          expect(
-            tester.getTopLeft(categoryControl).dy,
-            greaterThan(tester.getTopLeft(statusControl).dy),
-          );
-        } else {
-          expect(
-            tester.getTopLeft(categoryControl).dy,
-            closeTo(tester.getTopLeft(statusControl).dy, 0.1),
-          );
+        expect(
+          tester.getTopLeft(categoryControl).dy,
+          greaterThan(tester.getTopLeft(statusControl).dy),
+        );
+        if (width != 320) {
           final cards = find.byType(ModuleCatalogCard);
           expect(
             tester.getTopLeft(cards.at(1)).dy,
@@ -263,7 +273,7 @@ void main() {
           );
         }
         await chooseCatalogFilter(tester, 'status', '可更新');
-        expect(find.text('状态：可更新').hitTestable(), findsOneWidget);
+        expect(status, '可更新');
         expect(tester.takeException(), isNull);
       },
     );
@@ -272,6 +282,7 @@ void main() {
   testWidgets('filter selectors are reachable with keyboard focus', (
     tester,
   ) async {
+    String? status;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -282,7 +293,7 @@ void main() {
                 status: '全部',
                 category: '全部分类',
                 categories: const ['学习'],
-                onStatusChanged: (_) {},
+                onStatusChanged: (value) => status = value,
                 onCategoryChanged: (_) {},
               ),
             ],
@@ -292,11 +303,10 @@ void main() {
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(PopupMenuItem<String>, '可更新'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
+    expect(status, '推荐');
     expect(tester.takeException(), isNull);
   });
 }

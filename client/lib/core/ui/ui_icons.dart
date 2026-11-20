@@ -8,6 +8,7 @@ enum AppGlyph {
   today,
   calendar,
   tasks,
+  list,
   modules,
   folder,
   inbox,
@@ -71,8 +72,8 @@ IconData? appIconData(Object? name) => switch (name) {
   'more' || 'more_horiz' => Icons.more_horiz,
   'chevronRight' || 'right' => Icons.chevron_right_rounded,
   'chevronLeft' || 'left' => Icons.chevron_left_rounded,
-  'expandMore' || 'down' => Icons.expand_more_rounded,
-  'expandLess' || 'up' => Icons.expand_less_rounded,
+  'expandMore' || 'down' || 'chevron_down' => Icons.expand_more_rounded,
+  'expandLess' || 'up' || 'chevron_up' => Icons.expand_less_rounded,
   'search' => Icons.search_rounded,
   'info' => Icons.info_outline,
   'warning' => Icons.warning_amber_rounded,
@@ -140,10 +141,11 @@ AppGlyph? _glyph(IconData icon) {
     Icons.check_box_outlined,
     Icons.checklist,
     Icons.checklist_outlined,
-    Icons.list_alt,
-    Icons.list_alt_outlined,
   ].contains(icon)) {
     return AppGlyph.tasks;
+  }
+  if ([Icons.list, Icons.list_alt, Icons.list_alt_outlined].contains(icon)) {
+    return AppGlyph.list;
   }
   if ([
     Icons.grid_view,
@@ -543,6 +545,11 @@ class AppIconPainter extends CustomPainter {
       case AppGlyph.tasks:
         box(3.8, 3.8, 16.4, 16.4, 3);
         route([7.4, 12.2, 10.4, 15.2, 16.8, 8.8]);
+      case AppGlyph.list:
+        for (final y in [6.0, 12.0, 18.0]) {
+          dot(4.5, y);
+          line(9, y, 20, y);
+        }
       case AppGlyph.modules:
         for (final y in [3.5, 13.5]) {
           for (final x in [3.5, 13.5]) {

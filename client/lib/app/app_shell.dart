@@ -1,3 +1,5 @@
+import 'workspace_sidebar_item.dart';
+import '../features/settings/entry_directory.dart';
 import '../core/ui/workspace_interaction.dart';
 import '../core/module_host/plan_confirmation.dart';
 import '../core/ui/native_ui.dart';
@@ -268,6 +270,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void dispose() {
     widget.registry.removeListener(_onRegistryChanged);
+    directoryReturn?.remove();
+    menuOpen.dispose();
+    showingLocation.dispose();
     workspaceHeader.removeListener(_headerChanged);
     workspaceHeader.dispose();
     workspaceChrome.removeListener(_headerChanged);
@@ -519,7 +524,11 @@ class _AppShellState extends ConsumerState<AppShell> {
     final plannerTimeline =
         spec?['compact'] == true && spec?['layout'] == 'plannerTimeline';
     final titleStyle = WorkspaceTypography.titleStyle(textTheme).copyWith(
-      fontSize: plannerTimeline ? 20 : spec?['titleStyle'] == 'large' ? 32 : null,
+      fontSize: plannerTimeline
+          ? 20
+          : spec?['titleStyle'] == 'large'
+          ? 32
+          : null,
     );
     final titleMaxLines = plannerTimeline
         ? 1
@@ -658,6 +667,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         purpose: '打开页面操作、模块入口及设置',
         child: WorkspacePopupMenu(
           key: const ValueKey('workspace-menu'),
+          openSignal: menuOpen,
           headerController: workspaceHeader,
           headerOwner: contribution?.owner,
           headerLease: workspaceHeader.lease,
@@ -833,14 +843,164 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  void _openSettings() {
+  final menuOpen = ValueNotifier(0);
+  OverlayEntry? directoryReturn;
+  void _openDirectoryEntry(UiEntryRegistration entry, PageContext supplied) {
+    previousLocationWorkspace = selectedDestinationId;
     FocusManager.instance.primaryFocus?.unfocus();
-    Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => HostSettingsPage(registry: widget.registry),
+    showingLocation.value = true;
+    _openEntry(entry, pageContext: supplied);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && showingLocation.value) _showDirectoryReturn('返回目录');
+    });
+  }
+
+  Iterable<UiEntryRegistration> _assistantSources(String pageId) sync* {
+    final assistants = widget.registry.ui
+        .forSlot(UiSlot.workspaceAssistant)
+        .whereType<WorkspaceAssistantRegistration>()
+        .toList();
+    if (!assistants.any((a) => a.pageId == pageId)) return;
+    for (final source in widget.registry.ui.entries.where(
+      (e) => e.opening == UiOpening.workspace && !e.content,
+    )) {
+      final modules = _assistantModules(source);
+      if (assistants.where((a) => a.supports(modules)).firstOrNull?.pageId ==
+          pageId) {
+        yield source;
+      }
+    }
+  }
+
+  final showingLocation = ValueNotifier(false);
+  final settingsNavigator = GlobalKey<NavigatorState>();
+  Route<void>? settingsRoute;
+  String? previousLocationWorkspace;
+
+  void _returnFromLocation() {
+    directoryReturn?.remove();
+    directoryReturn = null;
+    if (!mounted) return;
+    final settings = settingsRoute;
+    if (settings != null && settings.isActive) {
+      Navigator.of(context).popUntil((route) => route == settings);
+    }
+    ref.read(locatedUiEntryProvider.notifier).select(null);
+    setState(() => selectedDestinationId = previousLocationWorkspace);
+    showingLocation.value = false;
+  }
+
+  void _locateEntry(String id, UiPlacement place, {String? sourcePage}) {
+    if (settingsRoute == null) return;
+    previousLocationWorkspace = selectedDestinationId;
+    FocusManager.instance.primaryFocus?.unfocus();
+    showingLocation.value = true;
+    ref.read(locatedUiEntryProvider.notifier).select(id);
+    workspaceChrome.reveal();
+    if (sourcePage != null) {
+      final source = widget.registry.ui.entries
+          .where(
+            (e) => e.pageId == sourcePage && e.opening == UiOpening.workspace,
+          )
+          .firstOrNull;
+      if (source != null) _openEntry(source);
+    }
+    if (place == UiPlacement.more) {
+      if (_profile.morePageEnabled) {
+        _openEntry(_moreEntry);
+      } else {
+        _showAllEntries(extraEntries);
+      }
+    }
+    // Contributed menus bind to the workspace header lease. Wait for that page's
+    // asynchronous header before opening it, including after a workspace switch.
+    final watch = Stopwatch()..start();
+    void present(Duration _) {
+      if (!mounted || !showingLocation.value) return;
+      if (sourcePage != null &&
+          watch.elapsed < const Duration(seconds: 3) &&
+          (workspaceHeader.lease?.pageId != sourcePage ||
+              workspaceHeader.content == null)) {
+        WidgetsBinding.instance.scheduleFrameCallback(present);
+        return;
+      }
+      if (place == UiPlacement.header) menuOpen.value++;
+      _showDirectoryReturn('返回查找');
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(present);
+  }
+
+  void _showDirectoryReturn(String label) {
+    directoryReturn?.remove();
+    directoryReturn = OverlayEntry(
+      builder: (c) => Positioned(
+        top: MediaQuery.paddingOf(c).top + 4,
+        left: 12,
+        child: Material(
+          color: Colors.transparent,
+          child: FilledButton.tonalIcon(
+            onPressed: _returnFromLocation,
+            icon: const Icon(Icons.arrow_back),
+            label: Text(label),
+          ),
+        ),
       ),
     );
+    Navigator.of(context).overlay!.insert(directoryReturn!);
+  }
+
+  Future<void> _openSettings() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (settingsRoute != null) return;
+    final nav = Navigator.of(context);
+    final route = _SettingsRoute(
+      hidden: showingLocation,
+      pageBuilder: (context, _, _) => ValueListenableBuilder<bool>(
+        valueListenable: showingLocation,
+        builder: (c, locating, child) => PopScope<void>(
+          canPop: !locating,
+          onPopInvokedWithResult: (popped, _) {
+            if (!popped && locating) _returnFromLocation();
+          },
+          child: Offstage(
+            offstage: locating,
+            child: NavigatorPopHandler<void>(
+              enabled: !locating,
+              onPopWithResult: (_) =>
+                  settingsNavigator.currentState!.maybePop(),
+              child: child!,
+            ),
+          ),
+        ),
+        child: EntryWorkspaceScope(
+          assistantSources: _assistantSources,
+          child: Navigator(
+            key: settingsNavigator,
+            onGenerateRoute: (_) => MaterialPageRoute<void>(
+              builder: (c) => HostSettingsPage(
+                registry: widget.registry,
+                onClose: () => nav.pop(),
+                onOpenEntry: _openDirectoryEntry,
+                onLocate: _locateEntry,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    settingsRoute = route;
+    try {
+      await nav.push(route);
+    } finally {
+      settingsRoute = null;
+      directoryReturn?.remove();
+      directoryReturn = null;
+      if (mounted) {
+        showingLocation.value = false;
+        ref.read(locatedUiEntryProvider.notifier).select(null);
+      }
+    }
   }
 
   void _navigationFeedback() {
@@ -1555,47 +1715,17 @@ class _AppShellState extends ConsumerState<AppShell> {
     UiEntryRegistration entry,
   ) {
     final selected = i == index;
-    final scheme = Theme.of(context).colorScheme;
     return UiAnnotation(
       id: entry.id,
       name: entry.label,
       moduleId: entry.moduleId,
       slot: 'main',
       purpose: '主导航入口',
-      child: Material(
-        color: selected
-            ? scheme.primaryContainer.withValues(alpha: 0.55)
-            : Colors.transparent,
-        shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          customBorder: AppDesign.smoothShape(radius: AppDesign.controlRadius),
-          hoverColor: scheme.surfaceContainerHigh.withValues(alpha: 0.8),
-          onTap: () => _openEntry(entry),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                UiIcon(
-                  destination.icon,
-                  size: 21,
-                  color: selected ? scheme.primary : AppDesign.muted(context),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    destination.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      child: WorkspaceSidebarItem(
+        icon: destination.icon,
+        label: destination.label,
+        selected: selected,
+        onTap: () => _openEntry(entry),
       ),
     );
   }
@@ -1619,4 +1749,19 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
     );
   }
+}
+
+/// Keep the settings navigation stack and its draft alive while the user visits
+/// a workspace. The transparent route lets the real workspace receive input.
+class _SettingsRoute extends PageRouteBuilder<void> {
+  _SettingsRoute({required this.hidden, required super.pageBuilder})
+    : super(opaque: false);
+  final ValueNotifier<bool> hidden;
+  @override
+  Widget buildModalBarrier() => ValueListenableBuilder<bool>(
+    valueListenable: hidden,
+    child: super.buildModalBarrier(),
+    builder: (_, inWorkspace, child) =>
+        IgnorePointer(ignoring: inWorkspace, child: child),
+  );
 }

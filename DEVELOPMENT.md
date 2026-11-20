@@ -41,6 +41,7 @@ Windows、WSL 或 VPS 的 Android 工具链、ADB 和远程调试步骤见 [Andr
 | 仓库与文档边界 | 根目录：`python3 scripts/check_repository.py`、`python3 scripts/check_docs.py` |
 | 生产依赖边界 | 根目录：`python3 scripts/module_host/check_architecture.py` |
 | Python 工具回归 | 根目录：`python3 -m unittest discover -s scripts/tests -v` |
+| Python 模块目录与发布回归 | 根目录：`python3 -m unittest discover -s scripts/module_catalog -p 'test_*.py' -v` |
 | 打包模块到 `dist/modules/` | 根目录：`python3 scripts/module_host/build_packages.py`；[预装资源规则](docs/MODULE_HOST.md#构建和验证) |
 | Flutter 分析与相关测试 | `client/`：`flutter analyze --no-pub`、`flutter test --no-pub --concurrency=2 test/相关文件.dart` |
 | Android 分 ABI 构建 | `client/`：`flutter build apk --release --split-per-abi --no-pub` |

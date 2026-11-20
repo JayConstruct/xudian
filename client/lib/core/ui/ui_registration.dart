@@ -32,10 +32,12 @@ class WorkspaceAssistantRegistration extends UiRegistration {
     required this.label,
     required this.onOpen,
     required this.supports,
+    this.pageId,
   }) : super(UiSlot.workspaceAssistant);
 
   final String id, label;
   final Future<void> Function(BuildContext context, PageContext pageContext)
   onOpen;
   final bool Function(Set<String> moduleIds) supports;
+  final String? pageId;
 }

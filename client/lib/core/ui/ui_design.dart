@@ -10,6 +10,7 @@ class AppDesign {
   static const lightSurface = Color(0xFFFEFEFC);
   static const darkSurface = Color(0xFF27282D);
   static const charcoal = Color(0xFF303239);
+  static const pageGutter = 20.0;
   static const compactRadius = 12.0;
   static const controlRadius = 14.0;
   static const radius = 20.0;
@@ -217,6 +218,32 @@ class AppDesign {
     borderRadius: BorderRadius.circular(radius),
     side: side,
   );
+
+  static InputDecoration outlinedField(
+    BuildContext context, {
+    bool search = false,
+    bool highlighted = false,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final border = ShapedInputBorder(
+      shape: smoothShape(radius: search ? controlRadius : compactRadius),
+      borderSide: BorderSide(color: colors.outlineVariant),
+    );
+    final accent = border.copyWith(
+      borderSide: BorderSide(color: colors.primary),
+    );
+    return InputDecoration(
+      isDense: true,
+      filled: true,
+      fillColor: colors.surface,
+      contentPadding: search
+          ? const EdgeInsets.symmetric(horizontal: 14, vertical: 13)
+          : const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      border: border,
+      enabledBorder: highlighted ? accent : border,
+      focusedBorder: accent,
+    );
+  }
 
   static Color canvas(BuildContext context) =>
       Theme.of(context).scaffoldBackgroundColor;

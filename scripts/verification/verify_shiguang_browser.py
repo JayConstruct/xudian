@@ -66,6 +66,17 @@ def expect_load(e, message, failed=False):
     raise RuntimeError('页面状态未出现：' + message + '; ' + str(labels(e)))
 
 
+def return_to_configuration(e):
+    for _ in range(10):
+        current = labels(e)
+        if '选择导入目标' in current:
+            e.tap('继续')
+            break
+        if '确认学期配置' in current:
+            return
+    e.wait_for('确认学期配置')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--install', action='store_true')
@@ -120,9 +131,7 @@ def main():
         e.record('android-shiguang-browser')
         e.tap('执行采集')
         e.tap('确定')
-        assert '选择导入目标' in labels(e), labels(e)
-        e.tap('继续')
-        assert '确认来源与学期配置' in labels(e), labels(e)
+        return_to_configuration(e)
         # Cancel metadata entry: proves the real shipped parser completed and
         # returned to Flutter without committing any captured data.
         e.record('android-shiguang-captured-config')

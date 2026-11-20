@@ -54,10 +54,13 @@ extension _UiLayoutChanges on _UiLayoutPageState {
 
   void _reviewChanges() {
     final changes = _changes();
-    showDialog<void>(
+    showModalBottomSheet<void>(
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
       context: context,
       builder: (dialogContext) => NativeUi(
-        child: AlertDialog(
+        child: SettingsSheet(
           title: Text('草稿变更 · ${changes.length} 项'),
           content: SizedBox(
             width: 560,

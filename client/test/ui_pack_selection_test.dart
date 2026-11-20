@@ -72,22 +72,12 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey(('global', missing))));
         await tester.pumpAndSettle();
-        expect(
-          find.widgetWithText(MenuItemButton, '$missing（不可用，自动回退）'),
-          findsOneWidget,
-        );
-        expect(find.byIcon(Icons.check_rounded), findsNothing);
-        final current = tester.widget<MenuItemButton>(
-          find.widgetWithText(MenuItemButton, '$missing（不可用，自动回退）'),
-        );
-        expect(current.trailingIcon, isNull);
-        expect(
-          current.style!.backgroundColor!.resolve({}),
-          isNot(Colors.transparent),
-        );
+        final chosen = find.widgetWithText(ListTile, '$missing（不可用，自动回退）').last;
+        expect(tester.widget<ListTile>(chosen).selected, isTrue);
+        expect(tester.widget<ListTile>(chosen).trailing, isNotNull);
         expect(tester.testTextInput.isVisible, isFalse);
         expect(tester.takeException(), isNull);
-        await tester.tap(find.widgetWithText(MenuItemButton, '内置默认'));
+        await tester.tap(find.widgetWithText(ListTile, '内置默认').last);
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey(('global', 'app.ui.default'))),
@@ -449,13 +439,13 @@ void main() {
           find.text(host.instances['example.ui.compact']!.package.title),
           findsOneWidget,
         );
-        await tester.tap(find.widgetWithText(ChoiceChip, 'UI 包'));
+        await tester.tap(find.text('UI 包'));
         await tester.pumpAndSettle();
         expect(
           find.text(host.instances['example.ui.compact']!.package.title),
           findsOneWidget,
         );
-        await tester.tap(find.widgetWithText(ChoiceChip, '业务模块'));
+        await tester.tap(find.text('业务模块'));
         await tester.pumpAndSettle();
         expect(
           find.text(host.instances['example.ui.compact']!.package.title),

@@ -112,7 +112,7 @@ void main() {
       pending.complete(GitHubResponse(200, jsonEncode([release('v0.2.0')])));
       await tester.pumpAndSettle();
       expect(find.text('发现新版本 0.2.0'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('查看更新并下载'), 200);
+      expect(find.text('查看更新并下载').hitTestable(), findsOneWidget);
       await tester.tap(find.text('查看更新并下载'));
       await tester.pumpAndSettle();
       expect(
@@ -158,7 +158,7 @@ void main() {
     expect(calls, 2);
     expect(find.text('发现新版本 0.2.0-beta.3'), findsOneWidget);
     expect(find.text('测试版本'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('查看更新并下载'), 200);
+    expect(find.text('查看更新并下载').hitTestable(), findsOneWidget);
     await tester.tap(find.text('查看更新并下载'));
     await tester.pumpAndSettle();
     expect(
@@ -287,7 +287,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('查看更新并下载'), 200);
+      expect(find.text('查看更新并下载').hitTestable(), findsOneWidget);
       expect(find.text('发现新版本 0.2.0'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

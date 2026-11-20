@@ -1,3 +1,5 @@
+import '../../features/settings/settings_focus.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,6 +9,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'ui_toast.dart';
+
+final locatedUiEntryProvider = NotifierProvider<LocatedUiEntry, String?>(
+  LocatedUiEntry.new,
+);
+
+class LocatedUiEntry extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void select(String? id) => state = id;
+}
 
 final uiAnnotationProvider = NotifierProvider<UiAnnotationController, bool>(
   UiAnnotationController.new,
@@ -284,6 +296,10 @@ class _UiAnnotationState extends ConsumerState<UiAnnotation> {
   @override
   Widget build(BuildContext context) {
     final enabled = ref.watch(uiAnnotationProvider);
+    final located = ref.watch(
+      locatedUiEntryProvider.select((id) => id == widget.id),
+    );
+    final inline = SettingsFocus.of(context) == widget.id;
     _record.active = enabled && (ModalRoute.of(context)?.isCurrent ?? true);
     _trackScroll(_controller._visible && _record.active);
     _controller._scheduleRefresh();
@@ -313,7 +329,14 @@ class _UiAnnotationState extends ConsumerState<UiAnnotation> {
         controller: _controller,
         record: _record,
         tracking: _tracking,
-        child: widget.child,
+        child: located
+            ? SettingsFocus(
+                label: widget.id,
+                child: SettingsAnchor(widget.id, child: widget.child),
+              )
+            : inline
+            ? SettingsAnchor(widget.id, child: widget.child)
+            : widget.child,
       ),
     );
   }

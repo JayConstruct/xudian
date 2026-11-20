@@ -13,12 +13,14 @@ class TimeRangeTable extends StatefulWidget {
     required this.baseline,
     required this.onChanged,
     this.enabled = true,
+    this.groups = const {},
   });
 
   final Map<String, Object?> value;
   final Map<String, Object?> baseline;
   final ValueChanged<Map<String, Object?>> onChanged;
   final bool enabled;
+  final Map<String, Set<String>> groups;
 
   @override
   State<TimeRangeTable> createState() => _TimeRangeTableState();
@@ -30,6 +32,7 @@ class _TimeRangeTableState extends State<TimeRangeTable> {
     text: '${draft['durationMinutes'] ?? ''}',
   );
   int revision = 0;
+  String? selectedGroup;
 
   static Map<String, Object?> _copy(Map<String, Object?> value) =>
       Map<String, Object?>.from(jsonDecode(jsonEncode(value)) as Map);
@@ -191,6 +194,18 @@ class _TimeRangeTableState extends State<TimeRangeTable> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final groupedIds = widget.groups.values.expand((ids) => ids).toSet();
+    final ungrouped = rows
+        .map((row) => row['id'].toString())
+        .where((id) => !groupedIds.contains(id))
+        .toSet();
+    final groups = {
+      ...widget.groups,
+      if (widget.groups.isNotEmpty && ungrouped.isNotEmpty) '其他': ungrouped,
+    };
+    final current = groups.containsKey(selectedGroup)
+        ? selectedGroup
+        : groups.keys.firstOrNull;
     final headingStyle = Theme.of(context).textTheme.labelLarge;
     Widget heading(String text) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
@@ -218,6 +233,20 @@ class _TimeRangeTableState extends State<TimeRangeTable> {
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 12),
+        if (groups.length > 1)
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final label in groups.keys)
+                ChoiceChip(
+                  label: Text(label),
+                  selected: label == current,
+                  showCheckmark: false,
+                  onSelected: (_) => setState(() => selectedGroup = label),
+                ),
+            ],
+          ),
         Material(
           color: Colors.transparent,
           child: Table(
@@ -238,7 +267,11 @@ class _TimeRangeTableState extends State<TimeRangeTable> {
                     TableCell(child: heading(label)),
                 ],
               ),
-              for (final row in rows)
+              for (final row in rows.where(
+                (row) =>
+                    current == null ||
+                    groups[current]!.contains(row['id'].toString()),
+              ))
                 TableRow(
                   key: ValueKey(row['id']),
                   children: [

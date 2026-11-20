@@ -161,7 +161,7 @@ export async function render({state={},event,formValues={},context={}}) {
   }
   if(state.connectionSettings) return {state,header:{title:'模型连接',backEvent:{type:'connectionBack'}},tree:connectionTree(connection,state.connectionStatus)};
   if(event?.type==='advanced') {
-    const values=await ui.dialog({title:'工作模式',fields:[{key:'mode',label:'模式',type:'select',value:state.advanced?'advanced':'chat',required:true,options:[{value:'chat',label:'普通聊天'},{value:'advanced',label:'高级模块开发'}]}]});
+    const values=await ui.dialog({title:'工作模式',presentation:'sheet',fields:[{key:'mode',label:'模式',type:'select',presentation:'grid',value:state.advanced?'advanced':'chat',required:true,options:[{value:'chat',label:'普通聊天'},{value:'advanced',label:'高级模块开发'}]}]});
     if(values) {
       await persist('ai.preferences.save',{advanced:values.mode==='advanced'});
       state.advanced=(await data.get('preferences','default'))?.advanced ?? state.advanced;
@@ -251,9 +251,9 @@ export async function render({state={},event,formValues={},context={}}) {
     if(state.advanced&&!failure) { state.moduleSource=JSON.stringify(proposal(reply),null,2); const p=await packages.prepare(proposal(reply)); await packages.review(p.id); }
   }
   if(context.aiSettings) return {state,header:{title:'AI 设置'},tree:{type:'column',compact:true,spacing:8,children:[
-    {type:'text',text:'模型与连接',style:'muted'},
+    {type:'sectionHeader',title:'模型与连接'},
     {type:'card',children:[{type:'listTile',icon:'link',title:'模型连接',subtitle:connection?.model?`${providerName(connection)} · ${connection.model}`:'配置模型服务与密钥',event:{type:'configure'}}]},
-    {type:'text',text:'对话',style:'muted'},
+    {type:'sectionHeader',title:'对话'},
     {type:'card',children:[
       {type:'listTile',icon:'ai',title:'工作模式',subtitle:state.advanced?'高级模块开发':'普通聊天',event:{type:'advanced'}},
       {type:'divider'},

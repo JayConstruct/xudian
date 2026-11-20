@@ -158,7 +158,19 @@ void main() {
       }),
     );
     expect(object(rendered['state'])['error'], isNull);
-    return object(rendered['state']);
+    expect(object(rendered['header'])['title'], '确认学期配置');
+    expect(
+      timezoneNodes(rendered['tree']).any((node) => node['key'] == 'timezone'),
+      isFalse,
+    );
+    final saved = object(
+      await host.invokePage(importer.moduleId, 'render', {
+        'state': rendered['state'],
+        'event': {'type': 'saveSemester'},
+      }),
+    );
+    expect(object(saved['state'])['error'], isNull);
+    return object(saved['state']);
   }
 
   Future<String> saveImporterInput(Object? input) async {
@@ -406,12 +418,7 @@ void main() {
   test('Shiguang new import hides timezone and stores the device zone after review', () async {
     mockDialogs();
     final state = await configureImport();
-    expect(dialogs, hasLength(1));
-    expect(dialogs.single['title'], '确认学期配置');
-    expect(
-      (dialogs.last['fields'] as List).map((f) => object(f)['key']),
-      isNot(contains('timezone')),
-    );
+    expect(dialogs, isEmpty);
     expect(
       object(object(object(state['input'])['draft'])['timetable'])['timezone'],
       'America/New_York',
@@ -428,7 +435,7 @@ void main() {
     dialogs.clear();
     mockDialogs(target: tid);
     final existing = await configureImport(sourceZone: 'Europe/Paris');
-    expect(dialogs.map((dialog) => dialog['title']), ['选择导入目标', '确认学期配置']);
+    expect(dialogs.map((dialog) => dialog['title']), ['选择导入目标']);
     final input = object(existing['input']);
     expect(input['mode'], 'merge');
     expect(

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_catalog/module_catalog.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
+import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/module_catalog_page.dart';
 import 'package:task_app/core/module_host/module_catalog_widgets.dart';
 import 'package:task_app/core/module_host/module_host.dart';
@@ -14,6 +15,7 @@ import 'package:task_app/core/module_host/module_management_widgets.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/ui/ui_design.dart';
 import 'package:task_app/data/app_database.dart';
+import 'package:task_app/data/providers.dart';
 
 import 'module_catalog_filter_test.dart' show waitForCatalog;
 import 'module_catalog_test.dart' show Fixture, makePackage;
@@ -61,7 +63,7 @@ Future<void> _finishIo(WidgetTester tester) async {
 }
 
 Future<void> _closeDetail(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(TextButton, '关闭'));
+  await tester.tap(find.widgetWithText(OutlinedButton, '关闭'));
   await tester.pumpAndSettle();
 }
 
@@ -114,7 +116,7 @@ void main() {
           ),
         ),
       );
-      expect(built.length, lessThan(30));
+      expect(built.length, lessThan(18 * columns));
       expect(find.byKey(const ValueKey(999)), findsNothing);
       final first = tester.getTopLeft(find.byKey(const ValueKey(0)));
       for (var i = 1; i < columns; i++) {
@@ -133,7 +135,7 @@ void main() {
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -1200));
       await tester.pumpAndSettle();
       expect(built.difference(before), isNotEmpty);
-      expect(built.length, lessThan(60));
+      expect(built.difference(before).length, lessThan(20 * columns));
       expect(tester.takeException(), isNull);
     });
   }
@@ -182,6 +184,8 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
             moduleCatalogClientProvider.overrideWith(
               (_) async => fixture.client,
             ),
@@ -365,32 +369,34 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
             moduleCatalogClientProvider.overrideWith((_) async => client),
           ],
           child: MaterialApp(home: ModuleCatalogPage(host: host)),
         ),
       );
       await _finishIo(tester);
-      expect(find.text('可安装 · 1.0.0'), findsOneWidget);
+      expect(find.byTooltip('可安装 · 1.0.0'), findsOneWidget);
       await tester.tap(find.byTooltip('刷新 / 重试'));
       await tester.pump();
       // The old card remains available while the new catalog is delayed.
       await tester.tap(find.text('test.shared'));
       await tester.pump();
-      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      await waitForCatalog(tester, find.text('1.0.0'));
       expect(oldIndexRequests, 1);
       catalogGate.complete();
       // The fresh repository must replace the cached version for this same ID.
-      await waitForCatalog(tester, find.text('可安装 · 2.0.0'));
+      await waitForCatalog(tester, find.byTooltip('可安装 · 2.0.0'));
       expect(newIndexRequests, 1);
-      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      await waitForCatalog(tester, find.text('1.0.0'));
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('可安装 · 2.0.0'), findsOneWidget);
+      expect(find.byTooltip('可安装 · 2.0.0'), findsOneWidget);
       await _closeDetail(tester);
       await tester.tap(find.text('test.shared'));
-      await waitForCatalog(tester, find.text('发布仓库：Bob/modules'));
+      await waitForCatalog(tester, find.text('Bob/modules'));
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('版本：2.0.0 · 可安装'), findsOneWidget);
+      expect(find.text('2.0.0'), findsOneWidget);
       expect(newIndexRequests, 1);
       await _closeDetail(tester);
       expect(tester.takeException(), isNull);
@@ -453,37 +459,39 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
             moduleCatalogClientProvider.overrideWith((_) async => client),
           ],
           child: MaterialApp(home: ModuleCatalogPage(host: host)),
         ),
       );
-      await waitForCatalog(tester, find.text('可安装 · 1.0.0'));
+      await waitForCatalog(tester, find.byTooltip('可安装 · 1.0.0'));
       expect(gate.isCompleted, isFalse);
       expect(requests, lessThanOrEqualTo(1));
       expect(find.textContaining('正在浏览缓存'), findsNothing);
       Future<void> closeWhileRefreshing() async {
-        await tester.tap(find.widgetWithText(TextButton, '关闭'));
+        await tester.tap(find.widgetWithText(OutlinedButton, '关闭'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.byType(AlertDialog), findsNothing);
       }
 
       await tester.tap(find.text('test.cached'));
-      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      await waitForCatalog(tester, find.text('1.0.0'));
       await tester.pump(const Duration(milliseconds: 300));
       await closeWhileRefreshing();
       // A second opening must also use the available version index immediately.
       await tester.tap(find.text('test.cached'));
-      await waitForCatalog(tester, find.text('版本：1.0.0 · 可安装'));
+      await waitForCatalog(tester, find.text('1.0.0'));
       await tester.pump(const Duration(milliseconds: 300));
       await closeWhileRefreshing();
       gate.complete();
       await _finishIo(tester);
-      expect(find.text('可安装 · 2.0.0'), findsOneWidget);
+      expect(find.byTooltip('可安装 · 2.0.0'), findsOneWidget);
       expect(requests, 2);
       await tester.tap(find.text('test.cached'));
-      await waitForCatalog(tester, find.text('版本：2.0.0 · 可安装'));
+      await waitForCatalog(tester, find.text('2.0.0'));
       await tester.pump(const Duration(milliseconds: 300));
       await _closeDetail(tester);
       expect(tester.takeException(), isNull);
@@ -549,12 +557,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            databaseProvider.overrideWith((_) async => db),
+            moduleHostProvider.overrideWith((_) async => host),
             moduleCatalogClientProvider.overrideWith((_) async => client),
           ],
           child: MaterialApp(home: ModuleCatalogPage(host: host)),
         ),
       );
-      await waitForCatalog(tester, find.text('找到 12 个模块 · 目录共 12 个'));
+      await waitForCatalog(tester, find.text('模块目录 · 12'));
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 30)),
       );

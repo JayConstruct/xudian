@@ -1,3 +1,4 @@
+import 'entry_context_picker.dart';
 import '../../core/ui/ui_icon.dart';
 import '../../core/ui/native_ui.dart';
 
@@ -16,6 +17,8 @@ import 'ui_layout_navigation_preview.dart';
 import 'ui_layout_picker.dart';
 import 'ui_layout_preview.dart';
 import 'settings_widgets.dart';
+import 'entry_directory.dart';
+import 'layout_arranger.dart';
 
 part 'ui_layout_changes.dart';
 
@@ -29,6 +32,8 @@ class UiLayoutPage extends ConsumerStatefulWidget {
     this.initialPageId,
     this.initialEntryId,
     this.initialDesktop = false,
+    this.onOpenEntry,
+    this.onLocate,
   });
 
   final ModuleRegistry registry;
@@ -36,6 +41,8 @@ class UiLayoutPage extends ConsumerStatefulWidget {
   final String? initialPageId;
   final String? initialEntryId;
   final bool initialDesktop;
+  final OpenShellEntry? onOpenEntry;
+  final LocateShellEntry? onLocate;
 
   @override
   ConsumerState<UiLayoutPage> createState() => _UiLayoutPageState();
@@ -64,6 +71,7 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
   UiLayoutPreviewArea activeArea = UiLayoutPreviewArea.all;
   bool inspectorOpen = false;
   bool positioned = false;
+  bool scopeRouteOpen = false;
   final sessionToken = Object();
   late final UiLayoutEditorSessions editorSessions;
 
@@ -116,6 +124,240 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
       selectedId = null;
       pageId = null;
     });
+  }
+
+  Future<void> _openScope(String? id) async {
+    scopeRouteOpen = true;
+    advanced = id == null;
+    pageId = id;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (c) => ValueListenableBuilder(
+          valueListenable: layoutRevision,
+          builder: (_, _, _) =>
+              _buildEditor(c, UiLayoutPreviewArea.all, inScope: true),
+        ),
+      ),
+    );
+    if (mounted) {
+      _update(() {
+        scopeRouteOpen = false;
+        pageId = null;
+        advanced = false;
+        selectedId = null;
+      });
+    }
+  }
+
+  void _directory() => Navigator.push<void>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => EntryDirectoryPage(
+        registry: widget.registry,
+        openShellEntry: widget.onOpenEntry,
+        locateShellEntry: widget.onLocate,
+      ),
+    ),
+  );
+
+  void _drop(UiEntryRegistration entry, UiPlacement placement, int index) {
+    if (saving ||
+        widget.registry.ui.entries.where((e) => identical(e, entry)).isEmpty ||
+        entry.content ||
+        !_editable(entry)) {
+      return;
+    }
+    final siblings = orderedEntries(
+      widget.registry.ui,
+      profile.mountFor,
+      (e) => profile.mountFor(e).placement == placement,
+    );
+    final previous = siblings.indexWhere((e) => e.id == entry.id);
+    if (previous >= 0 && (index == previous || index == previous + 1)) return;
+    siblings.removeWhere((e) => e.id == entry.id);
+    siblings.insert(
+      (previous >= 0 && previous < index ? index - 1 : index).clamp(
+        0,
+        siblings.length,
+      ),
+      entry,
+    );
+    var value = profile;
+    for (final (i, e) in siblings.indexed) {
+      final old = profile.mountFor(e);
+      if (old.placement == placement && old.order == i) continue;
+      value = value.withMount(
+        e.id,
+        UiMount(placement: placement, order: i, context: old.context),
+      );
+    }
+    _setProfile(value);
+  }
+
+  void _displayOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (c) => ValueListenableBuilder(
+        valueListenable: layoutRevision,
+        builder: (_, _, _) => SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppDesign.pageGutter,
+            0,
+            AppDesign.pageGutter,
+            20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('导航显示选项', style: Theme.of(c).textTheme.titleLarge),
+              SettingsGroup(
+                children: [
+                  SwitchListTile(
+                    key: const ValueKey('layout-more-page-enabled'),
+                    title: const Text('启用“更多”页面'),
+                    value: profile.morePageEnabled,
+                    onChanged: saving
+                        ? null
+                        : (v) => _setProfile(profile.withMorePageEnabled(v)),
+                  ),
+                  SettingsEntry(
+                    title: '主导航直显上限',
+                    subtitle: profile.mainLimit?.toString() ?? '自动',
+                    icon: Icons.tune,
+                    onTap: _editLimit,
+                  ),
+                ],
+              ),
+              const SettingsNote('关闭“更多”后，可从右上角菜单的“全部入口”访问这些工具。'),
+              FilledButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('返回编排'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _overview() {
+    return DetailPage(
+      title: '布局与导航',
+      settingsStyle: true,
+      child: SettingsList(
+        footer: FilledButton(
+          onPressed: saving || _changes().isEmpty ? null : () => _save(context),
+          child: const Text('保存布局'),
+        ),
+        children: [
+          const SettingsHeading('设备配置'),
+          const SizedBox(height: 10),
+          SettingsSegments<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('手机 / 窄屏')),
+              ButtonSegment(value: true, label: Text('电脑 / 宽屏')),
+            ],
+            selected: desktop,
+            onChanged: (value) => _update(() {
+              desktop = value;
+              selectedId = null;
+              collapsedGroups.clear();
+            }),
+          ),
+          const SizedBox(height: 16),
+          SettingsGroup(
+            title: '入口与位置',
+            children: [
+              SettingsEntry(
+                title: '编排入口',
+                subtitle: '把图标拖到导航、菜单或更多',
+                icon: Icons.dashboard_outlined,
+                onTap: () => _openArea(UiLayoutPreviewArea.navigation),
+              ),
+              SettingsEntry(
+                title: '入口目录',
+                subtitle: '打开入口，或查看它在 App 中的位置',
+                icon: Icons.list,
+                onTap: _directory,
+              ),
+              SettingsEntry(
+                title: '常用与隐藏入口',
+                subtitle: '调整设置首页的快捷方式',
+                icon: Icons.push_pin_outlined,
+                onTap: () => _openArea(UiLayoutPreviewArea.other),
+              ),
+            ],
+          ),
+          SettingsGroup(
+            title: '页面编排',
+            children: [
+              SettingsEntry(
+                title: '页面内容布局',
+                icon: Icons.view_quilt_outlined,
+                onTap: () async {
+                  final choices = widget.registry.ui.pages
+                      .where((p) => p.slots.isNotEmpty)
+                      .toList();
+                  final result = await showModalBottomSheet<String>(
+                    showDragHandle: true,
+                    useSafeArea: true,
+                    isScrollControlled: true,
+                    context: context,
+                    builder: (_) => UiLayoutPicker(
+                      title: '选择编辑页面',
+                      choices: [
+                        for (final p in choices)
+                          UiLayoutChoice(
+                            value: p.id,
+                            label: p.title,
+                            detail: p.slots.map((s) => s.label).join('、'),
+                            keywords: p.id,
+                          ),
+                      ],
+                    ),
+                  );
+                  if (mounted && result != null) await _openScope(result);
+                },
+              ),
+              SettingsEntry(
+                title: '高级编辑',
+                subtitle: warnings.isEmpty
+                    ? null
+                    : '${warnings.length} 项配置需要检查',
+                icon: Icons.tune,
+                onTap: () => _openScope(null),
+              ),
+            ],
+          ),
+          SettingsGroup(
+            title: '本次草稿',
+            children: [
+              SettingsEntry(
+                title: '预览结构',
+                icon: Icons.visibility_outlined,
+                onTap: _preview,
+              ),
+              SettingsEntry(
+                title: _changes().isEmpty
+                    ? '查看变更'
+                    : '查看变更（${_changes().length}）',
+                icon: Icons.compare_arrows,
+                onTap: _reviewChanges,
+              ),
+            ],
+          ),
+          if (error != null)
+            Text(
+              error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -218,8 +460,11 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
 
   void _preview() {
     if (!_validLimits()) return;
-    showDialog<void>(
+    showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
       builder: (_) => UiLayoutPreview(
         registry: widget.registry.ui,
         profile: profile,
@@ -310,102 +555,9 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
   Future<void> _context(UiEntryRegistration entry) async {
     try {
       final database = await ref.read(databaseProvider.future);
-      final tasks = await database.select(database.tasks).get();
-      final projects = await database.select(database.projects).get();
       if (!mounted) return;
       final mount = profile.mountFor(entry);
-      String? taskId = tasks.any((task) => task.id == mount.context.taskId)
-          ? mount.context.taskId
-          : null;
-      String? projectId =
-          projects.any((project) => project.id == mount.context.projectId)
-          ? mount.context.projectId
-          : null;
-      final result = await showDialog<PageContext>(
-        context: context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (context, update) => NativeUi(
-            child: AlertDialog(
-              title: const Text('补充上下文'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('未指定的上下文由宿主提供；选择具体对象不会增加模块权限。'),
-                    NativeUi(
-                      child: DropdownButtonFormField<String>(
-                        borderRadius: AppDesign.selectionBorderRadius,
-                        initialValue: taskId ?? '',
-                        isExpanded: true,
-                        decoration: const InputDecoration(labelText: '任务'),
-                        items: [
-                          const DropdownMenuItem(
-                            value: '',
-                            child: Text('由宿主提供'),
-                          ),
-                          for (final task in tasks)
-                            DropdownMenuItem(
-                              value: task.id,
-                              child: Text(
-                                task.title,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: (value) =>
-                            update(() => taskId = value == '' ? null : value),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    NativeUi(
-                      child: DropdownButtonFormField<String>(
-                        borderRadius: AppDesign.selectionBorderRadius,
-                        initialValue: projectId ?? '',
-                        isExpanded: true,
-                        decoration: const InputDecoration(labelText: '项目'),
-                        items: [
-                          const DropdownMenuItem(
-                            value: '',
-                            child: Text('由宿主提供'),
-                          ),
-                          for (final project in projects)
-                            DropdownMenuItem(
-                              value: project.id,
-                              child: Text(
-                                project.name,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: (value) => update(
-                          () => projectId = value == '' ? null : value,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                NativeUi(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('取消'),
-                  ),
-                ),
-                NativeUi(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(
-                      dialogContext,
-                      PageContext(taskId: taskId, projectId: projectId),
-                    ),
-                    child: const Text('使用此上下文'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      final result = await chooseEntryContext(context, database, mount.context);
       if (result != null && mounted) {
         _move(
           entry,
@@ -486,7 +638,10 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
   }
 
   Future<void> _anchor(UiEntryRegistration entry, bool after) async {
-    final selected = await showDialog<String>(
+    final selected = await showModalBottomSheet<String>(
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
       context: context,
       builder: (_) => UiLayoutPicker<String>(
         title: after ? '移到指定项之后' : '移到指定项之前',
@@ -511,7 +666,10 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
 
   Future<void> _target(UiEntryRegistration entry) async {
     final targets = _targets(entry);
-    final selected = await showDialog<UiMount>(
+    final selected = await showModalBottomSheet<UiMount>(
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
       context: context,
       builder: (_) => UiLayoutPicker<UiMount>(
         title: '选择兼容位置',
@@ -556,10 +714,13 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
   }
 
   void _status() {
-    showDialog<void>(
+    showModalBottomSheet<void>(
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
       context: context,
       builder: (dialogContext) => NativeUi(
-        child: AlertDialog(
+        child: SettingsSheet(
           title: const Text('草稿状态'),
           content: SizedBox(
             width: 520,
@@ -627,10 +788,13 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
   );
 
   void _editLimit() {
-    showDialog<void>(
+    showModalBottomSheet<void>(
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
       context: context,
       builder: (dialogContext) => NativeUi(
-        child: AlertDialog(
+        child: SettingsSheet(
           title: const Text('主导航直显上限'),
           content: SingleChildScrollView(
             child: Column(
@@ -659,7 +823,11 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
   Widget build(BuildContext context) =>
       _buildEditor(context, UiLayoutPreviewArea.all);
 
-  Widget _buildEditor(BuildContext context, UiLayoutPreviewArea area) {
+  Widget _buildEditor(
+    BuildContext context,
+    UiLayoutPreviewArea area, {
+    bool inScope = false,
+  }) {
     final childPage = area != UiLayoutPreviewArea.all;
     final state = childPage
         ? ref.read(uiLayoutProvider)
@@ -678,7 +846,7 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
     if (draft == null) {
       return NativeUi(
         child: Scaffold(
-          appBar: AppBar(title: const Text('入口与页面布局')),
+          appBar: AppBar(title: const Text('布局与导航')),
           body: Center(
             child: state.hasError
                 ? NativeUi(
@@ -703,6 +871,30 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
             profile.mountFor,
           ),
       };
+    }
+    if (area == UiLayoutPreviewArea.navigation ||
+        area == UiLayoutPreviewArea.header) {
+      return LayoutArranger(
+        registry: widget.registry.ui,
+        profile: profile,
+        desktop: desktop,
+        initialZone: area == UiLayoutPreviewArea.header
+            ? UiPlacement.header
+            : UiPlacement.main,
+        onSelect: (id) => _select(id, false),
+        canMove: _editable,
+        onDrop: _drop,
+        dirty: _changes().isNotEmpty,
+        saving: saving,
+        error: error,
+        onSave: () => _save(context),
+        onDirectory: _directory,
+        onOptions: _displayOptions,
+      );
+    }
+    if (!childPage &&
+        ((!inScope && scopeRouteOpen) || (!advanced && pageId == null))) {
+      return _overview();
     }
     final pages = widget.registry.ui.pages
         .where((page) => page.slots.isNotEmpty)
@@ -898,113 +1090,271 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
                   !widget.registry.ui.entries.any((entry) => entry.id == id),
             )
             .length;
-    final list = pageId == null && !advanced
-        ? ListView(
-            key: const ValueKey('layout-visual-editor'),
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-            children: [
-              Text(
-                childPage
-                    ? '点选入口调整位置、顺序或隐藏。修改后，保存才会应用。'
-                    : '选择需要调整的区域，返回此页会保留未保存的修改。',
+    final profileSelector = NativeUi(
+      child: SegmentedButton<bool>(
+        showSelectedIcon: !compactToolbar,
+        segments: [
+          ButtonSegment(
+            value: false,
+            tooltip: '手机 / 窄屏',
+            label: compactToolbar ? null : const Text('手机 / 窄屏'),
+            icon: compactToolbar ? const UiIcon(Icons.phone_android) : null,
+          ),
+          ButtonSegment(
+            value: true,
+            tooltip: '电脑 / 宽屏',
+            label: compactToolbar ? null : const Text('电脑 / 宽屏'),
+            icon: compactToolbar ? const UiIcon(Icons.laptop) : null,
+          ),
+        ],
+        selected: {desktop},
+        onSelectionChanged: saving
+            ? null
+            : (value) => _update(() {
+                desktop = value.single;
+                selectedId = null;
+                collapsedGroups.clear();
+              }),
+      ),
+    );
+    final scopeSelector = NativeUi(
+      child: DropdownButtonFormField<String>(
+        borderRadius: AppDesign.selectionBorderRadius,
+        key: ValueKey('layout-scope-$pageId'),
+        initialValue: pageId ?? '',
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: '编辑区域', isDense: true),
+        items: [
+          const DropdownMenuItem(
+            value: '',
+            child: Text('导航与菜单', overflow: TextOverflow.ellipsis),
+          ),
+          for (final page in pages)
+            DropdownMenuItem(
+              value: page.id,
+              child: Text(
+                '${page.title}${showIdentifiers ? ' · ${page.id}' : ''}',
+                overflow: TextOverflow.ellipsis,
               ),
+            ),
+          for (final id in dormantPageIds)
+            DropdownMenuItem(
+              value: id,
+              child: Text('失效页面配置 · $id', overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: saving
+            ? null
+            : (value) => _update(() {
+                pageId = value == '' ? null : value;
+                selectedId = null;
+              }),
+      ),
+    );
+    final searchField = NativeUi(
+      child: TextField(
+        key: const ValueKey('layout-search'),
+        controller: searchController,
+        enabled: !saving,
+        decoration: InputDecoration(
+          labelText: '搜索入口、模块、页面或位置',
+          isDense: true,
+          prefixIcon: const UiIcon(Icons.search),
+          suffixIcon: search.isEmpty
+              ? null
+              : NativeUi(
+                  child: IconButton(
+                    tooltip: '清空搜索',
+                    onPressed: () {
+                      searchController.clear();
+                      _update(() => search = '');
+                    },
+                    icon: const UiIcon(Icons.clear),
+                  ),
+                ),
+        ),
+        onChanged: (value) => _update(() => search = value),
+      ),
+    );
+    final list = area == UiLayoutPreviewArea.other
+        ? SettingsList(
+            children: [
               if (_changes().isNotEmpty)
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: NativeUi(
-                    child: TextButton(
-                      onPressed: _reviewChanges,
-                      child: Text('查看变更（${_changes().length}）'),
-                    ),
-                  ),
+                SettingsEntry(
+                  title: '查看变更（${_changes().length}）',
+                  icon: Icons.compare_arrows,
+                  onTap: _reviewChanges,
                 ),
-              const SizedBox(height: 20),
-              if (childPage)
-                UiLayoutNavigationPreview(
-                  registry: widget.registry.ui,
-                  profile: profile,
-                  desktop: desktop,
-                  selectedId: selectedId,
-                  onSelected: saving ? null : (id) => _select(id, split),
-                  onEditLimit: saving || area != UiLayoutPreviewArea.navigation
-                      ? null
-                      : _editLimit,
-                  onMorePageChanged:
-                      saving || area != UiLayoutPreviewArea.navigation
-                      ? null
-                      : (value) =>
-                            _setProfile(profile.withMorePageEnabled(value)),
-                  area: area,
-                ),
-              if (!childPage)
-                SettingsGroup(
-                  children: [
-                    SettingsEntry(
-                      title: desktop ? '侧栏导航' : '底部导航',
-                      subtitle: orderedEntries(
-                        widget.registry.ui,
-                        profile.mountFor,
-                        (entry) =>
-                            profile.mountFor(entry).placement ==
-                            UiPlacement.main,
-                      ).map((entry) => entry.label).join('、'),
-                      icon: desktop
-                          ? Icons.view_sidebar_outlined
-                          : Icons.view_week_outlined,
-                      enabled: !saving,
-                      onTap: () => _openArea(UiLayoutPreviewArea.navigation),
-                    ),
-                    SettingsEntry(
-                      title: '右上角菜单',
-                      subtitle: [
-                        ...orderedEntries(
-                          widget.registry.ui,
-                          profile.mountFor,
-                          (entry) =>
-                              profile.mountFor(entry).placement ==
-                              UiPlacement.header,
-                        ).map((entry) => entry.label),
-                        '设置（固定）',
-                      ].join('、'),
-                      icon: Icons.more_vert,
-                      enabled: !saving,
-                      onTap: () => _openArea(UiLayoutPreviewArea.header),
-                    ),
-                    SettingsEntry(
-                      title: '常用与隐藏入口',
-                      subtitle: '调整设置常用入口，恢复或移动隐藏入口',
-                      icon: Icons.visibility_outlined,
-                      enabled: !saving,
-                      onTap: () => _openArea(UiLayoutPreviewArea.other),
-                    ),
-                  ],
-                ),
-              if (!childPage && problemCount > 0)
-                NativeUi(
-                  child: ListTile(
-                    leading: const UiIcon(Icons.info_outline),
-                    title: Text('$problemCount 项配置需要检查'),
-                    subtitle: const Text('可在高级编辑中查看和修复'),
-                    trailing: const UiIcon(Icons.chevron_right),
-                    onTap: () => _update(() => advanced = true),
-                  ),
-                ),
-              if (!childPage)
-                NativeUi(
-                  child: TextButton.icon(
-                    onPressed: () => _update(() => advanced = true),
-                    icon: const UiIcon(Icons.tune),
-                    label: const Text('高级编辑'),
-                  ),
-                ),
+              UiLayoutNavigationPreview(
+                registry: widget.registry.ui,
+                profile: profile,
+                desktop: desktop,
+                selectedId: selectedId,
+                onSelected: saving ? null : (id) => _select(id, split),
+                area: area,
+              ),
             ],
           )
         : entryList;
+    if (compactToolbar && showTools) {
+      return Scaffold(
+        appBar: AppBar(title: Text(pageId == null ? '高级编辑' : '页面内容布局')),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: CustomScrollView(
+                  key: ValueKey('layout-list-$desktop-$pageId'),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppDesign.pageGutter,
+                        8,
+                        AppDesign.pageGutter,
+                        0,
+                      ),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            profileSelector,
+                            const SizedBox(height: 12),
+                            if (advanced) searchField,
+                            const SizedBox(height: 8),
+                            SettingsGroup(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  child: scopeSelector,
+                                ),
+                                if (advanced) ...[
+                                  SwitchListTile(
+                                    title: const Text('仅失效 / 待检查'),
+                                    value: onlyProblems,
+                                    onChanged: saving
+                                        ? null
+                                        : (v) =>
+                                              _update(() => onlyProblems = v),
+                                  ),
+                                  SwitchListTile(
+                                    title: const Text('显示技术标识'),
+                                    value: showIdentifiers,
+                                    onChanged: (v) =>
+                                        _update(() => showIdentifiers = v),
+                                  ),
+                                ],
+                                if (pageId == null)
+                                  SettingsEntry(
+                                    title: '主导航直显上限',
+                                    subtitle:
+                                        profile.mainLimit?.toString() ?? '自动',
+                                    icon: Icons.tune,
+                                    onTap: _editLimit,
+                                  ),
+                              ],
+                            ),
+                            Text(
+                              pageId == null ? '按位置浏览' : '页面槽位',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverList.builder(
+                        itemCount: rows.length,
+                        itemBuilder: (_, i) => rows[i](),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppDesign.pageGutter,
+                        8,
+                        AppDesign.pageGutter,
+                        18,
+                      ),
+                      sliver: SliverToBoxAdapter(
+                        child: SettingsGroup(
+                          children: [
+                            if (rows.isEmpty)
+                              const SettingsNote('当前范围没有符合条件的入口或内容。'),
+                            if (pageId != null)
+                              SettingsEntry(
+                                title: '添加入口或内容',
+                                icon: Icons.add,
+                                onTap: _add,
+                                enabled: !saving,
+                              ),
+                            SettingsEntry(
+                              title: '草稿状态',
+                              subtitle: problemCount == 0
+                                  ? '所有入口均可用'
+                                  : '$problemCount 项配置需要检查',
+                              icon: Icons.info_outline,
+                              onTap: _status,
+                            ),
+                            SettingsEntry(
+                              title: '查看变更（${_changes().length}）',
+                              icon: Icons.compare_arrows,
+                              onTap: _reviewChanges,
+                            ),
+                            SettingsEntry(
+                              title: '恢复当前范围默认',
+                              icon: Icons.restore,
+                              onTap: _reset,
+                              enabled: !saving,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (error != null)
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: saving ? null : _preview,
+                        child: const Text('预览草稿'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: saving || _changes().isEmpty
+                            ? null
+                            : () => _save(context),
+                        child: const Text('保存布局'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return NativeUi(
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            _areaTitle(area),
+            area == UiLayoutPreviewArea.all
+                ? (pageId != null ? '页面内容布局' : '高级编辑')
+                : _areaTitle(area),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1017,7 +1367,7 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
                   icon: const UiIcon(Icons.visibility_outlined),
                 ),
               ),
-            if (pageId == null && !childPage)
+            if (!inScope && pageId == null && !childPage)
               NativeUi(
                 child: IconButton(
                   tooltip: advanced ? '返回可视编辑' : '高级编辑',
@@ -1045,87 +1395,9 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
                 ),
                 child: Row(
                   children: [
-                    NativeUi(
-                      child: SegmentedButton<bool>(
-                        showSelectedIcon: !compactToolbar,
-                        segments: [
-                          ButtonSegment(
-                            value: false,
-                            tooltip: '手机 / 窄屏',
-                            label: compactToolbar
-                                ? null
-                                : const Text('手机 / 窄屏'),
-                            icon: compactToolbar
-                                ? const UiIcon(Icons.phone_android)
-                                : null,
-                          ),
-                          ButtonSegment(
-                            value: true,
-                            tooltip: '电脑 / 宽屏',
-                            label: compactToolbar
-                                ? null
-                                : const Text('电脑 / 宽屏'),
-                            icon: compactToolbar
-                                ? const UiIcon(Icons.laptop)
-                                : null,
-                          ),
-                        ],
-                        selected: {desktop},
-                        onSelectionChanged: saving
-                            ? null
-                            : (value) => _update(() {
-                                desktop = value.single;
-                                selectedId = null;
-                                collapsedGroups.clear();
-                              }),
-                      ),
-                    ),
+                    profileSelector,
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: NativeUi(
-                        child: DropdownButtonFormField<String>(
-                          borderRadius: AppDesign.selectionBorderRadius,
-                          key: ValueKey('layout-scope-$pageId'),
-                          initialValue: pageId ?? '',
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: '编辑区域',
-                            isDense: true,
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                              value: '',
-                              child: Text(
-                                '导航与菜单',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            for (final page in pages)
-                              DropdownMenuItem(
-                                value: page.id,
-                                child: Text(
-                                  '${page.title}${showIdentifiers ? ' · ${page.id}' : ''}',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            for (final id in dormantPageIds)
-                              DropdownMenuItem(
-                                value: id,
-                                child: Text(
-                                  '失效页面配置 · $id',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                          ],
-                          onChanged: saving
-                              ? null
-                              : (value) => _update(() {
-                                  pageId = value == '' ? null : value;
-                                  selectedId = null;
-                                }),
-                        ),
-                      ),
-                    ),
+                    Expanded(child: scopeSelector),
                     if (pageId == null && showTools) ...[
                       const SizedBox(width: 8),
                       if (compactToolbar)
@@ -1148,31 +1420,7 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
                   horizontal: 12,
                   vertical: 4,
                 ),
-                child: NativeUi(
-                  child: TextField(
-                    key: const ValueKey('layout-search'),
-                    controller: searchController,
-                    enabled: !saving,
-                    decoration: InputDecoration(
-                      labelText: '搜索入口、模块、页面或位置',
-                      isDense: true,
-                      prefixIcon: const UiIcon(Icons.search),
-                      suffixIcon: search.isEmpty
-                          ? null
-                          : NativeUi(
-                              child: IconButton(
-                                tooltip: '清空搜索',
-                                onPressed: () {
-                                  searchController.clear();
-                                  _update(() => search = '');
-                                },
-                                icon: const UiIcon(Icons.clear),
-                              ),
-                            ),
-                    ),
-                    onChanged: (value) => _update(() => search = value),
-                  ),
-                ),
+                child: searchField,
               ),
             if (showTools)
               SingleChildScrollView(
@@ -1281,7 +1529,10 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
                 keywords: '${entry.id} ${entry.moduleId} ${entry.pageId}',
               ),
     ];
-    final selected = await showDialog<(UiEntryRegistration, UiMount)>(
+    final selected = await showModalBottomSheet<(UiEntryRegistration, UiMount)>(
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
       context: context,
       builder: (_) => UiLayoutPicker(title: '选择贡献与槽位', choices: choices),
     );

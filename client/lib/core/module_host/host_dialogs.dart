@@ -2,6 +2,7 @@ import '../ui/native_ui.dart';
 import '../ui/ui_motion.dart';
 import '../ui/script_content_widgets.dart';
 import '../ui/ui_icon.dart';
+import '../ui/ui_icons.dart' show appIconData;
 
 import 'package:flutter/material.dart';
 
@@ -11,6 +12,8 @@ import '../ui/temporal_input.dart';
 import '../ui/input_validation.dart';
 import '../ui/json_review.dart';
 import '../../app/design_system.dart';
+import '../../features/settings/settings_widgets.dart'
+    show SettingsGroupSurface;
 import 'data_change_review.dart';
 import 'plan_confirmation.dart';
 
@@ -254,10 +257,12 @@ class HostFormDialog extends StatefulWidget {
     this.description,
     this.submitLabel = '继续',
     this.presentation,
+    this.fullWidthActions = false,
   });
   final String title;
   final String? description, presentation;
   final String submitLabel;
+  final bool fullWidthActions;
   final List<Map<String, Object?>> fields;
   @override
   State<HostFormDialog> createState() => _HostFormDialogState();
@@ -382,6 +387,57 @@ class _HostFormDialogState extends State<HostFormDialog> {
     _ => null,
   };
 
+  Widget _selectList(Map<String, Object?> field, String key) {
+    final options = (field['options'] as List? ?? []).map(object);
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (field['label'] case final String label when label.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+          ),
+        SettingsGroupSurface(
+          children: [
+            for (final option in options)
+              ListTile(
+                leading: switch (appIconData(option['icon'])) {
+                  final icon? => ScriptGlyph(
+                    icon: icon,
+                    tone: 'muted',
+                    surface: true,
+                    surfaceSize: 34,
+                  ),
+                  null => null,
+                },
+                title: Text('${option['label']}'),
+                subtitle: switch (option['subtitle']) {
+                  final String subtitle => Text(subtitle),
+                  _ => null,
+                },
+                trailing: selections[key] == option['value']
+                    ? UiIcon(
+                        Icons.check_rounded,
+                        color: scheme.primary,
+                        size: 18,
+                      )
+                    : null,
+                selected: selections[key] == option['value'],
+                selectedColor: scheme.onSurface,
+                onTap: () => setState(() {
+                  selections[key] = option['value'] as String;
+                  errors.remove(key);
+                }),
+              ),
+          ],
+        ),
+        if (errors[key] case final String error)
+          Text(error, style: TextStyle(color: scheme.error)),
+      ],
+    );
+  }
+
   Widget _field(Map<String, Object?> field) {
     final key = field['key'] as String;
     final label = '${field['label']}';
@@ -458,6 +514,7 @@ class _HostFormDialogState extends State<HostFormDialog> {
       );
     }
     if (field['type'] == 'select') {
+      if (field['presentation'] == 'list') return _selectList(field, key);
       if (field['presentation'] == 'grid') {
         final options = (field['options'] as List? ?? []).map(object).toList();
         final style = Theme.of(context).textTheme.labelLarge!;
@@ -628,6 +685,56 @@ class _HostFormDialogState extends State<HostFormDialog> {
           ),
       ],
     );
+    if (widget.presentation == 'sheet') {
+      return SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .8,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    widget.title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  Flexible(child: native.content!),
+                  if (widget.fullWidthActions && !instantSelection)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: NativeUi(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('取消'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: native.actions!.last),
+                      ],
+                    )
+                  else
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      children: native.actions!,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (widget.presentation == 'page') {
       return Dialog.fullscreen(
         child: Scaffold(

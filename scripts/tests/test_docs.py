@@ -91,12 +91,13 @@ class DocumentationTest(unittest.TestCase):
 
     def test_local_artifacts_are_optional_but_published_files_are_required(self):
         self.file('README.md', '[证据](dist/verification/missing.json) '
-                  '![原图](design/styles/draft.png) [指南](design/styles/README.md)')
+                  '![原图](design/styles/draft.png) [页面](design/settings/appearance.png) '
+                  '[指南](design/styles/README.md)')
         self.published.add('design/styles/README.md')
         report = self.check()
-        self.assertEqual(report['localLinksSkipped'], 2)
+        self.assertEqual(report['localLinksSkipped'], 3)
         self.assertEqual(len(report['errors']), 1)
-        self.assertEqual(len(self.check(check_local=True)['errors']), 3)
+        self.assertEqual(len(self.check(check_local=True)['errors']), 4)
 
     def test_local_markdown_can_be_checked_explicitly(self):
         self.file('README.md', '[证据](dist/report.md#result)')

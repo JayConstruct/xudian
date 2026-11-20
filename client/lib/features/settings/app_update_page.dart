@@ -1,3 +1,5 @@
+import 'settings_focus.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -132,144 +134,107 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     final url = release?.url ?? appReleasesUrl;
     return DetailPage(
       title: '检查更新',
+      settingsStyle: true,
       child: SettingsList(
-        children: [
-          SettingsGroup(
-            title: '当前版本',
-            children: [
-              NativeUi(
-                child: ListTile(
-                  leading: const UiIcon(Icons.grid_view_rounded),
-                  title: const Text('序点'),
-                  subtitle: Text(
-                    installed.when(
-                      data: (value) => value.label,
-                      loading: () => '正在读取版本…',
-                      error: (_, _) => '无法读取版本信息',
-                    ),
-                  ),
+        footer: Row(
+          children: [
+            if (update) ...[
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: savingChannel ? null : _check,
+                  child: const Text('重新检查'),
                 ),
               ),
+              const SizedBox(width: 8),
             ],
-          ),
-          SettingsGroup(
-            title: '更新通道',
-            children: [
-              NativeUi(
+            Expanded(
+              child: NativeUi(
                 protected: true,
-                child: SwitchListTile(
-                  title: const Text('测试通道'),
-                  subtitle: const Text(
-                    '开启后接收正式版及 alpha、beta、rc 测试版。测试版可能不稳定，安装前请备份数据。',
+                child: FilledButton(
+                  onPressed: checking || savingChannel
+                      ? null
+                      : update
+                      ? () => _open(url)
+                      : _check,
+                  child: Text(
+                    checking
+                        ? '检查中…'
+                        : update
+                        ? '查看更新并下载'
+                        : error != null
+                        ? '重试'
+                        : '重新检查',
                   ),
-                  value: testing,
-                  onChanged: checking || savingChannel ? null : _changeChannel,
-                ),
-              ),
-            ],
-          ),
-          ContentSurface(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (checking)
-                    const NativeUi(child: CircularProgressIndicator())
-                  else
-                    UiIcon(
-                      error != null
-                          ? Icons.cloud_off_rounded
-                          : update
-                          ? Icons.system_update_rounded
-                          : Icons.check_circle_outline,
-                      size: 36,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  const SizedBox(height: 16),
-                  Text(status, style: Theme.of(context).textTheme.titleLarge),
-                  if (release?.isPrerelease == true) ...[
-                    const SizedBox(height: 8),
-                    const Text('测试版本'),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    error ??
-                        (checking
-                            ? '正在查询 GitHub 上的应用发布版本。'
-                            : release == null
-                            ? testing
-                                  ? '发布正式或测试安装包后，可在这里检查并查看更新。'
-                                  : '发布正式安装包后，可在这里检查并查看更新。'
-                            : update
-                            ? '可查看更新说明，并在 GitHub 下载适合设备的安装包。'
-                            : testing
-                            ? '没有发现比当前安装版本更新的正式版或测试版。'
-                            : '没有发现比当前安装版本更新的正式版本。'),
-                  ),
-                  if (release?.publishedAt != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      '发布于 ${DateFormat('yyyy年M月d日').format(release!.publishedAt!.toLocal())}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      NativeUi(
-                        protected: true,
-                        child: FilledButton(
-                          onPressed: checking || savingChannel
-                              ? null
-                              : update
-                              ? () => _open(url)
-                              : _check,
-                          child: Text(
-                            checking
-                                ? '检查中…'
-                                : update
-                                ? '查看更新并下载'
-                                : error != null
-                                ? '重试'
-                                : '重新检查',
-                          ),
-                        ),
-                      ),
-                      if (update)
-                        NativeUi(
-                          protected: true,
-                          child: OutlinedButton(
-                            onPressed: savingChannel ? null : _check,
-                            child: const Text('重新检查'),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (release != null && release.notes.trim().isNotEmpty) ...[
-            const SizedBox(height: 16),
-            const SectionHeading(
-              title: '更新说明',
-              padding: EdgeInsets.symmetric(vertical: 12),
-            ),
-            ContentSurface(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: SelectableText(
-                  release.notes.length > 20000
-                      ? '${release.notes.substring(0, 20000)}\n完整说明请查看 GitHub 发布页。'
-                      : release.notes,
                 ),
               ),
             ),
           ],
-          const SizedBox(height: 16),
+        ),
+        children: [
+          SettingsSummary(
+            label: '检查结果',
+            title: status,
+            detail:
+                error ??
+                (checking
+                    ? '正在查询 GitHub 上的应用发布版本。'
+                    : testing
+                    ? '测试与正式发布通道'
+                    : '正式发布通道'),
+            icon: error != null
+                ? Icons.cloud_off_outlined
+                : update
+                ? Icons.system_update
+                : Icons.check_circle_outline,
+          ),
+          if (release?.isPrerelease == true) const SettingsNote('测试版本'),
+          if (release?.publishedAt != null)
+            SettingsNote(
+              '发布于 ${DateFormat('yyyy年M月d日').format(release!.publishedAt!.toLocal())}',
+            ),
+          SettingsGroup(
+            children: [
+              ListTile(
+                leading: const SettingsGlyph(Icons.grid_view_rounded),
+                title: const Text('当前版本'),
+                subtitle: Text(
+                  installed.when(
+                    data: (v) => v.label,
+                    loading: () => '正在读取版本…',
+                    error: (_, _) => '无法读取版本信息',
+                  ),
+                ),
+              ),
+              SettingsAnchor(
+                '测试通道',
+                child: NativeUi(
+                  protected: true,
+                  child: SwitchListTile(
+                    secondary: const SettingsGlyph(Icons.tune),
+                    title: const Text('测试通道'),
+                    subtitle: const Text('同时接收正式版和测试版。测试版可能不稳定，安装前请备份数据。'),
+                    value: testing,
+                    onChanged: checking || savingChannel
+                        ? null
+                        : _changeChannel,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (release != null && release.notes.trim().isNotEmpty)
+            SettingsGroup(
+              title: '更新说明',
+              children: [
+                ListTile(
+                  title: SelectableText(
+                    release.notes.length > 20000
+                        ? '${release.notes.substring(0, 20000)}\n完整说明请查看 GitHub 发布页。'
+                        : release.notes,
+                  ),
+                ),
+              ],
+            ),
           SettingsGroup(
             title: 'GitHub',
             children: [

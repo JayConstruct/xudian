@@ -7,10 +7,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:task_app/core/module_catalog/module_catalog.dart';
 import 'package:task_app/core/module_host/collection_store.dart';
+import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/module_catalog_page.dart';
+import 'package:task_app/core/module_host/module_catalog_widgets.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
+import 'package:task_app/core/ui/ui_component.dart';
+import 'package:task_app/core/ui/ui_design.dart';
+import 'package:task_app/core/ui/ui_pack.dart';
+import 'package:task_app/core/ui/ui_pack_providers.dart';
 import 'package:task_app/data/app_database.dart';
+import 'package:task_app/data/providers.dart';
 
 const _searchHint = '搜索名称、作用、作者或模块 ID';
 const _names = ['课表助手', 'Focus timer', '隐藏便签', '旧目录插件', '坏索引', '新版宿主插件'];
@@ -36,6 +43,7 @@ class _StoreFixture {
   Future<void> initialize({
     bool cache = false,
     bool brokenDisabled = false,
+    bool includeHostService = false,
   }) async {
     db = AppDatabase(NativeDatabase.memory());
     store = CollectionStore(db);
@@ -83,6 +91,16 @@ class _StoreFixture {
         if (id == 'private.schedule') _version(id, '1.1.0'),
         if (id == 'private.timer') _version(id, '2.0.0-beta.1'),
       ];
+      if (includeHostService && id == 'private.legacy') {
+        object(versions.single['manifest'])['serviceDependencies'] = [
+          {
+            'moduleId': 'app.host',
+            'serviceId': 'demo.service',
+            'majorVersion': 1,
+            'kind': 'query',
+          },
+        ];
+      }
       if (id == 'private.schedule') {
         final bytes = await ScriptPackage.build(
           {
@@ -156,6 +174,8 @@ class _StoreFixture {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          databaseProvider.overrideWith((_) async => db),
+          moduleHostProvider.overrideWith((_) async => host),
           moduleCatalogClientProvider.overrideWith((_) async => client),
         ],
         child: MaterialApp(
@@ -237,8 +257,10 @@ Map<String, Object?> _version(
 Finder _search() => find.byWidgetPredicate(
   (widget) => widget is TextField && widget.decoration?.hintText == _searchHint,
 );
-Finder _card(String name) =>
-    find.ancestor(of: find.text(name), matching: find.byType(Card));
+Finder _card(String name) => find.ancestor(
+  of: find.text(name),
+  matching: find.byType(ModuleCatalogCard),
+);
 
 Future<void> _choose(WidgetTester tester, String label) async {
   tester
@@ -246,14 +268,18 @@ Future<void> _choose(WidgetTester tester, String label) async {
       .position
       .jumpTo(0);
   await tester.pump();
-  final kind = const ['全部', '推荐', '已安装', '未安装', '可更新'].contains(label)
-      ? 'status'
-      : 'category';
-  final selector = find.byKey(ValueKey('catalog-filter-$kind'));
+  if (ModuleCatalogFilters.statuses.contains(label)) {
+    final option = find.byKey(ValueKey('catalog-status-$label'));
+    await tester.ensureVisible(option);
+    await tester.tap(option);
+    await tester.pumpAndSettle();
+    return;
+  }
+  final selector = find.byKey(const ValueKey('catalog-filter-category'));
   await tester.ensureVisible(selector);
   await tester.tap(selector);
   await tester.pumpAndSettle();
-  final option = find.widgetWithText(PopupMenuItem<String>, label);
+  final option = find.widgetWithText(ListTile, label);
   await tester.ensureVisible(option);
   await tester.tap(option);
   await tester.pumpAndSettle();
@@ -281,6 +307,156 @@ Future<_StoreFixture> _show(
 }
 
 void main() {
+  testWidgets(
+    'store and display panels use the saved global pack from a built-in route',
+    (tester) async {
+      tester.view.physicalSize = const Size(412, 916);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final fixture = _StoreFixture();
+      await tester.runAsync(() => fixture.initialize(includeHostService: true));
+      final source = object(
+        jsonDecode(
+          File('../packages/modules/diagnostic.ui.coverage/module.json')
+              .readAsStringSync(),
+        ),
+      );
+      final manifest = object(source['manifest']);
+      final pack = UiPackDefinition.parse(
+        moduleId: manifest['id'] as String,
+        version: manifest['version'] as String,
+        digest: 'fixture',
+        source: object(source['uiPack']),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWith((_) async => fixture.db),
+          moduleCatalogClientProvider.overrideWith((_) async => fixture.client),
+          uiPackRegistryProvider.overrideWith(
+            (_) => Stream.value({pack.moduleId: pack}),
+          ),
+        ],
+      );
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        container.dispose();
+        await tester.runAsync(fixture.close);
+      });
+      await tester.runAsync(() async {
+        await container.read(uiSelectionProvider.future);
+        await container
+            .read(uiSelectionProvider.notifier)
+            .save(UiSelection(globalPackId: pack.moduleId));
+      });
+      final baseTheme = AppDesign.theme(Brightness.light);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: baseTheme,
+            builder: (context, child) =>
+                UiPackScope(defaultOnly: true, child: child!),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ModuleCatalogPage(host: fixture.host),
+                    ),
+                  ),
+                  child: const Text('打开商店'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        UiScopeData.maybeOf(tester.element(find.text('打开商店')))!.defaultOnly,
+        isTrue,
+      );
+      await tester.tap(find.text('打开商店'));
+      await _settle(tester);
+
+      const canvas = Color(0xfffad8d9);
+      const surface = Color(0xfffff1f0);
+      void expectGlobalStyle(Finder finder, {bool sheet = false}) {
+        final context = tester.element(finder);
+        final scope = UiScopeData.maybeOf(context)!;
+        expect(scope.defaultOnly, isFalse);
+        expect(
+          scope.registry.implementationProvider('ui.icon@1'),
+          pack.moduleId,
+        );
+        expect(Theme.of(context).scaffoldBackgroundColor, canvas);
+        expect(Theme.of(context).colorScheme.surface, surface);
+        if (sheet) {
+          final panel = find.ancestor(
+            of: finder,
+            matching: find.byType(BottomSheet),
+          );
+          expect(tester.widget<BottomSheet>(panel).backgroundColor, canvas);
+        }
+      }
+
+      expectGlobalStyle(find.text('模块商店'));
+      expectGlobalStyle(_search());
+      await tester.tap(find.byKey(const ValueKey('catalog-filter-category')));
+      await tester.pumpAndSettle();
+      expectGlobalStyle(find.text('模块分类'), sheet: true);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('商店设置'));
+      await tester.pumpAndSettle();
+      expectGlobalStyle(find.text('商店设置'), sheet: true);
+      await tester.tap(find.text('修改目录仓库'));
+      await tester.pumpAndSettle();
+      expectGlobalStyle(find.text('模块目录仓库'), sheet: true);
+      await tester.enterText(find.byType(TextField).last, 'Unsaved/source');
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.enterText(_search(), 'private.legacy');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(_names[3]));
+      await _settle(tester);
+      expectGlobalStyle(find.text('模块详情'), sheet: true);
+      expectGlobalStyle(find.text('安装前核对'));
+      await tester.ensureVisible(find.text('服务依赖'));
+      await tester.tap(find.text('服务依赖'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('app.host'));
+      await tester.tap(find.text('app.host'));
+      await tester.pumpAndSettle();
+      expectGlobalStyle(find.text('宿主内置服务'));
+      await tester.tap(find.widgetWithText(TextButton, '关闭'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(OutlinedButton, '关闭'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('清空搜索'));
+      await tester.pumpAndSettle();
+      await _choose(tester, '可更新');
+      await tester.tap(find.widgetWithText(FilledButton, '更新'));
+      await _settle(tester);
+      final review = tester.element(find.text('确认模块安装计划'));
+      expect(UiScopeData.maybeOf(review)!.defaultOnly, isTrue);
+      expect(
+        Theme.of(review).scaffoldBackgroundColor,
+        baseTheme.scaffoldBackgroundColor,
+      );
+      await tester.tap(find.text('取消'));
+      await _settle(tester);
+      expectGlobalStyle(find.text('模块商店'));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'search matches names, descriptions, authors and module IDs without case sensitivity',
     (tester) async {
@@ -369,7 +545,13 @@ void main() {
       for (final name in _names.skip(1)) {
         expect(find.text(name), findsNothing);
       }
-      expect(find.textContaining('1.1.0'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Tooltip && widget.message?.endsWith('→ 1.1.0') == true,
+        ),
+        findsOneWidget,
+      );
       await _choose(tester, '未安装');
       for (final name in _names.take(3)) {
         expect(find.text(name), findsNothing);
@@ -405,8 +587,7 @@ void main() {
     (tester) async {
       final fixture = await _show(tester, cache: true);
       final requestCount = fixture.requests.length;
-      await tester.ensureVisible(find.text('商店设置'));
-      await tester.tap(find.text('商店设置'));
+      await tester.tap(find.byTooltip('商店设置'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byType(SwitchListTile));
       await tester.tap(find.byType(SwitchListTile));

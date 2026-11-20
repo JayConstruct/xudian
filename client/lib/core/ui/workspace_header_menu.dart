@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'native_ui.dart';
 import 'ui_icon.dart';
+import 'ui_annotation.dart';
 import 'ui_icons.dart';
 import 'workspace_header.dart';
 
@@ -216,16 +217,21 @@ class _WorkspaceHeaderMenuState extends State<WorkspaceHeaderMenu> {
       );
     }
     final submenu = action['children'] is List;
-    return _row(
-      label: label,
-      icon: appIconData(action['icon']),
-      subtitle: action['subtitle'] as String?,
-      value: action['valueLabel'] as String?,
-      selected: action['selected'] == true,
-      submenu: submenu,
-      onTap: submenu
-          ? () => setState(() => _path.add(label))
-          : () => _dispatch(action, 'event'),
+    return UiAnnotation(
+      id: 'menu-action:$label',
+      name: label,
+      purpose: '页面菜单操作',
+      child: _row(
+        label: label,
+        icon: appIconData(action['icon']),
+        subtitle: action['subtitle'] as String?,
+        value: action['valueLabel'] as String?,
+        selected: action['selected'] == true,
+        submenu: submenu,
+        onTap: submenu
+            ? () => setState(() => _path.add(label))
+            : () => _dispatch(action, 'event'),
+      ),
     );
   }
 

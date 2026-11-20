@@ -11,6 +11,7 @@ import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/host_providers.dart';
 import 'package:task_app/core/module_host/host_settings_page.dart';
 import 'package:task_app/core/module_host/module_catalog_page.dart';
+import 'package:task_app/core/module_host/module_catalog_widgets.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
@@ -304,6 +305,8 @@ void main() {
       await tester.tap(find.text('关于序点').hitTestable());
       await tester.pumpAndSettle();
       expect(find.byType(AboutSettingsPage), findsOneWidget);
+      expect(find.text(_projectUrl), findsOneWidget);
+      expect(find.text(_modulesUrl), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('打开模块商店'),
         200,
@@ -327,38 +330,41 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 20));
       }
-      expect(find.byType(ModuleCatalogPage), findsOneWidget);
+      final catalogPage = find.byType(ModuleCatalogPage);
+      expect(catalogPage, findsOneWidget);
       expect(find.text('模块商店'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('商店设置'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await Scrollable.ensureVisible(
-        tester.element(find.text('商店设置')),
-        alignment: .5,
-      );
+      await tester.tap(find.byTooltip('商店设置'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('商店设置'));
-      await tester.pumpAndSettle();
-      expect(find.text('目录：$repository'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, '修改目录仓库'), findsOneWidget);
+      expect(find.text(repository), findsOneWidget);
       expect(requested, contains(catalogUrl));
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      final catalogScroll = find.descendant(
+        of: catalogPage,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
+        ),
+      );
+      final catalogSearch = find.descendant(
+        of: catalogPage,
+        matching: find.byType(TextField),
+      );
       for (final name in ['拾光教务导入兼容', '大学课表']) {
-        tester
-            .state<ScrollableState>(find.byType(Scrollable).first)
-            .position
-            .jumpTo(0);
+        tester.state<ScrollableState>(catalogScroll).position.jumpTo(0);
         await tester.pump();
-        await tester.enterText(find.byType(TextField), name);
+        await tester.enterText(catalogSearch, name);
         await tester.pumpAndSettle();
         final moduleName = find.descendant(
-          of: find.byType(Card),
+          of: find.byType(ModuleCatalogCard),
           matching: find.text(name),
         );
         await tester.scrollUntilVisible(
           moduleName,
           160,
-          scrollable: find.byType(Scrollable).first,
+          scrollable: catalogScroll,
         );
         await tester.pumpAndSettle();
         expect(moduleName, findsOneWidget);

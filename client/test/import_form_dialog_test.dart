@@ -5,6 +5,88 @@ import 'package:task_app/core/module_host/host_dialogs.dart';
 import 'package:task_app/core/ui/ui_design.dart';
 
 void main() {
+  testWidgets('selection sheet retains its default until confirmed', (
+    tester,
+  ) async {
+    final results = <Map<String, Object?>?>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        supportedLocales: const [Locale('zh', 'CN')],
+        theme: AppDesign.theme(Brightness.light),
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async => results.add(
+                await showModalBottomSheet<Map<String, Object?>>(
+                  context: context,
+                  isScrollControlled: true,
+                  showDragHandle: true,
+                  builder: (_) => const HostFormDialog(
+                    title: '选择导入目标',
+                    presentation: 'sheet',
+                    fullWidthActions: true,
+                    fields: [
+                      {
+                        'key': 'target',
+                        'label': '',
+                        'type': 'select',
+                        'value': 'new',
+                        'presentation': 'list',
+                        'required': true,
+                        'options': [
+                          {
+                            'value': 'new',
+                            'label': '新建课表',
+                            'icon': 'add',
+                            'subtitle': '将采集结果导入新课表',
+                          },
+                          {
+                            'value': 'existing',
+                            'label': '秋季课表',
+                            'icon': 'calendar',
+                            'subtitle': '更新已有课表',
+                          },
+                        ],
+                      },
+                    ],
+                  ),
+                ),
+              ),
+              child: const Text('打开'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Future<void> tap(String label) async {
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
+
+    ListTile target(String label) =>
+        tester.widget(find.widgetWithText(ListTile, label));
+    await tap('打开');
+    expect(target('新建课表').selected, isTrue);
+    expect(
+      tester.getSize(find.byType(OutlinedButton)).width,
+      tester.getSize(find.byType(FilledButton)).width,
+    );
+    await tap('秋季课表');
+    expect(target('秋季课表').selected, isTrue);
+    expect(results, isEmpty);
+    await tap('取消');
+    expect(results, [null]);
+    await tap('打开');
+    expect(target('新建课表').selected, isTrue);
+    await tap('秋季课表');
+    await tap('继续');
+    expect(results.last, {'target': 'existing'});
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('semester page selects any first-week day and returns Monday', (
     tester,
   ) async {

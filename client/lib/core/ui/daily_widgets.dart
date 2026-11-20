@@ -46,6 +46,7 @@ Widget? dailyUiComponent(
       title: '${props['title'] ?? ''}',
       subtitle: props['subtitle'] as String?,
       count: props['count'],
+      countAtEnd: props['countPosition'] == 'end',
       actionLabel: props['actionLabel'] as String?,
       actionIcon: props['actionIcon'] as String?,
       onAction: disabled || events['press'] == null
@@ -492,6 +493,7 @@ class DailySectionHeader extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.count,
+    this.countAtEnd = false,
     this.actionLabel,
     this.actionIcon,
     this.onAction,
@@ -500,6 +502,7 @@ class DailySectionHeader extends StatelessWidget {
   final String title;
   final String? subtitle, actionLabel, actionIcon;
   final Object? count;
+  final bool countAtEnd;
   final VoidCallback? onAction;
   final bool compact;
 
@@ -517,7 +520,7 @@ class DailySectionHeader extends StatelessWidget {
                         : theme.textTheme.titleLarge)
                     ?.copyWith(fontWeight: FontWeight.w600),
           ),
-          if (count != null)
+          if (count != null && !countAtEnd)
             TextSpan(
               text: '  $count',
               style:
@@ -543,7 +546,11 @@ class DailySectionHeader extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (actionIcon == 'add')
-                    UiIcon(Icons.add_rounded, size: 22, semanticLabel: actionLabel)
+                    UiIcon(
+                      Icons.add_rounded,
+                      size: 22,
+                      semanticLabel: actionLabel,
+                    )
                   else ...[
                     Text(actionLabel!),
                     const SizedBox(width: 3),
@@ -563,7 +570,17 @@ class DailySectionHeader extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             runSpacing: 4,
-            children: [heading, ?action],
+            children: [
+              heading,
+              if (countAtEnd && count != null)
+                Text(
+                  '$count',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ?action,
+            ],
           ),
           if (subtitle != null && subtitle!.isNotEmpty)
             Padding(

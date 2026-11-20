@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -40,6 +41,9 @@ class DetailPage extends StatelessWidget {
     this.actions,
     this.titleMaxLines = 1,
     this.compactHeader = false,
+    this.settingsStyle = false,
+    this.maxBodyWidth,
+    this.minHeaderHeight,
   });
 
   final String title;
@@ -48,12 +52,27 @@ class DetailPage extends StatelessWidget {
   final List<Widget>? actions;
   final int titleMaxLines;
   final bool compactHeader;
+  final bool settingsStyle;
+  final double? maxBodyWidth;
+  final double? minHeaderHeight;
 
   @override
   Widget build(BuildContext context) {
-    double? toolbarHeight;
+    final media = MediaQuery.of(context);
+    final width = media.size.width - media.padding.horizontal;
+    final wide = settingsStyle && width >= 820;
+    final bodyWidth = maxBodyWidth ?? (settingsStyle ? 800.0 : 760.0);
+    final margin = AppDesign.pageGutter + math.max(0, (width - bodyWidth) / 2);
+    final settingsTitle = settingsStyle
+        ? Theme.of(context).textTheme.headlineSmall
+              ?.copyWith(fontWeight: FontWeight.w700, fontSize: wide ? 27 : 25)
+        : null;
+    double? toolbarHeight = minHeaderHeight == null
+        ? (wide ? 76 : null)
+        : math.max(minHeaderHeight!, wide ? 76.0 : kToolbarHeight);
     if (titleMaxLines > 1) {
       final style =
+          settingsTitle ??
           Theme.of(context).appBarTheme.titleTextStyle ??
           Theme.of(context).textTheme.titleLarge;
       final painter =
@@ -69,7 +88,7 @@ class DetailPage extends StatelessWidget {
             ),
           );
       toolbarHeight = (painter.height + 16).clamp(
-        kToolbarHeight,
+        toolbarHeight ?? kToolbarHeight,
         double.infinity,
       );
       painter.dispose();
@@ -82,14 +101,30 @@ class DetailPage extends StatelessWidget {
             title,
             maxLines: titleMaxLines,
             overflow: TextOverflow.ellipsis,
-            style: compactHeader
-                ? Theme.of(context).textTheme.titleLarge
-                      ?.copyWith(fontSize: 20, fontWeight: FontWeight.w700)
-                : null,
+            style:
+                settingsTitle ??
+                (compactHeader
+                    ? Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontSize: 20, fontWeight: FontWeight.w700)
+                    : null),
           ),
-          leading: leading,
-          leadingWidth: compactHeader ? 48 : null,
-          titleSpacing: compactHeader ? 8 : null,
+          leading:
+              settingsStyle && (leading != null || Navigator.canPop(context))
+              ? Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: leading ?? const BackButton(),
+                )
+              : leading,
+          leadingWidth: settingsStyle
+              ? margin + 32
+              : compactHeader
+              ? 48
+              : null,
+          titleSpacing: settingsStyle
+              ? (wide ? 16 : 10)
+              : compactHeader
+              ? 8
+              : null,
           actions: actions,
           centerTitle: false,
         ),
@@ -98,7 +133,7 @@ class DetailPage extends StatelessWidget {
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
+              constraints: BoxConstraints(maxWidth: bodyWidth),
               child: SizedBox.expand(child: child),
             ),
           ),
@@ -113,7 +148,10 @@ class SectionHeading extends StatelessWidget {
     super.key,
     required this.title,
     this.action,
-    this.padding = const EdgeInsets.fromLTRB(20, 12, 20, 12),
+    this.padding = const EdgeInsets.symmetric(
+      horizontal: AppDesign.pageGutter,
+      vertical: 12,
+    ),
   });
 
   final String title;

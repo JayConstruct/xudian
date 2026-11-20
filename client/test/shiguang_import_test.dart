@@ -11,6 +11,8 @@ import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
 import 'package:task_app/data/app_database.dart';
 
+import 'support/module_fixtures.dart' show sourcePackage;
+
 List<Map<String, Object?>> objects(Object? value) =>
     (value as List).map(object).toList();
 
@@ -66,16 +68,53 @@ void main() {
     host = ModuleHost(store: store, directory: dir);
     await host.initialize();
     for (final id in ['app.schedule', 'app.import.shiguang']) {
-      await host.install(
-        await ScriptPackage.verify(
-          await File('../dist/modules/$id.xmodule').readAsBytes(),
-          allowUnsignedLocal: true,
-        ),
-      );
+      await host.install(await sourcePackage(id));
     }
     adapter = host.instances['app.import.shiguang']!.actor;
     schedule = host.instances['app.schedule']!.actor;
   });
+
+  Future<Map<String, Object?>> renderImport(
+    String event, {
+    Object? state,
+    Map<String, Object?> context = const {},
+    Map<String, Object?> form = const {},
+    Map<String, Object?> params = const {},
+  }) async => object(
+    await host.invokePage(adapter.moduleId, 'render', {
+      'state': ?state,
+      'event': {'type': event, ...params},
+      'context': context,
+      'formValues': form,
+    }),
+  );
+
+  Future<Map<String, Object?>> generate(
+    Object? state, {
+    Map<String, Object?> form = const {},
+    Map<String, Object?> context = const {},
+  }) => renderImport(
+    'saveSemester',
+    state: state,
+    context: context,
+    form: {
+      'name': options['name'],
+      'firstMonday': options['firstMonday'],
+      'totalWeeks': options['totalWeeks'],
+      'displayWeekStart': '1',
+      ...form,
+    },
+  );
+
+  Future<Map<String, Object?>> locations(Object? state, String mode) async {
+    final page = await renderImport('locations', state: state);
+    return renderImport(
+      'locationMode',
+      state: page['state'],
+      params: {'value': mode},
+    );
+  }
+
   tearDown(() async {
     await host.close();
     await store.close();
@@ -423,26 +462,24 @@ void main() {
     final state = object(detailed['state']);
     expect(state['view'], 'detail');
     final detailNodes = nodes(detailed['tree']).toList();
-    final variants = detailNodes
-        .where(
-          (node) =>
-              node['type'] == 'listTile' &&
-              object(node['event'])['type'] == 'selectSchool',
-        )
-        .toList();
+    final variants = objects(
+      detailNodes.singleWhere((node) => node['type'] == 'segmented')['items'],
+    );
     expect(variants.map((node) => object(node['event'])['id']).toSet(), {
       'AUFE_01',
       'AUFE_02',
     });
+    final source = await renderImport(
+      'openSource',
+      state: state,
+      params: {'source': 'adapter'},
+    );
+    expect(jsonEncode(source['tree']), contains('resources/AUFE/aufe_01.js'));
     expect(
       detailNodes
-          .where((node) => node['type'] == 'richText')
-          .map((node) => node['text'])
+          .map((node) => node['trailing'])
+          .whereType<String>()
           .join('\n'),
-      contains('resources/AUFE/aufe_01.js'),
-    );
-    expect(
-      detailNodes.map((node) => node['text']).whereType<String>().join('\n'),
       contains('星河欲转'),
     );
     final switched = await render({
@@ -522,12 +559,22 @@ void main() {
         .where((node) => node['type'] == 'richText')
         .map((node) => '${node['text']}')
         .join('\n');
-    expect(
-      selectable,
-      contains('https://github.com/ShiGuangSchedule/shiguang_warehouse'),
+    final warehouse = await renderImport(
+      'openSource',
+      state: about['state'],
+      params: {'source': 'warehouse'},
     );
     expect(
-      selectable,
+      jsonEncode(warehouse['tree']),
+      contains('https://github.com/ShiGuangSchedule/shiguang_warehouse'),
+    );
+    final upstream = await renderImport(
+      'openSource',
+      state: about['state'],
+      params: {'source': 'upstream'},
+    );
+    expect(
+      jsonEncode(upstream['tree']),
       contains('https://github.com/ShiGuangSchedule/shiguangschedule'),
     );
     expect(selectable, contains('Permission is hereby granted'));
@@ -543,40 +590,17 @@ void main() {
       }),
     );
     host.interaction = (_, method, args) async {
-      if (method == 'browser.capture') {
-        expect(args['url'], school['url']);
-        return payload();
-      }
-      expect(method, 'ui.dialog');
-      return args['title'] == '选择导入目标' ? {'target': 'new'} : null;
+      expect(method, 'browser.capture');
+      expect(args['url'], school['url']);
+      return payload();
     };
-    final canceled = object(
-      await host.invokePage(adapter.moduleId, 'render', {
-        'state': selected['state'],
-        'event': {'type': 'browser'},
-      }),
-    );
+    final form = await renderImport('browser', state: selected['state']);
+    expect(object(form['header'])['title'], '确认学期配置');
+    final canceled = await renderImport('back', state: form['state']);
     expect(object(canceled['state'])['input'], isNull);
     expect(await store.query(schedule, 'timetables', {}), isEmpty);
-    host.interaction = (_, method, args) async {
-      if (method == 'browser.capture') return payload();
-      if (method == 'ui.navigate') return true;
-      expect(method, 'ui.dialog');
-      return args['title'] == '选择导入目标'
-          ? {'target': 'new'}
-          : {
-              ...options,
-              'timezone': 'Asia/Shanghai',
-              'displayWeekStart': '1',
-              'complete': false,
-            };
-    };
-    final configured = object(
-      await host.invokePage(adapter.moduleId, 'render', {
-        'state': selected['state'],
-        'event': {'type': 'browser'},
-      }),
-    );
+    final reopened = await renderImport('browser', state: canceled['state']);
+    final configured = await generate(reopened['state']);
     expect(
       object(object(object(configured['state'])['input'])['draft'])['courses'],
       hasLength(1),
@@ -596,15 +620,21 @@ void main() {
     for (final field in ['adapterId', 'input', 'plan', 'options']) {
       expect(resetState[field], isNull);
     }
-    host.interaction = (_, method, _) async {
-      expect(method, 'ui.dialog');
-      return {'script': 'window.shiguangBridge.notifyTaskCompletion();'};
-    };
-    final custom = object(
-      await host.invokePage(adapter.moduleId, 'render', {
-        'state': stale,
-        'event': {'type': 'customScript'},
-      }),
+    final paste = await renderImport('customScript', state: stale);
+    final pasteCancelled = await renderImport(
+      'back',
+      state: paste['state'],
+      form: {'scriptText': 'cancelled'},
+    );
+    expect(object(pasteCancelled['state'])['input'], stale['input']);
+    final reopenedPaste = await renderImport(
+      'customScript',
+      state: pasteCancelled['state'],
+    );
+    final custom = await renderImport(
+      'applyScript',
+      state: reopenedPaste['state'],
+      form: {'scriptText': 'window.shiguangBridge.notifyTaskCompletion();'},
     );
     final customState = object(custom['state']);
     expect(
@@ -720,27 +750,14 @@ void main() {
       Map<String, Object?>? navigation;
       host.interaction = (actor, method, args) async {
         if (method == 'files.readText') return jsonEncode(payload());
-        if (method == 'ui.dialog') {
-          return args['title'] == '选择导入目标'
-              ? {'target': 'new'}
-              : {
-                  ...options,
-                  'timezone': 'Asia/Shanghai',
-                  'displayWeekStart': '1',
-                  'complete': false,
-                };
-        }
         if (method == 'ui.navigate') {
           navigation = args;
           return true;
         }
         throw StateError(method);
       };
-      final loaded = object(
-        await host.invokePage(adapter.moduleId, 'render', {
-          'event': {'type': 'json'},
-        }),
-      );
+      final form = await renderImport('json');
+      final loaded = await generate(form['state']);
       expect(object(loaded['state'])['error'], isNull);
       expect(
         navigation,
@@ -874,7 +891,8 @@ export async function render({event, formValues={}}) {
     final configured = object(
       await host.invokePage(adapter.moduleId, 'render', {'context': context}),
     );
-    final state = object(configured['state']);
+    final generated = await generate(configured['state'], context: context);
+    final state = object(generated['state']);
     expect(state['error'], isNull);
     expect(object(object(state['input'])['draft'])['courses'], hasLength(1));
     await host.invokePage(adapter.moduleId, 'render', {
@@ -883,7 +901,7 @@ export async function render({event, formValues={}}) {
     });
     expect(
       dialogs,
-      1,
+      0,
       reason:
           'New timetable skips target selection and handoff is consumed once',
     );
@@ -930,13 +948,18 @@ export async function render({event, formValues={}}) {
       final canceled = object(
         await host.invokePage(adapter.moduleId, 'render', {'context': context}),
       );
-      final state = object(canceled['state']);
+      final returned = await renderImport(
+        'back',
+        state: canceled['state'],
+        context: context,
+      );
+      final state = object(returned['state']);
       expect(state['input'], isNull);
       await host.invokePage(adapter.moduleId, 'render', {
         'context': context,
         'state': state,
       });
-      expect(dialogs, 1);
+      expect(dialogs, 0);
       final invalid = object(
         await host.invokePage(adapter.moduleId, 'render', {
           'context': {
@@ -1040,12 +1063,7 @@ export async function render({event, formValues={}}) {
       };
       final preview = await host.prepare(adapter, importRef, input);
       expect(object(preview.result)['blocked'], true);
-      Map<String, Object?>? dialog;
-      host.interaction = (_, method, arguments) async {
-        if (method == 'ui.dialog') {
-          dialog = arguments;
-          return null;
-        }
+      host.interaction = (_, method, _) async {
         fail(
           'Cancelled conflict selection must not navigate or commit: $method',
         );
@@ -1061,15 +1079,34 @@ export async function render({event, formValues={}}) {
           'event': {'type': 'conflicts'},
         }),
       );
-      final basis = objects(dialog!['fields'])
-          .singleWhere((entry) => entry['key'] == 'timetable:timeBasis');
-      expect(basis['required'], true);
-      expect(basis['value'], '');
-      expect(objects(basis['options']).first['label'], contains('重新解释'));
-      expect(objects(basis['options']).last['label'], contains('全部课程'));
+      final choices = nodes(result['tree'])
+          .where(
+            (node) =>
+                node['type'] == 'listTile' &&
+                node['event'] is Map &&
+                object(node['event'])['type'] == 'pickConflict',
+          )
+          .toList();
+      expect(choices, hasLength(2));
+      expect(choices.every((option) => option['selected'] == false), isTrue);
+      expect(choices.first['subtitle'], contains('重新解释'));
+      expect(choices.last['subtitle'], contains('全部课程'));
       expect(jsonEncode(result['tree']), contains('取消合并并选择新建课表'));
+      final unselected = await renderImport(
+        'applyConflicts',
+        state: result['state'],
+      );
+      expect(object(unselected['state'])['view'], 'conflicts');
+      expect(object(unselected['state'])['error'], contains('请选择'));
+      final selected = await renderImport(
+        'pickConflict',
+        state: unselected['state'],
+        params: {'index': 0, 'value': 'local'},
+      );
+      final canceled = await renderImport('back', state: selected['state']);
+      expect(object(canceled['state'])['view'], 'preview');
       expect(await store.query(schedule, 'courses', {}), isEmpty);
-      expect(object(object(result['state'])['input'])['choices'], isEmpty);
+      expect(object(object(canceled['state'])['input'])['choices'], isEmpty);
     },
   );
 
@@ -1079,44 +1116,34 @@ export async function render({event, formValues={}}) {
       {...objects(source['courses']).single, 'position': '阳江校区 慎思楼 101'},
     ];
     var navigations = 0;
-    var cancelLocation = false;
-    var mode = 'removeCampus';
     host.interaction = (_, method, args) async {
       if (method == 'files.readText') return jsonEncode(source);
       if (method == 'ui.navigate') {
         navigations++;
         return true;
       }
-      if (method == 'ui.dialog') {
-        final fields = objects(args['fields']);
-        expect(args['presentation'], 'page');
-        expect(
-          fields.singleWhere((f) => f['key'] == 'campusNames')['value'],
-          '阳江校区',
-        );
-        if (args['title'] == '确认学期配置') {
-          expect(
-            fields.singleWhere((f) => f['key'] == 'locationMode')['value'],
-            'keep',
-          );
-          return {
-            ...options,
-            'displayWeekStart': '1',
-            'locationMode': mode,
-            'campusNames': '阳江校区',
-          };
-        }
-        expect(args['title'], '处理导入地点');
-        if (cancelLocation) return null;
-        return {'locationMode': mode, 'campusNames': '阳江校区'};
-      }
       fail('Unexpected operation $method');
     };
-    final loaded = object(
-      await host.invokePage(adapter.moduleId, 'render', {
-        'event': {'type': 'json'},
-      }),
+    final opened = await renderImport('json');
+    final editedConfiguration = await locations(
+      opened['state'],
+      'removeCampus',
     );
+    expect(
+      object(
+        object(editedConfiguration['state'])['locationDraft'],
+      )['campusNames'],
+      '阳江校区',
+    );
+    expect(
+      jsonEncode(editedConfiguration['tree']),
+      contains('原地点 · 阳江校区 慎思楼 101'),
+    );
+    final configured = await renderImport(
+      'applyLocations',
+      state: editedConfiguration['state'],
+    );
+    final loaded = await generate(configured['state']);
     final initial = object(loaded['state']);
     Map<String, Object?> meeting(Map<String, Object?> state) =>
         objects(object(object(state['input'])['draft'])['meetings']).single;
@@ -1125,29 +1152,18 @@ export async function render({event, formValues={}}) {
       objects(object(initial['payload'])['courses']).single['position'],
       '阳江校区 慎思楼 101',
     );
-    expect(jsonEncode(loaded['tree']), contains('阳江校区 慎思楼 101 → 慎思楼 101'));
+      expect(jsonEncode(loaded['tree']), contains('去掉校区，保留教室'));
     expect(navigations, 0);
 
-    cancelLocation = true;
+    final editing = await locations(initial, 'omit');
     final canceled = object(
-      object(
-        await host.invokePage(adapter.moduleId, 'render', {
-          'state': initial,
-          'event': {'type': 'locations'},
-        }),
-      )['state'],
+      (await renderImport('back', state: editing['state']))['state'],
     );
     expect(canceled['input'], initial['input']);
     expect(canceled['plan'], initial['plan']);
-    cancelLocation = false;
-    mode = 'omit';
+    final omitting = await locations(canceled, 'omit');
     final omitted = object(
-      object(
-        await host.invokePage(adapter.moduleId, 'render', {
-          'state': canceled,
-          'event': {'type': 'locations'},
-        }),
-      )['state'],
+      (await renderImport('applyLocations', state: omitting['state']))['state'],
     );
     expect(meeting(omitted)['location'], '');
     expect(meeting(omitted)['sourceId'], meeting(initial)['sourceId']);
@@ -1159,14 +1175,12 @@ export async function render({event, formValues={}}) {
       reason: 'Applying location options only rebuilds the preview',
     );
 
-    mode = 'keep';
+    final restoring = await locations(omitted, 'keep');
     final restored = object(
-      object(
-        await host.invokePage(adapter.moduleId, 'render', {
-          'state': omitted,
-          'event': {'type': 'locations'},
-        }),
-      )['state'],
+      (await renderImport(
+        'applyLocations',
+        state: restoring['state'],
+      ))['state'],
     );
     expect(meeting(restored)['location'], '阳江校区 慎思楼 101');
     expect(meeting(restored)['sourceId'], meeting(initial)['sourceId']);
@@ -1191,25 +1205,15 @@ export async function render({event, formValues={}}) {
         destinations.add(args);
         return true;
       }
-      if (method == 'ui.dialog') {
-        if (args['title'] == '确认学期配置') {
-          return {
-            ...options,
-            'displayWeekStart': '1',
-            'locationMode': 'removeCampus',
-            'campusNames': '阳江校区',
-          };
-        }
-        expect(args['title'], '处理导入地点');
-        return {'locationMode': 'keep', 'campusNames': '阳江校区'};
-      }
       fail('Preview/cancel must not save data: $method');
     };
-    final loaded = object(
-      await host.invokePage(adapter.moduleId, 'render', {
-        'event': {'type': 'json'},
-      }),
+    final form = await renderImport('json');
+    final removing = await locations(form['state'], 'removeCampus');
+    final configured = await renderImport(
+      'applyLocations',
+      state: removing['state'],
     );
+    final loaded = await generate(configured['state']);
     final opened = object(
       await host.invokePage(adapter.moduleId, 'render', {
         'state': loaded['state'],
@@ -1258,19 +1262,15 @@ export async function render({event, formValues={}}) {
     expect(state['payload'], source);
     expect(object(state['options'])['locationMode'], 'removeCampus');
     expect(object(state['options'])['campusNames'], '阳江校区');
-    expect(jsonEncode(returned['tree']), contains('阳江校区 慎思楼 101 → 慎思楼 101'));
-    final edited = object(
-      await host.invokePage(adapter.moduleId, 'render', {
-        'state': state,
-        'event': {'type': 'locations'},
-      }),
+      expect(jsonEncode(returned['tree']), contains('去掉校区，保留教室'));
+    final restoring = await locations(state, 'keep');
+    final edited = await renderImport(
+      'applyLocations',
+      state: restoring['state'],
     );
     expect(object(edited['state'])['plan'], isNull);
-    expect(jsonEncode(edited['tree']), contains('阳江校区 慎思楼 101 → 阳江校区 慎思楼 101'));
-    await host.invokePage(adapter.moduleId, 'render', {
-      'state': edited['state'],
-      'event': {'type': 'preview'},
-    });
+    expect(object(object(edited['state'])['options'])['locationMode'], 'keep');
+    await renderImport('preview', state: edited['state']);
     expect(destinations, hasLength(2));
     expect(destinations.last['page'], 'app.schedule.imports');
     expect(
@@ -1297,19 +1297,12 @@ export async function render({event, formValues={}}) {
           final tables = await store.query(schedule, 'timetables', {});
           return {'target': object(tables.single)['id']};
         }
+        expect(args['title'], '来源标识');
         configurations++;
-        expect(args['presentation'], 'page');
-        final scope = objects(args['fields'])
-            .singleWhere((f) => f['key'] == 'scope');
+        final scope = objects(args['fields']).single;
+        expect(scope['key'], 'scope');
         expect(scope['required'], isNot(true));
-        return {
-          ...options,
-          'scope': '',
-          'firstMonday': '2026-09-09',
-          'displayWeekStart': '1',
-          'mode': 'merge',
-          'complete': false,
-        };
+        return {'scope': ''};
       }
       if (method == 'ui.navigate') {
         planId = object(args['context'])['importPlanId'] as String;
@@ -1318,11 +1311,19 @@ export async function render({event, formValues={}}) {
       if (method == 'ui.review') return false;
       throw StateError(method);
     };
-    final loaded = object(
-      await host.invokePage(adapter.moduleId, 'render', {
-        'event': {'type': 'json'},
-      }),
-    );
+    Future<Map<String, Object?>> importPreview() async {
+      final form = await renderImport('json');
+      final scoped = await renderImport('editScope', state: form['state']);
+      final dated = await renderImport(
+        'semesterDate',
+        state: scoped['state'],
+        params: {'value': '2026-09-09'},
+      );
+      expect(object(dated['replaceForms'])['firstMonday'], '2026-09-07');
+      return generate(dated['state']);
+    }
+
+    final loaded = await importPreview();
     final draft = object(object(object(loaded['state'])['input'])['draft']);
     expect(object(draft['timetable'])['firstMonday'], '2026-09-07');
     expect(draft['scope'], 'shiguang:json/2026-09-07');
@@ -1368,11 +1369,7 @@ export async function render({event, formValues={}}) {
     host.interaction = importInteraction;
     final coursesBefore = await store.query(schedule, 'courses', {});
     sourceWeeks = [1, 3, 7];
-    final updatedImport = object(
-      await host.invokePage(adapter.moduleId, 'render', {
-        'event': {'type': 'json'},
-      }),
-    );
+    final updatedImport = await importPreview();
     await host.invokePage(adapter.moduleId, 'render', {
       'state': updatedImport['state'],
       'event': {'type': 'preview'},

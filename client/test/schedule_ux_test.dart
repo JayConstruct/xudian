@@ -146,6 +146,123 @@ void main() {
     };
   }
 
+  test(
+    'course editor keeps draft fields through validation and review',
+    () async {
+      await command('schedule.timetable.save', {'timetable': _table()});
+      final saved = object(
+        await command('schedule.course.save', {
+          'course': {
+            'id': 'math',
+            'timetableId': 'table',
+            'name': '高等数学',
+            'code': 'MATH101',
+            'notes': '基础必修课',
+            'color': '#657EAE',
+            'colorMode': 'custom',
+          },
+          'meeting': {
+            'id': 'monday',
+            'weekday': 1,
+            'startPeriod': 1,
+            'endPeriod': 2,
+            'weeks': List.generate(16, (i) => i + 1),
+            'teacher': '陈老师',
+            'location': '教学楼 A101',
+          },
+        }),
+      );
+      expect(saved['id'], 'math');
+      await command('schedule.change.save', {
+        'change': {
+          'id': 'skip-first',
+          'timetableId': 'table',
+          'meetingId': 'monday',
+          'kind': 'cancel',
+          'originalDate': '2026-09-07',
+        },
+      });
+      var page = await render('courses');
+      Future<void> press(
+        Object? event, [
+        Map<String, Object?> forms = const {},
+      ]) async {
+        page = await render(
+          'courses',
+          state: page['state'],
+          event: event,
+          forms: forms,
+        );
+      }
+
+      Map<String, Object?> node(String label) => _nodes(
+        page['tree'],
+      ).singleWhere((node) => node['title'] == label || node['text'] == label);
+
+      expect(node('高等数学')['subtitle'], 'MATH101 · 1 个周期安排');
+      await press(node('高等数学')['event']);
+      expect(node('高等数学')['subtitle'], 'MATH101 · 基础必修课');
+      await press(node('周一 · 第 1–2 节')['event']);
+      expect(node('周一 · 第 1–2 节')['subtitle'], '第 1–16 周 · 陈老师 · 教学楼 A101');
+      await press(node('编辑安排')['event']);
+      final initial = object(page['replaceForms']);
+      expect(initial['schedule.course.weeks'], '1–16');
+      expect(initial['schedule.course.color'], '#657EAE');
+      expect(object(page['header'])['backIcon'], 'close');
+      final edited = {
+        ...initial,
+        'schedule.course.name': '高等数学 A',
+        'schedule.course.weeks': '2–16',
+      };
+      host.interaction = (_, method, args) async {
+        interactions.add({'method': method, ...args});
+        return false;
+      };
+      await press(node('保存')['event'], edited);
+      expect(
+        _nodes(page['tree'])
+            .singleWhere((node) => node['type'] == 'notice')['text'],
+        contains('调课'),
+      );
+      expect(interactions, isEmpty);
+      expect(node('课程名称')['value'], '高等数学 A');
+      await press(node('失效调课处理')['event'], edited);
+      await press(node('撤销失效调课')['event'], edited);
+      final withPolicy = {...edited, ...object(page['replaceForms'])};
+      await press(node('保存')['event'], withPolicy);
+      expect(interactions.map((entry) => entry['method']), ['ui.review']);
+      expect(node('失效调课处理')['subtitle'], '撤销失效调课');
+      expect(object(await store.get(actor, 'courses', 'math'))['name'], '高等数学');
+      expect(
+        await store.get(actor, 'occurrenceChanges', 'skip-first'),
+        isNotNull,
+      );
+
+      mockDialogs();
+      await press(node('保存')['event'], withPolicy);
+      expect(node('高等数学 A')['expanded'], true);
+      expect(node('周一 · 第 1–2 节')['expanded'], true);
+      expect(await store.get(actor, 'occurrenceChanges', 'skip-first'), isNull);
+      expect(
+        object(await store.get(actor, 'meetings', 'monday'))['weeks'],
+        List.generate(15, (i) => i + 2),
+      );
+      await press(node('增加安排')['event']);
+      expect(node('课程名称')['value'], '高等数学 A');
+      expect(node('周次')['value'], '1–20');
+      await press(node('取消')['event'], {'schedule.course.name': '不保存的课程'});
+      expect(node('高等数学 A')['expanded'], true);
+      await press(node('删除安排')['event']);
+      expect(await store.get(actor, 'meetings', 'monday'), isNull);
+      await press(node('删除课程')['event']);
+      expect(await store.get(actor, 'courses', 'math'), isNull);
+      expect(node('还没有课程')['type'], 'emptyState');
+      await press(node('添加课程')['event']);
+      expect(node('课程名称')['value'], '');
+      expect(node('周次')['value'], '1–20');
+    },
+  );
+
   test('display height saves per timetable, survives restart and restores defaults', () async {
     await command('schedule.timetable.save', {'timetable': _table()});
     await command('schedule.timetable.save', {
@@ -490,7 +607,7 @@ void main() {
     final page = await render('settings');
     final nodes = _nodes(page['tree']);
     final labels = nodes.map((node) => node['text'] ?? node['title']).toList();
-    expect(labels, containsAll(['概览', '课表配置', '课程与调课', '数据管理']));
+    expect(labels, containsAll(['课程与安排', '课表配置', '课程与数据']));
     for (final destination in ['学期设置', '作息设置', '课程管理', '调课记录', '导入与备份']) {
       expect(
         nodes.where(

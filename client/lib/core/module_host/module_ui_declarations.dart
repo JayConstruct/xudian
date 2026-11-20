@@ -43,6 +43,33 @@ void _stringList(Object? value, String label) {
   }
 }
 
+void _checkNavigationPreview(Object? raw) {
+  if (raw == null) return;
+  final preview = object(raw, 'navigation preview');
+  _optionalString(preview['title'], 'navigation preview title');
+  _stringList(preview['menu'], 'navigation preview menu');
+  if (preview['assistant'] != null && preview['assistant'] is! bool) {
+    throw const FormatException('Invalid preview assistant');
+  }
+  for (final key in ['columns', 'rows', 'blocks']) {
+    final values = preview[key];
+    if (values == null) continue;
+    if (values is! List || values.length > 80) {
+      throw FormatException('Invalid preview $key');
+    }
+    for (final value in values) {
+      final row = object(value, 'preview item');
+      for (final field in row.keys) {
+        if (['id', 'title', 'subtitle', 'column'].contains(field)) {
+          _requiredString(row[field], field);
+        } else if (!['start', 'end'].contains(field) || row[field] is! int) {
+          throw FormatException('Invalid preview item $field');
+        }
+      }
+    }
+  }
+}
+
 /// Checks declarations without constructing Flutter registrations. These checks
 /// preserve the data validation performed by ScriptAppModule and ModuleRegistry.
 /// The application may additionally validate its native pages and renderers via
@@ -57,6 +84,10 @@ void validateModuleUiDeclarations(Iterable<ScriptPackage> packages) {
       if (!pages.add(id)) throw StateError('Duplicate UI page: $id');
       _requiredString(page['handler'], 'page handler');
       _optionalString(page['title'], 'page title');
+      _optionalString(page['menuSourcePage'], 'menu source page');
+      _checkNavigationPreview(page['navigationPreview']);
+      _stringList(page['settingsLabels'], 'settings labels');
+      _optionalString(page['settingsPath'], 'settings path');
       _choice(page['headerMode'], 'standard', {
         'standard',
         'contributed',

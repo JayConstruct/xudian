@@ -281,3 +281,25 @@ class ScriptChoiceCard extends StatelessWidget {
     );
   }
 }
+
+class ScriptFieldLabel extends StatelessWidget {
+  const ScriptFieldLabel({super.key, required this.label, required this.child});
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      ExcludeSemantics(
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium
+              ?.copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+      ),
+      const SizedBox(height: 5),
+      Semantics(label: label, child: child),
+    ],
+  );
+}

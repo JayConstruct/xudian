@@ -42,6 +42,26 @@ extension _AppShellHostInteraction on _AppShellState {
           browserTheme: Theme.of(context),
         );
       case 'ui.dialog':
+        Widget form(BuildContext context) => UiPackScope(
+          moduleId: caller.moduleId,
+          child: HostFormDialog(
+            title: args['title'] as String? ?? '模块输入',
+            description: args['description'] as String?,
+            submitLabel: args['submitLabel'] as String? ?? '继续',
+            presentation: args['presentation'] as String?,
+            fullWidthActions: args['fullWidthActions'] == true,
+            fields: [for (final f in args['fields'] as List? ?? []) object(f)],
+          ),
+        );
+        if (args['presentation'] == 'sheet') {
+          return showModalBottomSheet<Map<String, Object?>>(
+            context: context,
+            isScrollControlled: true,
+            showDragHandle: true,
+            useSafeArea: true,
+            builder: form,
+          );
+        }
         return showDialog<Map<String, Object?>>(
           context: context,
           barrierColor: args['presentation'] == 'compact'
@@ -50,18 +70,7 @@ extension _AppShellHostInteraction on _AppShellState {
           animationStyle: args['presentation'] == 'compact'
               ? AppMotion.dialogStyle(context)
               : null,
-          builder: (_) => UiPackScope(
-            moduleId: caller.moduleId,
-            child: HostFormDialog(
-              title: args['title'] as String? ?? '模块输入',
-              description: args['description'] as String?,
-              submitLabel: args['submitLabel'] as String? ?? '继续',
-              presentation: args['presentation'] as String?,
-              fields: [
-                for (final f in args['fields'] as List? ?? []) object(f),
-              ],
-            ),
-          ),
+          builder: form,
         );
       case 'secrets.configure':
         return platformBridge!.configureSecret(caller, args['endpoint'], (

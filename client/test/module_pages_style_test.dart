@@ -45,6 +45,23 @@ Iterable<Map<String, Object?>> _nodes(Object? value) sync* {
   }
 }
 
+void _expectSettingsGroups(Iterable<Map<String, Object?>> nodes, int count) {
+  final cards = nodes.where((node) => node['type'] == 'card');
+  expect(cards, hasLength(count));
+  for (final card in cards) {
+    final children = (card['children'] as List).map(object).toList();
+    expect(children.length.isOdd, isTrue);
+    for (var i = 0; i < children.length; i++) {
+      final child = children[i];
+      expect(child['type'], i.isEven ? 'listTile' : 'divider');
+      if (i.isEven) {
+        expect(child['title'], isNotEmpty);
+        expect(child['icon'], isNotEmpty);
+      }
+    }
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
@@ -145,46 +162,65 @@ void main() {
     ]) {
       final result = await render('app.schedule', page: page);
       final nodes = _nodes(result['tree']).toList();
-      expect(
-        nodes.where((node) => node['type'] == 'card'),
-        isEmpty,
-        reason: page,
-      );
+      const groupsPerPage = {'settings': 3, 'periods': 2, 'timetables': 1};
+      if (page != 'courses') {
+        _expectSettingsGroups(nodes, groupsPerPage[page] ?? 0);
+      }
       expect(
         nodes.where((node) => node['type'] == 'sectionHeader'),
         isNotEmpty,
         reason: page,
       );
-      expect(
-        nodes
-            .where((node) => node['type'] == 'listTile')
-            .every((node) => !node.containsKey('icon')),
-        true,
-        reason: page,
-      );
     }
-    final courses = _nodes(
-      (await render('app.schedule', page: 'courses'))['tree'],
-    ).toList();
-    expect(courses.where((node) => node['type'] == 'disclosure'), isNotEmpty);
-    final edit = courses.firstWhere((node) => node['title'] == '编辑安排');
+    var coursePage = await render('app.schedule', page: 'courses');
+    final course = _nodes(coursePage['tree']).firstWhere(
+      (node) => object(node['event'] ?? {})['type'] == 'toggleCourse',
+    );
+    expect(course['expanded'], false);
+    expect(course['trailingColor'], startsWith('#'));
+    coursePage = await render(
+      'app.schedule',
+      page: 'courses',
+      state: coursePage['state'],
+      event: course['event'],
+    );
+    final arrangement = _nodes(coursePage['tree']).firstWhere(
+      (node) => object(node['event'] ?? {})['type'] == 'toggleArrangement',
+    );
+    coursePage = await render(
+      'app.schedule',
+      page: 'courses',
+      state: coursePage['state'],
+      event: arrangement['event'],
+    );
+    final edit = _nodes(coursePage['tree'])
+        .firstWhere((node) => node['text'] == '编辑安排');
     final calls = <Map<String, Object?>>[];
     host.interaction = (_, method, args) async {
       calls.add({'method': method, ...args});
       return null;
     };
-    await render('app.schedule', page: 'courses', event: edit['event']);
-    expect(calls.single['method'], 'ui.dialog');
+    coursePage = await render(
+      'app.schedule',
+      page: 'courses',
+      state: coursePage['state'],
+      event: edit['event'],
+    );
+    expect(calls, isEmpty);
+    expect(object(coursePage['header'])['title'], '编辑课程与安排');
     expect(
-      (calls.single['fields'] as List).map((field) => object(field)['key']),
+      object(coursePage['replaceForms']).keys,
       containsAll([
-        'name',
-        'weekday',
-        'startPeriod',
-        'endPeriod',
-        'weeks',
-        'location',
-        'teacher',
+        for (final key in [
+          'name',
+          'weekday',
+          'startPeriod',
+          'endPeriod',
+          'weeks',
+          'location',
+          'teacher',
+        ])
+          'schedule.course.$key',
       ]),
     );
     final grid = _nodes((await render('app.schedule', page: 'home'))['tree'])
@@ -218,10 +254,7 @@ void main() {
     }
     final before = await store.sql('SELECT * FROM host_records');
     var page = await render('app.import.shiguang');
-    expect(
-      _nodes(page['tree']).where((node) => node['type'] == 'card'),
-      isEmpty,
-    );
+    _expectSettingsGroups(_nodes(page['tree']), 3);
     final entry = _nodes(page['tree'])
         .firstWhere((node) => node['title'] == '按学校导入');
     page = await render(
@@ -232,7 +265,8 @@ void main() {
     final first = _nodes(page['tree'])
         .firstWhere((node) => node['type'] == 'sectionHeader');
     expect(first['title'], '搜索结果');
-    expect(first['count'], greaterThan(30));
+    expect(int.parse((first['count'] as String).split(' ').first), greaterThan(30));
+    expect(first['countPosition'], 'end');
     page = await render(
       'app.import.shiguang',
       state: page['state'],
@@ -257,23 +291,22 @@ void main() {
         )
         .toList();
     expect(schools, hasLength(1));
-    expect(schools.single.containsKey('icon'), false);
+    expect(schools.single['icon'], 'school');
     page = await render(
       'app.import.shiguang',
       state: page['state'],
       event: schools.single['event'],
     );
     final details = _nodes(page['tree']).toList();
-    expect(details.where((node) => node['type'] == 'card'), isEmpty);
     expect(details.any((node) => node['title'] == '脚本来源'), true);
-    expect(
-      details.any(
-        (node) =>
-            node['type'] == 'richText' &&
-            '${node['text']}'.contains('github.com/'),
-      ),
-      true,
+    expect(details.singleWhere((node) => node['type'] == 'segmented')['items'], hasLength(2));
+    expect(object(object(page['tree'])['footer'])['text'], '打开教务浏览器');
+    final source = await render(
+      'app.import.shiguang',
+      state: page['state'],
+      event: details.singleWhere((node) => node['title'] == '原始源码')['event'],
     );
+    expect(_nodes(source['tree']).any((node) => node['type'] == 'richText' && '${node['text']}'.contains('github.com/')), isTrue);
     page = await render(
       'app.import.shiguang',
       state: page['state'],

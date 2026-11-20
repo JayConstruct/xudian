@@ -16,7 +16,7 @@ import 'ui_component.dart';
 import 'ui_pack.dart';
 import 'ui_pack_providers.dart';
 
-/// Recovery controls always use the built-in widgets, even when a pack fails.
+/// Drafts use the current UI. The reset control also works without a UI pack.
 class UiPackSettingsPage extends ConsumerStatefulWidget {
   const UiPackSettingsPage({super.key, this.registry});
   final ModuleRegistry? registry;
@@ -88,169 +88,156 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
         ref.watch(uiPackRegistryProvider).asData?.value ??
         const <String, UiPackDefinition>{};
     final host = ref.watch(moduleHostProvider).asData?.value;
+    final packNames = {
+      for (final id in packs.keys) id: host?.instances[id]?.package.title ?? id,
+    };
     final modules = <String, String>{
       for (final module in widget.registry?.modules ?? [])
         if (!packs.containsKey(module.manifest.id))
           module.manifest.id: module.manifest.id,
+      for (final module in widget.registry?.builtins ?? [])
+        if (widget.registry!.isEnabled(module.id)) module.id: module.title,
       if (host != null)
         for (final instance in host.instances.values)
           if (!instance.package.isUiPack)
-            instance.package.id:
-                instance.package.manifest['name'] as String? ??
-                instance.package.id,
+            instance.package.id: instance.package.title,
       for (final id
           in (draft ?? stored.asData?.value)?.modulePackIds.keys ?? <String>[])
-        id: host?.instances[id]?.package.manifest['name'] as String? ?? id,
+        if (host?.instances[id] case final instance?)
+          id: instance.package.title,
+    };
+    for (final id
+        in (draft ?? stored.asData?.value)?.modulePackIds.keys ?? <String>[]) {
+      modules.putIfAbsent(id, () => id);
+    }
+    final moduleIcons = {
+      for (final entry in (widget.registry?.ui.entries ?? []).reversed)
+        if (!entry.content) entry.moduleId: entry.icon,
     };
     final ids = modules.keys.toList()..sort();
-    return UiPackScope(
-      defaultOnly: true,
-      child: DetailPage(
-        title: '界面风格',
-        child: stored.when(
-          loading: () =>
-              const Center(child: NativeUi(child: CircularProgressIndicator())),
-          error: (_, _) => Center(
-            child: AppErrorState(
-              message: '无法读取界面风格，请重试',
-              onRetry: () => ref.invalidate(uiSelectionProvider),
-            ),
+    return DetailPage(
+      title: '界面风格',
+      settingsStyle: true,
+      child: stored.when(
+        loading: () =>
+            const Center(child: NativeUi(child: CircularProgressIndicator())),
+        error: (_, _) => Center(
+          child: AppErrorState(
+            message: '无法读取界面风格，请重试',
+            onRetry: () => ref.invalidate(uiSelectionProvider),
           ),
-          data: (selection) {
-            if (draft == null) baseline = draft = selection;
-            return SettingsList(
+        ),
+        data: (selection) {
+          if (draft == null) baseline = draft = selection;
+          return SettingsList(
+            footer: Row(
               children: [
-                const SettingsNote('选择全局风格，也可为模块单独设置。修改先保留为草稿，保存后应用。'),
-                const SectionHeading(
-                  title: '全局风格',
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                ),
-                ContentSurface(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _picker('全局界面', draft!.globalPackId, packs, (id) {
-                        setState(() {
-                          draft = draft!.copyWith(globalPackId: id);
-                          error = null;
-                        });
-                      }),
-                      if (packs[draft!.globalPackId] case final pack?)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(_packSummary(pack)),
-                        ),
-                      if (draft!.globalPackId != 'app.ui.default' &&
-                          !packs.containsKey(draft!.globalPackId))
-                        const Text('所选全局 UI 包不可用，当前使用默认界面；重新启用后恢复。'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const SectionHeading(
-                  title: '模块专属界面',
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                ),
-                const SettingsNote('默认跟随全局风格。单独选择后，仅影响对应模块。'),
-                if (ids.isEmpty) const SettingsNote('当前没有可单独设置的模块。'),
-                if (ids.isNotEmpty)
-                  ContentSurface(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      children: [
-                        for (final id in ids) ...[
-                          const SizedBox(height: 12),
-                          _picker(
-                            modules[id]!,
-                            draft!.modulePackIds[id] ?? '',
-                            packs,
-                            (packId) {
-                              final overrides = Map<String, String>.of(
-                                draft!.modulePackIds,
-                              );
-                              if (packId.isEmpty) {
-                                overrides.remove(id);
-                              } else {
-                                overrides[id] = packId;
-                              }
-                              setState(() {
-                                draft = draft!.copyWith(
-                                  modulePackIds: overrides,
-                                );
-                                error = null;
-                              });
-                            },
-                            inherit: true,
-                            fieldKey: id,
-                          ),
-                        ],
-                      ],
+                Expanded(
+                  child: NativeUi(
+                    child: OutlinedButton(
+                      onPressed: saving
+                          ? null
+                          : () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => UiPackPreviewPage(
+                                  packs: packs,
+                                  selection: draft!,
+                                  moduleIds: ids,
+                                ),
+                              ),
+                            ),
+                      child: const Text('预览草稿'),
                     ),
                   ),
-                const SizedBox(height: 12),
-                const SectionHeading(
-                  title: '保存与恢复',
-                  padding: EdgeInsets.symmetric(vertical: 12),
                 ),
-                if (error != null) ...[
-                  Text(
-                    error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: NativeUi(
+                    child: FilledButton(
+                      onPressed: saving || !dirty ? null : () => _save(),
+                      child: Text(saving ? '保存中…' : '保存风格'),
                     ),
                   ),
-                  NativeUi(
-                    child: TextButton(
-                      onPressed: saving ? null : _reload,
-                      child: const Text('重新读取已保存配置'),
-                    ),
+                ),
+              ],
+            ),
+            children: [
+              SettingsGroup(
+                title: '全局风格',
+                children: [
+                  _picker(
+                    '全局界面',
+                    draft!.globalPackId,
+                    packs,
+                    packNames,
+                    (id) => setState(() {
+                      draft = draft!.copyWith(globalPackId: id);
+                      error = null;
+                    }),
                   ),
                 ],
-                ContentSurface(
-                  padding: const EdgeInsets.all(18),
-                  child: Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      NativeUi(
-                        child: FilledButton(
-                          onPressed: saving || !dirty ? null : () => _save(),
-                          child: Text(saving ? '保存中…' : '保存风格'),
-                        ),
-                      ),
-                      NativeUi(
-                        child: OutlinedButton(
-                          onPressed: saving
-                              ? null
-                              : () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => UiPackPreviewPage(
-                                      packs: packs,
-                                      selection: draft!,
-                                      moduleIds: ids,
-                                    ),
-                                  ),
-                                ),
-                          child: const Text('预览草稿'),
-                        ),
-                      ),
-                      NativeUi(
-                        child: TextButton.icon(
-                          onPressed: saving ? null : () => _save(restore: true),
-                          icon: const UiIcon(Icons.restore),
-                          label: const Text('恢复默认界面'),
-                        ),
-                      ),
-                    ],
-                  ),
+              ),
+              SettingsGroup(
+                title: '模块专属界面',
+                children: [
+                  if (ids.isEmpty) const ListTile(title: Text('当前没有可单独设置的模块。')),
+                  for (final id in ids)
+                    _picker(
+                      modules[id]!,
+                      draft!.modulePackIds[id] ?? '',
+                      packs,
+                      packNames,
+                      (packId) {
+                        final overrides = Map<String, String>.of(
+                          draft!.modulePackIds,
+                        );
+                        if (packId.isEmpty) {
+                          overrides.remove(id);
+                        } else {
+                          overrides[id] = packId;
+                        }
+                        setState(() {
+                          draft = draft!.copyWith(modulePackIds: overrides);
+                          error = null;
+                        });
+                      },
+                      inherit: true,
+                      fieldKey: id,
+                      icon: moduleIcons[id] ?? Icons.extension_outlined,
+                    ),
+                ],
+              ),
+              UiPackScope(
+                defaultOnly: true,
+                child: SettingsGroup(
+                  title: '恢复',
+                  children: [
+                    SettingsEntry(
+                      title: '恢复默认界面',
+                      subtitle: '重置界面风格选择，保留业务数据。',
+                      icon: Icons.restore,
+                      enabled: !saving,
+                      onTap: () => _save(restore: true),
+                      protected: true,
+                    ),
+                  ],
                 ),
-                const SettingsNote('预览仅使用模拟数据。退出预览不会保存；恢复默认仅重置界面选择，保留业务数据。'),
+              ),
+              if (error != null) ...[
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                TextButton(
+                  onPressed: saving ? null : _reload,
+                  child: const Text('重新读取已保存配置'),
+                ),
               ],
-            );
-          },
-        ),
+              const SettingsNote('风格修改先存为草稿，保存后应用。'),
+            ],
+          );
+        },
       ),
     );
   }
@@ -259,55 +246,78 @@ class _UiPackSettingsPageState extends ConsumerState<UiPackSettingsPage> {
     String label,
     String value,
     Map<String, UiPackDefinition> packs,
+    Map<String, String> packNames,
     ValueChanged<String> change, {
     bool inherit = false,
     String? fieldKey,
+    IconData icon = Icons.layers_outlined,
   }) {
     final packIds = packs.keys.toList()..sort();
     final options = <String, String>{
       if (inherit) '': '跟随全局',
-      'app.ui.default': '内置默认',
-      for (final id in packIds) id: '$id · ${packs[id]!.version}',
+      defaultUiPackId: '内置默认',
+      for (final id in packIds) id: packNames[id]!,
       if (value.isNotEmpty &&
-          value != 'app.ui.default' &&
+          value != defaultUiPackId &&
           !packs.containsKey(value))
         value: '$value（不可用，自动回退）',
     };
-    return AppSelectField<String>(
-      key: ValueKey((fieldKey ?? 'global', value)),
-      value: value,
-      label: label,
-      options: [
-        for (final entry in options.entries)
-          AppSelectOption(value: entry.key, label: entry.value),
-      ],
-      onChanged: saving
-          ? null
-          : (value) {
-              if (value != null) change(value);
-            },
+    return SettingsEntry(
+      tileKey: ValueKey((fieldKey ?? 'global', value)),
+      icon: icon,
+      title: label,
+      subtitle: options[value] ?? value,
+      trailing: const UiIcon(Icons.expand_more, size: 18),
+      enabled: !saving,
+      onTap: () async {
+        final result = await showSettingsModal<String>(
+          context: context,
+          builder: (context) => SettingsSheet(
+            title: Text(inherit ? '$label的界面风格' : '选择全局风格'),
+            expandedActions: true,
+            content: SingleChildScrollView(
+              child: SettingsGroupSurface(
+                children: [
+                  for (final entry in options.entries)
+                    SettingsEntry(
+                      title: entry.value,
+                      subtitle: switch (entry.key) {
+                        '' => '使用已保存的全局风格',
+                        final id when packs.containsKey(id) =>
+                          '$id · ${packs[id]!.version}',
+                        _ => null,
+                      },
+                      icon: switch (entry.key) {
+                        '' => Icons.sync,
+                        defaultUiPackId => Icons.palette_outlined,
+                        _ => Icons.layers_outlined,
+                      },
+                      trailing: value == entry.key
+                          ? UiIcon(
+                              Icons.check_rounded,
+                              size: 19,
+                              color: Theme.of(context).colorScheme.primary,
+                            )
+                          : const SizedBox.shrink(),
+                      selected: value == entry.key,
+                      onTap: () => Navigator.pop(context, entry.key),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              NativeUi(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+              ),
+            ],
+          ),
+        );
+        if (result != null && mounted) change(result);
+      },
     );
-  }
-
-  String _packSummary(UiPackDefinition pack) {
-    final labels = <String>{};
-    for (final ref in pack.components.keys) {
-      labels.add(switch (ref) {
-        'ui.button@1' => '按钮',
-        'ui.card@1' => '内容卡片',
-        'ui.page.list@1' => '列表页',
-        'ui.page.form@1' => '表单页',
-        'ui.page.settings@1' => '设置页',
-        'ui.page.detail@1' => '详情页',
-        'ui.page.timeGrid@1' => '时间网格页',
-        'ui.chrome.header@1' => '顶栏',
-        'ui.chrome.bottomNav@1' => '底栏',
-        'ui.chrome.sidebar@1' => '侧栏',
-        _ when ref.startsWith('ui.') => '通用控件',
-        _ => '扩展组件',
-      });
-    }
-    return '包含：${[if (pack.tokens.isNotEmpty) '颜色与样式', ...labels].join('、')}';
   }
 }
 

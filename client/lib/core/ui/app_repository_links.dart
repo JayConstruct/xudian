@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'ui_toast.dart';
+import '../../features/settings/settings_focus.dart';
+import '../../features/settings/settings_widgets.dart';
 import 'ui_icon.dart';
+import 'ui_toast.dart';
 
 final externalUrlLauncherProvider = Provider<Future<bool> Function(Uri)>(
   (_) =>
@@ -15,11 +17,11 @@ class AppRepositoryLinks extends ConsumerWidget {
   const AppRepositoryLinks({
     super.key,
     required this.onBrowseModules,
-    this.showHeading = true,
+    this.title = '关于序点',
   });
 
   final VoidCallback onBrowseModules;
-  final bool showHeading;
+  final String title;
 
   void _notify(BuildContext context, String message, {required String kind}) {
     AppToast.show(context, message: message, kind: kind);
@@ -61,27 +63,27 @@ class AppRepositoryLinks extends ConsumerWidget {
     required String address,
     required String copyTooltip,
     required IconData icon,
-  }) => ListTile(
-    contentPadding: EdgeInsets.zero,
-    leading: UiIcon(icon),
-    title: Text(title),
-    subtitle: Text(address, softWrap: true),
-    onTap: () => _open(context, ref, address),
-    trailing: IconButton(
-      tooltip: copyTooltip,
-      icon: const UiIcon(Icons.copy_outlined),
-      onPressed: () => _copy(context, address),
+  }) => SettingsAnchor(
+    title,
+    child: ListTile(
+      minTileHeight: 62,
+      leading: SettingsGlyph(icon),
+      title: Text(title),
+      subtitle: Text(address),
+      onTap: () => _open(context, ref, address),
+      trailing: IconButton(
+        tooltip: copyTooltip,
+        alignment: AlignmentDirectional.centerEnd,
+        icon: const UiIcon(Icons.copy_outlined, size: 18),
+        onPressed: () => _copy(context, address),
+      ),
     ),
   );
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context, WidgetRef ref) => SettingsGroup(
+    title: title,
     children: [
-      if (showHeading) ...[
-        const SizedBox(height: 16),
-        Text('关于序点', style: Theme.of(context).textTheme.titleMedium),
-      ],
       _link(
         context,
         ref,
@@ -98,10 +100,12 @@ class AppRepositoryLinks extends ConsumerWidget {
         copyTooltip: '复制模块仓库地址',
         icon: Icons.extension_outlined,
       ),
-      TextButton.icon(
-        onPressed: onBrowseModules,
-        icon: const UiIcon(Icons.public),
-        label: const Text('打开模块商店'),
+      SettingsEntry(
+        title: '打开模块商店',
+        icon: Icons.public,
+        trailing: const Icon(Icons.chevron_right_rounded, size: 14),
+        protected: true,
+        onTap: onBrowseModules,
       ),
     ],
   );

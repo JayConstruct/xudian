@@ -258,17 +258,7 @@ void main() {
           false,
         );
         Future<void> tapExport() async {
-          await tester.scrollUntilVisible(
-            find.text('选择位置并导出'),
-            180,
-            scrollable: find
-                .descendant(
-                  of: find.byType(ListView).first,
-                  matching: find.byType(Scrollable),
-                )
-                .first,
-          );
-          await tester.ensureVisible(find.text('选择位置并导出'));
+          expect(find.text('选择位置并导出').hitTestable(), findsOneWidget);
           await tester.tap(find.text('选择位置并导出'));
           await tester.pumpAndSettle();
         }

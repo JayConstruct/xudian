@@ -6,9 +6,11 @@
 
 ## 最近设备验收
 
-2026-11-19，使用 `scripts/update-emulator.sh --force --verify-catalog --catalog-offline` 在 Android x86_64 模拟器覆盖安装 `0.2.0-beta.29` 构建 259（versionCode 4259），保留应用数据。设备 APK 的 SHA-256 为 `5126abec9fe9961e491759426a9c8e30cb097cb9d32a81551a1d66409b20d8a0`，与本机产物一致。
+2026-11-20，在 Android x86_64 模拟器上使用 `scripts/update-emulator.sh --verify-catalog --catalog-offline` 覆盖安装本地构建 273（`0.2.0-beta.29`，versionCode 4273）。设备 APK 与构建产物的 SHA-256 均为 `deb5000dc4a0bac198fc8f8b455e62d0eea4389d573f859536f1b8b3708a5ae8`。[安装与检查记录](../dist/verification/20261120T123529.968161Z-emulator-update/results.json)
 
-商店详情关闭、返回及重开，搜索与筛选，离线恢复、进程冷启动和关于页版本回读均通过。项目菜单、AI 拆解入口、设置、规划和课表的设备验收，以及四个已安装模块的摘要回读，在业务代码相同的 `beta.28` 候选上完成。最终安装与商店证据在 `dist/verification/20261119T064406.289255Z-emulator-update/`。
+57 项商店及界面包专项测试通过。模拟器验证了商店搜索、筛选、详情关闭与重开、离线缓存恢复和进程冷启动。切换内置默认与红色 UI 包后，商店首页、分类、设置、目录仓库编辑和详情均跟随全局配色。验收结束时恢复了原先选用的红色包。[商店配色对照图](../dist/verification/20261120-catalog-global-ui/store-comparison.png) · [配色与恢复记录](../dist/verification/20261120-catalog-global-ui/theme-check.json)
+
+同轮构建 4270 至 4272 验收了六处 UI 的 26 个状态。大学课表模块为 `1.17.2`，拾光教务导入为 `1.9.1`。教务登录后的预览和冲突处理使用隔离实例及样例数据，真实学校账号验收仍由 IMPORT-01 跟踪。[逐图对照](../dist/verification/20261120-unified-pages/compare.html) · [页面与模块验收记录](../dist/verification/20261120-unified-pages/verification.json)
 
 ## 复验入口
 

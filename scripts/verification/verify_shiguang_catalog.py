@@ -12,8 +12,8 @@ import json
 import threading
 
 from scripts.module_host.emulator_ui import Emulator, ROOT, OUT
-from .verify_shiguang_browser import enter_url, expect_load, labels
-from .verify_shiguang_hierarchy import import_home
+from .verify_shiguang_browser import enter_url, expect_load, return_to_configuration
+from .verify_shiguang_hierarchy import import_home, labels, search
 
 
 def main():
@@ -41,13 +41,8 @@ def main():
         import_home(e)
         e.tap('按学校导入', contains=True)
         e.record('android-shiguang-school-catalog')
-        inputs = [n for n in e.nodes() if n.get('class') == 'android.widget.EditText']
-        e.tap_node(inputs[0]); e.nodes()  # settle the native text input connection
-        e.adb('shell', 'input', 'text', 'YXHMC')
-        e.adb('shell', 'input', 'keyevent', 'KEYCODE_SPACE')
-        e.nodes()
-        e.adb('shell', 'input', 'keyevent', '4')
-        assert any('找到 1 所学校' in label for label in labels(e)), labels(e)
+        search(e, 'YXHMC')
+        e.wait_for('1 所学校')
         e.record('android-shiguang-school-search')
         e.tap('银杏', contains=True)
         assert any('gingkoc.edu.cn' in label for label in labels(e)), labels(e)
@@ -63,9 +58,7 @@ def main():
         e.tap('确定')  # default four-digit year; named validator returns false
         assert any('选择学期' in label for label in labels(e)), labels(e)
         e.tap('确定')  # one-based choice defaults to first semester
-        assert '选择导入目标' in labels(e), labels(e)
-        e.tap('继续')
-        assert '确认来源与学期配置' in labels(e), labels(e)
+        return_to_configuration(e)
         e.record('android-shiguang-warehouse-captured-config')
         e.tap('取消')
         # The Flutter URL field regains focus when native dialogs close. ESC
@@ -75,7 +68,7 @@ def main():
         if not any('已取消导入配置' in label for label in labels(e)):
             e.adb('shell', 'input', 'swipe', '540', '1600', '540', '550', '350')
         assert any('已取消导入配置' in label for label in labels(e)), labels(e)
-        assert '预览实际变更' not in labels(e)
+        assert '查看实际变更' not in labels(e)
         e.record('android-shiguang-warehouse-cancelled')
         report = {
             'device': 'emulator-5554', 'moduleVersion': version,

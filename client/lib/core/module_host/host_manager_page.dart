@@ -1,3 +1,5 @@
+import '../../features/settings/settings_widgets.dart';
+import '../ui/ui_surfaces.dart' show DetailPage;
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
 import '../ui/ui_feedback.dart';
@@ -303,63 +305,18 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
           builder: (context, _) => FutureBuilder(
             future: _installationRows,
             builder: (context, snapshot) => _template(
-              ListView(
-                padding: const EdgeInsets.all(16),
+              SettingsList(
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _importButton(host),
-                      NativeUi(
-                        child: OutlinedButton.icon(
-                          onPressed: busy
-                              ? null
-                              : () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        ModuleCatalogPage(host: host),
-                                  ),
-                                ),
-                          icon: const UiIcon(Icons.public),
-                          label: const Text('模块商店'),
-                        ),
-                      ),
+                  SettingsSegments<String>(
+                    segments: const [
+                      ButtonSegment(value: 'all', label: Text('全部')),
+                      ButtonSegment(value: 'business', label: Text('业务模块')),
+                      ButtonSegment(value: 'ui', label: Text('UI 包')),
                     ],
+                    selected: category,
+                    onChanged: (value) => setState(() => category = value),
                   ),
                   if (busy) const NativeUi(child: LinearProgressIndicator()),
-                  NativeUi(
-                    child: ListTile(
-                      leading: const UiIcon(Icons.palette_outlined),
-                      title: const Text('界面风格与恢复默认'),
-                      trailing: const UiIcon(Icons.chevron_right),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const UiPackSettingsPage(),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (final entry in const {
-                        'all': '全部',
-                        'business': '业务模块',
-                        'ui': 'UI 包',
-                      }.entries)
-                        NativeUi(
-                          child: ChoiceChip(
-                            label: Text(entry.value),
-                            selected: category == entry.key,
-                            onSelected: (_) =>
-                                setState(() => category = entry.key),
-                          ),
-                        ),
-                    ],
-                  ),
                   if (error != null)
                     Text(
                       error!,
@@ -383,310 +340,369 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
                       ),
                     ),
                   ],
-                  for (final row in snapshot.data ?? <Map<String, Object?>>[])
-                    if (category == 'all' ||
-                        (category == 'ui') == _isUiPackRow(row))
-                      Card(
-                        child: ModuleSummaryTile(
-                          name:
-                              row['package_name'] as String? ??
-                              row['module_id'] as String,
-                          description: _description(row),
-                          version: row['version'] as String,
-                          status: moduleState(row),
-                          uiPack: _isUiPackRow(row),
-                          onTap: busy
-                              ? null
-                              : () => action(
-                                  () =>
-                                      details(host, row['module_id'] as String),
-                                ),
-                          trailing: PopupMenuButton<String>(
-                            enabled: !busy,
-                            onSelected: (value) => action(() async {
-                              final id = row['module_id'] as String;
-                              if (value == 'previewUi') {
-                                final package = await host.packageSource(
-                                  id,
-                                  row['version'] as String,
-                                );
-                                if (!mounted) return;
-                                final packs = await ref.read(
-                                  uiPackRegistryProvider.future,
-                                );
-                                if (!context.mounted) return;
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => UiPackPreviewPage(
-                                      packs: {...packs, id: package.uiPack!},
-                                      selection: UiSelection(globalPackId: id),
+                  SettingsGroup(
+                    title: '已安装',
+                    children: [
+                      for (final row
+                          in snapshot.data ?? <Map<String, Object?>>[])
+                        if (category == 'all' ||
+                            (category == 'ui') == _isUiPackRow(row))
+                          ModuleSummaryTile(
+                            name:
+                                row['package_name'] as String? ??
+                                row['module_id'] as String,
+                            description: _description(row),
+                            version: row['version'] as String,
+                            status: moduleState(row),
+                            uiPack: _isUiPackRow(row),
+                            onTap: busy
+                                ? null
+                                : () => action(
+                                    () => details(
+                                      host,
+                                      row['module_id'] as String,
                                     ),
                                   ),
-                                );
-                              }
-                              if (value == 'source') {
-                                if (!context.mounted) return;
-                                final input =
-                                    await showDialog<Map<String, Object?>>(
-                                      context: context,
-                                      builder: (_) => ModuleSourceDialog(
-                                        loadDocuments: () async {
-                                          final package = await host
-                                              .packageSource(
-                                                id,
-                                                row['version'] as String,
-                                              );
-                                          return compute(prepareModuleSource, {
-                                            'definition': package.definition,
-                                            'files': package.files,
-                                          });
-                                        },
-                                      ),
-                                    );
-                                if (input != null) {
-                                  final candidate = input;
-                                  if (object(
-                                        object(
-                                          candidate['definition'],
-                                        )['manifest'],
-                                      )['id'] !=
-                                      id) {
-                                    throw StateError('编辑时不能改变模块 ID');
-                                  }
-                                  await host.editLocalPackage(candidate);
-                                }
-                              }
-                              if (value == 'enable' && context.mounted) {
-                                await installResolvedModules(
-                                  context,
-                                  ref,
-                                  host,
-                                  requests: {id: 'any'},
-                                );
-                              }
-                              if (value == 'disable') {
-                                if (!context.mounted) return;
-                                if (await confirmModuleImpact(
-                                  context,
-                                  title: '停用模块',
-                                  moduleId: id,
-                                  affected: host.affectedDependents(id),
-                                  dataEffect: '模块数据和版本继续保留。',
-                                )) {
-                                  await host.disable(id, cascade: true);
-                                }
-                              }
-                              if (value == 'remove') await remove(host, id);
-                              if (value == 'snapshots') {
-                                final snapshots = await host.store.sql(
-                                  'SELECT * FROM host_snapshots WHERE module_id=? ORDER BY created_at DESC',
-                                  [id],
-                                );
-                                if (!context.mounted) return;
-                                final selected = await showDialog<String>(
-                                  context: context,
-                                  builder: (context) => SimpleDialog(
-                                    titlePadding: AppDesign.dialogTitlePadding,
-                                    contentPadding:
-                                        AppDesign.dialogContentPadding,
-                                    title: const Text('数据快照恢复'),
-                                    children: [
-                                      for (final snapshot in snapshots)
-                                        SimpleDialogOption(
-                                          onPressed: () => Navigator.pop(
-                                            context,
-                                            snapshot['id'],
-                                          ),
-                                          child: Text(
-                                            '${snapshot['version']} · 数据 ${snapshot['data_version']}\n${snapshot['created_at']}',
-                                          ),
-                                        ),
-                                      if (snapshots.isEmpty)
-                                        const Padding(
-                                          padding: EdgeInsets.all(16),
-                                          child: Text('没有可恢复快照'),
-                                        ),
-                                    ],
-                                  ),
-                                );
-                                if (selected != null &&
-                                    context.mounted &&
-                                    await reviewDialog(
-                                      context,
-                                      '恢复旧快照；当前数据保留为新快照',
-                                      {
-                                        'moduleId': id,
-                                        'snapshotId': selected,
-                                        'effect': '切换版本和数据；快照之后的修改不会自动合并',
-                                      },
-                                    )) {
-                                  await host.recoverSnapshot(id, selected);
-                                }
-                              }
-                              if (value == 'history') {
-                                final records = await host.automationHistory(
-                                  id,
-                                );
-                                if (!context.mounted) return;
-                                final retry = await showDialog<String>(
-                                  context: context,
-                                  builder: (context) => SimpleDialog(
-                                    titlePadding: AppDesign.dialogTitlePadding,
-                                    contentPadding:
-                                        AppDesign.dialogContentPadding,
-                                    title: const Text('规则执行记录'),
-                                    children: [
-                                      for (final record in records)
-                                        SimpleDialogOption(
-                                          onPressed:
-                                              record['status'] == 'failure'
-                                              ? () => Navigator.pop(
-                                                  context,
-                                                  record['id'],
-                                                )
-                                              : null,
-                                          child: Text(
-                                            '${record['rule_id']} · ${record['status']}\n${record['created_at']}\n${record['message'] ?? ''}\n重试来源：${record['retry_of'] ?? '无'}${record['status'] == 'failure' ? '\n点击重试' : ''}',
-                                          ),
-                                        ),
-                                      if (records.isEmpty)
-                                        const Padding(
-                                          padding: EdgeInsets.all(16),
-                                          child: Text('没有执行记录'),
-                                        ),
-                                    ],
-                                  ),
-                                );
-                                if (retry != null) {
-                                  await host.retryHistoricalAutomation(
+                            trailing: _ModuleActions(
+                              title:
+                                  row['package_name'] as String? ??
+                                  row['module_id'] as String,
+                              enabled: !busy,
+                              onSelected: (value) => action(() async {
+                                final id = row['module_id'] as String;
+                                if (value == 'previewUi') {
+                                  final package = await host.packageSource(
                                     id,
-                                    retry,
+                                    row['version'] as String,
+                                  );
+                                  if (!mounted) return;
+                                  final packs = await ref.read(
+                                    uiPackRegistryProvider.future,
+                                  );
+                                  if (!context.mounted) return;
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => UiPackPreviewPage(
+                                        packs: {...packs, id: package.uiPack!},
+                                        selection: UiSelection(
+                                          globalPackId: id,
+                                        ),
+                                      ),
+                                    ),
                                   );
                                 }
-                              }
-                              if (value == 'erase' &&
-                                  context.mounted &&
-                                  await confirmModuleImpact(
+                                if (value == 'source') {
+                                  if (!context.mounted) return;
+                                  final input =
+                                      await showDialog<Map<String, Object?>>(
+                                        context: context,
+                                        builder: (_) => ModuleSourceDialog(
+                                          loadDocuments: () async {
+                                            final package = await host
+                                                .packageSource(
+                                                  id,
+                                                  row['version'] as String,
+                                                );
+                                            return compute(
+                                              prepareModuleSource,
+                                              {
+                                                'definition':
+                                                    package.definition,
+                                                'files': package.files,
+                                              },
+                                            );
+                                          },
+                                        ),
+                                      );
+                                  if (input != null) {
+                                    final candidate = input;
+                                    if (object(
+                                          object(
+                                            candidate['definition'],
+                                          )['manifest'],
+                                        )['id'] !=
+                                        id) {
+                                      throw StateError('编辑时不能改变模块 ID');
+                                    }
+                                    await host.editLocalPackage(candidate);
+                                  }
+                                }
+                                if (value == 'enable' && context.mounted) {
+                                  await installResolvedModules(
                                     context,
-                                    title: '彻底删除模块数据和历史',
+                                    ref,
+                                    host,
+                                    requests: {id: 'any'},
+                                  );
+                                }
+                                if (value == 'disable') {
+                                  if (!context.mounted) return;
+                                  if (await confirmModuleImpact(
+                                    context,
+                                    title: '停用模块',
                                     moduleId: id,
                                     affected: host.affectedDependents(id),
-                                    dataEffect: '删除此模块的全部数据、版本包、快照、历史和旧迁移记录，并从列表移除；其他模块的数据与旧迁移备份文件保留，无法通过宿主恢复。',
+                                    dataEffect: '模块数据和版本继续保留。',
                                   )) {
-                                await host.uninstall(
-                                  id,
-                                  cascade: true,
-                                  deleteData: true,
-                                );
-                              }
-                              if (value == 'versions') {
-                                final versions = await host.store.sql(
-                                  'SELECT version,origin,digest FROM host_packages WHERE module_id=?',
-                                  [id],
-                                );
-                                if (!context.mounted) return;
-                                final selected = await showDialog<String>(
-                                  context: context,
-                                  builder: (context) => SimpleDialog(
-                                    titlePadding: AppDesign.dialogTitlePadding,
-                                    contentPadding:
-                                        AppDesign.dialogContentPadding,
-                                    title: const Text('版本历史'),
-                                    children: [
-                                      for (final v in versions)
-                                        SimpleDialogOption(
-                                          onPressed: () => Navigator.pop(
-                                            context,
-                                            v['version'],
-                                          ),
-                                          child: Text(
-                                            '${v['version']} · ${v['origin']}\n${v['digest']}',
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                );
-                                if (selected != null &&
-                                    context.mounted &&
-                                    await reviewDialog(
-                                      context,
-                                      '回退版本并保留当前兼容数据',
-                                      {'module': id, 'version': selected},
-                                    )) {
-                                  await host.rollback(id, selected);
+                                    await host.disable(id, cascade: true);
+                                  }
                                 }
-                              }
-                            }),
-                            itemBuilder: (_) => [
-                              if (_isUiPackRow(row))
-                                const PopupMenuItem(
-                                  value: 'previewUi',
-                                  child: Text('预览 UI 包'),
-                                ),
-                              const PopupMenuItem(
-                                value: 'source',
-                                child: Text('模块定义与文件源码'),
-                              ),
-                              if (row['installed'] == 1)
-                                PopupMenuItem(
-                                  value: row['enabled'] == 1
-                                      ? 'disable'
-                                      : 'enable',
-                                  child: Text(
-                                    row['enabled'] == 1 ? '停用' : '启用',
+                                if (value == 'remove') await remove(host, id);
+                                if (value == 'snapshots') {
+                                  final snapshots = await host.store.sql(
+                                    'SELECT * FROM host_snapshots WHERE module_id=? ORDER BY created_at DESC',
+                                    [id],
+                                  );
+                                  if (!context.mounted) return;
+                                  final selected = await showDialog<String>(
+                                    context: context,
+                                    builder: (context) => SimpleDialog(
+                                      titlePadding:
+                                          AppDesign.dialogTitlePadding,
+                                      contentPadding:
+                                          AppDesign.dialogContentPadding,
+                                      title: const Text('数据快照恢复'),
+                                      children: [
+                                        for (final snapshot in snapshots)
+                                          SimpleDialogOption(
+                                            onPressed: () => Navigator.pop(
+                                              context,
+                                              snapshot['id'],
+                                            ),
+                                            child: Text(
+                                              '${snapshot['version']} · 数据 ${snapshot['data_version']}\n${snapshot['created_at']}',
+                                            ),
+                                          ),
+                                        if (snapshots.isEmpty)
+                                          const Padding(
+                                            padding: EdgeInsets.all(16),
+                                            child: Text('没有可恢复快照'),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                  if (selected != null &&
+                                      context.mounted &&
+                                      await reviewDialog(
+                                        context,
+                                        '恢复旧快照；当前数据保留为新快照',
+                                        {
+                                          'moduleId': id,
+                                          'snapshotId': selected,
+                                          'effect': '切换版本和数据；快照之后的修改不会自动合并',
+                                        },
+                                      )) {
+                                    await host.recoverSnapshot(id, selected);
+                                  }
+                                }
+                                if (value == 'history') {
+                                  final records = await host.automationHistory(
+                                    id,
+                                  );
+                                  if (!context.mounted) return;
+                                  final retry = await showDialog<String>(
+                                    context: context,
+                                    builder: (context) => SimpleDialog(
+                                      titlePadding:
+                                          AppDesign.dialogTitlePadding,
+                                      contentPadding:
+                                          AppDesign.dialogContentPadding,
+                                      title: const Text('规则执行记录'),
+                                      children: [
+                                        for (final record in records)
+                                          SimpleDialogOption(
+                                            onPressed:
+                                                record['status'] == 'failure'
+                                                ? () => Navigator.pop(
+                                                    context,
+                                                    record['id'],
+                                                  )
+                                                : null,
+                                            child: Text(
+                                              '${record['rule_id']} · ${record['status']}\n${record['created_at']}\n${record['message'] ?? ''}\n重试来源：${record['retry_of'] ?? '无'}${record['status'] == 'failure' ? '\n点击重试' : ''}',
+                                            ),
+                                          ),
+                                        if (records.isEmpty)
+                                          const Padding(
+                                            padding: EdgeInsets.all(16),
+                                            child: Text('没有执行记录'),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                  if (retry != null) {
+                                    await host.retryHistoricalAutomation(
+                                      id,
+                                      retry,
+                                    );
+                                  }
+                                }
+                                if (value == 'erase' &&
+                                    context.mounted &&
+                                    await confirmModuleImpact(
+                                      context,
+                                      title: '彻底删除模块数据和历史',
+                                      moduleId: id,
+                                      affected: host.affectedDependents(id),
+                                      dataEffect: '删除此模块的全部数据、版本包、快照、历史和旧迁移记录，并从列表移除；其他模块的数据与旧迁移备份文件保留，无法通过宿主恢复。',
+                                    )) {
+                                  await host.uninstall(
+                                    id,
+                                    cascade: true,
+                                    deleteData: true,
+                                  );
+                                }
+                                if (value == 'versions') {
+                                  final versions = await host.store.sql(
+                                    'SELECT version,origin,digest FROM host_packages WHERE module_id=?',
+                                    [id],
+                                  );
+                                  if (!context.mounted) return;
+                                  final selected = await showDialog<String>(
+                                    context: context,
+                                    builder: (context) => SimpleDialog(
+                                      titlePadding:
+                                          AppDesign.dialogTitlePadding,
+                                      contentPadding:
+                                          AppDesign.dialogContentPadding,
+                                      title: const Text('版本历史'),
+                                      children: [
+                                        for (final v in versions)
+                                          SimpleDialogOption(
+                                            onPressed: () => Navigator.pop(
+                                              context,
+                                              v['version'],
+                                            ),
+                                            child: Text(
+                                              '${v['version']} · ${v['origin']}\n${v['digest']}',
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                  if (selected != null &&
+                                      context.mounted &&
+                                      await reviewDialog(
+                                        context,
+                                        '回退版本并保留当前兼容数据',
+                                        {'module': id, 'version': selected},
+                                      )) {
+                                    await host.rollback(id, selected);
+                                  }
+                                }
+                              }),
+                              itemBuilder: (_) => [
+                                if (_isUiPackRow(row))
+                                  const PopupMenuItem(
+                                    value: 'previewUi',
+                                    child: Text('预览 UI 包'),
                                   ),
-                                ),
-                              const PopupMenuItem(
-                                value: 'versions',
-                                child: Text('版本与回退'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'snapshots',
-                                child: Text('数据快照恢复'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'history',
-                                child: Text('规则执行记录'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'erase',
-                                child: Text('彻底删除数据与历史'),
-                              ),
-                              if (row['installed'] == 1)
                                 const PopupMenuItem(
-                                  value: 'remove',
-                                  child: Text('卸载（保留数据）'),
+                                  value: 'source',
+                                  child: Text('模块定义与文件源码'),
                                 ),
-                            ],
+                                if (row['installed'] == 1)
+                                  PopupMenuItem(
+                                    value: row['enabled'] == 1
+                                        ? 'disable'
+                                        : 'enable',
+                                    child: Text(
+                                      row['enabled'] == 1 ? '停用' : '启用',
+                                    ),
+                                  ),
+                                const PopupMenuItem(
+                                  value: 'versions',
+                                  child: Text('版本与回退'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'snapshots',
+                                  child: Text('数据快照恢复'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'history',
+                                  child: Text('规则执行记录'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'erase',
+                                  child: Text('彻底删除数据与历史'),
+                                ),
+                                if (row['installed'] == 1)
+                                  const PopupMenuItem(
+                                    value: 'remove',
+                                    child: Text('卸载（保留数据）'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                    ],
+                  ),
+                  const SettingsHeading('安装与恢复'),
+                  _importButton(host),
+                  const SizedBox(height: 10),
+                  SettingsGroup(
+                    children: [
+                      SettingsEntry(
+                        title: '模块商店',
+                        icon: Icons.public,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ModuleCatalogPage(host: host),
                           ),
                         ),
                       ),
-                  const SizedBox(height: 24),
-                  const Text('恢复随客户端发布的模块'),
-                  FutureBuilder(
-                    future: _bundledCatalog,
-                    builder: (context, snapshot) => Column(
-                      children: [
-                        if (snapshot.hasData)
-                          for (final raw in snapshot.data!)
-                            NativeUi(
-                              child: ListTile(
-                                title: Text('${raw['id']}'),
-                                trailing: NativeUi(
-                                  child: TextButton(
-                                    onPressed: busy
-                                        ? null
-                                        : () => action(
-                                            () => restoreBundled(host, raw),
-                                          ),
-                                    child: const Text('安装 / 恢复'),
+                      SettingsEntry(
+                        title: '恢复随客户端发布的模块',
+                        icon: Icons.restore,
+                        enabled: !busy,
+                        onTap: () => action(() async {
+                          final modules = await _bundledCatalog;
+                          if (!context.mounted) return;
+                          final selected =
+                              await Navigator.push<Map<String, Object?>>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (c) => DetailPage(
+                                    title: '恢复内置模块',
+                                    child: SettingsList(
+                                      children: [
+                                        const SettingsNote('从当前客户端内置的模块包恢复。'),
+                                        SettingsGroup(
+                                          title: '可恢复的模块',
+                                          children: [
+                                            for (final raw in modules)
+                                              ListTile(
+                                                title: Text('${raw['id']}'),
+                                                trailing: TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(c, raw),
+                                                  child: const Text('安装 / 恢复'),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                      ],
-                    ),
+                              );
+                          if (selected != null && mounted) {
+                            await restoreBundled(host, selected);
+                          }
+                        }),
+                      ),
+                      SettingsEntry(
+                        title: '界面风格与恢复默认',
+                        icon: Icons.palette_outlined,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const UiPackSettingsPage(),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -694,4 +710,52 @@ class _HostManagerPageState extends ConsumerState<HostManagerPage> {
           ),
         ),
       );
+}
+
+class _ModuleActions extends StatelessWidget {
+  const _ModuleActions({
+    required this.title,
+    required this.enabled,
+    required this.itemBuilder,
+    required this.onSelected,
+  });
+  final String title;
+  final bool enabled;
+  final List<PopupMenuItem<String>> Function(BuildContext) itemBuilder;
+  final ValueChanged<String> onSelected;
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: '模块操作',
+    icon: const UiIcon(Icons.more_horiz),
+    onPressed: !enabled
+        ? null
+        : () async {
+            final selected = await showModalBottomSheet<String>(
+              context: context,
+              useSafeArea: true,
+              showDragHandle: true,
+              isScrollControlled: true,
+              builder: (c) => ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(c).height * .8,
+                ),
+                child: SettingsList(
+                  children: [
+                    SettingsGroup(
+                      title: title,
+                      children: [
+                        for (final item in itemBuilder(c))
+                          ListTile(
+                            title: item.child,
+                            onTap: () => Navigator.pop(c, item.value),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+            if (selected != null && context.mounted) onSelected(selected);
+          },
+  );
 }

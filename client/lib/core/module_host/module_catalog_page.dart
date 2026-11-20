@@ -1,6 +1,8 @@
+import '../../features/settings/settings_widgets.dart';
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
-import '../ui/ui_design.dart';
+import '../ui/ui_component.dart';
+import '../ui/ui_surfaces.dart';
 import '../../app/app_toast.dart';
 
 import 'dart:async';
@@ -121,10 +123,13 @@ Future<void> installResolvedModules(
     final packages = await showDialog<List<ScriptPackage>>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => ModuleDownloadDialog(
-        client: client,
-        modules: changes,
-        offline: offline,
+      builder: (_) => UiPackScope(
+        defaultOnly: true,
+        child: ModuleDownloadDialog(
+          client: client,
+          modules: changes,
+          offline: offline,
+        ),
       ),
     );
     if (packages == null || !context.mounted) return;
@@ -140,14 +145,16 @@ Future<void> installResolvedModules(
       return;
     }
     try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => ModuleBatchReviewDialog(
-          modules: resolution.ordered
-              .where((item) => reviewedIds.contains(item.id))
-              .toList(),
-          packages: packages,
-          requestedIds: {...requests.keys, ...localPackages.map((p) => p.id)},
+      final confirmed = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ModuleBatchReviewDialog(
+            modules: resolution.ordered
+                .where((item) => reviewedIds.contains(item.id))
+                .toList(),
+            packages: packages,
+            requestedIds: {...requests.keys, ...localPackages.map((p) => p.id)},
+          ),
         ),
       );
       if (confirmed != true || !context.mounted) return;
@@ -173,17 +180,36 @@ Future<void> installResolvedModules(
   }
 }
 
-UiPageRegistration? _moduleEntry(ModuleHost host, String id) {
+({UiPageRegistration page, IconData? icon})? _moduleEntry(
+  ModuleHost host,
+  String id,
+) {
   final package = host.instances[id]?.package;
   if (package == null) return null;
-  return ScriptAppModule(host, package).ui
+  final registrations = ScriptAppModule(host, package).ui;
+  final page = registrations
       .whereType<UiPageRegistration>()
       .where((page) => page.requiredContext.isEmpty)
       .firstOrNull;
+  if (page == null) return null;
+  final entry = registrations
+      .whereType<UiEntryRegistration>()
+      .where((entry) => !entry.content && entry.pageId == page.id)
+      .firstOrNull;
+  return (page: page, icon: entry?.icon);
 }
 
+IconData _catalogModuleIcon(String category, {required bool uiPack}) =>
+    switch ((uiPack, category)) {
+      (true, _) || (_, '界面') => Icons.layers_outlined,
+      (_, '学习') => Icons.school_outlined,
+      (_, '效率') => Icons.checklist,
+      (_, 'AI') => Icons.auto_awesome,
+      _ => Icons.extension_outlined,
+    };
+
 void _openModule(BuildContext context, ModuleHost host, String id) {
-  final page = _moduleEntry(host, id);
+  final page = _moduleEntry(host, id)?.page;
   if (page == null || !context.mounted) return;
   Navigator.push(
     context,
@@ -389,42 +415,65 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     }
   }
 
-  Future<void> configure() async {
-    final controller = TextEditingController(
-      text: repository ?? 'JayConstruct/xudian-modules',
-    );
-    final next = await showDialog<String>(
+  Future<void> _storeSettings(BuildContext context) async {
+    final choice = await showSettingsModal<String>(
       context: context,
-      builder: (context) => NativeUi(
-        child: AlertDialog(
-          title: const Text('模块目录仓库'),
-          titlePadding: AppDesign.dialogTitlePadding,
-          contentPadding: AppDesign.dialogContentPadding,
-          actionsPadding: AppDesign.dialogActionsPadding,
-          content: NativeUi(
-            child: TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'GitHub 仓库（作者/仓库）'),
-            ),
+      useGlobalStyle: true,
+      builder: (context) => SettingsSheet(
+        title: const Text('商店设置'),
+        expandedActions: true,
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SettingsGroupSurface(
+                children: [
+                  SettingsEntry(
+                    title: '修改目录仓库',
+                    subtitle: repository,
+                    icon: Icons.public,
+                    enabled: !loading && !busy,
+                    onTap: () => Navigator.pop(context, 'repository'),
+                  ),
+                  SwitchListTile(
+                    secondary: const SettingsGlyph(Icons.offline_bolt_outlined),
+                    title: const Text('离线浏览缓存'),
+                    value: offline,
+                    onChanged: loading || busy
+                        ? null
+                        : (_) => Navigator.pop(context, 'offline'),
+                  ),
+                ],
+              ),
+              const SettingsNote('安装前核对模块身份、摘要、权限与依赖。'),
+            ],
           ),
-          actions: [
-            NativeUi(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-            ),
-            NativeUi(
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text.trim()),
-                child: const Text('保存'),
-              ),
-            ),
-          ],
         ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
-    controller.dispose();
+    if (!context.mounted) return;
+    if (choice == 'repository') await configure(context);
+    if (choice == 'offline') {
+      setState(() => offline = !offline);
+      await load();
+    }
+  }
+
+  Future<void> configure(BuildContext context) async {
+    final next = await showSettingsModal<String>(
+      context: context,
+      useGlobalStyle: true,
+      builder: (_) => _CatalogRepositorySheet(
+        repository: repository ?? 'JayConstruct/xudian-modules',
+      ),
+    );
     if (next == null || !mounted) return;
     if (!RegExp(r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$').hasMatch(next)) {
       setState(() => failure = '仓库格式应为 作者/仓库');
@@ -444,7 +493,11 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     await load();
   }
 
-  Future<void> install(String id, {String? version}) async {
+  Future<void> install(
+    BuildContext context,
+    String id, {
+    String? version,
+  }) async {
     setState(() => busy = true);
     try {
       await installResolvedModules(
@@ -472,22 +525,24 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     }
   }
 
-  Future<void> details(String id) async {
+  Future<void> details(BuildContext context, String id) async {
     setState(() => busy = true);
     try {
       var selectedId = id;
-      while (mounted) {
+      while (context.mounted) {
         final target = selectedId;
-        final next = await showDialog<_CatalogDetailsAction>(
+        final next = await showSettingsModal<_CatalogDetailsAction>(
           context: context,
+          useGlobalStyle: true,
           builder: (dialogContext) => ModuleDetailsLoader(
-            title: catalog?.modules[target]?.name ?? target,
+            title: '模块详情',
+            sheet: true,
             load: () => _detailsContent(target, dialogContext),
           ),
         );
-        if (next == null || !mounted) return;
+        if (next == null || !context.mounted) return;
         if (next.install) {
-          await install(next.id);
+          await install(context, next.id);
           return;
         }
         selectedId = next.id;
@@ -510,6 +565,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     final installed = current[id];
     if (installed != null) {
       return ModuleDetailsDialog(
+        sheet: true,
         package: installed.package,
         repository: installed.repository,
         status: installed.enabled ? '已启用' : '已停用',
@@ -535,6 +591,10 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
       item: item,
       index: index,
       version: version,
+      icon: _catalogModuleIcon(
+        item.category,
+        uiPack: version.manifest['kind'] == 'uiPack',
+      ),
     );
   }
 
@@ -569,7 +629,11 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
     });
   }
 
-  Widget moduleCard(CatalogModule item) {
+  Widget moduleCard(
+    BuildContext context,
+    CatalogModule item, {
+    bool grouped = false,
+  }) {
     final installed = installations[item.id];
     final latest = latestCompatible(item);
     final hasIndex = loadedIndexes.containsKey(item.id);
@@ -610,12 +674,22 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
       status: status,
       version: version,
       featured: item.featured,
+      icon:
+          entry?.icon ??
+          _catalogModuleIcon(
+            item.category,
+            uiPack:
+                installed?.package.isUiPack ??
+                latest?.manifest['kind'] == 'uiPack',
+          ),
+      grouped: grouped,
       action: action,
-      onDetails: busy ? null : () => details(item.id),
+      onDetails: busy ? null : () => details(context, item.id),
       onAction: action == '打开模块'
           ? (busy ? null : () => _openModule(context, widget.host, item.id))
           : actionable
           ? () => install(
+              context,
               item.id,
               version: action == '更新' ? '>${installed!.package.version}' : null,
             )
@@ -641,6 +715,7 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
               onPressed: busy
                   ? null
                   : () => install(
+                      context,
                       item.id,
                       version: '>${installed.package.version}',
                     ),
@@ -652,186 +727,196 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      UiPackScope.global(child: Builder(builder: _buildCatalog));
+
+  Widget _buildCatalog(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final searching = searchController.text.trim().isNotEmpty;
     final candidates = listing?.matching(searchController.text, category);
     final modules = filter == '全部'
         ? candidates?.toList() ?? const <CatalogModule>[]
         : candidates?.where(_matchesStatus).toList() ?? const <CatalogModule>[];
-    final categories = listing?.categories ?? const <String>[];
-    return NativeUi(
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('模块商店'),
-          actions: [
-            NativeUi(
-              child: IconButton(
-                tooltip: '刷新 / 重试',
-                onPressed: loading || busy ? null : load,
-                icon: const UiIcon(Icons.refresh),
-              ),
-            ),
-          ],
+    final resultLabel = switch (filter) {
+      '全部' => searching ? '搜索结果' : '模块目录',
+      _ => '$filter模块',
+    };
+    return DetailPage(
+      title: '模块商店',
+      settingsStyle: true,
+      maxBodyWidth: 1360,
+      actions: [
+        IconButton(
+          tooltip: '刷新 / 重试',
+          onPressed: loading || busy ? null : load,
+          icon: const UiIcon(Icons.refresh, size: 21),
         ),
-        body: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    NativeUi(
-                      child: TextField(
-                        controller: searchController,
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(
-                          hintText: '搜索名称、作用、作者或模块 ID',
-                          prefixIcon: const UiIcon(Icons.search),
-                          suffixIcon: searchController.text.isEmpty
-                              ? null
-                              : NativeUi(
-                                  child: IconButton(
-                                    tooltip: '清空搜索',
-                                    onPressed: () => setState(
-                                      () => searchController.clear(),
-                                    ),
-                                    icon: const UiIcon(Icons.close),
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ModuleCatalogFilters(
-                      status: filter,
-                      category: category,
-                      categories: categories,
-                      onStatusChanged: (value) =>
-                          setState(() => filter = value),
-                      onCategoryChanged: (value) =>
-                          setState(() => category = value),
-                    ),
-                    if (offline) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: ShapeDecoration(
-                          color: colors.surfaceContainerHighest,
-                          shape: AppDesign.smoothShape(
-                            radius: AppDesign.compactRadius,
-                          ),
-                        ),
-                        child: const Text('正在浏览缓存。离线安装需要全部模块包已缓存；可在商店设置中恢复联网。'),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    if (loading || busy)
-                      const NativeUi(child: LinearProgressIndicator()),
-                    if (failure != null) ...[
-                      const SizedBox(height: 8),
-                      SelectableText(
-                        failure!,
-                        style: TextStyle(color: colors.error),
-                      ),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: NativeUi(
-                          child: TextButton.icon(
-                            onPressed: loading || busy ? null : load,
-                            icon: const UiIcon(Icons.refresh),
-                            label: const Text('刷新 / 重试'),
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    Text(
-                      '找到 ${modules.length} 个模块 · 目录共 ${catalog?.modules.length ?? 0} 个',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    if (catalog != null && catalog!.modules.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Text('目录中没有模块，请在商店设置中检查目录仓库。'),
-                      )
-                    else if (catalog != null && modules.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              loading && filter == '可更新'
-                                  ? '正在检查模块版本…'
-                                  : '没有符合筛选条件的模块',
-                            ),
-                            const SizedBox(height: 8),
-                            const Text('试试其他关键词、分类或安装状态。'),
-                            NativeUi(
-                              child: TextButton(
-                                onPressed: clearFilters,
-                                child: const Text('清除筛选'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              ),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: IconButton(
+            tooltip: '商店设置',
+            onPressed: () => _storeSettings(context),
+            icon: const UiIcon(Icons.tune, size: 21),
+          ),
+        ),
+      ],
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDesign.pageGutter,
+              8,
+              AppDesign.pageGutter,
+              0,
             ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: ModuleCatalogSliverGrid(
-                itemCount: modules.length,
-                itemBuilder: (context, index) => moduleCard(modules[index]),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              sliver: SliverToBoxAdapter(
-                child: Card(
-                  child: ExpansionTile(
-                    title: const Text('商店设置'),
-                    leading: const UiIcon(Icons.settings_outlined),
-                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('选择所需功能，商店会准备依赖模块并在安装前统一确认。'),
-                      const SizedBox(height: 8),
-                      if (repository != null) SelectableText('目录：$repository'),
-                      const SizedBox(height: 8),
-                      NativeUi(
-                        child: OutlinedButton.icon(
-                          onPressed: loading || busy ? null : configure,
-                          icon: const UiIcon(Icons.edit_outlined),
-                          label: const Text('修改目录仓库'),
-                        ),
-                      ),
-                      NativeUi(
-                        child: SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('离线浏览缓存'),
-                          value: offline,
-                          onChanged: loading || busy
-                              ? null
-                              : (value) {
-                                  setState(() => offline = value);
-                                  load();
-                                },
-                        ),
-                      ),
-                      const Text('安装前检查模块身份、摘要、权限与完整依赖；摘要校验不代表发布者签名。'),
-                    ],
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SettingsSearchField(
+                    controller: searchController,
+                    hint: '搜索名称、作用、作者或模块 ID',
+                    onChanged: () => setState(() {}),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  ModuleCatalogFilters(
+                    status: filter,
+                    category: category,
+                    categories: listing?.categories ?? const [],
+                    resultLabel: resultLabel,
+                    count: modules.length,
+                    onStatusChanged: (value) => setState(() => filter = value),
+                    onCategoryChanged: (value) =>
+                        setState(() => category = value),
+                  ),
+                  if (offline)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 15),
+                      padding: const EdgeInsets.all(12),
+                      decoration: ShapeDecoration(
+                        color: colors.primaryContainer,
+                        shape: AppDesign.smoothShape(radius: 12),
+                      ),
+                      child: Text(
+                        '正在浏览缓存。离线安装需要已缓存的模块包。',
+                        style: TextStyle(
+                          color: colors.onPrimaryContainer,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  if (loading)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: LinearProgressIndicator(minHeight: 3),
+                    ),
+                  if (failure != null) ...[
+                    SelectableText(
+                      failure!,
+                      style: TextStyle(color: colors.error),
+                    ),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton.icon(
+                        onPressed: loading || busy ? null : load,
+                        icon: const UiIcon(Icons.refresh),
+                        label: const Text('刷新 / 重试'),
+                      ),
+                    ),
+                  ],
+                  if (catalog?.modules.isEmpty == true)
+                    const SettingsEmptyState(
+                      icon: Icons.extension_outlined,
+                      title: '目录中没有模块',
+                      detail: '请在商店设置中检查目录仓库。',
+                    )
+                  else if (catalog != null && modules.isEmpty)
+                    if (loading && filter == '可更新')
+                      const SettingsNote('正在检查模块版本…')
+                    else ...[
+                      const SettingsEmptyState(
+                        title: '没有符合筛选条件的模块',
+                        detail: '调整分类或安装状态，或清除筛选。',
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 15),
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: OutlinedButton(
+                            onPressed: clearFilters,
+                            child: const Text('清除筛选'),
+                          ),
+                        ),
+                      ),
+                    ],
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDesign.pageGutter,
+              0,
+              AppDesign.pageGutter,
+              20,
+            ),
+            sliver: ModuleCatalogSliverGrid(
+              itemCount: modules.length,
+              itemBuilder: (tileContext, index) =>
+                  moduleCard(context, modules[index]),
+              groupedItemBuilder: (tileContext, index) =>
+                  moduleCard(context, modules[index], grouped: true),
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _CatalogRepositorySheet extends StatefulWidget {
+  const _CatalogRepositorySheet({required this.repository});
+
+  final String repository;
+
+  @override
+  State<_CatalogRepositorySheet> createState() =>
+      _CatalogRepositorySheetState();
+}
+
+class _CatalogRepositorySheetState extends State<_CatalogRepositorySheet> {
+  late final controller = TextEditingController(text: widget.repository);
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => NativeUi(
+    child: SettingsSheet(
+      title: const Text('模块目录仓库'),
+      content: NativeUi(
+        child: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'GitHub 仓库（作者/仓库）'),
+        ),
+      ),
+      actions: [
+        NativeUi(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        ),
+        NativeUi(
+          child: FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ),
+      ],
+    ),
+  );
 }

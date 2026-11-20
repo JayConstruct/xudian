@@ -32,6 +32,10 @@ def find_node(nodes, label, *, contains=False, button=False):
         matches = [node for node in matches if node.get('class') == 'android.widget.Button']
     if not matches:
         return None
+    if button and label == '关闭':
+        # A bottom sheet's drag handle also announces “关闭”. Use the explicit
+        # footer action, which works for both sheets and centered dialogs.
+        return max(matches, key=lambda node: (emulator_ui.Emulator.bounds(node)[1], -area(node)))
     return min(matches, key=area) if button else matches[-1]
 
 
@@ -80,7 +84,7 @@ class CatalogAcceptance:
         return f'查看 {self.module["name"]} 详情'
 
     def open(self):
-        self.emulator.home()
+        self.launch_home()
         self.emulator.open_settings()
         self.wait_label('模块与连接', contains=True)
         self.tap('模块与连接', contains=True)
@@ -105,19 +109,19 @@ class CatalogAcceptance:
         self.tap('搜索名称、作用、作者或模块 ID')
         self.emulator.adb('shell', 'input', 'text', self.module['id'])
         self.back()
-        self.wait_label('找到 1 个模块', contains=True)
+        self.wait_label('搜索结果 · 1')
         self.tap('清空搜索')
         self.wait_label(self.card, contains=True)
 
     def filters(self):
-        self.tap('状态：全部')
-        self.wait_label('已安装')
-        self.tap('已安装')
-        self.wait_label('状态：已安装')
-        self.tap('状态：已安装')
-        self.wait_label('全部')
-        self.tap('全部')
-        self.wait_label('状态：全部')
+        self.tap('筛选安装状态：已安装')
+        self.wait_label('已安装模块 ·', contains=True)
+        self.tap('筛选安装状态：全部')
+        self.wait_label('模块目录 ·', contains=True)
+        self.tap('全部分类')
+        self.wait_label('模块分类')
+        self.tap('取消', button=True)
+        self.wait_label('模块目录 ·', contains=True)
 
     def scroll_to(self, label, *, down=True):
         previous = None
@@ -142,13 +146,16 @@ class CatalogAcceptance:
 
     def set_offline(self, enabled):
         if not self.settings_open:
-            self.emulator.tap_node(self.scroll_to('商店设置'))
-            self.settings_open = True
+            self.tap('商店设置', button=True)
+        self.settings_open = True
         node = self.scroll_to('离线浏览缓存')
         if node.get('checkable') != 'true':
             raise RuntimeError('无法读取离线开关状态；未盲目切换')
         if (node.get('checked') == 'true') != enabled:
             self.emulator.tap_node(node)
+        else:
+            self.back()
+        self.settings_open = False
         self.scroll_to('搜索名称、作用、作者或模块 ID', down=False)
         self.wait(lambda nodes: (find_node(nodes, '正在浏览缓存', contains=True) is not None) == enabled
                   and find_node(nodes, self.card, contains=True) is not None
@@ -174,12 +181,16 @@ class CatalogAcceptance:
         self.emulator.record('reopened')
         self.emulator.home()
 
-    def cold_start(self):
+    def launch_home(self):
         self.emulator.adb('shell', 'am', 'force-stop', 'dev.taskapp.task_app')
         result = self.emulator.adb('shell', 'am', 'start', '-W', '-n', 'dev.taskapp.task_app/.MainActivity')
         if 'Status: ok' not in result:
             raise RuntimeError('Android 未确认应用冷启动成功')
-        self.wait_label('页面菜单')
+        self.wait(lambda nodes: any(find_node(nodes, label) is not None for label in
+                  ('页面菜单', '打开设置', '打开设置并恢复模块')), '首页设置入口')
+
+    def cold_start(self):
+        self.launch_home()
         self.emulator.record('cold-start')
 
 

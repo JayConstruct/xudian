@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../modules/module_registry.dart';
 import 'ui_surfaces.dart';
+import '../../features/settings/settings_focus.dart';
 import '../../features/settings/ui_layout.dart';
 import '../../features/settings/ui_layout_page.dart';
 import 'ui_annotation.dart';
@@ -357,6 +358,7 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
       key: ValueKey(nextIdentity),
       child: UiPageContentScope(
         inline: widget.inlineContent,
+        settingsStyle: page.isSettingsPage && !widget.inlineContent,
         child: Builder(
           builder: (context) => page.builder(context, effectiveContext),
         ),
@@ -491,7 +493,7 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
           entry: entry,
         );
       }
-      return UiPageHost(
+      final child = UiPageHost(
         key: ValueKey(entry.id),
         registry: widget.registry,
         pageId: entry.pageId,
@@ -501,6 +503,9 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
         showDepthWarning: widget.showDepthWarning,
         inlineContent: widget.inlineContent || slot.inline,
       );
+      return SettingsFocus.of(context) == entry.id
+          ? SettingsAnchor(entry.id, child: child)
+          : child;
     }
 
     final children = <Widget>[];

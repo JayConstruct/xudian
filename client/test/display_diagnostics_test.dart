@@ -306,7 +306,7 @@ void main() {
       final initial = await clipboard.copy(tester);
       expect(initial['mediaQuery']['padding']['top'], 24.0);
       expect(initial['layout']['availableWidthLogicalPx'], 370.0);
-      expect(initial['layout']['contentWidthLogicalPx'], 338.0);
+      expect(initial['layout']['contentWidthLogicalPx'], 330.0);
       tester.view.padding = const FakeViewPadding(left: 10, top: 24, right: 20);
       tester.view.viewInsets = const FakeViewPadding(bottom: 300);
       await tester.pumpAndSettle();

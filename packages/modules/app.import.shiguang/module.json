@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.import.shiguang",
     "name": "拾光教务导入兼容",
-    "version": "1.8.2",
-    "hostApi": "^1.33.0",
+    "version": "1.9.1",
+    "hostApi": "^1.55.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -130,6 +130,12 @@
           "targetPageId": "app.schedule.imports",
           "slotId": "importers"
         }
+      ],
+      "settingsLabels": [
+        "按学校导入",
+        "通用系统导入",
+        "粘贴学校脚本",
+        "导入拾光 JSON 文件"
       ]
     }
   ]

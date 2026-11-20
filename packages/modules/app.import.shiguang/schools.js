@@ -1,4 +1,5 @@
 import {adapters,snapshot} from './warehouse/catalog.js';
+import {button,card,column,group,heading,input,text,tile} from './ui.js';
 
 export const categories={BACHELOR_AND_ASSOCIATE:'本科／专科',POSTGRADUATE:'研究生',GENERAL_TOOL:'通用教务'};
 export const selectedAdapter=state=>adapters.find(a=>a.id===state.adapterId);
@@ -23,6 +24,16 @@ export function listSchools({search='',page=0}={}) {
   return paginate([...groups.values()],page);
 }
 export const schoolAdapters=adapter=>adapters.filter(a=>a.schoolId===adapter.schoolId);
+export const schoolTitle=school=>school.replace(/\(([^()]*)\)/g,'（$1）');
+const systems={zhengfang_01:'正方教务',qingguo_01:'青果教务',urp_01:'URP 教务',chaoxing:'超星教务系统'};
+export const systemTitle=adapter=>systems[adapter.id]||adapter.name.replace('html通用获取','').replace('通用获取','');
+export function entranceTitle(adapter,variants) {
+  if (variants.filter(item=>item.category===adapter.category).length===1) {
+    if (adapter.category==='BACHELOR_AND_ASSOCIATE') return '本科教务';
+    if (adapter.category==='POSTGRADUATE') return '研究生教务';
+  }
+  return adapter.name;
+}
 export function compatibilityNote(adapter) {
   return [
     ...(adapter.features.includes('customTime')?['部分课程可能使用自定义时刻，需准确对应课表节次']:[]),
@@ -32,37 +43,43 @@ export function compatibilityNote(adapter) {
 }
 export function schoolPicker(state) {
   const result=listSchools({search:state.schoolSearch,page:state.schoolPage});
-  return {type:'column',children:[
-    ...(state.error?[{type:'text',text:state.error}]:[]),
-    {type:'input',key:'schoolSearch',text:'搜索学校名称或缩写',inputMode:'search',clearable:true,value:state.schoolSearch||'',onChangeEvent:{type:'searchSchool'}},
-    {type:'sectionHeader',title:'搜索结果',count:result.total,subtitle:`第 ${result.page+1}/${result.pages} 页`},
-    ...(result.items.length?result.items.map(s=>({
-      type:'listTile',title:s.school,
+  const search=input('schoolSearch','搜索学校名称或缩写',state.schoolSearch||'',{
+    inputMode:'search',presentation:'search',clearable:true,onChangeEvent:{type:'searchSchool'},
+  });
+  if (!result.items.length) return column([
+    search,
+    {...card({type:'emptyState',icon:'search',iconSurface:true,iconSurfaceSize:46,iconTone:'muted',padding:31,
+      title:'没有找到学校',text:'试试学校全名或缩写，也可以选择其他导入方式。'}),padding:0},
+    heading('其他导入方式'),
+    group(
+      tile('通用系统导入',{subtitle:'正方、青果、URP、超星',icon:'importExport',event:{type:'chooseGeneral'}}),
+      tile('粘贴学校脚本',{subtitle:'使用已有的完整适配脚本',icon:'code',event:{type:'customScript'}}),
+    ),
+  ]);
+  return column([
+    search,
+    heading('搜索结果',{count:`${result.total} 所学校`,countPosition:'end',compact:true,...(result.pages>1?{subtitle:`第 ${result.page+1}/${result.pages} 页`}:{})}),
+    group(...result.items.map(s=>tile(schoolTitle(s.school),{
       subtitle:s.adapters.length>1?`${s.adapters.length} 个导入入口`:categories[s.adapters[0].category],
-      event:{type:'selectSchool',id:s.adapters[0].id},
-    })):[{type:'column',children:[
-      {type:'text',text:'没有找到学校',style:'heading'},
-      {type:'text',text:'可以换用学校全名或缩写搜索；也可以尝试正方、青果、URP、超星等通用脚本。'},
-      {type:'button',text:'尝试通用系统导入',event:{type:'chooseGeneral'}},
-      {type:'button',text:'粘贴学校脚本',event:{type:'customScript'}},
-    ]}]),
-    ...(result.pages>1?[{
-      type:'row',children:[
-        {type:'button',text:'上一页',disabled:result.page===0,event:{type:'schoolPage',page:result.page-1}},
-        {type:'button',text:'下一页',disabled:result.page+1>=result.pages,event:{type:'schoolPage',page:result.page+1}},
-      ],
-    }]:[]),
-    ...(result.items.length?[{type:'listTile',title:'找不到学校？',subtitle:'尝试通用教务系统脚本',event:{type:'chooseGeneral'}}]:[]),
-  ]};
+      icon:'school',event:{type:'selectSchool',id:s.adapters[0].id},
+    }))),
+    ...(result.pages>1?[{type:'row',layout:'flex',children:[
+      button('上一页','schoolPage','outlined',{flex:1,disabled:result.page===0,event:{type:'schoolPage',page:result.page-1}}),
+      button('下一页','schoolPage','outlined',{flex:1,disabled:result.page+1>=result.pages,event:{type:'schoolPage',page:result.page+1}}),
+    ]}]:[]),
+    heading('其他导入方式'),
+    group(tile('找不到学校？',{subtitle:'尝试通用教务系统',icon:'importExport',event:{type:'chooseGeneral'}})),
+  ]);
 }
 export function generalPicker() {
-  return {type:'column',children:[
-    {type:'sectionHeader',title:'教务系统',subtitle:'根据学校使用的教务系统选择脚本。具体说明和网址在下一页填写。'},
-    ...matches('','general').map(a=>({type:'listTile',title:a.name.replace('html通用获取','').replace('通用获取',''),event:{type:'selectSchool',id:a.id}})),
-    {type:'text',text:'通用脚本适用于对应系统的部分版本；如果不匹配，可按学校导入或粘贴学校脚本。',style:'muted'},
-    {type:'row',children:[
-      {type:'button',text:'按学校导入',event:{type:'chooseSchool'}},
-      {type:'button',text:'粘贴学校脚本',event:{type:'customScript'}},
-    ]},
-  ]};
+  const order=['正方教务','青果教务','URP 教务','超星教务系统'];
+  const available=matches('','general');
+  const ordered=[...order.flatMap(title=>available.filter(a=>systemTitle(a)===title)),...available.filter(a=>!order.includes(systemTitle(a)))];
+  return column([
+    heading('教务系统'),
+    group(...ordered.map(a=>tile(systemTitle(a),{icon:'link',event:{type:'selectSchool',id:a.id}}))),
+    text('选择学校使用的教务系统，下一步填写教务网址。适配情况取决于教务系统版本。','muted'),
+    heading('其他导入方式'),
+    group(tile('按学校导入',{icon:'school',event:{type:'chooseSchool'}}),tile('粘贴学校脚本',{icon:'code',event:{type:'customScript'}})),
+  ]);
 }

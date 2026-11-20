@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/ui/ui_composition.dart';
 import '../../core/ui/ui_layout_resolver.dart';
 import '../../core/ui/ui_registry.dart';
+import 'settings_widgets.dart';
 import 'ui_layout.dart';
 import 'ui_layout_navigation_preview.dart';
 
@@ -44,7 +45,7 @@ class UiLayoutPreview extends StatelessWidget {
     );
     final host = registry.page(pageId ?? '');
     return NativeUi(
-      child: AlertDialog(
+      child: SettingsSheet(
         title: const Text('草稿结构预览'),
         content: SizedBox(
           width: 560,

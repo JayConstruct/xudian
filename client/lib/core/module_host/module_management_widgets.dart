@@ -1,7 +1,10 @@
+import '../../features/settings/settings_widgets.dart';
+
 import 'dart:async';
 
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
+import '../ui/ui_component.dart';
 import '../ui/ui_design.dart';
 
 import 'package:flutter/material.dart';
@@ -33,29 +36,36 @@ List<Map<String, Object?>> manifestServiceRequirements(
       },
 ]);
 
-void showHostService(BuildContext context, Map<String, Object?> service) =>
-    showDialog<void>(
-      context: context,
-      builder: (context) => NativeUi(
-        child: AlertDialog(
-          titlePadding: AppDesign.dialogTitlePadding,
-          contentPadding: AppDesign.dialogContentPadding,
-          actionsPadding: AppDesign.dialogActionsPadding,
-          title: const Text('宿主内置服务'),
-          content: Text(
-            '${service['serviceId']} @ ${service['majorVersion']} 由宿主提供，无需安装。',
-          ),
-          actions: [
-            NativeUi(
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('关闭'),
-              ),
-            ),
-          ],
+void showHostService(
+  BuildContext context,
+  Map<String, Object?> service, {
+  bool useGlobalStyle = false,
+}) => showDialog<void>(
+  context: context,
+  builder: (context) {
+    final dialog = NativeUi(
+      protected: !useGlobalStyle,
+      child: AlertDialog(
+        titlePadding: AppDesign.dialogTitlePadding,
+        contentPadding: AppDesign.dialogContentPadding,
+        actionsPadding: AppDesign.dialogActionsPadding,
+        title: const Text('宿主内置服务'),
+        content: Text(
+          '${service['serviceId']} @ ${service['majorVersion']} 由宿主提供，无需安装。',
         ),
+        actions: [
+          NativeUi(
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ),
+        ],
       ),
     );
+    return useGlobalStyle ? UiPackScope.global(child: dialog) : dialog;
+  },
+);
 
 String moduleState(Map<String, Object?> row) =>
     row['error'] as String? ??
@@ -84,23 +94,14 @@ class ModuleSummaryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => NativeUi(
     child: ListTile(
-      leading: UiIcon(
-        uiPack ? Icons.palette_outlined : Icons.extension_outlined,
+      leading: Tooltip(
+        message: description,
+        child: SettingsGlyph(
+          uiPack ? Icons.palette_outlined : Icons.extension_outlined,
+        ),
       ),
       title: Text(name),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(description),
-          const SizedBox(height: 4),
-          Text(
-            '$version · $status',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
+      subtitle: Text('$version · $status'),
       onTap: onTap,
       trailing: trailing,
     ),
@@ -116,7 +117,9 @@ class ModuleDetailsDialog extends StatelessWidget {
     this.repository,
     this.status,
     this.allDependents,
+    this.sheet = false,
   });
+  final bool sheet;
   final ScriptPackage package;
   final List<String> dependents;
   final void Function(String id) onDependency;
@@ -140,8 +143,8 @@ class ModuleDetailsDialog extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) => NativeUi(
-    child: AlertDialog(
+  Widget build(BuildContext context) {
+    final dialog = AlertDialog(
       titlePadding: AppDesign.dialogTitlePadding,
       contentPadding: AppDesign.dialogContentPadding,
       actionsPadding: AppDesign.dialogActionsPadding,
@@ -153,6 +156,13 @@ class ModuleDetailsDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (sheet) ...[
+                Text(
+                  package.title,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 12),
+              ],
               _field(context, '作用', package.description),
               _field(context, '模块 ID', package.id),
               _field(
@@ -209,7 +219,11 @@ class ModuleDetailsDialog extends StatelessWidget {
                     ),
                     trailing: const UiIcon(Icons.chevron_right),
                     onTap: raw['moduleId'] == 'app.host'
-                        ? () => showHostService(context, raw)
+                        ? () => showHostService(
+                            context,
+                            raw,
+                            useGlobalStyle: sheet,
+                          )
                         : () => onDependency(raw['moduleId'] as String),
                   ),
                 ),
@@ -238,8 +252,23 @@ class ModuleDetailsDialog extends StatelessWidget {
           ),
         ),
       ],
-    ),
-  );
+    );
+    return NativeUi(
+      child: sheet
+          ? SettingsSheet(
+              title: const Text('模块详情'),
+              content: dialog.content!,
+              expandedActions: true,
+              actions: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('关闭'),
+                ),
+              ],
+            )
+          : dialog,
+    );
+  }
 }
 
 Future<bool> confirmModuleImpact(
@@ -304,9 +333,11 @@ class ModuleDetailsLoader extends StatefulWidget {
     super.key,
     required this.title,
     required this.load,
+    this.sheet = false,
   });
   final String title;
   final Future<Widget> Function() load;
+  final bool sheet;
 
   @override
   State<ModuleDetailsLoader> createState() => _ModuleDetailsLoaderState();
@@ -332,6 +363,31 @@ class _ModuleDetailsLoaderState extends State<ModuleDetailsLoader> {
     future: content.future,
     builder: (context, snapshot) {
       if (snapshot.hasData) return snapshot.data!;
+      if (widget.sheet) {
+        return SettingsSheet(
+          title: Text(widget.title),
+          expandedActions: true,
+          content: snapshot.hasError
+              ? SingleChildScrollView(
+                  child: SelectableText('${snapshot.error}'),
+                )
+              : const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LinearProgressIndicator(minHeight: 3),
+                    SizedBox(height: 12),
+                    Text('正在读取模块详情…'),
+                  ],
+                ),
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      }
       return NativeUi(
         child: AlertDialog(
           title: Text(widget.title),

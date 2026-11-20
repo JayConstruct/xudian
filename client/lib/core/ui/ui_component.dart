@@ -100,12 +100,22 @@ class UiPackScope extends ConsumerStatefulWidget {
     this.defaultOnly = false,
     this.previewPacks,
     this.previewSelection,
-  });
+  }) : _globalSelection = false;
+
+  /// Starts a route using the saved global pack, including from a default UI.
+  const UiPackScope.global({super.key, required this.child})
+    : moduleId = null,
+      defaultOnly = false,
+      previewPacks = null,
+      previewSelection = null,
+      _globalSelection = true;
+
   final Widget child;
   final String? moduleId;
   final bool defaultOnly;
   final Map<String, UiPackDefinition>? previewPacks;
   final UiSelection? previewSelection;
+  final bool _globalSelection;
   @override
   ConsumerState<UiPackScope> createState() => _UiPackScopeState();
 }
@@ -131,12 +141,11 @@ class _UiPackScopeState extends ConsumerState<UiPackScope> {
     final defaultTheme = widget.previewPacks != null
         ? Theme.of(context)
         : inherited?.defaultTheme ?? Theme.of(context);
-    // A preview can intentionally choose a non-default implementation while its
-    // surrounding configuration controls remain in the protected default UI.
     final protected =
         widget.defaultOnly ||
         (widget.previewPacks == null &&
-            (!hasProviders || inherited?.defaultOnly == true));
+            (!hasProviders ||
+                (!widget._globalSelection && inherited?.defaultOnly == true)));
     final packs = protected
         ? const <String, UiPackDefinition>{}
         : widget.previewPacks ??

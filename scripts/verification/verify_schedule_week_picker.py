@@ -3,8 +3,45 @@
 import argparse
 import hashlib
 import json
+import re
 
 from scripts.module_host.emulator_ui import Emulator, ROOT, OUT
+from scripts.module_host.update_emulator_modules import _scroll_to_top, _swipe
+
+
+def installed_schedule(emulator):
+    emulator.manager()
+    emulator.wait_for('模块管理')
+    nodes = _scroll_to_top(emulator, emulator.nodes(), description='模块管理列表')
+    for _ in range(20):
+        rows = [node for node in nodes if '大学课表' in emulator.label(node).splitlines()]
+        if rows:
+            emulator.tap_node(rows[0])
+            break
+        _swipe(emulator, nodes)
+        nodes = emulator.nodes()
+    else:
+        raise RuntimeError('模块管理中找不到大学课表')
+
+    emulator.wait_for('模块 ID', contains=True)
+    fields = {}
+    try:
+        for _ in range(8):
+            nodes = emulator.nodes()
+            lines = [line for node in nodes for line in emulator.label(node).splitlines()]
+            for key, value in zip(lines, lines[1:]):
+                if key in ('模块 ID', '版本与状态', 'SHA-256'):
+                    fields[key] = value
+            status = re.fullmatch(r'(\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)*) · 已启用',
+                                  fields.get('版本与状态', ''))
+            if fields.get('模块 ID') == 'app.schedule' and status:
+                digest = fields.get('SHA-256', '')
+                if re.fullmatch(r'[0-9a-f]{64}', digest):
+                    return status[1], digest
+            _swipe(emulator, nodes)
+        raise RuntimeError('无法从同一模块详情核对 app.schedule 的启用版本和 SHA-256')
+    finally:
+        emulator.adb('shell', 'input', 'keyevent', '4')
 
 
 def main():
@@ -15,6 +52,8 @@ def main():
     labels = lambda: [emulator.label(n) for n in emulator.nodes()]
     if any(value in labels() for value in ['选择教学周', '切换课表']):
         emulator.tap('取消')
+    emulator.home()
+    version, module_digest = installed_schedule(emulator)
     emulator.home()
     emulator.tap('课表')
     before = labels()
@@ -54,7 +93,8 @@ def main():
     digest = hashlib.sha256(apk.read_bytes()).hexdigest()
     assert emulator.installed_digest() == digest
     report = {
-        'moduleVersion': '1.7.0',
+        'moduleVersion': version,
+        'moduleSha256': module_digest,
         'apkSha256': digest,
         'multipleNumbersPerRow': True,
         'selectImmediately': True,

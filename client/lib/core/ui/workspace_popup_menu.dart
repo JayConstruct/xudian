@@ -26,6 +26,7 @@ class WorkspacePopupMenu extends StatefulWidget {
     this.inlineActionLabels = const {},
     this.longPressChild,
     this.enabled = true,
+    this.openSignal,
   });
 
   final List<PopupMenuEntry<int>> items;
@@ -40,6 +41,7 @@ class WorkspacePopupMenu extends StatefulWidget {
   /// A row can open the same popup from its bounds on long press.
   final Widget? longPressChild;
   final bool enabled;
+  final Listenable? openSignal;
 
   @override
   State<WorkspacePopupMenu> createState() => _WorkspacePopupMenuState();
@@ -47,6 +49,21 @@ class WorkspacePopupMenu extends StatefulWidget {
 
 class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
   _WorkspaceMenuRoute? _route;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.openSignal?.addListener(_showMenu);
+  }
+
+  @override
+  void didUpdateWidget(WorkspacePopupMenu old) {
+    super.didUpdateWidget(old);
+    if (old.openSignal != widget.openSignal) {
+      old.openSignal?.removeListener(_showMenu);
+      widget.openSignal?.addListener(_showMenu);
+    }
+  }
 
   Future<void> _showMenu() async {
     if (_route != null || !widget.enabled) return;
@@ -91,6 +108,7 @@ class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
   @override
   void dispose() {
     // A row can be removed or replaced while its menu is on top.
+    widget.openSignal?.removeListener(_showMenu);
     final route = _route;
     if (widget.longPressChild != null && route != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -244,20 +262,13 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
           child: themes.wrap(
             Builder(
               builder: (context) {
-                final theme = Theme.of(context);
                 return Semantics(
                   role: SemanticsRole.menu,
                   scopesRoute: true,
                   namesRoute: true,
                   explicitChildNodes: true,
                   label: menuLabel,
-                  child: Material(
-                    key: const ValueKey('workspace-menu-surface'),
-                    color:
-                        theme.popupMenuTheme.color ?? theme.colorScheme.surface,
-                    elevation: theme.popupMenuTheme.elevation ?? 8,
-                    shape: AppDesign.smoothShape(radius: 20),
-                    clipBehavior: Clip.antiAlias,
+                  child: WorkspaceMenuSurface(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: IntrinsicWidth(
@@ -325,4 +336,21 @@ class _WorkspaceMenuLayout extends SingleChildLayoutDelegate {
       anchor != oldDelegate.anchor ||
       padding != oldDelegate.padding ||
       direction != oldDelegate.direction;
+}
+
+class WorkspaceMenuSurface extends StatelessWidget {
+  const WorkspaceMenuSurface({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      key: const ValueKey('workspace-menu-surface'),
+      color: theme.popupMenuTheme.color ?? theme.colorScheme.surface,
+      elevation: theme.popupMenuTheme.elevation ?? 8,
+      shape: AppDesign.smoothShape(radius: 20),
+      clipBehavior: Clip.antiAlias,
+      child: child,
+    );
+  }
 }

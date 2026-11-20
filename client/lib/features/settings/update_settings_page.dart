@@ -10,6 +10,7 @@ import '../../core/module_host/module_catalog_page.dart';
 import '../../core/ui/native_ui.dart';
 import 'app_update_page.dart';
 import 'settings_widgets.dart';
+import 'settings_focus.dart';
 
 class UpdateSettingsPage extends ConsumerStatefulWidget {
   const UpdateSettingsPage({super.key});
@@ -58,6 +59,7 @@ class _UpdateSettingsPageState extends ConsumerState<UpdateSettingsPage> {
     final updates = checked.modules?.updates ?? const <String, String>{};
     return DetailPage(
       title: '更新设置',
+      settingsStyle: true,
       child: SettingsList(
         children: [
           SettingsGroup(
@@ -73,22 +75,24 @@ class _UpdateSettingsPageState extends ConsumerState<UpdateSettingsPage> {
                     child: const Text('重试'),
                   ),
                 ),
-                data: (value) => NativeUi(
-                  protected: true,
-                  child: SwitchListTile(
-                    title: const Text('启动时检查更新'),
-                    subtitle: const Text('下次冷启动起，在后台检查 App 和已安装模块的更新'),
-                    value: value,
-                    onChanged: saving ? null : _save,
+                data: (value) => SettingsAnchor(
+                  '启动时检查更新',
+                  child: NativeUi(
+                    child: SwitchListTile(
+                      secondary: const SettingsGlyph(Icons.autorenew_rounded),
+                      title: const Text('启动时检查更新'),
+                      subtitle: const Text('下次冷启动时，在后台检查 App 和已安装模块。'),
+                      value: value,
+                      onChanged: saving ? null : _save,
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          const SettingsNote('检查不会阻塞启动。发现更新时提醒；下载与安装由你确认。关闭后仍可手动检查。'),
           if (checked.checking) const SettingsNote('正在后台检查 App 和模块更新…'),
           SettingsGroup(
-            title: 'App 与模块',
+            title: '手动检查',
             children: [
               SettingsEntry(
                 title: '检查 App 更新',
@@ -99,8 +103,7 @@ class _UpdateSettingsPageState extends ConsumerState<UpdateSettingsPage> {
                     : checked.app != null
                     ? '启动检查未发现 App 更新'
                     : '查看当前版本、更新通道与发布说明',
-                icon: Icons.system_update_rounded,
-                protected: true,
+                icon: Icons.system_update_outlined,
                 onTap: () => Navigator.push<void>(
                   context,
                   MaterialPageRoute(builder: (_) => const AppUpdatePage()),
@@ -117,13 +120,13 @@ class _UpdateSettingsPageState extends ConsumerState<UpdateSettingsPage> {
                     ? '启动检查未发现可用的模块更新'
                     : '在模块商店查看可更新版本并审核安装',
                 icon: Icons.extension_outlined,
-                protected: true,
                 onTap: _openModules,
               ),
               if (updates.isNotEmpty && checked.modules!.incomplete)
                 const SettingsNote('部分模块检查失败，请在模块商店刷新确认。'),
             ],
           ),
+          const SettingsNote('发现更新时会提醒你，下载与安装由你确认。'),
         ],
       ),
     );

@@ -1,3 +1,5 @@
+import '../../features/settings/settings_widgets.dart';
+import '../../features/settings/settings_focus.dart';
 import '../ui/workspace_interaction.dart';
 import '../ui/ui_icon.dart';
 import '../ui/page_runtime_context.dart';
@@ -62,11 +64,13 @@ class ScriptPage extends StatefulWidget {
     required this.handler,
     this.pageContext = const {},
     this.embedded = false,
+    this.settingsStyle = false,
   });
   final ModuleHost host;
   final String moduleId, handler;
   final Map<String, Object?> pageContext;
   final bool embedded;
+  final bool settingsStyle;
   @override
   State<ScriptPage> createState() => _ScriptPageState();
 }
@@ -1516,12 +1520,16 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       return ListView.builder(
         key: PageStorageKey(scrollKey),
         controller: controller,
-        padding: EdgeInsets.fromLTRB(
-          16,
-          8,
-          16,
-          WorkspaceContentInsets.bottomOf(uiContext) + 24,
-        ),
+        padding: widget.settingsStyle
+            ? SettingsList.contentPadding(
+                bottomInset: WorkspaceContentInsets.bottomOf(uiContext),
+              )
+            : EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                WorkspaceContentInsets.bottomOf(uiContext) + 24,
+              ),
         itemCount: children.length,
         itemBuilder: (context, i) => Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -1643,6 +1651,13 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         false,
       );
       slots.putIfAbsent('control', () => native);
+    } else if (widget.settingsStyle &&
+        ref == 'ui.sectionHeader@1' &&
+        props['count'] == null &&
+        props['subtitle'] == null &&
+        props['actionLabel'] == null &&
+        callbacks.isEmpty) {
+      native = SettingsHeading(props['title'] as String? ?? '');
     } else {
       native = defaultUiComponent(ref, props, slots, callbacks);
     }
@@ -1767,7 +1782,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     }
     final direction = raw['direction'];
     final duration = raw['duration'] ?? 260;
-    if (!const ['forward', 'back','next','previous'].contains(direction) ||
+    if (!const ['forward', 'back', 'next', 'previous'].contains(direction) ||
         duration is! int ||
         duration < 100 ||
         duration > 2000) {
@@ -1796,12 +1811,15 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         ? _inlineReviewFooter(_inlinePlanPreview!)
         : safeNode(object(footer));
     final message = tree?['footerMessage'];
-    final flat = tree?['footerStyle'] == 'flat';
+    final edge = tree?['footerStyle'] == 'edge';
+    final flat = edge || tree?['footerStyle'] == 'flat';
     final rendered = _pageTransition(
       Container(
         decoration: flat
             ? BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
+                color: edge
+                    ? Theme.of(context).scaffoldBackgroundColor
+                    : Theme.of(context).colorScheme.surface,
                 border: Border(
                   top: BorderSide(
                     color: Theme.of(context).colorScheme.outlineVariant
@@ -1811,9 +1829,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               )
             : null,
         padding: EdgeInsets.fromLTRB(
-          16,
-          8,
-          16,
+          edge ? AppDesign.pageGutter : 16,
+          edge ? 10 : 8,
+          edge ? AppDesign.pageGutter : 16,
           12 + WorkspaceContentInsets.bottomOf(context),
         ),
         child: Column(
@@ -1873,6 +1891,27 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     );
   }
 
+  double _columnGap(
+    Map<String, Object?> column,
+    List<Map<String, Object?>> children,
+    int index,
+    int depth,
+  ) {
+    final settings = widget.settingsStyle;
+    if (index == children.length - 1 &&
+        (column['trailingSpacing'] == false || settings && depth > 0)) {
+      return 0;
+    }
+    if (settings) {
+      final type = children[index]['type'];
+      if (type == 'sectionHeader') return SettingsGroup.headingGap;
+      if (type == 'card' || depth == 0 && type == 'column') {
+        return SettingsGroup.spacing;
+      }
+    }
+    return (column['spacing'] as num? ?? 12).toDouble().clamp(0, 48);
+  }
+
   Widget pageContent() {
     final spec = tree!;
     final rootChildren = objects(spec['children']);
@@ -1900,6 +1939,24 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           final rawPanel = spec['floatingPanel'];
           final panel = rawPanel is Map ? object(rawPanel) : null;
           final bottom = WorkspaceContentInsets.bottomOf(context);
+          final compact = spec['compact'] == true;
+          final edgeToEdge = spec['edgeToEdge'] == true;
+          final horizontal = compact ? 16.0 : AppDesign.pageGutter;
+          final scrollPadding = widget.settingsStyle
+              ? SettingsList.contentPadding(
+                  edgeToEdge: edgeToEdge,
+                  bottomInset: bottom,
+                )
+              : EdgeInsets.fromLTRB(
+                  edgeToEdge ? 0 : horizontal,
+                  edgeToEdge
+                      ? 0
+                      : compact
+                      ? 8
+                      : 16,
+                  edgeToEdge ? 0 : horizontal,
+                  16 + bottom,
+                );
           final top = ((panel?['top'] as num?) ?? 16)
               .toDouble()
               .clamp(0, constraints.maxHeight * .25)
@@ -1930,24 +1987,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                     ? ListView.builder(
                         key: PageStorageKey(scrollKey),
                         controller: controller,
-                        padding: EdgeInsets.fromLTRB(
-                          spec['edgeToEdge'] == true
-                              ? 0
-                              : spec['compact'] == true
-                              ? 16
-                              : 20,
-                          spec['edgeToEdge'] == true
-                              ? 0
-                              : spec['compact'] == true
-                              ? 8
-                              : 16,
-                          spec['edgeToEdge'] == true
-                              ? 0
-                              : spec['compact'] == true
-                              ? 16
-                              : 20,
-                          16 + bottom,
-                        ),
+                        padding: scrollPadding,
                         itemCount: rootChildren.length,
                         itemBuilder: (context, i) {
                           final child = rootChildren[i];
@@ -1956,9 +1996,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                                 ? null
                                 : ValueKey(child['key']),
                             padding: EdgeInsets.only(
-                              bottom: (spec['spacing'] as num? ?? 12)
-                                  .toDouble()
-                                  .clamp(0, 48),
+                              bottom: _columnGap(spec, rootChildren, i, 0),
                             ),
                             child: node(child, 1),
                           );
@@ -1967,24 +2005,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                     : SingleChildScrollView(
                         key: PageStorageKey(scrollKey),
                         controller: controller,
-                        padding: EdgeInsets.fromLTRB(
-                          spec['edgeToEdge'] == true
-                              ? 0
-                              : spec['compact'] == true
-                              ? 16
-                              : 20,
-                          spec['edgeToEdge'] == true
-                              ? 0
-                              : spec['compact'] == true
-                              ? 8
-                              : 16,
-                          spec['edgeToEdge'] == true
-                              ? 0
-                              : spec['compact'] == true
-                              ? 16
-                              : 20,
-                          16 + bottom,
-                        ),
+                        padding: scrollPadding,
                         child: _pageBody(spec),
                       ),
               ),
@@ -2077,7 +2098,9 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                 ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: 48),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppDesign.pageGutter,
+                    ),
                     child: Align(
                       alignment: AlignmentDirectional.centerEnd,
                       child: WorkspaceHeaderAction(
@@ -2092,7 +2115,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               if (widget.embedded)
                 Padding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: 20,
+                    horizontal: AppDesign.pageGutter,
                     vertical: tree?['compact'] == true ? 4 : 12,
                   ),
                   child: Stack(

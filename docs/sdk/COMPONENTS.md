@@ -191,3 +191,18 @@ API `1.44.0` 为现有 `dayOverview`、`sectionHeader`、`agendaItem`、`taskIte
 `menuButton` 锚定于当前控件，`text` 显示当前选项，`icon` 指定可选图标。每个 `items` 条目包含 `label`、`event` 和可选 `selected`。宿主用勾选标志显示当前项，选择时派发对应事件，取消时保留选择。
 
 `emptyState` 居中显示 `title`、说明文字 `text` 与可选 `icon`，用于列表无结果时的提示。
+
+## 表单与分组列表的可选配置
+
+宿主 API 1.55 提供以下声明。使用这些配置的独立模块可声明 `hostApi: "^1.55.0"`。字段取值和业务动作由模块提供，默认样式和无障碍行为由宿主处理。
+
+| 节点 | 字段与行为 |
+| --- | --- |
+| `listTile` | `trailingIcon` 指定共享图标，`trailingColor` 可附加 `#RRGGBB` 数据色点。`expanded` 供读屏器播报展开状态。`titleStyle: 'heading'`、`minHeight`、`minVerticalPadding`、`iconSurfaceSize` 用于摘要行，`tone: 'danger'` 用于危险操作。 |
+| `button`、`switch` | 按钮支持 `tone: 'danger'`。开关可用 `subtitle` 说明影响。 |
+| `input`、`select`、`dateInput` | `presentation: 'labeled'` 将标签置于控件上方并保留无障碍名称。`input.hintText` 为占位提示，`select.showIndicator: false` 可收起箭头。 |
+| `sourceEditor` | `presentation: 'code'` 使用等宽字体和多行输入，可通过 `hintText` 提示输入内容。 |
+| `sectionHeader`、`inset`、`emptyState` | `countPosition: 'end'` 将计数置于末端。`inset.padding` 按左、上、右、下接受四个逻辑像素值，`emptyState.padding` 接受统一内边距。 |
+| `header` | `backIcon: 'close'` 显示带取消语义的关闭按钮。点击与系统返回均遵循已有的内部返回声明。 |
+| 页面框架 | `header.minHeight` 在 48 至 120 逻辑像素内指定最小顶栏高度。`tree.footerStyle: 'edge'` 使用画布底色及与页面一致的水平边距。 |
+| `ui.dialog` | `presentation: 'sheet'` 下可设置 `fullWidthActions: true` 均分操作栏。选项字段使用 `type: 'select', presentation: 'list'`，各选项可附 `icon` 和 `subtitle`。选中状态由宿主维护，取消时不提交。 |

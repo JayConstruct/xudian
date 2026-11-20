@@ -1,5 +1,8 @@
-import '../ui/ui_icon.dart';
-import '../ui/native_ui.dart';
+import '../../features/settings/entry_directory.dart';
+import '../../features/settings/settings_focus.dart';
+import '../../features/settings/settings_search.dart';
+import '../../features/settings/display_diagnostics_page.dart';
+import '../ui/ui_pack_settings_page.dart';
 import '../../app/app_toast.dart';
 
 import 'package:flutter/material.dart';
@@ -47,8 +50,19 @@ Future<void> _openCatalog(BuildContext context, WidgetRef ref) async {
 }
 
 class HostSettingsPage extends ConsumerWidget {
-  const HostSettingsPage({super.key, required this.registry});
+  const HostSettingsPage({
+    super.key,
+    required this.registry,
+    this.onOpenEntry,
+    this.onLocate,
+    this.onClose,
+    this.returnToSearch = false,
+  });
   final ModuleRegistry registry;
+  final OpenShellEntry? onOpenEntry;
+  final LocateShellEntry? onLocate;
+  final bool returnToSearch;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -69,7 +83,186 @@ class HostSettingsPage extends ConsumerWidget {
               !entry.content &&
               profile.mountFor(entry).placement == UiPlacement.settings,
         );
+        Widget layoutPage() => UiLayoutPage(
+          registry: registry,
+          initialDesktop: MediaQuery.sizeOf(context).width >= 820,
+          onOpenEntry: onOpenEntry,
+          onLocate: onLocate,
+        );
+        void directory() => open(
+          EntryDirectoryPage(
+            registry: registry,
+            openShellEntry: onOpenEntry,
+            locateShellEntry: onLocate,
+          ),
+        );
+        void search() => open(
+          ListenableBuilder(
+            listenable: registry,
+            builder: (context, _) {
+              final items = <SettingsSearchItem>[];
+              void index(
+                String title,
+                String path,
+                IconData icon,
+                Widget Function() destination, {
+                List<String> labels = const [],
+                String aliases = '',
+              }) {
+                items.add(
+                  SettingsSearchItem(
+                    title,
+                    path,
+                    icon,
+                    () => open(destination()),
+                    keywords: aliases,
+                    page: true,
+                  ),
+                );
+                for (final label in labels) {
+                  items.add(
+                    SettingsSearchItem(
+                      label,
+                      title,
+                      icon,
+                      () => open(
+                        SettingsFocus(label: label, child: destination()),
+                      ),
+                      keywords: aliases,
+                    ),
+                  );
+                }
+              }
+
+              index(
+                '外观与交互',
+                '设置 › 个性化',
+                Icons.palette_outlined,
+                () => AppearanceSettingsPage(registry: registry),
+                labels: ['外观主题', '减少动画', '触感反馈'],
+                aliases: '主题 深色 浅色 振动 动效',
+              );
+              index(
+                '界面风格',
+                '外观与交互',
+                Icons.style_outlined,
+                () => UiPackSettingsPage(registry: registry),
+                labels: ['全局风格', '模块专属界面', '保存与恢复'],
+              );
+              index(
+                '布局与导航',
+                '设置 › 个性化',
+                Icons.dashboard_outlined,
+                layoutPage,
+                labels: ['编排入口', '常用与隐藏入口', '高级编辑'],
+                aliases: '底栏 菜单 侧栏 更多 拖动',
+              );
+              index(
+                '入口目录',
+                '设置',
+                Icons.list,
+                () => EntryDirectoryPage(
+                  registry: registry,
+                  openShellEntry: onOpenEntry,
+                  locateShellEntry: onLocate,
+                ),
+                aliases: '打开入口 查找位置',
+              );
+              index(
+                '模块与连接',
+                '设置 › 应用与数据',
+                Icons.grid_view_outlined,
+                () => ModuleSettingsPage(registry: registry),
+                labels: ['模块管理与恢复', '模块商店'],
+              );
+              index(
+                '更新设置',
+                '设置 › 应用与数据',
+                Icons.refresh,
+                () => const UpdateSettingsPage(),
+                labels: ['启动时检查更新', '检查 App 更新', '检查模块更新'],
+              );
+              index(
+                '检查 App 更新',
+                '更新设置 › 手动检查',
+                Icons.system_update,
+                () => const AppUpdatePage(),
+                labels: ['测试通道'],
+              );
+              index(
+                '导出所有配置',
+                '设置 › 应用与数据',
+                Icons.download_outlined,
+                () => const ConfigurationExportPage(),
+                labels: ['包含 API 密钥'],
+                aliases: '备份 JSON',
+              );
+              index(
+                '辅助工具',
+                '设置 › 支持与关于',
+                Icons.build_outlined,
+                () => const SettingsToolsPage(),
+                labels: ['界面标注模式'],
+              );
+              index(
+                '显示与布局信息',
+                '辅助工具',
+                Icons.aspect_ratio,
+                () => const DisplayDiagnosticsPage(),
+                aliases: '诊断 字号 分辨率 安全区',
+              );
+              index(
+                '关于序点',
+                '设置 › 支持与关于',
+                Icons.info_outline,
+                () => const AboutSettingsPage(),
+                labels: ['本机数据', '项目地址', '模块仓库'],
+              );
+              for (final page in registry.ui.pages) {
+                final entry = registry.ui.entries
+                    .where(
+                      (e) =>
+                          e.pageId == page.id &&
+                          profile.mountFor(e).placement == UiPlacement.settings,
+                    )
+                    .firstOrNull;
+                if (entry == null &&
+                    page.settingsPath == null &&
+                    page.settingsLabels.isEmpty) {
+                  continue;
+                }
+                final source =
+                    page.settingsPath ??
+                    (entry == null
+                        ? '模块设置'
+                        : entry.content
+                        ? '模块与连接'
+                        : '设置 › 常用入口');
+                index(
+                  page.title,
+                  source,
+                  entry?.icon ?? Icons.tune,
+                  () => ModuleDetailPage(
+                    registry: registry,
+                    pageId: page.id,
+                    pageContext: entry == null
+                        ? const PageContext()
+                        : profile.mountFor(entry).context,
+                    title: page.title,
+                  ),
+                  labels: page.settingsLabels,
+                  aliases: '${page.moduleId} ${entry?.label ?? ''}',
+                );
+              }
+              return SettingsSearchPage(items: items);
+            },
+          ),
+        );
         return SettingsHome(
+          onClose: onClose,
+          onSearch: search,
+          onDirectory: directory,
+          returnToSearch: returnToSearch,
           appearance: SettingsFeatureCard(
             appearance: true,
             title: '外观与交互',
@@ -84,12 +277,7 @@ class HostSettingsPage extends ConsumerWidget {
           layout: SettingsFeatureCard(
             title: '布局与导航',
             subtitle: '入口位置与页面布局',
-            onTap: () => open(
-              UiLayoutPage(
-                registry: registry,
-                initialDesktop: MediaQuery.sizeOf(context).width >= 820,
-              ),
-            ),
+            onTap: () => open(layoutPage()),
           ),
           management: [
             SettingsHomeEntry(
@@ -180,9 +368,9 @@ class ModuleSettingsPage extends ConsumerWidget {
         );
         return DetailPage(
           title: '模块与连接',
+          settingsStyle: true,
           child: SettingsList(
             children: [
-              const SettingsNote('管理已安装模块。连接配置等专属选项由各模块提供。'),
               SettingsGroup(
                 title: '模块管理',
                 children: [
@@ -196,6 +384,7 @@ class ModuleSettingsPage extends ConsumerWidget {
                       MaterialPageRoute(
                         builder: (_) => const DetailPage(
                           title: '模块管理',
+                          settingsStyle: true,
                           child: HostManagerPage(),
                         ),
                       ),
@@ -258,60 +447,82 @@ class AboutSettingsPage extends ConsumerWidget {
   const AboutSettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => DetailPage(
-    title: '关于序点',
-    child: SettingsList(
-      children: [
-        SettingsGroup(
-          title: '应用',
-          children: [
-            NativeUi(
-              child: ListTile(
-                leading: const UiIcon(Icons.grid_view_rounded),
-                title: const Text('序点'),
-                subtitle: Text(
-                  ref
-                      .watch(installedAppVersionProvider)
-                      .when(
-                        data: (value) => value.label,
-                        loading: () => '正在读取版本…',
-                        error: (_, _) => '专注当下，逐项完成',
-                      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final installedVersion = ref.watch(installedAppVersionProvider);
+    return DetailPage(
+      title: '关于序点',
+      settingsStyle: true,
+      child: SettingsList(
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+              final twoColumns =
+                  MediaQuery.sizeOf(context).width >= 820 &&
+                  constraints.maxWidth >= 680 * textScale;
+              final version = [
+                SettingsSummary(
+                  label: '应用版本',
+                  title: '序点',
+                  icon: Icons.grid_view_rounded,
+                  detail: installedVersion.when(
+                    data: (v) => v.label,
+                    loading: () => '正在读取版本…',
+                    error: (_, _) => '无法读取版本信息',
+                  ),
                 ),
-              ),
-            ),
-            SettingsEntry(
-              title: '检查更新',
-              subtitle: '从 GitHub 检查应用新版本',
-              icon: Icons.system_update_rounded,
-              protected: true,
-              onTap: () => Navigator.push<void>(
-                context,
-                MaterialPageRoute(builder: (_) => const AppUpdatePage()),
-              ),
-            ),
-            const NativeUi(
-              child: ListTile(
-                leading: UiIcon(Icons.storage_outlined),
-                title: Text('本机数据'),
-                subtitle: Text('数据与设置保存在本机；在线模块功能需要网络连接'),
-              ),
-            ),
-          ],
-        ),
-        SettingsGroup(
-          title: '项目与社区',
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: AppRepositoryLinks(
-                showHeading: false,
-                onBrowseModules: () => _openCatalog(context, ref),
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
+                SettingsGroup(
+                  children: [
+                    SettingsEntry(
+                      title: '检查更新',
+                      subtitle: '从 GitHub 检查应用新版本',
+                      icon: Icons.system_update_rounded,
+                      protected: true,
+                      onTap: () => Navigator.push<void>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AppUpdatePage(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ];
+              final information = [
+                const SettingsGroup(
+                  title: '数据',
+                  children: [
+                    SettingsEntry(
+                      title: '本机数据',
+                      subtitle: '数据与设置保存在本机，在线模块功能需要网络连接',
+                      icon: Icons.storage_outlined,
+                      protected: true,
+                    ),
+                  ],
+                ),
+                AppRepositoryLinks(
+                  title: '项目与社区',
+                  onBrowseModules: () => _openCatalog(context, ref),
+                ),
+              ];
+              Widget column(List<Widget> children) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              );
+              return twoColumns
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 28,
+                      children: [
+                        Expanded(flex: 288, child: column(version)),
+                        Expanded(flex: 444, child: column(information)),
+                      ],
+                    )
+                  : column([...version, ...information]);
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }

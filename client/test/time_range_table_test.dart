@@ -37,6 +37,42 @@ void main() {
     ],
   };
 
+  testWidgets('filtering ranges preserves every row in the editable draft', (
+    tester,
+  ) async {
+    Map<String, Object?>? changed;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TimeRangeTable(
+            value: initial(),
+            baseline: initial(),
+            groups: const {
+              '第一组': {'1'},
+              '第二组': {'2'},
+            },
+            onChanged: (v) => changed = v,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('第 1 节'), findsOneWidget);
+    expect(find.text('第 2 节'), findsNothing);
+    await tester.tap(find.text('第二组'));
+    await tester.pumpAndSettle();
+    expect(find.text('第 2 节'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('time-range-duration')),
+      '50',
+    );
+    await tester.pumpAndSettle();
+    expect((changed!['rows'] as List).length, 2);
+    await tester.tap(find.text('第一组'));
+    await tester.pumpAndSettle();
+    expect(find.text('08:45'), findsOneWidget);
+    expect(changed!['durationMinutes'], '50');
+  });
+
   Future<void> choose(
     WidgetTester tester,
     String key,

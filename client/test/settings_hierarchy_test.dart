@@ -9,6 +9,7 @@ import 'package:task_app/core/module_host/host_settings_page.dart';
 import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
 import 'package:task_app/core/ui/ui_annotation.dart';
+import 'package:task_app/core/ui/ui_component.dart';
 import 'package:task_app/core/ui/ui_composition.dart';
 import 'package:task_app/core/ui/ui_page_host.dart';
 import 'package:task_app/data/app_database.dart';
@@ -92,6 +93,84 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   }
+
+  testWidgets(
+    'setting search opens the matching row and retains its query on return',
+    (tester) async {
+      await show(tester);
+      await tap(tester, '搜索设置');
+      expect(
+        find.ancestor(
+          of: find.byType(TextField),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is UiComponent && widget.ref == 'ui.input@1',
+          ),
+        ),
+        findsOneWidget,
+      );
+      await tester.enterText(find.byType(TextField), '更新');
+      await tester.pumpAndSettle();
+      await tap(tester, '启动时检查更新');
+      expect(find.widgetWithText(SwitchListTile, '启动时检查更新'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '更新',
+      );
+      await tester.enterText(find.byType(TextField), 'no-such-setting');
+      await tester.pumpAndSettle();
+      expect(find.text('没有匹配的设置'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'directory groups equivalent paths and preserves hidden destinations',
+    (tester) async {
+      registry.ui.register(
+        UiPageRegistration(
+          id: 'test.page',
+          moduleId: 'test',
+          title: '工具箱',
+          builder: (_, _) => const Text('工具内容'),
+        ),
+      );
+      for (final placement in [
+        UiPlacement.header,
+        UiPlacement.settings,
+        UiPlacement.hidden,
+      ]) {
+        registry.ui.register(
+          UiEntryRegistration(
+            id: 'tool.${placement.name}',
+            moduleId: 'test',
+            pageId: 'test.page',
+            label: '工具箱',
+            icon: Icons.build,
+            defaultMount: UiMount(placement: placement),
+          ),
+        );
+      }
+      await show(tester);
+      await tap(tester, '入口目录');
+      await tester.enterText(find.byType(TextField), '工具');
+      await tester.pumpAndSettle();
+      expect(find.text('工具箱'), findsOneWidget);
+      await tap(tester, '查找位置');
+      await tap(tester, '工具箱');
+      expect(find.text('右上角菜单 › 工具箱'), findsOneWidget);
+      await tap(tester, '设置 › 常用入口 › 工具箱');
+      expect(find.text('返回查找'), findsOneWidget);
+      await tap(tester, '返回查找');
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '工具',
+      );
+      await tap(tester, '打开入口');
+      await tap(tester, '工具箱');
+      expect(find.text('工具内容'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'appearance save failure preserves the applied setting and allows retry',

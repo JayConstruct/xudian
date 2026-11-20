@@ -104,6 +104,14 @@ extension _ScriptPageNodes on _ScriptPageState {
   }
 
   Widget _node(Map<String, Object?> spec, int depth, bool replace) {
+    final node = _nodeBody(spec, depth, replace);
+    final label = spec['title'] ?? spec['text'];
+    return label is String && SettingsFocus.of(uiContext) == label
+        ? SettingsAnchor(label, child: node)
+        : node;
+  }
+
+  Widget _nodeBody(Map<String, Object?> spec, int depth, bool replace) {
     if (depth > 32) return const Text('组件嵌套超过限制');
     if (spec['type'] == 'motion' || spec['type'] == 'swipeActions') {
       try {
@@ -172,7 +180,7 @@ extension _ScriptPageNodes on _ScriptPageState {
         'checkbox' => 'ui.checkbox@1',
         'switch' => 'ui.toggle@1',
         'select' => 'ui.select@1',
-        'input' => 'ui.input@1',
+        'input' || 'sourceEditor' => 'ui.input@1',
         'multiSelect' => 'ui.multiSelect@1',
         'dateInput' => 'ui.dateInput@1',
         'dateTimeInput' => 'ui.dateTimeInput@1',
@@ -204,6 +212,11 @@ extension _ScriptPageNodes on _ScriptPageState {
                 'min',
                 'max',
                 'feedback',
+                'presentation',
+                'tone',
+                'expanded',
+                'trailingIcon',
+                'trailingColor',
               ])
                 if (spec.containsKey(key)) key: spec[key],
             }),
@@ -276,11 +289,16 @@ extension _ScriptPageNodes on _ScriptPageState {
                 ScrollController.new,
               )
             : null,
-        padding: scrolling
+        padding: scrolling && widget.settingsStyle
+            ? SettingsList.contentPadding(
+                edgeToEdge: spec['edgeToEdge'] == true,
+                bottomInset: WorkspaceContentInsets.bottomOf(uiContext),
+              )
+            : scrolling
             ? EdgeInsets.fromLTRB(
-                spec['edgeToEdge'] == true ? 0 : 20,
+                spec['edgeToEdge'] == true ? 0 : AppDesign.pageGutter,
                 spec['edgeToEdge'] == true ? 0 : 16,
-                spec['edgeToEdge'] == true ? 0 : 20,
+                spec['edgeToEdge'] == true ? 0 : AppDesign.pageGutter,
                 16 + WorkspaceContentInsets.bottomOf(uiContext),
               )
             : EdgeInsets.zero,
@@ -465,14 +483,7 @@ extension _ScriptPageNodes on _ScriptPageState {
                   // control, when rows are inserted before a focused input.
                   key: keyCounts[children[i].key] == 1 ? children[i].key : null,
                   padding: EdgeInsets.only(
-                    bottom:
-                        spec['trailingSpacing'] == false &&
-                            i == children.length - 1
-                        ? 0
-                        : (spec['spacing'] as num? ?? 12).toDouble().clamp(
-                            0,
-                            48,
-                          ),
+                    bottom: _columnGap(spec, childSpecs, i, depth),
                   ),
                   child: children[i],
                 ),
@@ -564,18 +575,65 @@ extension _ScriptPageNodes on _ScriptPageState {
               : () => _render(event),
         );
       case 'inset':
+        final edges = spec['padding'];
+        final padding = switch (edges) {
+          [num left, num top, num right, num bottom] => EdgeInsets.fromLTRB(
+            left.toDouble().clamp(0, 128),
+            top.toDouble().clamp(0, 128),
+            right.toDouble().clamp(0, 128),
+            bottom.toDouble().clamp(0, 128),
+          ),
+          _ => const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        };
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: padding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: children,
           ),
         );
       case 'disclosure':
+        if (spec['presentation'] == 'sheet') {
+          return SettingsEntry(
+            title: text,
+            icon: Icons.help_outline,
+            onTap: () {
+              showModalBottomSheet<void>(
+                context: uiContext,
+                useSafeArea: true,
+                isScrollControlled: true,
+                showDragHandle: true,
+                builder: (sheet) => SettingsSheet(
+                  title: Text(text),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: children,
+                    ),
+                  ),
+                  actions: [
+                    FilledButton(
+                      onPressed: () => Navigator.pop(sheet),
+                      child: const Text('返回'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        }
         final rounded = AppDesign.smoothShape();
         return ExpansionTile(
           key: PageStorageKey(spec['key'] ?? text),
           title: Text(text),
+          subtitle: spec['subtitle'] == null
+              ? null
+              : Text('${bind(spec['subtitle'])}'),
+          leading: switch (_icon(spec['icon'])) {
+            final icon? => SettingsGlyph(icon, surface: true),
+            null => null,
+          },
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           shape: rounded,
@@ -591,6 +649,20 @@ extension _ScriptPageNodes on _ScriptPageState {
           child: node(object(spec['child']), depth + 1),
         );
       case 'card':
+        if (widget.settingsStyle &&
+            spec['variant'] == null &&
+            spec['event'] == null &&
+            spec['tone'] == null &&
+            childSpecs.isNotEmpty &&
+            childSpecs.every(
+              (item) => item['type'] == 'listTile' || item['type'] == 'divider',
+            )) {
+          // Module-declared dividers keep their position and UI pack overrides.
+          return SettingsGroupSurface(
+            insertDividers: false,
+            children: children,
+          );
+        }
         if (spec['variant'] == 'outlined' || spec['event'] != null) {
           final scheme = Theme.of(uiContext).colorScheme;
           final shape = AppDesign.smoothShape(
@@ -796,6 +868,7 @@ extension _ScriptPageNodes on _ScriptPageState {
             );
           }
         }
+        final settings = widget.settingsStyle;
         final toned = spec['iconTone'] is String;
         final metaIcon = _icon(spec['metaIcon']);
         final lines = subtitle is String && metaIcon != null
@@ -804,18 +877,62 @@ extension _ScriptPageNodes on _ScriptPageState {
         final metadata = lines.length == 2;
 
         final theme = Theme.of(uiContext);
-        return ListTile(
-          minVerticalPadding: toned ? 8 : null,
-          minTileHeight: metadata
-              ? 88
-              : toned
-              ? 60
-              : null,
-          horizontalTitleGap: toned ? 12 : null,
-          minLeadingWidth: toned ? 34 : null,
-          contentPadding: EdgeInsets.symmetric(horizontal: toned ? 12 : 8),
-          dense: tree?['compact'] == true,
-          visualDensity: tree?['compact'] == true && trailingAction == null
+        final trailingIcon = _icon(bind(spec['trailingIcon']));
+        final swatch = bind(spec['trailingColor']);
+        if (trailingControl == null &&
+            (trailingIcon != null || swatch is String)) {
+          trailingControl = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (swatch is String &&
+                  RegExp(r'^#[a-fA-F0-9]{6}$').hasMatch(swatch))
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(
+                      int.parse(swatch.substring(1), radix: 16) | 0xFF000000,
+                    ),
+                  ),
+                ),
+              if (swatch is String && trailingIcon != null)
+                const SizedBox(width: 8),
+              if (trailingIcon != null)
+                UiIcon(
+                  trailingIcon,
+                  size: 18,
+                  color: trailingIcon == Icons.check_rounded
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+            ],
+          );
+        }
+        final minHeight = (spec['minHeight'] as num?)?.clamp(0, 240).toDouble();
+        final tile = ListTile(
+          minVerticalPadding:
+              (spec['minVerticalPadding'] as num?)?.toDouble().clamp(0, 48) ??
+              (toned && !settings ? 8 : null),
+          minTileHeight:
+              minHeight ??
+              (metadata
+                  ? 88
+                  : settings
+                  ? (subtitle == null
+                        ? SettingsListTileTheme.singleLineHeight
+                        : SettingsListTileTheme.twoLineHeight)
+                  : toned
+                  ? 60
+                  : null),
+          horizontalTitleGap: toned && !settings ? 12 : null,
+          minLeadingWidth: toned && !settings ? 34 : null,
+          contentPadding: settings
+              ? null
+              : EdgeInsets.symmetric(horizontal: toned ? 12 : 8),
+          dense: !settings && tree?['compact'] == true,
+          visualDensity:
+              !settings && tree?['compact'] == true && trailingAction == null
               ? const VisualDensity(vertical: -2)
               : null,
           titleTextStyle: toned
@@ -823,10 +940,10 @@ extension _ScriptPageNodes on _ScriptPageState {
                   fontSize: 15.5,
                   fontWeight: FontWeight.w600,
                 )
-              : tree?['compact'] == true
+              : !settings && tree?['compact'] == true
               ? Theme.of(uiContext).textTheme.bodyMedium
               : null,
-          subtitleTextStyle: tree?['compact'] == true
+          subtitleTextStyle: !settings && tree?['compact'] == true
               ? Theme.of(uiContext).textTheme.bodySmall
                     ?.copyWith(color: AppDesign.muted(uiContext))
               : null,
@@ -837,10 +954,23 @@ extension _ScriptPageNodes on _ScriptPageState {
                   icon: icon,
                   tone: spec['iconTone'] as String,
                   surface: true,
-                  surfaceSize: 34,
+                  surfaceSize: (spec['iconSurfaceSize'] as num? ?? 34)
+                      .toDouble()
+                      .clamp(16, 80),
                 )
+              : settings
+              ? SettingsGlyph(icon, surface: subtitle != null)
               : UiIcon(icon),
-          title: Text('${bind(spec['title']) ?? text}'),
+          title: Text(
+            '${bind(spec['title']) ?? text}',
+            style: TextStyle(
+              fontSize: spec['titleStyle'] == 'heading' ? 20 : null,
+              fontWeight: spec['titleStyle'] == 'heading'
+                  ? FontWeight.w700
+                  : null,
+              color: spec['tone'] == 'danger' ? theme.colorScheme.error : null,
+            ),
+          ),
           subtitle: metadata
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -884,7 +1014,7 @@ extension _ScriptPageNodes on _ScriptPageState {
                     )
                   : event == null
                   ? null
-                  : const UiIcon(Icons.chevron_right)),
+                  : UiIcon(Icons.chevron_right, size: settings ? 12 : null)),
           enabled: enabled,
           selected: bind(spec['selected']) == true,
           selectedTileColor: Theme.of(uiContext).colorScheme.primary
@@ -893,6 +1023,25 @@ extension _ScriptPageNodes on _ScriptPageState {
               ? null
               : () => _commandEvent(event, null),
         );
+        // Two-line Material tiles may shrink below minTileHeight in compact
+        // layout. Keep the declared minimum and center their actual contents.
+        final sizedTile = minHeight == null
+            ? tile
+            : ConstrainedBox(
+                constraints: BoxConstraints(minHeight: minHeight),
+                child: Align(
+                  alignment: Alignment.center,
+                  heightFactor: 1,
+                  child: tile,
+                ),
+              );
+        final styledTile = settings
+            ? SettingsListTileTheme(child: sizedTile)
+            : sizedTile;
+        final expanded = bind(spec['expanded']);
+        return expanded is bool
+            ? Semantics(expanded: expanded, child: styledTile)
+            : styledTile;
       case 'source':
         return ExpansionTile(
           title: const Text('查看文件内容'),
@@ -916,6 +1065,25 @@ extension _ScriptPageNodes on _ScriptPageState {
             : () {
                 _commandEvent(event, spec['command']);
               };
+        final errorColor = Theme.of(uiContext).colorScheme.error;
+        final style = spec['tone'] == 'danger'
+            ? appUiButtonStyle.copyWith(
+                foregroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? null
+                      : spec['variant'] == 'filled'
+                      ? Theme.of(uiContext).colorScheme.onError
+                      : errorColor,
+                ),
+                backgroundColor: spec['variant'] == 'filled'
+                    ? WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.disabled)
+                            ? null
+                            : errorColor,
+                      )
+                    : null,
+              )
+            : appUiButtonStyle;
         final buttonIcon = _icon(spec['icon']);
         final buttonLabel = buttonIcon == null
             ? Text(text)
@@ -933,28 +1101,28 @@ extension _ScriptPageNodes on _ScriptPageState {
             feedback: ScriptButtonFeedback.parse(spec['feedback']),
             onPressed: press,
             variant: spec['variant'] as String?,
-            style: appUiButtonStyle,
+            style: style,
             child: buttonLabel,
           );
         }
         return switch (spec['variant']) {
           'text' => TextButton(
-            style: appUiButtonStyle,
+            style: style,
             onPressed: press,
             child: buttonLabel,
           ),
           'outlined' => OutlinedButton(
-            style: appUiButtonStyle,
+            style: style,
             onPressed: press,
             child: buttonLabel,
           ),
           'filled' => FilledButton(
-            style: appUiButtonStyle,
+            style: style,
             onPressed: press,
             child: buttonLabel,
           ),
           _ => FilledButton.tonal(
-            style: appUiButtonStyle,
+            style: style,
             onPressed: press,
             child: buttonLabel,
           ),
@@ -1081,6 +1249,9 @@ extension _ScriptPageNodes on _ScriptPageState {
       case 'switch':
         return SwitchListTile(
           title: Text(text),
+          subtitle: spec['subtitle'] == null
+              ? null
+              : Text('${bind(spec['subtitle'])}'),
           value: bind(spec['value']) == true,
           onChanged: busy || bind(spec['disabled']) == true
               ? null
@@ -1088,14 +1259,21 @@ extension _ScriptPageNodes on _ScriptPageState {
         );
       case 'select':
         final items = objects(spec['items']);
-        final value = bind(spec['value']);
-        return DropdownButtonFormField<Object>(
+        final key = spec['key'];
+        final value = key is String
+            ? _selectionValue(key, spec)
+            : bind(spec['value']);
+        final labeled = spec['presentation'] == 'labeled';
+        final control = DropdownButtonFormField<Object>(
           borderRadius: AppDesign.selectionBorderRadius,
           key: ValueKey('${spec['key']}:$value'),
           initialValue: items.any((item) => item['value'] == value)
               ? value
               : null,
-          decoration: InputDecoration(labelText: text),
+          decoration: labeled
+              ? AppDesign.outlinedField(uiContext)
+              : InputDecoration(labelText: text),
+          icon: spec['showIndicator'] == false ? const SizedBox.shrink() : null,
           isExpanded: true,
           items: [
             for (final item in items)
@@ -1111,6 +1289,9 @@ extension _ScriptPageNodes on _ScriptPageState {
               ? null
               : (value) => _changeControl(spec, value, event),
         );
+        return labeled
+            ? ScriptFieldLabel(label: text, child: control)
+            : control;
       case 'multiSelect':
         final key = string(spec['key'], 'multi-select key');
         final selected = (_selectionValue(key, spec) as List? ?? []).toSet();
@@ -1169,7 +1350,11 @@ extension _ScriptPageNodes on _ScriptPageState {
         );
       case 'emptyState':
         return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 96, 24, 24),
+          padding: spec['padding'] is num
+              ? EdgeInsets.all(
+                  (spec['padding'] as num).toDouble().clamp(0, 128),
+                )
+              : const EdgeInsets.fromLTRB(24, 96, 24, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1178,7 +1363,10 @@ extension _ScriptPageNodes on _ScriptPageState {
                   ScriptGlyph(
                     icon: icon,
                     surface: true,
-                    surfaceSize: 52,
+                    surfaceSize: (spec['iconSurfaceSize'] as num? ?? 52)
+                        .toDouble()
+                        .clamp(16, 80),
+                    tone: spec['iconTone'] as String? ?? 'accent',
                     size: 24,
                   )
                 else
@@ -1321,8 +1509,20 @@ extension _ScriptPageNodes on _ScriptPageState {
           formValues.putIfAbsent(key, () => initial);
           return TextEditingController(text: initial);
         });
-        return TextField(
+        final labeled = spec['presentation'] == 'labeled';
+        final code = spec['presentation'] == 'code';
+        final search = spec['presentation'] == 'search';
+        final control = TextField(
           controller: controller,
+          style: code
+              ? const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  height: 1.7,
+                )
+              : search
+              ? const TextStyle(fontSize: 14)
+              : null,
           focusNode: focusNodes.putIfAbsent(key, FocusNode.new),
           enabled: bind(spec['disabled']) != true,
           keyboardType: spec['inputMode'] == 'number'
@@ -1354,48 +1554,64 @@ extension _ScriptPageNodes on _ScriptPageState {
               (spec['multiline'] == true || spec['type'] == 'sourceEditor'
                   ? 16
                   : 1),
-          decoration: InputDecoration(
-            labelText: spec['presentation'] == 'search' ? null : text,
-            hintText: spec['presentation'] == 'search' ? text : null,
-            isDense: spec['presentation'] == 'search' ? true : null,
-            contentPadding: spec['presentation'] == 'search'
-                ? const EdgeInsets.symmetric(horizontal: 14, vertical: 14)
-                : null,
-            helperText: spec['helperText'] == null
-                ? null
-                : '${bind(spec['helperText'])}',
-            errorText: spec['errorText'] == null
-                ? spec['inputMode'] == 'number'
-                      ? validateNumberInput(
-                          controller.text,
-                          integer: spec['integer'] == true,
-                          min: spec['min'] as num?,
-                          max: spec['max'] as num?,
+          decoration:
+              (labeled || search
+                      ? AppDesign.outlinedField(
+                          uiContext,
+                          search: search,
+                          highlighted: search && controller.text.isNotEmpty,
                         )
-                      : null
-                : '${bind(spec['errorText'])}',
-            prefixIcon:
-                spec['inputMode'] == 'search' && spec['showSearchIcon'] != false
-                ? const UiIcon(Icons.search)
-                : null,
-            suffixIcon: spec['clearable'] == true && controller.text.isNotEmpty
-                ? IconButton(
-                    tooltip: '清除$text',
-                    onPressed: bind(spec['disabled']) == true
+                      : const InputDecoration())
+                  .copyWith(
+                    labelText: search || labeled || code ? null : text,
+                    hintText: spec['hintText'] != null
+                        ? '${bind(spec['hintText'])}'
+                        : search
+                        ? text
+                        : null,
+                    isDense: search || labeled ? true : null,
+                    fillColor: code
+                        ? Theme.of(uiContext)
+                              .colorScheme
+                              .surfaceContainerHighest
+                        : null,
+                    helperText: spec['helperText'] == null
                         ? null
-                        : () {
-                            controller.clear();
-                            _changeForm(
-                              key,
-                              '',
-                              bind(spec['onChangeEvent']),
-                              debounce: true,
-                            );
-                          },
-                    icon: const UiIcon(Icons.close_rounded),
-                  )
-                : null,
-          ),
+                        : '${bind(spec['helperText'])}',
+                    errorText: spec['errorText'] == null
+                        ? spec['inputMode'] == 'number'
+                              ? validateNumberInput(
+                                  controller.text,
+                                  integer: spec['integer'] == true,
+                                  min: spec['min'] as num?,
+                                  max: spec['max'] as num?,
+                                )
+                              : null
+                        : '${bind(spec['errorText'])}',
+                    prefixIcon:
+                        spec['inputMode'] == 'search' &&
+                            spec['showSearchIcon'] != false
+                        ? const UiIcon(Icons.search)
+                        : null,
+                    suffixIcon:
+                        spec['clearable'] == true && controller.text.isNotEmpty
+                        ? IconButton(
+                            tooltip: '清除$text',
+                            onPressed: bind(spec['disabled']) == true
+                                ? null
+                                : () {
+                                    controller.clear();
+                                    _changeForm(
+                                      key,
+                                      '',
+                                      bind(spec['onChangeEvent']),
+                                      debounce: true,
+                                    );
+                                  },
+                            icon: const UiIcon(Icons.close_rounded),
+                          )
+                        : null,
+                  ),
           onChanged: (v) {
             _changeForm(key, v, bind(spec['onChangeEvent']), debounce: true);
           },
@@ -1406,6 +1622,9 @@ extension _ScriptPageNodes on _ScriptPageState {
                   'value': v,
                 }, spec['command']),
         );
+        return labeled
+            ? ScriptFieldLabel(label: text, child: control)
+            : control;
       case 'timeRangeTable':
         final key = string(spec['key'], 'time range table key');
         final value = _selectionValue(key, spec);
@@ -1416,6 +1635,13 @@ extension _ScriptPageNodes on _ScriptPageState {
           key: ValueKey(key),
           value: object(value),
           baseline: object(spec['baseline']),
+          groups: {
+            for (final group in objects(spec['groups']))
+              if (group['label'] is String && group['ids'] is List)
+                group['label'] as String: (group['ids'] as List)
+                    .whereType<String>()
+                    .toSet(),
+          },
           enabled: !busy && bind(spec['disabled']) != true,
           onChanged: (value) => _changeForm(key, value, null),
         );
@@ -1458,6 +1684,9 @@ extension _ScriptPageNodes on _ScriptPageState {
           enabled: !busy && bind(spec['disabled']) != true,
           clearable: spec['clearable'] == true,
           editable: spec['editable'] != false && kind != TemporalInputKind.time,
+          externalLabel:
+              kind == TemporalInputKind.date &&
+              spec['presentation'] == 'labeled',
           minDate: spec['minDate'] as String?,
           maxDate: spec['maxDate'] as String?,
           errorText: spec['errorText'] == null
@@ -1495,9 +1724,13 @@ extension _ScriptPageNodes on _ScriptPageState {
         }
         return control;
       case 'divider':
-        return Divider(
-          height: (spec['height'] as num?)?.toDouble().clamp(0, 48),
-        );
+        final height = (spec['height'] as num?)
+            ?.toDouble()
+            .clamp(0, 48)
+            .toDouble();
+        return widget.settingsStyle
+            ? SettingsDivider(height: height)
+            : Divider(height: height);
       case 'timeGrid':
         return TimeGrid(
           columns: objects(spec['columns']),
