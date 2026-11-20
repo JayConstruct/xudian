@@ -1,0 +1,243 @@
+{
+  "date": "2026-11-20",
+  "status": "published-and-verified",
+  "sourceCommit": "88226b18f941dd3fdad068d25a7ddcb65c22bfd2",
+  "appTag": "v0.2.0-beta.31",
+  "moduleTag": "modules-20261120-unified-settings",
+  "moduleSourceCommit": "f654c4605732e08b44c053ad4e0fb76917b4bcc1",
+  "supersededCandidate": {
+    "tag": "v0.2.0-beta.30",
+    "sourceCommit": "f654c4605732e08b44c053ad4e0fb76917b4bcc1",
+    "workflow": "https://github.com/JayConstruct/xudian/actions/runs/44745378481",
+    "publication": "blocked by Flutter regression tests",
+    "failures": [
+      "Popup menu test fixtures lacked the Riverpod scope and planner host overrides.",
+      "Bundled restore test used the former entry and dialog structure."
+    ]
+  },
+  "checks": {
+    "firstFlutterRun": {
+      "passed": 263,
+      "failed": 3
+    },
+    "focusedFlutterRecheck": {
+      "passed": 45,
+      "failed": 0
+    },
+    "beta31FlutterRecheck": {
+      "passed": 57,
+      "failed": 0
+    },
+    "fixtureCorrections": [
+      "Locate store results through ModuleCatalogCard.",
+      "Provide Riverpod scope for MoreWorkspacePage annotation widgets."
+    ],
+    "fullFlutterCI": {
+      "passed": 1941,
+      "shards": [
+        654,
+        633,
+        654
+      ]
+    },
+    "pythonToolingPassed": 336,
+    "moduleCatalogPassed": 37,
+    "staticAnalysis": "passed",
+    "productionArchitecture": "passed",
+    "repositoryAndDocumentation": "passed",
+    "nodePageReads": "passed",
+    "githubActions": [
+      {
+        "ref": "main",
+        "id": 44747529789,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/44747529789",
+        "conclusion": "success"
+      },
+      {
+        "ref": "v0.2.0-beta.31",
+        "id": 44747529801,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/44747529801",
+        "conclusion": "success"
+      },
+      {
+        "ref": "modules-20261120-unified-settings",
+        "id": 44745378397,
+        "url": "https://github.com/JayConstruct/xudian/actions/runs/44745378397",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "emulator": {
+    "serial": "emulator-5554",
+    "versionName": "0.2.0-beta.31",
+    "buildNumber": 275,
+    "installedVersionCode": 4275,
+    "installedApkSha256": "588184474d947a6adf3f31221b8ff2935b6810657587251d4d75b95cad3dedd2",
+    "sourceFingerprint": "a63704e07f81beee1cbcf290a09a7af934ef66a14bd461b072b8dee6b36c19b6",
+    "modules": [
+      {
+        "id": "app.ai",
+        "version": "1.7.1",
+        "sha256": "828cecafcf93b04cbf23bb414fdcd7eb13b60c50a73f4b22b540a008714f9b1d",
+        "installedSha256": "828cecafcf93b04cbf23bb414fdcd7eb13b60c50a73f4b22b540a008714f9b1d",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.schedule",
+        "version": "1.17.2",
+        "sha256": "5300a3b0ecfcbc1d803ba2a2d27b9a3fc4a5a92658e68ae187f6265ef11a2e51",
+        "installedSha256": "5300a3b0ecfcbc1d803ba2a2d27b9a3fc4a5a92658e68ae187f6265ef11a2e51",
+        "status": "already-installed"
+      },
+      {
+        "id": "app.import.shiguang",
+        "version": "1.9.1",
+        "sha256": "1a5b60c886d0550f36bbfaa52c9f5804759497713debb492eb0352c9a8c5fd55",
+        "installedSha256": "1a5b60c886d0550f36bbfaa52c9f5804759497713debb492eb0352c9a8c5fd55",
+        "status": "already-installed"
+      }
+    ],
+    "catalogOnlineOfflineBackReopenColdStart": true,
+    "deviceChecks": [
+      "version",
+      "settings-search",
+      "entry-directory",
+      "entry-arrangement",
+      "update-settings",
+      "style",
+      "courses",
+      "school-navigation",
+      "schedule-week"
+    ],
+    "releaseVersionPageRechecked": true,
+    "moduleReadbackVersionCode": 4274
+  },
+  "publicApp": {
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/v0.2.0-beta.31",
+    "publishedAt": "2026-11-20T13:56:03Z",
+    "prerelease": true,
+    "anonymousDownloadsVerified": true,
+    "apks": [
+      {
+        "name": "xudian-v0.2.0-beta.31-armeabi-v7a-release.apk",
+        "versionName": "0.2.0-beta.31",
+        "versionCode": 1177,
+        "abi": "armeabi-v7a",
+        "sha256": "ebde5d143c36d8bc0d64036cf3ef6c9e4e7cd5c356a70bf1c9b8576fbe4d9923",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "bundledModules": 6
+      },
+      {
+        "name": "xudian-v0.2.0-beta.31-arm64-v8a-release.apk",
+        "versionName": "0.2.0-beta.31",
+        "versionCode": 2177,
+        "abi": "arm64-v8a",
+        "sha256": "50ad7cb2c27a408df68f19ef4493942f357c5622bf647f922fae11a83c201282",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "bundledModules": 6
+      },
+      {
+        "name": "xudian-v0.2.0-beta.31-x86_64-release.apk",
+        "versionName": "0.2.0-beta.31",
+        "versionCode": 4177,
+        "abi": "x86_64",
+        "sha256": "eb2a84ae4e1c205e9f46b3aa9d307474f7b624594dcd241ebb7cd1e21d15b1f2",
+        "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+        "bundledModules": 6
+      }
+    ]
+  },
+  "publicModuleRelease": {
+    "url": "https://github.com/JayConstruct/xudian/releases/tag/modules-20261120-unified-settings",
+    "publishedAt": "2026-11-20T13:33:57Z"
+  },
+  "publicModules": [
+    {
+      "id": "app.ai",
+      "version": "1.7.1",
+      "hostApi": "^1.31.0",
+      "sha256": "828cecafcf93b04cbf23bb414fdcd7eb13b60c50a73f4b22b540a008714f9b1d",
+      "size": 12217
+    },
+    {
+      "id": "app.import.shiguang",
+      "version": "1.9.1",
+      "hostApi": "^1.55.0",
+      "sha256": "1a5b60c886d0550f36bbfaa52c9f5804759497713debb492eb0352c9a8c5fd55",
+      "size": 1006868
+    },
+    {
+      "id": "app.schedule",
+      "version": "1.17.2",
+      "hostApi": "^1.55.0",
+      "sha256": "5300a3b0ecfcbc1d803ba2a2d27b9a3fc4a5a92658e68ae187f6265ef11a2e51",
+      "size": 42027
+    }
+  ],
+  "publicIndexes": [
+    {
+      "id": "app.ai",
+      "sha256": "82f4912b78417d8953bb4bd33543af58ee76345d32cdb264ee7c8b37e2cafea8",
+      "attempts": 1
+    },
+    {
+      "id": "app.import.shiguang",
+      "sha256": "0d7c0a9ff8a50b0b77605a593d82760497f489fc8fc1b65881c86952ef8e8eaf",
+      "attempts": 1
+    },
+    {
+      "id": "app.planner",
+      "sha256": "b8bbb9ef56707d0b39f2e01d7cae828f1cb415b78d81f71aa1f28a4a61e2557a",
+      "attempts": 1
+    },
+    {
+      "id": "app.schedule",
+      "sha256": "062b007707ab7dc12996e715edd2b02aec7305a4d4b6c69b26b933ff993c6725",
+      "attempts": 1
+    },
+    {
+      "id": "app.tasks",
+      "sha256": "3badeef2744dc5114b5008a50bbb211aff2c842ffdc69916f6f75df2ee46bef8",
+      "attempts": 1
+    },
+    {
+      "id": "app.ui.contributions",
+      "sha256": "3208feabdb4dc2f35d2a5fefb0b8dd9fd558bd878915b383d52e6a27e65aba40",
+      "attempts": 1
+    },
+    {
+      "id": "app.ui.examples",
+      "sha256": "43ad2b1bd5bb357eacc1ad4809a76b62a68c6e2f6ae523622e2c8b1bb97d9de2",
+      "attempts": 1
+    },
+    {
+      "id": "app.views.today",
+      "sha256": "33ce4f1cf03efe85b07a32eadbf84fbde4946e8cb583e9c31c733ff90b9ee82e",
+      "attempts": 1
+    },
+    {
+      "id": "example.ui.compact",
+      "sha256": "821872d6c0cd67bb056dbe810747f7cf539dfa3df67fdc12d0f39c562999c6f9",
+      "attempts": 1
+    }
+  ],
+  "publicDirectory": {
+    "validated": true,
+    "sha256": {
+      "catalog.json": "6f4020d4f4563d0cb81eb3bf6baa07f1bd561acd0e58efeb68912086e57e3b7f",
+      "schemas/module-version-index-v1.schema.json": "5c7be4771eaf58e1c7ed206da87a84dbe15cdd27ae9de739f7dc6e778dd1b5a1"
+    },
+    "onlineIndexesAndPackagesValidated": 86
+  },
+  "localEvidence": {
+    "installation": "dist/verification/20261120T134439.844265Z-emulator-update/results.json",
+    "catalog": "dist/verification/20261120T134439.844265Z-emulator-update/catalog/results.json",
+    "device": "dist/verification/releases/release-20261120-beta30/device/results.json",
+    "candidateVersionPage": "dist/verification/releases/release-20261120-beta31/device/results.json",
+    "moduleInstallation": "dist/verification/20261120T132038.379961Z-emulator-update/results.json",
+    "previousDesignComparison": "dist/verification/20261120-unified-pages/compare.html"
+  },
+  "limitations": [
+    "University login and live school response capture remain tracked by IMPORT-01. Preview and conflict states were previously verified with isolated sample data."
+  ]
+}

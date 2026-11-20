@@ -1,13 +1,6 @@
 # 当前版本文档
 
-仓库最近发布的 App 版本是 **v0.2.0-beta.29**，对应宿主 API **1.54.0**。安装包的变更和对应模块版本见[本版说明](releases/v0.2.0-beta.29.md)，安装摘要与实测范围见[验证记录](VERIFICATION.md)。
-
-功能说明按工作区源码维护。以下两个模块的源码版本高于仓库作者索引中的最高版本；设备实际版本可在模块管理中查看。
-
-| 模块 | 工作区清单 | 作者版本索引 |
-| --- | --- | --- |
-| 任务规划 | [1.15.3](../packages/modules/app.planner/module.json) | [1.15.1](../module-index/app.planner.json) |
-| 课表 | [1.16.6](../packages/modules/app.schedule/module.json) | [1.16.5](../module-index/app.schedule.json) |
+最新发布为 Android 测试版 **v0.2.0-beta.31**，宿主 API 为 **1.55.0**。同步发布 AI 助手 1.7.1、大学课表 1.17.2 和拾光教务导入 1.9.1。[本版说明](releases/v0.2.0-beta.31.md) · [验证记录](VERIFICATION.md)
 
 ## 功能使用
 
