@@ -349,8 +349,8 @@ void main() {
         'context': {'pageId': 'app.planner.home'},
         'state': {'history': true},
       });
-      expect(jsonEncode(rendered), contains('最近2次操作'));
-      expect(jsonEncode(rendered), isNot(contains('最近50次操作')));
+      expect(jsonEncode(rendered), matches(RegExp(r'最近\s*2\s*次操作')));
+      expect(jsonEncode(rendered), isNot(matches(RegExp(r'最近\s*50\s*次操作'))));
     },
   );
 

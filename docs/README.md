@@ -1,6 +1,6 @@
 # 当前版本文档
 
-最新发布为 Android 测试版 **v0.2.0-beta.32**，宿主 API 为 **1.57.0**。同步发布任务规划模块 **1.17.1**。[本版说明](releases/v0.2.0-beta.32.md) · [验证记录](VERIFICATION.md)
+最新发布为 Android 测试版 **v0.2.0-beta.33**，宿主 API 为 **1.57.0**。同步发布任务规划模块 **1.17.1**。[本版说明](releases/v0.2.0-beta.33.md) · [验证记录](VERIFICATION.md)
 
 ## 功能使用
 
