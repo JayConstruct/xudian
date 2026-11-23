@@ -109,7 +109,7 @@ void main() {
   });
 
   testWidgets(
-    'compact confirmation shows plain action text, cancels, and keeps real writes expandable',
+    'compact confirmation shows plain action text, and cancels without an additional details panel',
     (tester) async {
       bool? accepted;
       await _show(tester, _details(), onResult: (value) => accepted = value);
@@ -117,17 +117,7 @@ void main() {
       expect(find.text(_options['message']!), findsOneWidget);
       expect(find.byType(DataChangeReview), findsNothing);
       expect(find.text('start'), findsNothing);
-      await tester.tap(find.text('查看变更详情'));
-      await tester.pumpAndSettle();
-      expect(find.byType(DataChangeReview), findsOneWidget);
-      expect(find.text('修改 · 真实任务'), findsOneWidget);
-      expect(find.text('之前："original-time"'), findsOneWidget);
-      expect(find.text('之后："frozen-new-time"'), findsOneWidget);
-      final raw = find.text('全量原始详情');
-      await tester.ensureVisible(raw);
-      await tester.tap(raw);
-      await tester.pumpAndSettle();
-      expect(find.textContaining('frozen-plan'), findsOneWidget);
+      expect(find.text('查看变更详情'), findsNothing);
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
       expect(accepted, isFalse);
@@ -193,22 +183,18 @@ void main() {
     },
   );
 
-  testWidgets(
-    'real deletions are announced before optional details are expanded',
-    (tester) async {
-      await _show(tester, _details(deletion: true));
-      expect(find.text('将删除 1 条记录，请核对后确认。'), findsOneWidget);
-      expect(find.byType(DataChangeReview), findsNothing);
-      await tester.tap(find.text('查看变更详情'));
-      await tester.pumpAndSettle();
-      expect(find.text('删除 · 真实任务'), findsOneWidget);
-      expect(find.text('此记录将被删除'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('real deletions are announced in the compact confirmation', (
+    tester,
+  ) async {
+    await _show(tester, _details(deletion: true));
+    expect(find.text('将删除 1 条记录，请核对后确认。'), findsOneWidget);
+    expect(find.byType(DataChangeReview), findsNothing);
+    expect(find.text('查看变更详情'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
-    'unrecognizable plans retain the original host review instead of compact text',
+    'unrecognizable plans use the compact dialog and require original details',
     (tester) async {
       await _show(
         tester,
@@ -220,7 +206,7 @@ void main() {
         },
         options: {..._options, 'acknowledgement': '不能替代原始审核'},
       );
-      expect(find.text('确认实际数据变更'), findsOneWidget);
+      expect(find.text('确认变更'), findsOneWidget);
       expect(find.text('确认移动任务'), findsNothing);
       expect(find.text('无法生成可靠的数据摘要，请核对以下原始详情。'), findsOneWidget);
       expect(find.byType(Checkbox), findsNothing);

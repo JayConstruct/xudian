@@ -57,7 +57,7 @@ actions: [
       {label:'3天', event:{type:'periodShortcut',days:3}},
       {label:'5天', selected:true, event:{type:'periodShortcut',days:5}},
     ]},
-    {label:'每日显示时段', subtitle:'自动 07:00–22:00', event:{type:'displayHours'}},
+    {label:'每日显示时段', subtitle:'自动 · 智能时段', event:{type:'displayHours'}},
     {kind:'stepper', label:'时间轴缩放', valueLabel:'标准',
      decreaseEvent:{type:'zoom',delta:-1}, increaseEvent:{type:'zoom',delta:1},
      decreaseEnabled:true, increaseEnabled:true},
@@ -206,3 +206,19 @@ API `1.44.0` 为现有 `dayOverview`、`sectionHeader`、`agendaItem`、`taskIte
 | `header` | `backIcon: 'close'` 显示带取消语义的关闭按钮。点击与系统返回均遵循已有的内部返回声明。 |
 | 页面框架 | `header.minHeight` 在 48 至 120 逻辑像素内指定最小顶栏高度。`tree.footerStyle: 'edge'` 使用画布底色及与页面一致的水平边距。 |
 | `ui.dialog` | `presentation: 'sheet'` 下可设置 `fullWidthActions: true` 均分操作栏。选项字段使用 `type: 'select', presentation: 'list'`，各选项可附 `icon` 和 `subtitle`。选中状态由宿主维护，取消时不提交。 |
+
+## 全屏表单与详情返回
+
+宿主 API 1.56 支持在 `ui.dialog` 的 `presentation: 'page'` 下使用 `fullWidthActions: true`，固定显示等宽的取消与提交按钮。字段可声明以下布局。
+
+| 字段 | 行为 |
+| --- | --- |
+| `section`、`row` | `section` 在此字段前显示分组名。相邻两个字段填写同一 `row` 字符串时等宽并列，窄屏和大字号自动分行。 |
+| `summary: {title, subtitle, icon}` | 在字段和分组前显示公用摘要卡。图标采用共享图标名称。 |
+| `presentation: 'labeled'` | 文本、多行、数值、下拉和日期输入使用上方标签。多行字段的 `minLines` 和 `maxLines` 在 1 至 10 行间取值。 |
+
+页面处理器可在用户操作的返回值中声明 `dismissPage: true`，例如在保存成功后关闭自己的详情页，回到原来的课表或面板。宿主核对当前路由、页面 ID 和模块归属后再退出。初次渲染、被覆盖的路由、工作区和内联贡献均忽略此字段。取消审核时返回原来的 `state` 和 `tree`，可继续编辑表单草稿。
+
+使用这些选项的模块声明 `hostApi: "^1.56.0"`。
+
+连续日期的 `plannerBoard` 可声明 `options.smartHours: true`（宿主 1.57），以可见列与实测视口计算每日显示时段。手动时段与全天仍使用 `startMinute`、`endMinute`。

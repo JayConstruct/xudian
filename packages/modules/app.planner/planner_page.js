@@ -1,10 +1,10 @@
-import {data, ui, clock, ids} from '@xudian/sdk';
-import {add, day} from './engine.js';
+import {data, ui, clock, ids, services} from '@xudian/sdk';
+import {add, day, weekday} from './engine.js';
 import {renderCreation} from './creation.js';
 import {plannerEditor, quickAdjustmentContract} from './presentation.js';
 import {renderTaskDetail} from './task_detail_page.js';
-import {text, button, row, checkbox, stamp, localDeadlineLabels} from './page_helpers.js';
-import {ref, query, task, execute, completionCommand, setCompletion, applyMove} from './task_actions.js';
+import {text, button, row, checkbox, stamp, localDeadlineLabels, monthDay, note, group, iconRow, hero, footer, keyValue, pageInset} from './page_helpers.js';
+import {ref, query, task, execute, completionCommand, setCompletion, applyMove, undoBatch} from './task_actions.js';
 
 const keyedList = (scope, children) => ({
   type: 'keyedList', key: scope, scope,
@@ -12,7 +12,7 @@ const keyedList = (scope, children) => ({
     key: `${scope}:${child.key ? 'item:' + child.key : 'static:' + index}`,
   })),
 });
-const panel = async (page, context = {}) => ui.panel('app.planner.' + page, {...context, editorSession: await ids.new()}, {adaptive: true, wide: 'center', heightFactor: page === 'quickAdd' ? .94 : page === 'taskDetail' ? .78 : .88});
+const panel = async (page, context = {}) => ui.panel('app.planner.' + page, {...context, editorSession: await ids.new()}, {adaptive: true, wide: 'center', heightFactor: page === 'quickAdd' ? .94 : page === 'taskDetail' ? .83 : .88});
 const summary = t => t?.dueDate ? `${t.dueDate.slice(5).replace('-', '/')}截止` : '';
 const duration = minutes => minutes >= 60 ? `耗时${Math.round(minutes / 6) / 10}h` : `耗时${minutes}min`;
 const rangeLabel = (start, end) => start.slice(0, 7) === end.slice(0, 7)
@@ -73,31 +73,26 @@ function displayPreference(value) {
   } catch (_) { return {...displayDefaults}; }
 }
 function displayHours(preference, blocks, startDate, days) {
-  let startMinute = 480, endMinute = 1320;
-  if (preference.mode === 'full') { startMinute = 0; endMinute = 1440; }
-  else if (preference.mode === 'manual') {
-    startMinute = displayMinute(preference.start); endMinute = displayMinute(preference.end, true);
-  } else {
-    let first = 1440, last = 0;
-    // Intersect each occupation with each displayed calendar day. Overnight
-    // tasks include the late and early portions, including midnight boundaries.
+  if (preference.mode === 'manual') {
+    const startMinute = displayMinute(preference.start);
+    return {startMinute, endMinute: displayMinute(preference.end, true), initialMinute: startMinute,
+      displayHoursLabel: `手动 ${preference.start}–${preference.end}`};
+  }
+  if (preference.mode === 'auto') {
+    // The host combines visible occupancy with the measured scroll viewport.
+    let first = 1440;
     for (let i = 0; i < days; i++) {
       const date = add(startDate, i), next = add(date, 1);
       for (const block of blocks) {
         if (block.start >= next + 'T00:00:00' || block.end <= date + 'T00:00:00') continue;
         const from = block.start.slice(0, 10) < date ? 0 : displayMinute(block.start.slice(11, 16));
-        const to = block.end.slice(0, 10) > date ? 1440 : displayMinute(block.end.slice(11, 16));
-        first = Math.min(first, from); last = Math.max(last, to);
+        first = Math.min(first, from);
       }
     }
-    if (last > first) {
-      startMinute = Math.max(0, Math.floor((first - 60) / 60) * 60);
-      endMinute = Math.min(1440, Math.ceil((last + 60) / 60) * 60);
-    }
+    const initialMinute = first === 1440 ? 480 : Math.max(0, Math.floor((first - 60) / 60) * 60);
+    return {startMinute: 0, endMinute: 1440, initialMinute, smartHours: true, displayHoursLabel: '自动 · 智能时段'};
   }
-  const label = minute => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-  return {startMinute, endMinute, initialMinute: preference.mode === 'full' ? 540 : startMinute,
-    displayHoursLabel: `${{auto: '自动', manual: '手动', full: '全天'}[preference.mode]} ${label(startMinute)}–${label(endMinute)}`};
+  return {startMinute: 0, endMinute: 1440, initialMinute: 540, displayHoursLabel: '全天 00:00–24:00'};
 }
 
 export async function renderPlanner({state = {}, event, context = {}, formValues = {}} = {}) {
@@ -108,6 +103,18 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   const today = await clock.today(a.timezone);
   if (context.pageId === 'app.planner.quickAdd') return renderCreation(state, event, formValues, a);
   if (context.pageId === 'app.planner.taskDetail') return renderTaskDetail(state, event, context, formValues, a);
+  const route = {
+    'app.planner.history': 'history', 'app.planner.cancelled': 'cancelledView', 'app.planner.auto': 'chooseAuto',
+  }[context.pageId];
+  if (route && !state.detailRoute) {
+    state.detailRoute = true;
+    state[route] = true;
+    if (route === 'chooseAuto') {
+      state.startDate ||= context.startDate;
+      state.days ||= context.days;
+      state.selected ||= context.selected;
+    }
+  }
   state.displayHours = displayPreference(await ui.preferences.get(displayKey));
   state.zoom = zoomIndex(await ui.preferences.get(zoomKey));
   const savedScale = await ui.preferences.get(pinchKey);
@@ -123,7 +130,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   const candidateLimit = 100;
   try {
     if (event?.type === 'detailSettings') {
-      await panel('displaySettings');
+      await ui.navigate('app.planner.displaySettings');
       state.details = detailsPreference(await ui.preferences.get(detailsKey));
     }
     if (event?.type === 'detailPreference') {
@@ -141,7 +148,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       const previous = state.displayHours;
       const mode = await ui.dialog({title: '表格显示时段', fields: [{key: 'mode', type: 'select', label: '显示方式', value: previous.mode,
         presentation: 'grid', submitOnSelect: true, options: [
-          {value: 'auto', label: '自动按任务'}, {value: 'manual', label: '手动设置'}, {value: 'full', label: '显示全天'},
+          {value: 'auto', label: '智能时段'}, {value: 'manual', label: '手动设置'}, {value: 'full', label: '显示全天'},
         ]}]});
       if (mode && ['auto', 'manual', 'full'].includes(mode.mode)) {
         let next = {...previous, mode: mode.mode};
@@ -168,9 +175,12 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       if (saved) await ui.notify({message: current.completedAt ? '任务已重新打开' : '任务已完成，已记录完成时间', kind: 'success'});
     }
     if (event?.type === 'openProject') await ui.navigate('app.tasks.directory', {projectId:event.projectId,folderId:event.folderId,focusTaskId:event.taskId});
-    if (event?.type === 'detail') await panel('taskDetail', {taskId: event.id});
+    if (event?.type === 'detail') {
+      if (state.cancelledView) await ui.navigate('app.planner.taskDetail', {taskId: event.id});
+      else await panel('taskDetail', {taskId: event.id});
+    }
     if (event?.type === 'editTime') await panel('taskDetail', {taskId: event.id, step: 'time'});
-    if (event?.type === 'tools') await panel('tools', {screen: event.screen || 'rules'});
+    if (event?.type === 'tools') await ui.navigate('app.planner.tools', {screen: event.screen || 'rules'});
     if (event?.type === 'today') await jumpDate(state, today);
     if (event?.type === 'timelineViewport') {
       day(event.startDate);
@@ -186,7 +196,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       })) await ui.notify({message: '任务已恢复', kind: 'success'});
     }
     if (event?.type === 'chooseAuto') { state.chooseAuto = true; delete state.autoPreview; }
-    if (event?.type === 'occurrence') await panel('editor', {candidate: event.candidate});
+    if (event?.type === 'occurrence') await ui.navigate('app.planner.editor', {candidate: event.candidate});
     if (event?.type === 'onlyDeadline') { state.onlyDeadline = event.value ?? !state.onlyDeadline; state.candidateOffset = 0; }
     if (event?.type === 'zoom') {
       if (event.delta !== -1 && event.delta !== 1) throw Error('请选择放大或缩小时间轴');
@@ -215,34 +225,53 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
       state.days = event.days; state.candidateOffset = 0;
       await saveViewport(state);
     }
+    if (event?.type === 'openSummary' && ['history', 'cancelled', 'auto'].includes(event.page)) {
+      await ui.navigate('app.planner.' + event.page, event.page === 'auto'
+        ? {startDate: state.startDate, days: state.days, selected: state.selected} : {});
+    }
     if (event?.type === 'history') state.history = !state.history;
-    if (event?.type === 'undo') await execute('batch.undo', {id: event.id});
+    if (event?.type === 'undo') await undoBatch(event.id, a.timezone);
     if (event?.type === 'auto') {
-      const elapsedDays = Math.max(0, Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(state.startDate + 'T00:00:00Z')) / 86400000));
-      if (elapsedDays >= state.days) throw Error('当前可见日期均已过去，请回到今天后自动安排');
+      const endDate = add(state.startDate, state.days - 1);
+      const startDate = state.startDate < today && today <= endDate ? today : state.startDate;
+      const days = Math.round((Date.parse(endDate) - Date.parse(startDate)) / 86400000) + 1;
+      state.autoPreview = await query('plan.preview', {startDate, days, ...(state.selected.length ? {selectedIds: state.selected} : {})});
       state.chooseAuto = false;
-      state.autoPreview = await query('plan.preview', {startDate: add(state.startDate, elapsedDays), days: state.days - elapsedDays, ...(state.selected.length ? {selectedIds: state.selected} : {})});
       state.autoKey = await ids.new();
+      delete state.autoPlanId;
+      if (state.autoPreview.confirmable && state.autoPreview.assigned.length) {
+        const plan = await services.prepare(ref('batch.apply'), {batchKey: state.autoKey, preview: state.autoPreview});
+        state.autoPlanId = plan.planId;
+      }
     }
     if (event?.type === 'confirmAuto' && state.autoPreview) {
-      const saved = await execute('batch.apply', {batchKey: state.autoKey, preview: state.autoPreview});
-      if (saved) { delete state.autoPreview; state.selected = []; }
+      const saved = state.autoPlanId && await ui.review(state.autoPlanId) && await services.commit(state.autoPlanId);
+      if (saved) {
+        delete state.autoPreview;
+        state.selected = [];
+        if (state.detailRoute) await ui.navigate('app.planner.home');
+      }
     }
-    if (event?.type === 'dismissAuto') delete state.autoPreview;
+    if (event?.type === 'dismissAuto') {
+      delete state.autoPreview;
+      if (state.detailRoute) await ui.navigate('app.planner.home');
+    }
     if (event?.type === 'move') {
       // Keep the requested position after a validation failure so it can be retried.
       state.moveIntent = {...event, expectedTasks: {...event.expectedTasks,
         ...(event.targetId && state.boardVersions?.[event.targetId] ? {[event.targetId]: state.boardVersions[event.targetId]} : {})}};
-      if (await applyMove(state.moveIntent, a)) delete state.moveIntent;
     }
-    if (event?.type === 'retryMove' && state.moveIntent) { if (await applyMove(state.moveIntent, a)) delete state.moveIntent; }
+    if ((event?.type === 'move' || event?.type === 'retryMove') && state.moveIntent) {
+      await applyMove(state.moveIntent, a);
+      delete state.moveIntent;
+    }
     if (event?.type === 'dismissMove') delete state.moveIntent;
     delete state.error;
   } catch (e) { state.error = String(e); }
   // Summary pages do not need current board positions or candidate projection.
   // Undo and apply still validate current tasks in their command services.
-  if (context.pageId === 'app.planner.displaySettings') return {state, header: {title: '详情显示'}, tree: detailSettingsContent(state)};
-  if (!loadRange && state.history) return plannerPage(state, await historyContent(state));
+  if (context.pageId === 'app.planner.displaySettings') return {state, header: {title: '详情显示', minHeight: 65, compact: true, titleStyle: 'large'}, tree: detailSettingsContent(state)};
+  if (!loadRange && state.history) return plannerPage(state, await historyContent(state, a.timezone));
   if (!loadRange && state.cancelledView) return plannerPage(state, await cancelledContent(state, a));
   if (!loadRange && state.autoPreview) return plannerPage(state, previewContent(state));
   const boardInput = () => ({...(loadRange || {startDate: add(state.startDate, -7), days: 21}), candidateOffset: state.candidateOffset, candidateLimit, onlyDeadline: !!state.onlyDeadline});
@@ -310,18 +339,23 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
   const visibleHours = displayHours(state.displayHours, blocks, loadRange?.startDate || state.startDate, loadRange?.days || state.days);
   let content;
   if (!loadRange && state.chooseAuto) {
-    content = keyedList('planner:chooseAuto', [
-      text('选择参与自动安排的任务；无截止任务仅在明确选中后参与。'),
-      ...(state.error ? [text(state.error)] : []),
-      ...pending.map(c => ({...checkbox(c.id, `${c.title} · ${summary(c.task) || duration(c.estimatedMinutes || a.defaultMinutes)}`, state.selected.includes(c.id), {type: 'select', id: c.id}), key: 'select:' + c.id})),
+    const selectedCount = state.selected.length;
+    const choices = pending.map(c => ({
+      ...checkbox('select:' + c.id, c.title, state.selected.includes(c.id), {type: 'select', id: c.id}),
+      minHeight: 64, subtitle: `${c.estimatedMinutes || a.defaultMinutes} 分钟 · ${c.task?.dueDate ? '截止 ' + monthDay(c.task.dueDate) : c.ruleId ? '规划规则' : '无截止日期'}`,
+    }));
+    content = {type: 'column', key: 'planner:chooseAuto', children: [
+      ...(state.error ? [{type: 'notice', tone: 'warning', text: state.error}] : []),
+      group('待安排', choices.length ? choices : [row('暂无待安排任务')], selectedCount
+        ? {action: {label: '清空选择', event: {type: 'clearSelection'}}} : {count: data.candidateTotal + ' 项'}),
       ...(data.candidateTotal > candidateLimit ? [
-        text(`候选 ${state.candidateOffset + 1}–${state.candidateOffset + pending.length} / ${data.candidateTotal}`),
+        note(`候选 ${state.candidateOffset + 1}–${state.candidateOffset + pending.length} / ${data.candidateTotal}`),
         ...(state.candidateOffset ? [button('上一页候选', {type: 'candidatePage', offset: Math.max(0, state.candidateOffset - candidateLimit)})] : []),
         ...(data.hasMoreCandidates ? [button('下一页候选', {type: 'candidatePage', offset: state.candidateOffset + candidateLimit})] : []),
       ] : []),
-      ...(selectedText ? [text(selectedText), button('清空选择', {type: 'clearSelection'})] : []),
-      button(state.selected.length ? `预览安排（${state.selected.length}项）` : '预览有截止及规则任务', {type: 'auto'}, 'filled'),
-    ]);
+      ...(selectedCount && state.selected.some(id => !pending.some(c => c.id === id)) ? [note(selectedText)] : []),
+      note('有截止日期或来自规则的任务可直接预览；没有截止日期的任务需手动选中。'),
+    ], ...footer(button(selectedCount ? `预览安排（${selectedCount} 项）` : '预览有截止及规则任务', {type: 'auto'}, 'filled'))};
   } else content = {
     type: 'plannerBoard', key: 'planner:board', candidates, blocks,
     quickAdjustment: quickAdjustmentContract,
@@ -355,13 +389,17 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
 
 function plannerPage(state, content, displayHoursLabel = '') {
   const alternate = state.history || state.cancelledView || state.autoPreview || state.chooseAuto;
+  const historyAction = {label: '操作历史', icon: 'history', presentation: 'menu', event: {type: 'openSummary', page: 'history'}};
+  const cancelledAction = {label: '已取消任务', icon: 'archive', presentation: 'menu', event: {type: 'openSummary', page: 'cancelled'}};
+  const batchesAction = {label: '批量任务', icon: 'layers', presentation: 'menu', event: {type: 'batches'}};
+  const recordActions = state.cancelledView ? [historyAction, batchesAction] : state.history ? [cancelledAction, batchesAction] : [];
   return {state, header: {compact: true, title: state.cancelledView ? '已取消任务' : state.history ? '操作历史' : state.autoPreview ? '安排预览' : state.chooseAuto ? '自动安排' : '任务规划',
     ...(!alternate ? {layout: 'plannerTimeline'} : {}),
-    ...(alternate ? {backEvent: {type: 'board'}} : {}), actions: alternate ? [] : [
+    ...(alternate ? {titleStyle: 'large', minHeight: 65,
+      ...(state.detailRoute ? {backIcon: 'chevron', ...(state.autoPreview ? {backEvent: {type: 'chooseAuto'}} : {})} : {backEvent: {type: 'board'}})} : {}), actions: alternate ? recordActions : [
     {label: '新建', icon: 'add', presentation: 'inline', iconOnly: true, overflowOnly: true, event: {type: 'add'}},
-    {label: '批量任务', icon: 'layers', presentation: 'menu', event: {type: 'batches'}},
-    {label: '操作历史', icon: 'history', presentation: 'menu', event: {type: 'history'}},
-    {label: '已取消任务', icon: 'archive', presentation: 'menu', event: {type: 'cancelledTasks'}},
+    {label: '自动安排', icon: 'schedule', presentation: 'menu', event: {type: 'openSummary', page: 'auto'}},
+    batchesAction, historyAction, cancelledAction,
     {label: '视图与显示', icon: 'calendar', presentation: 'menu', separatorBefore: true, children: [
       {kind: 'choiceGrid', label: '显示列数', children: visibleDayCounts.map(days => ({label: `${days}列`, selected: state.days === days, event: {type: 'periodShortcut', days}}))},
       {label: '跳转日期…', icon: 'dateRange', event: {type: 'period'}},
@@ -382,69 +420,79 @@ function plannerPage(state, content, displayHoursLabel = '') {
 }
 
 function detailSettingsContent(state) {
-  const option = (key, label) => checkbox('detail:' + key, label, state.details[key], {type: 'detailPreference', key});
-  return keyedList('planner:details', [
-    text('所有课程共用，设置自动保存。标题与时间始终显示。'),
-    ...(state.error ? [{type: 'notice', text: state.error}] : []),
-    {type: 'card', children: [text('课程卡片'), option('courseLocation', '显示地点'), option('courseTeacher', '显示老师'), text('空间不足时省略，可选中查看完整内容。')]},
-    {type: 'card', key: 'coursePreview', tone: 'soft', children: [
-      {...text('课程卡片预览'), style: 'caption', color: 'muted'},
-      {...text('高等数学'), weight: 'semibold'},
-      ...(state.details.courseLocation ? [text('教一 302')] : []),
-      ...(state.details.courseTeacher ? [text('王老师')] : []),
-      {...text('08:00—09:35'), style: 'caption', color: 'muted'},
-    ]},
-    {type: 'card', children: [text('选中后的详情'), option('location', '地点'), option('teacher', '老师'), option('source', '来源'), option('gaps', '空闲时段')]},
-    {type: 'card', key: 'selectionPreview', variant: 'outlined', children: [
-      {...text('选中详情预览'), style: 'caption', color: 'muted'},
-      {...text('高等数学'), weight: 'semibold'}, text('08:00—09:35 · 1小时35分钟'),
-      ...(state.details.location ? [text('地点 教一 302')] : []),
-      ...(state.details.teacher ? [text('老师 王老师')] : []),
-      ...(state.details.source ? [text('来源 课程')] : []),
-      ...(state.details.gaps ? [text('空闲 09:35—10:00')] : []),
-    ]},
-    text('双指张开或合拢可缩放时间轴。拖动按5分钟调整，精确时间请手动编辑。'),
-    button('恢复默认', {type: 'resetDetails'}, 'text'),
-  ]);
+  const option = (key, label, icon) => ({...checkbox('detail:' + key, label, state.details[key], {type: 'detailPreference', key}), minHeight: icon ? 54 : 50, icon});
+  const locationTeacher = [state.details.location && '教一 302', state.details.teacher && '王老师'].filter(Boolean).join(' · ');
+  const sourceGaps = [state.details.source && '课程', state.details.gaps && '09:35–10:00'].filter(Boolean).join(' · ');
+  const cardDetails = ['08:00–09:35', state.details.courseLocation && '教一 302', state.details.courseTeacher && '王老师'].filter(Boolean);
+  return {type: 'column', key: 'planner:details', ...pageInset([
+    ...(state.error ? [{type: 'notice', tone: 'warning', text: state.error}] : []),
+    group('课程卡片', [option('courseLocation', '显示地点', 'location'), option('courseTeacher', '显示老师', 'school')]),
+    {...hero('高等数学', cardDetails.join(' · '), 'school'), key: 'planner:details:item:coursePreview'},
+    group('选中后的详情', [option('location', '地点'), option('teacher', '老师'), option('source', '来源'), option('gaps', '空闲时段')]),
+    {...group('选中详情预览', [
+      iconRow('高等数学', '08:00–09:35 · 1 小时 35 分钟', undefined, 'school'),
+      ...(locationTeacher ? [keyValue([state.details.location && '地点', state.details.teacher && '老师'].filter(Boolean).join('／'), locationTeacher)] : []),
+      ...(sourceGaps ? [keyValue([state.details.source && '来源', state.details.gaps && '空闲'].filter(Boolean).join('／'), sourceGaps)] : []),
+    ]), key: 'planner:details:item:selectionPreview'},
+  ]), ...footer(button('恢复默认', {type: 'resetDetails'}, 'outlined'))};
 }
 
 async function cancelledContent(state, a) {
   const tasks = await query('task.cancelled.list');
-  const positions = await clock.toLocalMany(tasks.filter(t => t.plannedStartAt).flatMap(t => [
-    {utc: t.plannedStartAt, zone: a.timezone}, {utc: t.plannedEndAt, zone: a.timezone},
-  ]));
+  const planned = tasks.filter(t => t.plannedStartAt);
+  const positions = [];
+  for (let offset = 0; offset < planned.length; offset += 128) {
+    positions.push(...await clock.toLocalMany(planned.slice(offset, offset + 128).flatMap(t => [
+      {utc: t.plannedStartAt, zone: a.timezone}, {utc: t.plannedEndAt, zone: a.timezone},
+    ])));
+  }
   let index = 0;
-  return keyedList('planner:cancelled', [
-    {type: 'notice', text: tasks.length ? `${tasks.length} 项已取消 · 任务和原安排均已保留` : '暂无已取消的任务'},
-    ...(state.error ? [text(state.error)] : []),
-    ...tasks.map(t => {
-      const start = t.plannedStartAt ? positions[index++] : null, end = start ? positions[index++] : null;
-      return {type: 'card', key: t.id, children: [
-        row(t.title, start ? `已取消 · 原安排 ${start.date} ${start.time}—${end.date === start.date ? '' : end.date + ' '}${end.time}` : '已取消 · 尚未安排时间', {type: 'detail', id: t.id}),
-        button('恢复任务', {type: 'restoreTask', id: t.id, expectedUpdatedAt: t.updatedAt}, 'text'),
-      ]};
-    }),
-  ]);
+  const rows = tasks.map((t, rowIndex) => {
+    const start = t.plannedStartAt ? positions[index++] : null, end = start ? positions[index++] : null;
+    const subtitle = start ? `原安排 · ${monthDay(start.date)} ${start.time}–${end.date === start.date ? '' : monthDay(end.date) + ' '}${end.time}` : '尚未安排时间';
+    return {type: 'groupItem', key: t.id, position: tasks.length === 1 ? 'only' : rowIndex === 0 ? 'first' : rowIndex === tasks.length - 1 ? 'last' : 'middle',
+      child: {type: 'inset', padding: [0, 0, 14, 0], children: [{type: 'row', layout: 'flex', children: [
+        {...iconRow(t.title, subtitle, {type: 'detail', id: t.id}, 'calendarRemove', {trailing: false}), flex: 1},
+        {...button('恢复任务', {type: 'restoreTask', id: t.id, expectedUpdatedAt: t.updatedAt}, 'text'), presentation: 'link'},
+      ]}]}};
+  });
+  return {...keyedList('planner:cancelled', [
+    ...(state.error ? [note(state.error)] : []),
+    ...(rows.length ? [{type: 'sectionHeader', title: '已取消', compact: true, count: rows.length + ' 项', countPosition: 'end'},
+      ...rows, {type: 'inset', padding: [0, 14, 0, 0], children: [note('点任务名称可查看详情。')]}] : [{type: 'emptyState', title: '暂无已取消的任务', icon: 'calendarRemove', iconSurface: true}]),
+  ]), spacing: 0};
 }
 
-async function historyContent(state) {
+async function historyContent(state, timezone) {
   const [history, contract] = await Promise.all([query('operation.list'), data.contract('journal')]);
-  return keyedList('planner:history', [
-    text(`最近${contract.settings.retainedRecords}次操作 · 后续修改或完成将阻止整体撤销`),
-    ...(state.error ? [text(state.error)] : []),
-    ...history.map(b => ({...row(`${b.createdAt} · ${b.changeCount}项`, b.undone ? '已撤销' : '点击撤销整次操作', b.undone ? undefined : {type: 'undo', id: b.id}), key: b.id})),
-    ...(!history.length ? [text('暂无操作记录')] : []),
-  ]);
+  const moments = [];
+  for (let offset = 0; offset < history.length; offset += 256) {
+    moments.push(...await clock.toLocalMany(history.slice(offset, offset + 256).map(op => ({utc: op.createdAt, zone: timezone}))));
+  }
+  const byDate = new Map();
+  history.forEach((op, index) => {
+    const {date, time} = moments[index];
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date).push({...iconRow(`${time} · ${op.changeCount} 项变更`, op.undone ? '已撤销' : '撤销整次操作',
+      op.undone ? undefined : {type: 'undo', id: op.id}, 'history'), key: op.id});
+  });
+  return {type: 'column', key: 'planner:history', children: [
+    ...(state.error ? [note(state.error)] : []),
+    ...Array.from(byDate, ([date, rows]) => group(monthDay(date), rows)),
+    ...(!history.length ? [{type: 'emptyState', title: '暂无操作记录', text: '调整安排后，可在这里查看最近的操作。', icon: 'history', iconSurface: true, padding: 12}] : []),
+    note(`保留最近 ${contract.settings.retainedRecords} 次操作。任务在之后被修改或完成时，将无法整体撤销。`),
+  ]};
 }
 
 function previewContent(state) {
-  const p = state.autoPreview;
-  return keyedList('planner:auto', [
-    text(`建议预览 · ${p.assigned.length}项安排 · ${p.unassigned.length}项待安排`),
-    ...(state.error ? [text(state.error)] : []),
-    ...[...p.warnings, ...p.conflicts].map(text),
-    ...p.assigned.map(c => ({...row(c.title, `${c.date} ${c.start}—${c.end}`), key: c.id})),
-    ...p.unassigned.map(c => ({...row(c.title, c.reason, {type: 'occurrence', candidate: c}), key: c.id})),
-    button('确认安排', {type: 'confirmAuto'}, 'filled'), button('返回图形规划', {type: 'dismissAuto'}),
-  ]);
+  const p = state.autoPreview, date = p.assigned[0]?.date || p.input?.startDate || state.startDate;
+  const multiDay = p.assigned.some(c => c.date !== date);
+  return {type: 'column', key: 'planner:auto', ...(state.autoPlanId ? {planReview: {planId: state.autoPlanId, eventType: 'confirmAuto'}} : {}), children: [
+    hero(multiDay ? rangeLabel(p.input.startDate, add(p.input.startDate, p.input.days - 1)) : `${monthDay(date)} · 周${'一二三四五六日'[weekday(date) - 1]}`,
+      `${p.assigned.length} 项可安排 · ${p.unassigned.length} 项仍待安排`, 'schedule'),
+    ...(state.error ? [{type: 'notice', tone: 'warning', text: state.error}] : []),
+    ...[...p.warnings, ...p.conflicts].map(message => ({type: 'notice', tone: 'warning', text: message})),
+    ...(p.assigned.length ? [group('建议安排', p.assigned.map(c => iconRow(c.title, `${multiDay ? monthDay(c.date) + ' · ' : ''}${c.start}–${c.end} · ${c.estimatedMinutes} 分钟`, undefined, 'schedule')), {count: p.assigned.length + ' 项'})] : []),
+    ...(p.unassigned.length ? [group('仍待安排', p.unassigned.map(c => iconRow(c.title, c.reason, {type: 'occurrence', candidate: c}, 'warning')), {count: p.unassigned.length + ' 项'})] : []),
+  ], ...footer(button('返回图形规划', {type: 'dismissAuto'}, 'outlined'), {...button('确认安排', {type: 'confirmAuto'}, 'filled'), disabled: !state.autoPlanId || !p.confirmable || !p.assigned.length})};
 }

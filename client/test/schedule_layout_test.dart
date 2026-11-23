@@ -380,8 +380,8 @@ void main() {
       await tester.ensureVisible(find.text('保存学期设置'));
       await tester.tap(find.text('保存学期设置'));
       await _settleNative(tester);
-      expect(find.text('确认实际数据变更'), findsOneWidget);
-      await tester.tap(find.text('确认'));
+      expect(find.text('确认变更'), findsNWidgets(2));
+      await tester.tap(find.widgetWithText(FilledButton, '确认变更'));
       await _settleNative(tester);
       final saved = await tester.runAsync(
         () => store.get(
@@ -472,7 +472,7 @@ void main() {
           await _settleNative(tester);
           await tester.tap(find.text('保存显示设置'));
           await _settleNative(tester);
-          await tester.tap(find.text('确认'));
+          await tester.tap(find.widgetWithText(FilledButton, '确认变更'));
           await _settleNative(tester);
           expect(find.text('显示设置已保存'), findsOneWidget);
           await tester.tap(find.byTooltip('关闭显示调整'));

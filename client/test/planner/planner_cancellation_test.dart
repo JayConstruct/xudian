@@ -250,10 +250,10 @@ void main() {
       context: {'taskId': original['id']},
     );
     final texts = nodes(detail['tree']).map((n) => n['text']).toList();
-    expect(texts, contains('已取消 · 2026-10-15 08:00'));
+    expect(texts, containsAll(['已取消', '10月15日 · 08:00']));
     expect(texts, contains('恢复任务'));
-    expect(texts, contains('任务说明\n第二行'));
-    expect(texts, contains('原安排：2026-10-15 09:00—09:30'));
+    expect(nodes(detail['tree']).any((n) => n['subtitle'] == '任务说明\n第二行'), true);
+    expect(nodes(detail['tree']).any((n) => n['title'] == '原安排' && n['trailing'] == '10月15日 · 09:00–09:30'), true);
     expect(texts, isNot(contains('标记已完成')));
     await cancel(await raw(original['id']), false);
     final restored = await raw(original['id']);
@@ -266,7 +266,7 @@ void main() {
 
   test('unscheduled cancellation leaves active candidates and is visible in the cancelled view, including empty state and return', () async {
     final empty = await page(event: {'type': 'cancelledTasks'});
-    expect(nodes(empty['tree']).any((n) => n['text'] == '暂无已取消的任务'), true);
+    expect(nodes(empty['tree']).any((n) => n['title'] == '暂无已取消的任务'), true);
     final task = await create(scheduled: false);
     await cancel(task);
     final board = object(
@@ -277,7 +277,7 @@ void main() {
     expect(object(list['header'])['title'], '已取消任务');
     expect(
       nodes(list['tree']).any(
-        (n) => n['title'] == task['title'] && n['subtitle'] == '已取消 · 尚未安排时间',
+        (n) => n['title'] == task['title'] && n['subtitle'] == '尚未安排时间',
       ),
       true,
     );

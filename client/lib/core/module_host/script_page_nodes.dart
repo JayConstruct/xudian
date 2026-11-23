@@ -494,6 +494,17 @@ extension _ScriptPageNodes on _ScriptPageState {
             .toDouble()
             .clamp(0, 48)
             .toDouble();
+        if (spec['verticalFromWidth'] case final num breakpoint
+            when MediaQuery.sizeOf(uiContext).width >= breakpoint) {
+          return Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: spacing,
+              children: children,
+            ),
+          );
+        }
         if (spec['layout'] == 'flex') {
           final specifications = objects(spec['children']);
           return Row(
@@ -526,12 +537,15 @@ extension _ScriptPageNodes on _ScriptPageState {
             ],
           );
         }
-        return Wrap(
+        final row = Wrap(
           spacing: spacing,
           runSpacing: spacing,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: children,
         );
+        return spec['alignment'] == 'start'
+            ? Align(alignment: AlignmentDirectional.centerStart, child: row)
+            : row;
       case 'grid':
         return ResponsiveContentGrid(children: children);
       case 'segmented':
@@ -563,7 +577,17 @@ extension _ScriptPageNodes on _ScriptPageState {
           children: children,
         );
       case 'notice':
-        return ScriptNotice(text: text, tone: '${spec['tone'] ?? 'info'}');
+        final action = spec['action'] is Map ? object(spec['action']) : null;
+        return ScriptNotice(
+          text: text,
+          tone: '${spec['tone'] ?? 'info'}',
+          action: action == null
+              ? null
+              : TextButton(
+                  onPressed: busy ? null : () => _render(bind(action['event'])),
+                  child: Text('${bind(action['label']) ?? ''}'),
+                ),
+        );
       case 'choiceCard':
         return ScriptChoiceCard(
           key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
@@ -1066,8 +1090,19 @@ extension _ScriptPageNodes on _ScriptPageState {
                 _commandEvent(event, spec['command']);
               };
         final errorColor = Theme.of(uiContext).colorScheme.error;
-        final style = spec['tone'] == 'danger'
+        final baseStyle =
+            spec['presentation'] == 'link' && spec['variant'] == 'text'
             ? appUiButtonStyle.copyWith(
+                alignment: AlignmentDirectional.centerStart,
+                minimumSize: const WidgetStatePropertyAll(Size(48, 30)),
+                padding: const WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 2),
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              )
+            : appUiButtonStyle;
+        final style = spec['tone'] == 'danger'
+            ? baseStyle.copyWith(
                 foregroundColor: WidgetStateProperty.resolveWith(
                   (states) => states.contains(WidgetState.disabled)
                       ? null
@@ -1083,7 +1118,9 @@ extension _ScriptPageNodes on _ScriptPageState {
                       )
                     : null,
               )
-            : appUiButtonStyle;
+            : baseStyle;
+        final link =
+            spec['variant'] == 'text' && spec['presentation'] == 'link';
         final buttonIcon = _icon(spec['icon']);
         final buttonLabel = buttonIcon == null
             ? Text(text)
@@ -1091,8 +1128,8 @@ extension _ScriptPageNodes on _ScriptPageState {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  UiIcon(buttonIcon, size: 20),
-                  const SizedBox(width: 8),
+                  UiIcon(buttonIcon, size: link ? 16 : 20),
+                  SizedBox(width: link ? 6 : 8),
                   Flexible(child: Text(text)),
                 ],
               );
@@ -1107,12 +1144,23 @@ extension _ScriptPageNodes on _ScriptPageState {
         }
         return switch (spec['variant']) {
           'text' => TextButton(
-            style: style,
+            style: link
+                ? style.copyWith(
+                    padding: const WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(horizontal: 2),
+                    ),
+                    textStyle: WidgetStatePropertyAll(
+                      Theme.of(uiContext).textTheme.labelMedium,
+                    ),
+                  )
+                : style,
             onPressed: press,
             child: buttonLabel,
           ),
           'outlined' => OutlinedButton(
-            style: style,
+            style: spec['tone'] == 'neutral'
+                ? AppDesign.modalSecondary(uiContext).merge(style)
+                : style,
             onPressed: press,
             child: buttonLabel,
           ),
@@ -1214,14 +1262,39 @@ extension _ScriptPageNodes on _ScriptPageState {
       case 'checkbox':
         final selected = bind(spec['value']) == true;
         final detail = bind(spec['detail']);
+        final subtitle = bind(spec['subtitle']);
+        final icon = _icon(spec['icon']);
+        final minHeight = (spec['minHeight'] as num?)
+            ?.clamp(32, 240)
+            .toDouble();
         final control = CheckboxListTile(
+          minTileHeight: minHeight,
+          minVerticalPadding: minHeight == null ? null : 4,
+          contentPadding: minHeight == null
+              ? null
+              : const EdgeInsets.symmetric(horizontal: 14),
+          checkboxShape: minHeight == null
+              ? null
+              : RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          checkboxScaleFactor: minHeight == null ? 1 : 1.13,
           controlAffinity: detail == null
               ? ListTileControlAffinity.platform
               : ListTileControlAffinity.leading,
           value: selected,
-          title: Text(text),
-          secondary: detail == null
+          title: Text(
+            text,
+            style: minHeight == null
+                ? null
+                : Theme.of(uiContext).textTheme.titleSmall,
+          ),
+          subtitle: subtitle == null
               ? null
+              : Text(
+                  '$subtitle',
+                  style: Theme.of(uiContext).textTheme.bodySmall,
+                ),
+          secondary: detail == null
+              ? (icon == null ? null : UiIcon(icon, size: 20))
               : ConstrainedBox(
                   constraints: BoxConstraints(
                     maxWidth: MediaQuery.sizeOf(uiContext).width * .33,
@@ -1563,7 +1636,9 @@ extension _ScriptPageNodes on _ScriptPageState {
                         )
                       : const InputDecoration())
                   .copyWith(
-                    labelText: search || labeled || code ? null : text,
+                    labelText: search || labeled || code || text.isEmpty
+                        ? null
+                        : text,
                     hintText: spec['hintText'] != null
                         ? '${bind(spec['hintText'])}'
                         : search
@@ -1685,7 +1760,8 @@ extension _ScriptPageNodes on _ScriptPageState {
           clearable: spec['clearable'] == true,
           editable: spec['editable'] != false && kind != TemporalInputKind.time,
           externalLabel:
-              kind == TemporalInputKind.date &&
+              (kind == TemporalInputKind.date ||
+                  kind == TemporalInputKind.time) &&
               spec['presentation'] == 'labeled',
           minDate: spec['minDate'] as String?,
           maxDate: spec['maxDate'] as String?,

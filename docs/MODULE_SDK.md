@@ -1,6 +1,6 @@
 # JavaScript 模块 SDK v1
 
-当前宿主 API 为 `1.55.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](ui/UI_PACKS.md)。
+当前宿主 API 为 `1.57.0`。公共 UI 契约、声明式 UI 包和全局／模块选择见 [公共 UI 与界面包](ui/UI_PACKS.md)。
 
 新增模块使用 `formatVersion: 3`、`packageFormat: 2`，按所用能力声明最低 `hostApi`。组件/服务的 `@1` 主版本与宿主 API 版本分别管理，各专题完整契约保留兼容规则。
 

@@ -23,6 +23,7 @@ import 'planner_source_hatching.dart';
 export 'planner_board_types.dart';
 
 part 'planner_board_scroll.dart';
+part 'planner_board_hours.dart';
 part 'planner_board_painters.dart';
 part 'planner_board_drag_feedback.dart';
 
@@ -128,7 +129,150 @@ class _PlannerBoardState extends State<PlannerBoard>
   final _clockElapsed = Stopwatch();
   Timer? _clockTimer;
   double _candidateScrollOffset = 0;
-  final _vertical = ScrollController();
+  final _vertical = _PlannerHoursScrollController();
+  final _hoursPull = ValueNotifier(0.0);
+  static final _fullDaySessions = Expando<bool>();
+  Object? _hoursSession;
+  int _smartStart = 0, _smartEnd = 1440;
+  bool _hoursScheduled = false;
+  Object? _hoursInputs;
+  bool get _smartHours => _timeline && widget.options['smartHours'] == true;
+  bool get _boundedHours =>
+      _smartHours && _fullDaySessions[_hoursSession!] != true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _hoursSession =
+        Navigator.maybeOf(context, rootNavigator: true) ??
+        WidgetsBinding.instance;
+  }
+
+  void _scheduleHours() {
+    if (!_boundedHours || _hoursScheduled || _pinching) return;
+    _hoursScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _hoursScheduled = false;
+      if (!mounted ||
+          !_boundedHours ||
+          !_vertical.hasClients ||
+          _timelineRepositioning ||
+          _pinching ||
+          !_horizontal.hasClients) {
+        return;
+      }
+      final left = _leftDate;
+      if (left == null) return;
+      final partial = (_horizontal.offset / _columnWidth + .001) % 1 > .002;
+      final count = _visibleDayCount + (partial ? 1 : 0);
+      final height = math.max(
+        1.0,
+        _vertical.position.viewportDimension - widget.bottomInset,
+      );
+      final blocks = _blocks;
+      final inputs = (left, count, height, _scale, blocks);
+      if (inputs == _hoursInputs) return;
+      final top = _startMinute + _vertical.offset / _scale;
+      var low = top.clamp(0.0, 1440.0);
+      var high = (top + height / _scale).clamp(0.0, 1440.0);
+      for (var index = 0; index < count; index++) {
+        final day = left.add(Duration(days: index));
+        if (_timelineWindow?.isLoaded(day) == false) return;
+        final next = day.add(const Duration(days: 1));
+        for (final block in blocks) {
+          final start = _date(block['start']), end = _date(block['end']);
+          if (start == null ||
+              end == null ||
+              !start.isBefore(next) ||
+              !end.isAfter(day)) {
+            continue;
+          }
+          low = math.min(low, start.difference(day).inMinutes - 60.0);
+          high = math.max(
+            high,
+            end.difference(day).inMilliseconds / 60000 + 60,
+          );
+        }
+      }
+      _hoursInputs = inputs;
+      _setHours(
+        ((low / 60).floor() * 60).clamp(0, 1380),
+        ((high / 60).ceil() * 60).clamp(60, 1440),
+      );
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _setHours(int start, int end) {
+    final shift = (_smartStart - start) * _scale;
+    if (start == _smartStart && end == _smartEnd) return;
+    if (shift != 0 && _vertical.hasClients) {
+      _vertical.anchoredOffset =
+          (_vertical.anchoredOffset ?? _vertical.offset) + shift;
+    }
+    if (_gesturePointer != null) _gestureScroll += shift;
+    setState(() {
+      _smartStart = start;
+      _smartEnd = end;
+      _layout.clear();
+    });
+  }
+
+  void _addHoursPull(double delta) {
+    if (!_boundedHours || delta == 0) return;
+    if ((delta < 0 && _smartStart == 0) || (delta > 0 && _smartEnd == 1440)) {
+      _hoursPull.value = 0;
+      return;
+    }
+    final previous = _hoursPull.value;
+    final distance = (previous.sign == delta.sign ? previous : 0.0) + delta;
+    if (distance.abs() < _hoursRevealDistance) {
+      _hoursPull.value = distance;
+      return;
+    }
+    _hoursPull.value = 0;
+    _setHours(0, 1440);
+    _fullDaySessions[_hoursSession!] = true;
+    HapticFeedback.lightImpact();
+  }
+
+  bool _hoursScroll(ScrollNotification event) {
+    if (!_boundedHours ||
+        event.depth != 0 ||
+        event.metrics.axis != Axis.vertical ||
+        _dragActive.value ||
+        _pinching) {
+      return false;
+    }
+    if (event is OverscrollNotification && event.dragDetails != null) {
+      _addHoursPull(event.overscroll);
+    } else if (event is ScrollEndNotification ||
+        event is ScrollUpdateNotification) {
+      _hoursPull.value = 0;
+    }
+    return false;
+  }
+
+  void _dragHoursPull(Offset position) {
+    final previous = _pointerPosition, view = _viewport;
+    if (!_boundedHours ||
+        previous == null ||
+        view == null ||
+        !_vertical.hasClients) {
+      return;
+    }
+    final scroll = _vertical.position;
+    final bottom = view.bottom - widget.bottomInset;
+    final dy = position.dy - previous.dy;
+    if (scroll.extentBefore < .5 && dy < 0 && position.dy < view.top + 92) {
+      _addHoursPull(-math.min(-dy, math.max(0.0, view.top + 92 - position.dy)));
+    } else if (scroll.extentAfter < .5 && dy > 0 && position.dy > bottom - 92) {
+      _addHoursPull(math.min(dy, math.max(0.0, position.dy - (bottom - 92))));
+    } else if (dy != 0) {
+      _hoursPull.value = 0;
+    }
+  }
+
   final _gridKey = GlobalKey();
   final _viewportKey = GlobalKey();
   final _pinchPointers = <int, Offset>{};
@@ -802,9 +946,16 @@ class _PlannerBoardState extends State<PlannerBoard>
   double _number(String key, double fallback, double min, double max) =>
       (widget.options[key] as num? ?? fallback).toDouble().clamp(min, max);
   int get _startMinute =>
-      _focusStart ?? _number('startMinute', 0, 0, 1439).round();
+      _focusStart ??
+      (_boundedHours
+          ? _smartStart
+          : _number('startMinute', 0, 0, 1439).round());
   int get _endMinute {
-    final value = _focusEnd ?? _number('endMinute', 1440, 1, 1440).round();
+    final value =
+        _focusEnd ??
+        (_boundedHours
+            ? _smartEnd
+            : _number('endMinute', 1440, 1, 1440).round());
     return value > _startMinute ? value : 1440;
   }
 
@@ -924,6 +1075,7 @@ class _PlannerBoardState extends State<PlannerBoard>
 
   void _refreshWindow() {
     if (!mounted) return;
+    _scheduleHours();
     final size = _viewport?.size;
     if (size == null) return;
     final x = _horizontal.hasClients ? _horizontal.offset : 0.0;
@@ -1058,7 +1210,16 @@ class _PlannerBoardState extends State<PlannerBoard>
         }
       }
     }
-    if (widget.options['startMinute'] != oldWidget.options['startMinute'] ||
+    final hoursModeChanged =
+        widget.options['smartHours'] != oldWidget.options['smartHours'];
+    if (hoursModeChanged) {
+      _hoursInputs = null;
+      _smartStart = 0;
+      _smartEnd = 1440;
+      _hoursPull.value = 0;
+    }
+    if (hoursModeChanged ||
+        widget.options['startMinute'] != oldWidget.options['startMinute'] ||
         widget.options['endMinute'] != oldWidget.options['endMinute']) {
       final preserveMinute =
           _timeline &&
@@ -1147,6 +1308,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     _header.dispose();
     _candidatesScroll.dispose();
     _vertical.dispose();
+    _hoursPull.dispose();
     _proposal.dispose();
     if (_dragActive.value) widget.onDragActiveChanged?.call(false);
     _dragActive.dispose();
@@ -1179,6 +1341,7 @@ class _PlannerBoardState extends State<PlannerBoard>
   }
 
   void _clearDrag({bool endGesture = true}) {
+    _hoursPull.value = 0;
     if (endGesture) _setDragActive(false);
     _intentTimer?.cancel();
     _scrollTicker.stop();
@@ -1295,8 +1458,7 @@ class _PlannerBoardState extends State<PlannerBoard>
       _scrollTicker.stop();
       return;
     }
-    double edge(double value, double min, double max) {
-      const margin = 44.0;
+    double edge(double value, double min, double max, {double margin = 44}) {
       const speed = 14 / .032;
       if (value < min + margin) {
         return -speed * ((min + margin - value) / margin).clamp(0, 1);
@@ -1324,7 +1486,12 @@ class _PlannerBoardState extends State<PlannerBoard>
     );
     final verticalChanged = scroll(
       _vertical,
-      edge(position.dy, viewport.top, viewport.bottom),
+      edge(
+        position.dy,
+        viewport.top,
+        viewport.bottom - widget.bottomInset,
+        margin: _boundedHours ? 92 : 44,
+      ),
     );
     if (horizontalChanged || verticalChanged) {
       _hover(item, position, fromScroll: true);
@@ -1441,6 +1608,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     final days = _days;
     final duration = _duration(item);
     if (box == null || days.isEmpty || duration == null) return;
+    if (!fromScroll) _dragHoursPull(global);
     _activeItem = item;
     _pointerPosition = global;
     _ensureAutoScroll();
@@ -3739,12 +3907,24 @@ class _PlannerBoardState extends State<PlannerBoard>
                         ),
                         const SizedBox(width: 3),
                         const Icon(Icons.expand_more, size: 18),
+                        if (_smartHours) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              '${_hoursLabel(_startMinute)}–${_hoursLabel(_endMinute)}',
+                              key: const ValueKey('planner-hour-range'),
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
               ),
-              if (outside.isNotEmpty)
+              if (!_smartHours && outside.isNotEmpty)
                 IconButton(
                   key: const ValueKey('planner-outside-indicator'),
                   onPressed: () => _showOutside(outside),
@@ -4877,225 +5057,263 @@ class _PlannerBoardState extends State<PlannerBoard>
                 onPointerMove: _pinchMove,
                 onPointerUp: _pinchUp,
                 onPointerCancel: _pinchUp,
-                child: SizedBox(
+                child: Stack(
                   key: _viewportKey,
-                  child: SingleChildScrollView(
-                    key: const ValueKey('planner-vertical'),
-                    physics: _pinching
-                        ? const NeverScrollableScrollPhysics()
-                        : null,
-                    controller: _vertical,
-                    child: Padding(
-                      padding: EdgeInsets.only(bottom: widget.bottomInset),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 48,
-                            height: gridHeight,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                Positioned.fill(
-                                  child: _PlannerRulerOpacity(
-                                    proposal: _proposal,
-                                    child: Stack(
-                                      clipBehavior: Clip.none,
-                                      children: [
-                                        for (
-                                          var minute = _focusDays == null
-                                              ? ((_startMinute + 59) ~/ 60) * 60
-                                              : ((_startMinute + 4) ~/ 5) * 5;
-                                          minute < _endMinute ||
-                                              (_focusDays != null &&
-                                                  minute == _endMinute);
-                                          minute += _focusDays == null ? 60 : 5
-                                        )
-                                          Positioned(
-                                            key: ValueKey(
-                                              'planner-ruler:$minute',
-                                            ),
-                                            top: minute == _endMinute
-                                                ? math.max(
-                                                    0,
-                                                    gridHeight -
-                                                        scaler.scale(11) * 1.5,
-                                                  )
-                                                : (minute - _startMinute) *
-                                                      _scale,
-                                            left: 2,
-                                            child: Text(
-                                              '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                Positioned.fill(
-                                  child: AnimatedBuilder(
-                                    animation: Listenable.merge([
-                                      _proposal,
-                                      _vertical,
-                                    ]),
-                                    builder: (context, _) => Stack(
-                                      clipBehavior: Clip.none,
-                                      children: _dragRuler(gridHeight),
-                                    ),
-                                  ),
-                                ),
-                                if (_timeline)
-                                  Positioned.fill(child: _currentTimeLabel()),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: NotificationListener<ScrollNotification>(
-                              onNotification: (notification) =>
-                                  _timelineScrollNotification(
-                                    notification,
-                                    _horizontal,
-                                  ),
-                              child: SingleChildScrollView(
-                                key: const ValueKey('planner-horizontal'),
-                                controller: _horizontal,
-                                physics: _pinching
-                                    ? const NeverScrollableScrollPhysics()
-                                    : _timeline
-                                    ? _PlannerDayScrollPhysics(
-                                        _columnWidth,
-                                        dragOrigin: () => _timelineDragOrigin,
-                                      )
-                                    : null,
-                                scrollDirection: Axis.horizontal,
-                                dragStartBehavior: DragStartBehavior.down,
-                                child: DragTarget<BoardItem>(
-                                  onWillAcceptWithDetails: (details) =>
-                                      _movable(details.data),
-                                  onMove: (details) =>
-                                      _hover(details.data, details.offset),
-                                  onLeave: (_) => _clearDrag(endGesture: false),
-                                  onAcceptWithDetails: (details) =>
-                                      _drop(details.data, details.offset),
-                                  builder: (context, _, _) => SizedBox(
-                                    key: _gridKey,
-                                    width: gridWidth,
-                                    height: gridHeight,
-                                    child: AnimatedBuilder(
-                                      animation: Listenable.merge([
-                                        _proposal,
-                                        _validation,
-                                        _window,
-                                      ]),
-                                      child: AnimatedBuilder(
-                                        animation: _window,
-                                        child: RepaintBoundary(
-                                          child: CustomPaint(
-                                            painter: _BoardLines(
-                                              _columnWidth,
-                                              _scale,
-                                              _startMinute,
-                                              scheme.outlineVariant,
-                                              interval: _focusDays == null
-                                                  ? 30
-                                                  : 5,
-                                            ),
-                                          ),
-                                        ),
-                                        builder: (context, lines) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    NotificationListener<ScrollNotification>(
+                      onNotification: _hoursScroll,
+                      child: SingleChildScrollView(
+                        key: const ValueKey('planner-vertical'),
+                        physics: _pinching
+                            ? const NeverScrollableScrollPhysics()
+                            : _smartHours
+                            ? const ClampingScrollPhysics(
+                                parent: AlwaysScrollableScrollPhysics(),
+                              )
+                            : null,
+                        controller: _vertical,
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: widget.bottomInset),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 48,
+                                height: gridHeight,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Positioned.fill(
+                                      child: _PlannerRulerOpacity(
+                                        proposal: _proposal,
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
                                           children: [
                                             for (
-                                              var dayIndex = 0;
-                                              dayIndex < days.length;
-                                              dayIndex++
+                                              var minute = _focusDays == null
+                                                  ? ((_startMinute + 59) ~/
+                                                            60) *
+                                                        60
+                                                  : ((_startMinute + 4) ~/ 5) *
+                                                        5;
+                                              minute < _endMinute ||
+                                                  (_focusDays != null &&
+                                                      minute == _endMinute);
+                                              minute += _focusDays == null
+                                                  ? 60
+                                                  : 5
                                             )
-                                              if (_dashboard &&
-                                                  _today(days[dayIndex]))
-                                                Positioned(
-                                                  left: dayIndex * _columnWidth,
-                                                  top: 0,
-                                                  bottom: 0,
-                                                  width: _columnWidth,
-                                                  child: ColoredBox(
-                                                    color: scheme.primary
-                                                        .withValues(
-                                                          alpha: .025,
-                                                        ),
-                                                  ),
+                                              Positioned(
+                                                key: ValueKey(
+                                                  'planner-ruler:$minute',
                                                 ),
-                                            Positioned.fill(child: lines!),
-                                            ..._timelinePlaceholders(
-                                              gridHeight,
-                                            ),
-                                            ..._segments(_blocks, cardHeight),
-                                            if (_selectedItem != null)
-                                              ..._gapLabels(_selectedItem!),
-                                            ..._segments(
-                                              widget.previewBlocks,
-                                              cardHeight,
-                                              preview: true,
-                                            ),
-                                            ..._currentTimeLine(),
+                                                top: minute == _endMinute
+                                                    ? math.max(
+                                                        0,
+                                                        gridHeight -
+                                                            scaler.scale(11) *
+                                                                1.5,
+                                                      )
+                                                    : (minute - _startMinute) *
+                                                          _scale,
+                                                left: 2,
+                                                child: Text(
+                                                  '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall,
+                                                ),
+                                              ),
                                           ],
                                         ),
                                       ),
-                                      builder: (context, base) => Stack(
-                                        clipBehavior: Clip.hardEdge,
-                                        children: [
-                                          Positioned.fill(child: base!),
-                                          if (_proposal.value != null)
-                                            ..._segments(
-                                              _localPreview(_proposal.value!),
-                                              cardHeight,
-                                              preview: true,
-                                              prefix: 'local',
+                                    ),
+                                    Positioned.fill(
+                                      child: AnimatedBuilder(
+                                        animation: Listenable.merge([
+                                          _proposal,
+                                          _vertical,
+                                        ]),
+                                        builder: (context, _) => Stack(
+                                          clipBehavior: Clip.none,
+                                          children: _dragRuler(gridHeight),
+                                        ),
+                                      ),
+                                    ),
+                                    if (_timeline)
+                                      Positioned.fill(
+                                        child: _currentTimeLabel(),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: NotificationListener<ScrollNotification>(
+                                  onNotification: (notification) =>
+                                      _timelineScrollNotification(
+                                        notification,
+                                        _horizontal,
+                                      ),
+                                  child: SingleChildScrollView(
+                                    key: const ValueKey('planner-horizontal'),
+                                    controller: _horizontal,
+                                    physics: _pinching
+                                        ? const NeverScrollableScrollPhysics()
+                                        : _timeline
+                                        ? _PlannerDayScrollPhysics(
+                                            _columnWidth,
+                                            dragOrigin: () =>
+                                                _timelineDragOrigin,
+                                          )
+                                        : null,
+                                    scrollDirection: Axis.horizontal,
+                                    dragStartBehavior: DragStartBehavior.down,
+                                    child: DragTarget<BoardItem>(
+                                      onWillAcceptWithDetails: (details) =>
+                                          _movable(details.data),
+                                      onMove: (details) =>
+                                          _hover(details.data, details.offset),
+                                      onLeave: (_) =>
+                                          _clearDrag(endGesture: false),
+                                      onAcceptWithDetails: (details) =>
+                                          _drop(details.data, details.offset),
+                                      builder: (context, _, _) => SizedBox(
+                                        key: _gridKey,
+                                        width: gridWidth,
+                                        height: gridHeight,
+                                        child: AnimatedBuilder(
+                                          animation: Listenable.merge([
+                                            _proposal,
+                                            _validation,
+                                            _window,
+                                          ]),
+                                          child: AnimatedBuilder(
+                                            animation: _window,
+                                            child: RepaintBoundary(
+                                              child: CustomPaint(
+                                                painter: _BoardLines(
+                                                  _columnWidth,
+                                                  _scale,
+                                                  _startMinute,
+                                                  scheme.outlineVariant,
+                                                  interval: _focusDays == null
+                                                      ? 30
+                                                      : 5,
+                                                ),
+                                              ),
                                             ),
-                                          if (_proposal.value?.targetId != null)
-                                            ..._segments(
-                                              [
-                                                ?_index(
+                                            builder: (context, lines) => Stack(
+                                              children: [
+                                                for (
+                                                  var dayIndex = 0;
+                                                  dayIndex < days.length;
+                                                  dayIndex++
+                                                )
+                                                  if (_dashboard &&
+                                                      _today(days[dayIndex]))
+                                                    Positioned(
+                                                      left:
+                                                          dayIndex *
+                                                          _columnWidth,
+                                                      top: 0,
+                                                      bottom: 0,
+                                                      width: _columnWidth,
+                                                      child: ColoredBox(
+                                                        color: scheme.primary
+                                                            .withValues(
+                                                              alpha: .025,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                Positioned.fill(child: lines!),
+                                                ..._timelinePlaceholders(
+                                                  gridHeight,
+                                                ),
+                                                ..._segments(
                                                   _blocks,
                                                   cardHeight,
-                                                ).byId[_proposal
-                                                    .value!
-                                                    .targetId],
+                                                ),
+                                                if (_selectedItem != null)
+                                                  ..._gapLabels(_selectedItem!),
+                                                ..._segments(
+                                                  widget.previewBlocks,
+                                                  cardHeight,
+                                                  preview: true,
+                                                ),
+                                                ..._currentTimeLine(),
                                               ],
-                                              cardHeight,
-                                              preview: true,
-                                              prefix: 'target',
-                                              outline: true,
                                             ),
-                                          if (_proposal.value != null)
-                                            ..._gapLabels({
-                                              ..._proposal.value!.item,
-                                              'start': _stamp(
-                                                _proposal.value!.start,
-                                              ),
-                                              'end': _stamp(
-                                                _proposal.value!.end,
-                                              ),
-                                            }, replacements: _servicePreview()),
-                                          ..._segments(
-                                            _servicePreview(),
-                                            cardHeight,
-                                            preview: true,
-                                            prefix: 'service',
                                           ),
-                                        ],
+                                          builder: (context, base) => Stack(
+                                            clipBehavior: Clip.hardEdge,
+                                            children: [
+                                              Positioned.fill(child: base!),
+                                              if (_proposal.value != null)
+                                                ..._segments(
+                                                  _localPreview(
+                                                    _proposal.value!,
+                                                  ),
+                                                  cardHeight,
+                                                  preview: true,
+                                                  prefix: 'local',
+                                                ),
+                                              if (_proposal.value?.targetId !=
+                                                  null)
+                                                ..._segments(
+                                                  [
+                                                    ?_index(
+                                                      _blocks,
+                                                      cardHeight,
+                                                    ).byId[_proposal
+                                                        .value!
+                                                        .targetId],
+                                                  ],
+                                                  cardHeight,
+                                                  preview: true,
+                                                  prefix: 'target',
+                                                  outline: true,
+                                                ),
+                                              if (_proposal.value != null)
+                                                ..._gapLabels(
+                                                  {
+                                                    ..._proposal.value!.item,
+                                                    'start': _stamp(
+                                                      _proposal.value!.start,
+                                                    ),
+                                                    'end': _stamp(
+                                                      _proposal.value!.end,
+                                                    ),
+                                                  },
+                                                  replacements:
+                                                      _servicePreview(),
+                                                ),
+                                              ..._segments(
+                                                _servicePreview(),
+                                                cardHeight,
+                                                preview: true,
+                                                prefix: 'service',
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                    if (_smartHours)
+                      _HoursPullIndicator(
+                        pull: _hoursPull,
+                        dragging: _dragActive,
+                        bottomInset: widget.bottomInset,
+                      ),
+                  ],
                 ),
               ),
             ),

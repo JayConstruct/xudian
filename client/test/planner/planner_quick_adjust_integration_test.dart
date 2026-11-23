@@ -251,7 +251,7 @@ void main() {
         expect(plan.caller.moduleId, 'app.planner');
         expect(plan.writes, isNotEmpty);
         expect(plan.result, isNotNull);
-        expect(confirmation?.message, contains('真实快速调整'));
+        expect(confirmation?.subject, '真实快速调整');
         expect(confirmation?.acknowledgement, isNull);
         return true;
       },

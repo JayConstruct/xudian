@@ -349,11 +349,14 @@ void main() {
             .map((candidate) => candidate['id']),
         contains(pending['id']),
       );
-      expect(options(rendered)['startMinute'], 240);
+      expect(options(rendered)['initialMinute'], 240);
+      expect(options(rendered)['startMinute'], 0);
       expect(options(rendered)['endMinute'], 1440);
       expect(object(options(rendered)['displayHours'])['mode'], 'auto');
-      expect(options(await page())['startMinute'], 480);
-      expect(options(await page())['endMinute'], 1320);
+      final foreground = options(await page());
+      expect(foreground['startMinute'], 0);
+      expect(foreground['endMinute'], 1440);
+      expect(foreground['initialMinute'], 480);
       for (final original in [...tasks, pending]) {
         expect(
           await host.query(
@@ -614,7 +617,7 @@ void main() {
   );
 
   test(
-    'preloaded occupancy is bounded but automatic display uses visible days',
+    'preloaded tasks outside the visible dates do not change the opening hour',
     () async {
       for (final date in [
         '2026-10-04',
@@ -634,8 +637,9 @@ void main() {
         objects(board(rendered)['blocks']).map((block) => block['title']),
         unorderedEquals(['2026-10-05', '2026-10-25']),
       );
-      expect(options(rendered)['startMinute'], 480);
-      expect(options(rendered)['endMinute'], 1320);
+      expect(options(rendered)['startMinute'], 0);
+      expect(options(rendered)['endMinute'], 1440);
+      expect(options(rendered)['initialMinute'], 480);
     },
   );
 
@@ -756,10 +760,19 @@ void main() {
         objects(object(object(rendered['state'])['autoPreview'])['assigned']),
         hasLength(1),
       );
+      final planId = object(rendered['state'])['autoPlanId'];
+      expect(planId, isA<String>());
+      expect(object(rendered['tree'])['planReview'], {'planId': planId, 'eventType': 'confirmAuto'});
+      final reviews = <Object?>[];
+      host.interaction = (_, method, args) async {
+        if (method == 'ui.review') reviews.add(args['planId']);
+        return method == 'ui.review';
+      };
       rendered = await page(
         state: object(rendered['state']),
         event: {'type': 'confirmAuto'},
       );
+      expect(reviews, [planId]);
       expect(object(rendered['state'])['error'], isNull);
       expect(objects(board(rendered)['blocks']).single['title'], '三列内安排');
       expect(options(rendered)['initialDate'], '2026-10-12');
@@ -779,15 +792,30 @@ void main() {
   );
 
   test(
-    'past viewport cannot silently plan outside its visible dates',
+    'automatic planning in a past viewport warns and saves inside the selected dates',
     () async {
-      final rendered = await page(
-        state: {'startDate': '2026-10-01', 'days': 3},
+      await command('planner.availability.save', {
+        'availability': {
+          'timezone': 'Asia/Shanghai',
+          'weekly': {'4': [{'start': '09:00', 'end': '12:00'}]},
+        },
+      });
+      final task = await command('task.create', {
+        'title': '补记上周工作', 'estimatedMinutes': 30,
+      }, module: 'app.tasks');
+      host.interaction = (_, method, args) async => method == 'ui.review';
+      var rendered = await page(
+        state: {'startDate': '2026-10-01', 'days': 3, 'selected': ['task:${task['id']}']},
         event: {'type': 'auto'},
       );
       final state = object(rendered['state']);
-      expect(state['error'], contains('当前可见日期均已过去'));
-      expect(state['autoPreview'], isNull);
+      final preview = object(state['autoPreview']);
+      expect(preview['confirmable'], true);
+      expect(preview['warnings'], contains(contains('开始时间已过去')));
+      expect(objects(preview['assigned']).single['date'], '2026-10-01');
+      rendered = await page(state: state, event: {'type': 'confirmAuto'});
+      expect(object(rendered['state'])['error'], isNull);
+      expect(objects(board(rendered)['blocks']).single['start'], '2026-10-01T09:00:00');
       expect(options(rendered)['initialDate'], '2026-10-01');
       expect(options(rendered)['scrollRequest'], 0);
     },

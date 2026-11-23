@@ -1,5 +1,6 @@
 import 'workspace_sidebar_item.dart';
 import '../features/settings/entry_directory.dart';
+import '../features/settings/settings_widgets.dart' show showSettingsModal;
 import '../core/ui/workspace_interaction.dart';
 import '../core/module_host/plan_confirmation.dart';
 import '../core/ui/native_ui.dart';

@@ -6,12 +6,16 @@ class PlanConfirmation {
     required this.message,
     required this.confirmLabel,
     this.acknowledgement,
+    this.subject,
+    this.section,
+    this.notice,
+    this.icon,
     this.summaryOnly = false,
     this.items = const [],
   });
 
   final String title, message, confirmLabel;
-  final String? acknowledgement;
+  final String? acknowledgement, subject, section, icon, notice;
   final bool summaryOnly;
   final List<({String title, String subtitle})> items;
   static const limits = {
@@ -19,6 +23,10 @@ class PlanConfirmation {
     'message': 6000,
     'confirmLabel': 48,
     'acknowledgement': 1000,
+    'subject': 120,
+    'section': 120,
+    'notice': 2000,
+    'icon': 64,
   };
 
   factory PlanConfirmation.parse(Object? value) {
@@ -68,6 +76,10 @@ class PlanConfirmation {
     }
     return PlanConfirmation._(
       items: List.unmodifiable(items),
+      subject: value.containsKey('subject') ? read('subject') : null,
+      notice: value.containsKey('notice') ? read('notice') : null,
+      section: value.containsKey('section') ? read('section') : null,
+      icon: value.containsKey('icon') ? read('icon') : null,
       summaryOnly: value['summaryOnly'] == true,
       title: read('title'),
       message: read('message'),
@@ -80,6 +92,10 @@ class PlanConfirmation {
 
   Map<String, Object?> toJson() => Map.unmodifiable({
     if (summaryOnly) 'summaryOnly': true,
+    if (subject != null) 'subject': subject,
+    if (section != null) 'section': section,
+    if (notice != null) 'notice': notice,
+    if (icon != null) 'icon': icon,
     if (items.isNotEmpty)
       'items': [
         for (final row in items) {'title': row.title, 'subtitle': row.subtitle},

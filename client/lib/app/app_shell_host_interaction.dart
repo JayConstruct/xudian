@@ -24,14 +24,15 @@ extension _AppShellHostInteraction on _AppShellState {
         final rawConfirmation = details.remove('confirmation');
         return reviewDialog(
           context,
-          '确认实际数据变更',
+          '确认变更',
           details,
+          moduleName: (id) => host?.instances[id]?.package.title ?? id,
           confirmation: rawConfirmation == null
               ? null
               : PlanConfirmation.parse(rawConfirmation),
         );
       case 'packages.review':
-        return reviewDialog(context, '审核模块文件、数据、界面和权限', args);
+        return reviewDialog(context, '审核模块文件、数据、界面和权限', args, packageReview: true);
       case 'grants.request':
         return reviewDialog(context, '授权模块调用（30分钟，最多20次写入）', args);
       case 'browser.capture':
@@ -54,6 +55,13 @@ extension _AppShellHostInteraction on _AppShellState {
           ),
         );
         if (args['presentation'] == 'sheet') {
+          if (args['fullWidthActions'] == true) {
+            return showSettingsModal<Map<String, Object?>>(
+              context: context,
+              compactFrame: true,
+              builder: form,
+            );
+          }
           return showModalBottomSheet<Map<String, Object?>>(
             context: context,
             isScrollControlled: true,
@@ -64,6 +72,7 @@ extension _AppShellHostInteraction on _AppShellState {
         }
         return showDialog<Map<String, Object?>>(
           context: context,
+          useSafeArea: args['presentation'] != 'page',
           barrierColor: args['presentation'] == 'compact'
               ? Theme.of(context).colorScheme.scrim.withValues(alpha: .4)
               : null,

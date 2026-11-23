@@ -87,6 +87,74 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final scale in [1.0, 2.0]) {
+    testWidgets(
+      'paired form fields adapt to text scale $scale and return both values',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(360, 800));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        Map<String, Object?>? result;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppDesign.theme(Brightness.light),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () async {
+                    result = await showDialog<Map<String, Object?>>(
+                      context: context,
+                      builder: (_) => const HostFormDialog(
+                        title: '课表设置',
+                        presentation: 'page',
+                        fullWidthActions: true,
+                        fields: [
+                          {
+                            'key': 'start',
+                            'label': '开始节次',
+                            'type': 'number',
+                            'presentation': 'labeled',
+                            'section': '本次安排',
+                            'row': 'periods',
+                            'value': '1',
+                          },
+                          {
+                            'key': 'end',
+                            'label': '结束节次',
+                            'type': 'number',
+                            'presentation': 'labeled',
+                            'row': 'periods',
+                            'value': '2',
+                          },
+                        ],
+                      ),
+                    );
+                  },
+                  child: const Text('打开'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('打开'));
+        await tester.pumpAndSettle();
+        final fields = find.byType(TextField);
+        final startY = tester.getTopLeft(fields.first).dy,
+            endY = tester.getTopLeft(fields.last).dy;
+        expect(endY, scale == 1.0 ? equals(startY) : greaterThan(startY));
+        await tester.enterText(fields.last, '4');
+        await tester.tap(find.text('继续'));
+        await tester.pumpAndSettle();
+        expect(result, {'start': 1, 'end': 4});
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('semester page selects any first-week day and returns Monday', (
     tester,
   ) async {

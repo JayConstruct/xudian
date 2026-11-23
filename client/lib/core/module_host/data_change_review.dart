@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../contracts/json_values.dart';
 import '../ui/json_review.dart';
 import '../ui/native_ui.dart';
+import '../ui/ui_component.dart';
 
 enum DataChangeKind { add, update, delete, unchanged }
 
@@ -282,3 +283,26 @@ class DataChangeReview extends StatelessWidget {
     );
   }
 }
+
+Future<void> showDataChangeDetails(
+  BuildContext context,
+  DataChangeSummary summary,
+) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  showDragHandle: true,
+  builder: (context) => UiPackScope(
+    defaultOnly: true,
+    child: NativeUi(
+      child: SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .65,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: DataChangeReview(summary: summary),
+          ),
+        ),
+      ),
+    ),
+  ),
+);

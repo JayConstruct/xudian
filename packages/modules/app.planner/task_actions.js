@@ -1,4 +1,7 @@
-import {services, ui, clock, ids} from '@xudian/sdk';
+import {services, ui, clock, ids, data} from '@xudian/sdk';
+
+import {monthDay} from './page_helpers.js';
+import {weekday} from './engine.js';
 
 export const ref = id => ({moduleId: 'app.planner', serviceId: 'planner.' + id, majorVersion: 1});
 export const query = (id, input = {}) => services.query(ref(id), input);
@@ -37,29 +40,64 @@ export async function applyMove(event, a) {
   return execute('operation.apply', {operationKey: await ids.new(), preview, allowOverdue}, confirmation);
 }
 
-// These labels describe the same validated preview used to prepare the frozen
-// plan. The host owns confirmation, optional acknowledgement and final review;
-// canceling the dialog never commits the prepared operation.
+const dayLabel = date => monthDay(date) + ' 周' + '一二三四五六日'[weekday(date) - 1];
+const timeRange = (a, b) => a.time + '–' + (a.date === b.date ? '' : monthDay(b.date) + ' ') + b.time;
+const placement = (a, b) => a && b ? monthDay(a.date) + ' ' + timeRange(a, b) : '待安排';
+
+async function localTimes(instants, zone) {
+  const keys = [...new Set(instants.filter(Boolean))];
+  const local = keys.length ? await clock.toLocalMany(keys.map(utc => ({utc, zone}))) : [];
+  return new Map(keys.map((utc, i) => [utc, local[i]]));
+}
+
 async function moveConfirmation(preview, zone, precise) {
-  const instants = preview.changes.flatMap(c => [c.before.plannedStartAt, c.before.plannedEndAt,
-    c.fields.plannedStartAt, c.fields.plannedEndAt]).filter(Boolean);
-  const local = await clock.toLocalMany(instants.map(utc => ({utc, zone})));
-  const times = new Map(instants.map((utc, i) => [utc, local[i]]));
-  const label = (start, end) => {
-    if (!start || !end) return '待安排';
-    const a = times.get(start), b = times.get(end);
-    return `${a.date} ${a.time} — ${a.date === b.date ? '' : b.date + ' '}${b.time}`;
-  };
-  const newTask = !preview.changes[0].before.plannedStartAt;
-  const action = preview.kind === 'swap' ? '交换时间' : preview.kind === 'resize' ? '调整时长'
+  const first = preview.changes[0], swap = preview.kind === 'swap';
+  const times = await localTimes(preview.changes.flatMap(c => [c.before.plannedStartAt,
+    c.before.plannedEndAt, c.fields.plannedStartAt, c.fields.plannedEndAt, c.before.dueAt]), zone);
+  const newTask = !first.before.plannedStartAt;
+  const action = swap ? '交换时间' : preview.kind === 'resize' ? '调整时长'
     : precise ? '调整时间' : newTask ? '安排任务' : '移动任务';
-  const confirmLabel = preview.kind === 'swap' ? '确认交换' : preview.kind === 'resize' || precise ? '确认调整'
-    : newTask ? '确认安排' : '确认移动';
-  return {
-    title: '确认' + action,
-    message: preview.changes.map(c => `${c.before.title}\n原安排：${label(c.before.plannedStartAt, c.before.plannedEndAt)}\n调整为：${label(c.fields.plannedStartAt, c.fields.plannedEndAt)}\n时长${c.fields.estimatedMinutes}分钟`).join('\n\n')
-      + '\n\n截止时间保持不变。',
-    confirmLabel,
-    ...(preview.overdue?.length ? {acknowledgement: `${preview.overdue.map(c => c.title).join('、')}的安排超出截止时间，我仍按此安排，保留原截止。`} : {}),
-  };
+  const items = [], notices = preview.warnings.map(warning =>
+    warning === '所选开始时间已过去，仍可保存安排。' ? '这个时段已过去，仍可保存安排。' : warning);
+  for (const c of preview.changes) {
+    const a = times.get(c.fields.plannedStartAt), b = times.get(c.fields.plannedEndAt);
+    const old = placement(times.get(c.before.plannedStartAt), times.get(c.before.plannedEndAt));
+    if (swap) {
+      items.push({title: c.before.title.slice(0, 300), subtitle: old + ' → ' + placement(a, b)});
+    } else {
+      if (!newTask) items.push({title: '原安排', subtitle: old});
+      items.push({title: '日期', subtitle: dayLabel(a.date)}, {title: '时间', subtitle: timeRange(a, b)});
+    }
+    if (preview.overdue?.some(task => task.taskId === c.taskId)) {
+      const due = times.get(c.before.dueAt);
+      items.push({title: '任务截止', subtitle: due ? monthDay(due.date) + ' ' + due.time : monthDay(c.before.dueDate)});
+      const minutes = due ? Math.ceil((Date.parse(c.fields.plannedEndAt) - Date.parse(c.before.dueAt)) / 60000) : 0;
+      const delay = minutes % 60 === 0 ? (minutes / 60) + ' 小时' : minutes + ' 分钟';
+      notices.push((swap ? c.before.title + '的安排' : '安排') + (due ? '比任务截止时间晚 ' + delay + '。' : '超过任务截止日期。'));
+    }
+  }
+  return {title: '确认' + action, section: '本次安排', summaryOnly: true, items,
+    subject: swap ? '交换两项任务' : first.before.title.slice(0, 120),
+    message: swap ? '2 项任务' : (newTask ? '待安排' : '已安排') + ' · ' + first.fields.estimatedMinutes + ' 分钟',
+    icon: 'clipboard', ...(notices.length ? {notice: notices.join('\n').slice(0, 2000)} : {}),
+    confirmLabel: preview.overdue?.length ? '仍然安排' : swap ? '确认交换' : precise || preview.kind === 'resize' ? '确认调整' : newTask ? '确认安排' : '确认移动'};
+}
+
+export async function undoBatch(id, zone) {
+  const batch = await data.get('batches', id);
+  const changes = batch?.changes || [];
+  if (!changes.length || !['move', 'resize', 'swap', 'plan'].includes(batch.kind || 'plan')) {
+    return execute('batch.undo', {id});
+  }
+  const single = changes.length === 1, shown = changes.slice(0, 39);
+  const times = await localTimes(shown.flatMap(c => [c.before?.plannedStartAt, c.before?.plannedEndAt,
+    c.after?.plannedStartAt, c.after?.plannedEndAt]), zone);
+  const label = task => task ? placement(times.get(task.plannedStartAt), times.get(task.plannedEndAt)) : '移除本次创建的任务';
+  const first = changes[0].after || changes[0].before;
+  const items = single ? [{title: '当前安排', subtitle: label(changes[0].after)}, {title: '撤销后', subtitle: label(changes[0].before)}]
+    : shown.map(c => ({title: (c.after || c.before).title.slice(0, 300), subtitle: label(c.after) + ' → ' + label(c.before)}));
+  if (changes.length > shown.length) items.push({title: '其他任务', subtitle: (changes.length - shown.length) + ' 项'});
+  return execute('batch.undo', {id}, {title: '撤销这次安排？', section: '安排变化', icon: 'history',
+    summaryOnly: true, items, subject: single ? first.title.slice(0, 120) : '批量安排',
+    message: single && first.estimatedMinutes ? first.estimatedMinutes + ' 分钟' : changes.length + ' 项任务', confirmLabel: '确认撤销'});
 }

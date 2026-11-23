@@ -1,6 +1,7 @@
 import '../ui/native_ui.dart';
 import '../ui/ui_motion.dart';
 import '../ui/script_content_widgets.dart';
+import '../ui/script_form_controls.dart';
 import '../ui/ui_icon.dart';
 import '../ui/ui_icons.dart' show appIconData;
 
@@ -13,8 +14,9 @@ import '../ui/input_validation.dart';
 import '../ui/json_review.dart';
 import '../../app/design_system.dart';
 import '../../features/settings/settings_widgets.dart'
-    show SettingsGroupSurface;
+    show SettingsGroupSurface, SettingsSheet;
 import 'data_change_review.dart';
+import 'review_widgets.dart';
 import 'plan_confirmation.dart';
 
 Future<bool> reviewDialog(
@@ -22,24 +24,50 @@ Future<bool> reviewDialog(
   String title,
   Object? details, {
   PlanConfirmation? confirmation,
+  bool packageReview = false,
+  String Function(String)? moduleName,
 }) async {
   // Keep the frozen plan and its field comparisons for this dialog's lifetime.
   final summary = DataChangeSummary.tryParse(details);
-  if (confirmation != null && summary != null) {
+  if (!packageReview &&
+      (summary != null || confirmation != null ||
+          details is Map && (details.containsKey('writes') || details.containsKey('planId')))) {
+    var ready = false;
     return await showDialog<bool>(
           context: context,
-          barrierColor: confirmation.summaryOnly
-              ? Theme.of(context).colorScheme.scrim.withValues(alpha: .4)
-              : null,
-          animationStyle: confirmation.summaryOnly
-              ? AppMotion.dialogStyle(context)
-              : null,
+          barrierColor: AppDesign.modalBarrier(Theme.of(context)),
+          animationStyle: AppMotion.dialogStyle(context),
           builder: (context) => UiPackScope(
             defaultOnly: true,
             child: NativeUi(
-              child: _CompactPlanReview(
-                confirmation: confirmation,
-                summary: summary,
+              child: CompactDialogMotion(
+                child: summary == null
+                    ? StatefulBuilder(
+                        builder: (context, setState) => ReviewDialog(
+                          title: '确认变更',
+                          confirmLabel: '确认',
+                          onConfirm: ready
+                              ? () => Navigator.pop(context, true)
+                              : null,
+                          children: [
+                            _reviewContent(
+                              details,
+                              null,
+                              onReadyChanged: (value) =>
+                                  setState(() => ready = value),
+                            ),
+                          ],
+                        ),
+                      )
+                    : confirmation != null
+                    ? _CompactPlanReview(
+                        confirmation: confirmation,
+                        summary: summary,
+                      )
+                    : _FrozenChangeDialog(
+                        summary: summary,
+                        moduleName: moduleName,
+                      ),
               ),
             ),
           ),
@@ -93,6 +121,49 @@ Future<bool> reviewDialog(
       false;
 }
 
+class _FrozenChangeDialog extends StatelessWidget {
+  const _FrozenChangeDialog({required this.summary, this.moduleName});
+  final DataChangeSummary summary;
+  final String Function(String)? moduleName;
+
+  @override
+  Widget build(BuildContext context) {
+    final changes = summary.records.where(
+      (record) => record.kind != DataChangeKind.unchanged,
+    );
+    final counts = <String, int>{};
+    for (final record in changes) {
+      counts.update(record.action, (value) => value + 1, ifAbsent: () => 1);
+    }
+    final names = summary.moduleIds.map((id) => moduleName?.call(id) ?? id);
+    return ReviewDialog(
+      title: '确认变更',
+      confirmLabel: '确认变更',
+      onConfirm: () => Navigator.pop(context, true),
+      children: [
+        ReviewSubject(
+          title: names.isEmpty ? '本次操作' : names.join('、'),
+          subtitle: counts.isEmpty
+              ? '没有实际数据变化'
+              : counts.entries.map((e) => '${e.key} ${e.value} 项').join(' · '),
+          icon: Icons.edit_note_outlined,
+        ),
+        if (changes.isNotEmpty)
+          ReviewFacts(
+            title: '受影响的记录',
+            emphasizedTitle: '删除',
+            items: [
+              for (final record in changes.take(20))
+                (title: record.action, subtitle: record.label),
+              if (changes.length > 20)
+                (title: '其他记录', subtitle: '${changes.length - 20} 项'),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
 class _CompactPlanReview extends StatefulWidget {
   const _CompactPlanReview({required this.confirmation, required this.summary});
   final PlanConfirmation confirmation;
@@ -107,128 +178,52 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
   Widget build(BuildContext context) {
     final options = widget.confirmation;
     final deletions = widget.summary.count(DataChangeKind.delete);
-    final dialog = AlertDialog(
-      titlePadding: AppDesign.dialogTitlePadding,
-      contentPadding: AppDesign.dialogContentPadding,
-      actionsPadding: AppDesign.dialogActionsPadding,
-      title: Text(options.title),
-      content: SizedBox(
-        width: 540,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(options.message),
-              if (options.items.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outlineVariant,
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final (index, item) in options.items.indexed) ...[
-                          if (index > 0)
-                            const Divider(height: 1, indent: 12, endIndent: 12),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            child: Row(
-                              children: [
-                                const ScriptGlyph(
-                                  icon: Icons.content_paste_outlined,
-                                  tone: 'muted',
-                                  surface: true,
-                                  surfaceSize: 34,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item.title,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleSmall,
-                                      ),
-                                      Text(
-                                        item.subtitle,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              if (deletions > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    '将删除 $deletions 条记录，请核对后确认。',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              if (options.acknowledgement != null)
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(options.acknowledgement!),
-                  value: acknowledged,
-                  onChanged: (value) =>
-                      setState(() => acknowledged = value == true),
-                ),
-              if (!options.summaryOnly)
-                NativeUi(
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: const Text('查看变更详情'),
-                    initiallyExpanded: false,
-                    children: [DataChangeReview(summary: widget.summary)],
-                  ),
-                ),
-            ],
+    final dialog = ReviewDialog(
+      title: options.title,
+      confirmLabel: options.confirmLabel,
+      onConfirm: options.acknowledgement != null && !acknowledged
+          ? null
+          : () => Navigator.pop(context, true),
+      children: [
+        if (options.subject != null)
+          ReviewSubject(
+            title: options.subject!,
+            subtitle: options.message,
+            icon: appIconData(options.icon) ?? Icons.event_note_outlined,
+          )
+        else
+          Text(options.message),
+        if (options.items.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: ReviewFacts(title: options.section, items: options.items),
           ),
-        ),
-      ),
-      actions: [
-        NativeUi(
-          child: TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+        if (options.section != null && options.items.isEmpty)
+          ReviewNotice(options.section!),
+        if (options.notice != null)
+          ReviewNotice(options.notice!, icon: Icons.info_outline),
+        if (deletions > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              '将删除 $deletions 条记录，请核对后确认。',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-        ),
-        NativeUi(
-          child: FilledButton(
-            onPressed: options.acknowledgement != null && !acknowledged
-                ? null
-                : () => Navigator.pop(context, true),
-            child: Text(options.confirmLabel),
+        if (options.acknowledgement != null)
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(options.acknowledgement!),
+            value: acknowledged,
+            onChanged: (value) => setState(() => acknowledged = value == true),
           ),
-        ),
       ],
     );
-    return options.summaryOnly ? CompactDialogMotion(child: dialog) : dialog;
+    return dialog;
   }
 }
 
@@ -441,6 +436,16 @@ class _HostFormDialogState extends State<HostFormDialog> {
   Widget _field(Map<String, Object?> field) {
     final key = field['key'] as String;
     final label = '${field['label']}';
+    final labeled = field['presentation'] == 'labeled';
+    InputDecoration decoration() =>
+        (labeled
+                ? AppDesign.outlinedField(context)
+                : InputDecoration(labelText: label))
+            .copyWith(
+              errorText: errors[key],
+              helperText: field['helperText'] as String?,
+              helperMaxLines: 3,
+            );
     if (_temporalKind(field['type']) case final kind?) {
       return TemporalInput(
         kind: kind,
@@ -454,6 +459,7 @@ class _HostFormDialogState extends State<HostFormDialog> {
         minDate: field['minDate'] as String?,
         maxDate: field['maxDate'] as String?,
         legacyDateTime: true,
+        externalLabel: labeled,
         onChanged: (value) => setState(() {
           if (kind == TemporalInputKind.dateRange) ranges[key] = value;
           if (kind == TemporalInputKind.date &&
@@ -597,11 +603,11 @@ class _HostFormDialogState extends State<HostFormDialog> {
           },
         );
       }
-      return DropdownButtonFormField<String>(
+      final dropdown = DropdownButtonFormField<String>(
         borderRadius: AppDesign.selectionBorderRadius,
         initialValue: selections[key],
         isExpanded: true,
-        decoration: InputDecoration(labelText: label, errorText: errors[key]),
+        decoration: decoration(),
         items: [
           for (final option in (field['options'] as List? ?? []).map(object))
             DropdownMenuItem(
@@ -617,29 +623,98 @@ class _HostFormDialogState extends State<HostFormDialog> {
           errors.remove(key);
         }),
       );
+      return labeled
+          ? ScriptFieldLabel(label: label, child: dropdown)
+          : dropdown;
     }
-    return TextField(
+    final multiline = field['type'] == 'multiline';
+    final maxLines = multiline
+        ? (field['maxLines'] as int? ?? 10).clamp(1, 10)
+        : 1;
+    final input = TextField(
       controller: controllers[key],
       readOnly: field['editable'] == false,
       obscureText: field['type'] == 'secret',
       enableSuggestions: field['type'] != 'secret',
       autocorrect: field['type'] != 'secret',
-      minLines: field['type'] == 'multiline' ? 3 : 1,
-      maxLines: field['type'] == 'multiline' ? 10 : 1,
+      minLines: multiline
+          ? (field['minLines'] as int? ?? 3).clamp(1, maxLines)
+          : 1,
+      maxLines: maxLines,
       keyboardType: field['type'] == 'number'
           ? TextInputType.numberWithOptions(
               decimal: field['integer'] != true,
               signed: true,
             )
           : null,
-      decoration: InputDecoration(
-        labelText: label,
-        errorText: errors[key],
-        helperText: field['helperText'] as String?,
-        helperMaxLines: 3,
-      ),
+      decoration: decoration(),
       onChanged: (_) => setState(() => errors.remove(key)),
     );
+    return labeled ? ScriptFieldLabel(label: label, child: input) : input;
+  }
+
+  Iterable<Widget> _fieldRows({required double spacing}) sync* {
+    final fields = widget.fields;
+    for (var i = 0; i < fields.length; i++) {
+      final field = fields[i];
+      if (field['summary'] case {
+        'title': final String title,
+        'subtitle': final String subtitle,
+        'icon': final String icon,
+      }) {
+        yield ReviewSubject(
+          title: title,
+          subtitle: subtitle,
+          icon: appIconData(icon) ?? Icons.info_outline,
+        );
+      }
+      if (field['section'] case final String section) {
+        yield Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            section,
+            style: Theme.of(context).textTheme.labelMedium
+                ?.copyWith(color: AppDesign.muted(context)),
+          ),
+        );
+      }
+      Widget control = _fieldWrap(field, _field(field));
+      if (field['row'] is String &&
+          i + 1 < fields.length &&
+          fields[i + 1]['row'] == field['row'] &&
+          fields[i + 1]['section'] == null &&
+          fields[i + 1]['summary'] == null) {
+        final second = fields[++i];
+        final left = control, right = _fieldWrap(second, _field(second));
+        control = LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth <
+                MediaQuery.textScalerOf(context).scale(235)) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  left,
+                  SizedBox(height: spacing),
+                  right,
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: left),
+                const SizedBox(width: 10),
+                Expanded(child: right),
+              ],
+            );
+          },
+        );
+      }
+      yield Padding(
+        padding: EdgeInsets.only(bottom: spacing),
+        child: control,
+      );
+    }
   }
 
   @override
@@ -660,11 +735,7 @@ class _HostFormDialogState extends State<HostFormDialog> {
                   padding: const EdgeInsets.only(bottom: 20),
                   child: Text(widget.description!),
                 ),
-              for (final field in widget.fields)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: _fieldWrap(field, _field(field)),
-                ),
+              ..._fieldRows(spacing: 14),
             ],
           ),
         ),
@@ -685,111 +756,80 @@ class _HostFormDialogState extends State<HostFormDialog> {
           ),
       ],
     );
+    final cancel = NativeUi(
+      child: OutlinedButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+    );
+    final confirm = NativeUi(
+      child: FilledButton(onPressed: submit, child: Text(widget.submitLabel)),
+    );
     if (widget.presentation == 'sheet') {
-      return SafeArea(
-        child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * .8,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    widget.title,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 16),
-                  Flexible(child: native.content!),
-                  if (widget.fullWidthActions && !instantSelection)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: NativeUi(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('取消'),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(child: native.actions!.last),
-                      ],
-                    )
-                  else
-                    Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 8,
-                      children: native.actions!,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      final expanded = widget.fullWidthActions && !instantSelection;
+      return SettingsSheet(
+        title: Text(widget.title),
+        content: native.content!,
+        expandedActions: expanded,
+        showClose: expanded,
+        actions: expanded ? [cancel, confirm] : native.actions!,
       );
     }
     if (widget.presentation == 'page') {
       return Dialog.fullscreen(
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text(widget.title),
-            leading: IconButton(
-              tooltip: '取消',
-              icon: const UiIcon(Icons.close_rounded),
-              onPressed: () => Navigator.pop(context),
-            ),
+        child: DetailPage(
+          title: widget.title,
+          maxBodyWidth: 740,
+          minHeaderHeight: widget.fullWidthActions ? 65 : null,
+          settingsStyle: widget.fullWidthActions,
+          leading: IconButton(
+            tooltip: '取消',
+            icon: const UiIcon(Icons.close_rounded),
+            onPressed: () => Navigator.pop(context),
           ),
-          body: SafeArea(
-            top: false,
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 700),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (widget.description != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 24),
-                                child: Text(widget.description!),
-                              ),
-                            for (final field in widget.fields)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: _fieldWrap(field, _field(field)),
-                              ),
-                          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    widget.fullWidthActions ? 4 : 20,
+                    20,
+                    16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (widget.description != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: Text(widget.description!),
                         ),
-                      ),
-                    ),
+                      ..._fieldRows(spacing: widget.fullWidthActions ? 12 : 20),
+                    ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                  child: SizedBox(
-                    width: 700,
-                    child: NativeUi(
-                      child: FilledButton(
-                        onPressed: submit,
-                        child: Text(widget.submitLabel),
-                      ),
-                    ),
-                  ),
+              ),
+              if (widget.fullWidthActions) const Divider(height: 1),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  10,
+                  20,
+                  widget.fullWidthActions ? 12 : 20,
                 ),
-              ],
-            ),
+                child: widget.fullWidthActions
+                    ? Row(
+                        spacing: 10,
+                        children: [
+                          Expanded(child: cancel),
+                          Expanded(child: confirm),
+                        ],
+                      )
+                    : confirm,
+              ),
+            ],
           ),
         ),
       );

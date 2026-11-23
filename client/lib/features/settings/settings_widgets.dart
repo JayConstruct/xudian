@@ -339,15 +339,16 @@ class SettingsGroup extends StatelessWidget {
     required this.children,
     this.title,
     this.dividerIndent = SettingsListTileTheme.textIndent,
+    this.bottomSpacing = spacing,
   });
-  final double dividerIndent;
+  final double bottomSpacing, dividerIndent;
   final String? title;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
     final content = Padding(
-      padding: const EdgeInsets.only(bottom: spacing),
+      padding: EdgeInsets.only(bottom: bottomSpacing),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -600,10 +601,11 @@ class SettingsSheet extends StatelessWidget {
     required this.content,
     this.actions = const [],
     this.expandedActions = false,
+    this.showClose = false,
   });
   final Widget title, content;
   final List<Widget> actions;
-  final bool expandedActions;
+  final bool expandedActions, showClose;
   @override
   Widget build(BuildContext context) => Material(
     type: MaterialType.transparency,
@@ -626,7 +628,18 @@ class SettingsSheet extends StatelessWidget {
               DefaultTextStyle(
                 style: Theme.of(context).textTheme.titleLarge!
                     .copyWith(fontWeight: FontWeight.w700, fontSize: 22),
-                child: title,
+                child: showClose
+                    ? Row(
+                        children: [
+                          Expanded(child: title),
+                          IconButton(
+                            tooltip: '关闭',
+                            icon: const UiIcon(Icons.close_rounded, size: 18),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      )
+                    : title,
               ),
               const SizedBox(height: 14),
               Flexible(child: content),
@@ -659,6 +672,7 @@ Future<T?> showSettingsModal<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool useGlobalStyle = false,
+  bool compactFrame = false,
 }) {
   final scope = UiScopeData.maybeOf(context);
   final builtIn = !useGlobalStyle && scope?.defaultOnly == true;
@@ -669,20 +683,52 @@ Future<T?> showSettingsModal<T>({
     context: context,
     useSafeArea: true,
     isScrollControlled: true,
-    showDragHandle: true,
-    backgroundColor: theme.scaffoldBackgroundColor,
-    barrierColor: theme.colorScheme.scrim.withValues(alpha: .33),
+    showDragHandle: !compactFrame,
+    backgroundColor: compactFrame
+        ? AppDesign.modalSurface(theme)
+        : theme.scaffoldBackgroundColor,
+    barrierColor: compactFrame
+        ? AppDesign.modalBarrier(theme)
+        : theme.colorScheme.scrim.withValues(alpha: .33),
     shape: const RoundedSuperellipseBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
     ),
     builder: (context) {
+      Widget body(BuildContext sheet) {
+        if (!compactFrame) return builder(sheet);
+        return OutlinedButtonTheme(
+          data: OutlinedButtonThemeData(
+            style:
+                theme.outlinedButtonTheme.style?.merge(
+                  AppDesign.modalSecondary(sheet),
+                ) ??
+                AppDesign.modalSecondary(sheet),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(top: 10, bottom: 4),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.outline,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Flexible(child: builder(sheet)),
+            ],
+          ),
+        );
+      }
+
       if (useGlobalStyle) {
-        return UiPackScope.global(child: Builder(builder: builder));
+        return UiPackScope.global(child: Builder(builder: body));
       }
       if (builtIn) {
-        return UiPackScope(defaultOnly: true, child: Builder(builder: builder));
+        return UiPackScope(defaultOnly: true, child: Builder(builder: body));
       }
-      return builder(context);
+      return body(context);
     },
   );
 }

@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.planner",
     "name": "任务规划",
-    "version": "1.16.0",
-    "hostApi": "^1.49.0",
+    "version": "1.17.1",
+    "hostApi": "^1.57.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -53,6 +53,24 @@
       }
     },
     {
+      "id": "app.planner.history",
+      "title": "操作历史",
+      "handler": "render",
+      "headerMode": "contributed"
+    },
+    {
+      "id": "app.planner.cancelled",
+      "title": "已取消任务",
+      "handler": "render",
+      "headerMode": "contributed"
+    },
+    {
+      "id": "app.planner.auto",
+      "title": "自动安排",
+      "handler": "render",
+      "headerMode": "contributed"
+    },
+    {
       "id": "app.planner.editor",
       "title": "编辑规划",
       "handler": "render",
@@ -64,7 +82,7 @@
       "handler": "render",
       "entry": {
         "id": "app.planner.summary",
-        "placement": "page",
+        "placement": "hidden",
         "targetPageId": "app.views.today.home",
         "slotId": "daily",
         "content": true,

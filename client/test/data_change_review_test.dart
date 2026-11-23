@@ -164,7 +164,8 @@ void main() {
   Future<void> show(
     WidgetTester tester,
     Object? details, {
-    String title = '确认实际数据变更',
+    String title = '确认变更',
+    bool detailsOnly = false,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -174,7 +175,9 @@ void main() {
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
-                onPressed: () => reviewDialog(context, title, details),
+                onPressed: () => detailsOnly
+                  ? showDataChangeDetails(context, DataChangeSummary.tryParse(details)!)
+                  : reviewDialog(context, title, details, packageReview: title.startsWith('审核')),
                 child: const Text('审核'),
               ),
             ),
@@ -187,7 +190,7 @@ void main() {
   }
 
   testWidgets(
-    'business summary shows deletion warning and field before after with raw expansion',
+    'compact review names deleted and updated records',
     (tester) async {
       await show(
         tester,
@@ -200,19 +203,13 @@ void main() {
           ),
         ]),
       );
-      expect(find.text('将影响 1 个模块：新增 0 条，修改 1 条，删除 1 条'), findsOneWidget);
-      expect(find.text('删除 · 要删除的任务'), findsOneWidget);
-      expect(find.text('此记录将被删除'), findsOneWidget);
-      expect(find.text('包含 1 条删除，请核对后确认'), findsOneWidget);
-      expect(find.text('之前：false'), findsOneWidget);
-      expect(find.text('之后：true'), findsOneWidget);
-      expect(find.textContaining('frozen-plan'), findsNothing);
-      final raw = find.text('全量原始详情');
-      await tester.ensureVisible(raw);
-      await tester.tap(raw);
-      await _waitForReviewContent(tester);
-      expect(find.textContaining('frozen-plan'), findsOneWidget);
-      expect(find.textContaining('真实结果'), findsOneWidget);
+      expect(find.text('修改 1 项 · 删除 1 项').evaluate().length +
+          find.text('删除 1 项 · 修改 1 项').evaluate().length, 1);
+      expect(find.text('删除'), findsOneWidget);
+      expect(find.text('要删除的任务'), findsOneWidget);
+      expect(find.text('新名称'), findsOneWidget);
+      expect(find.text('受影响的记录'), findsOneWidget);
+      expect(find.text('全量原始详情'), findsNothing);
     },
   );
 
@@ -249,7 +246,7 @@ void main() {
   testWidgets('empty actual plan states no data changes', (tester) async {
     await show(tester, _plan([]));
     expect(find.text('没有实际数据变化'), findsOneWidget);
-    expect(find.text('全量原始详情'), findsOneWidget);
+    expect(find.text('全量原始详情'), findsNothing);
   });
 
   testWidgets('raw review cannot be confirmed when preparing details fails', (
@@ -272,7 +269,7 @@ void main() {
     'dialog rebuild preserves the frozen review and reopening prepares a fresh snapshot',
     (tester) async {
       final details = _plan([]);
-      await show(tester, details);
+      await show(tester, details, detailsOnly: true);
       await tester.tap(find.text('全量原始详情'));
       await tester.pumpAndSettle();
       final raw = find.byType(JsonReviewContent);
@@ -289,7 +286,7 @@ void main() {
       expect(identical(tester.state(raw), state), isTrue);
       expect(find.textContaining('真实结果'), findsOneWidget);
       expect(find.textContaining('下一次审核的结果'), findsNothing);
-      await tester.tap(find.text('取消'));
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       await tester.tap(find.text('审核'));
       await tester.pumpAndSettle();
@@ -360,6 +357,7 @@ void main() {
           ),
           _write('next', null, {'id': 'next', 'title': '后续记录'}),
         ]),
+        detailsOnly: true,
       );
       final valueDisclosure = find.textContaining('之后：内容较长，展开查看完整值');
       await tester.ensureVisible(valueDisclosure);
@@ -439,7 +437,7 @@ void main() {
         closeTo(scroll.position.maxScrollExtent, 1),
       );
       expect(tester.widget<SelectableText>(raw).data, contains('真实结果'));
-      expect(find.text('确认').hitTestable(), findsOneWidget);
+      expect(find.byType(BottomSheet), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -462,6 +460,7 @@ void main() {
             },
           ),
         ]),
+        detailsOnly: true,
       );
       expect(find.text('field13'), findsNothing);
       final fields = find.text('其余 4 个变化字段');
@@ -515,7 +514,7 @@ void main() {
           _write('a$i', null, {'id': 'a$i', 'name': '记录$i'}),
         _write('delete', {'id': 'delete', 'name': '最后的删除'}, null),
       ];
-      await show(tester, _plan(writes));
+      await show(tester, _plan(writes), detailsOnly: true);
       expect(find.text('删除 · 最后的删除'), findsOneWidget);
       expect(find.text('新增 · 记录18'), findsOneWidget);
       expect(find.text('新增 · 记录19'), findsNothing);
@@ -682,7 +681,7 @@ void main() {
     );
     await tester.tap(find.text('审核'));
     await tester.pumpAndSettle();
-    expect(find.text('新增 · 取消的新记录'), findsOneWidget);
+    expect(find.text('取消的新记录'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(accepted, isFalse);

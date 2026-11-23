@@ -29,6 +29,25 @@ class AppDesign {
   static const dialogActionsPadding = EdgeInsets.fromLTRB(12, 0, 12, 12);
   static const dialogConstraints = BoxConstraints(minWidth: 280, maxWidth: 760);
 
+  static Color modalBarrier(ThemeData theme) =>
+      theme.colorScheme.scrim.withValues(alpha: .31);
+
+  static Color modalSurface(ThemeData theme) =>
+      theme.brightness == Brightness.dark
+      ? theme.colorScheme.surface
+      : Color.lerp(
+          theme.scaffoldBackgroundColor,
+          theme.colorScheme.surface,
+          .55,
+        )!;
+
+  static ButtonStyle modalSecondary(BuildContext context) =>
+      OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
+      );
+
   static ThemeData theme(Brightness brightness, {bool haptics = true}) {
     final dark = brightness == Brightness.dark;
     final scheme =

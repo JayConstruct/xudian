@@ -1,3 +1,4 @@
+import 'script_content_widgets.dart' show scriptToneSurface;
 import 'package:flutter/material.dart';
 
 import 'ui_motion.dart';
@@ -178,9 +179,15 @@ class ScriptFormSection extends StatelessWidget {
 }
 
 class ScriptNotice extends StatelessWidget {
-  const ScriptNotice({super.key, required this.text, this.tone = 'info'});
+  const ScriptNotice({
+    super.key,
+    required this.text,
+    this.tone = 'info',
+    this.action,
+  });
 
   final String text, tone;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -194,15 +201,27 @@ class ScriptNotice extends StatelessWidget {
     return Semantics(
       liveRegion: tone == 'warning',
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: action == null ? 10 : 0,
+        ),
         decoration: BoxDecoration(
-          color: foreground.withValues(alpha: .055),
+          color: tone == 'accent' || (action != null && tone == 'warning')
+              ? scriptToneSurface(context, tone)
+              : foreground.withValues(alpha: .055),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Text(
-          text,
-          style: theme.textTheme.bodySmall?.copyWith(color: foreground),
-        ),
+        child: action == null
+            ? Text(
+                text,
+                style: theme.textTheme.bodySmall?.copyWith(color: foreground),
+              )
+            : Row(
+                children: [
+                  Expanded(child: Text(text, style: theme.textTheme.bodySmall)),
+                  action!,
+                ],
+              ),
       ),
     );
   }

@@ -15,6 +15,7 @@ import 'dart:async';
 import '../contracts/json_values.dart';
 import '../performance/ui_load_trace.dart';
 import '../ui/workspace_header.dart';
+import '../ui/module_detail_page.dart';
 import '../ui/workspace_header_action.dart';
 import '../ui/workspace_typography.dart';
 import '../ui/ui_component.dart';
@@ -224,25 +225,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               ),
               IconButton(
                 tooltip: '查看实际变更详情',
-                onPressed: () => showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  showDragHandle: true,
-                  builder: (context) => UiPackScope(
-                    defaultOnly: true,
-                    child: NativeUi(
-                      child: SafeArea(
-                        child: SizedBox(
-                          height: MediaQuery.sizeOf(context).height * .65,
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
-                            child: DataChangeReview(summary: preview.summary),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                onPressed: () => showDataChangeDetails(context, preview.summary),
                 icon: const Icon(Icons.info_outline),
               ),
             ],
@@ -1053,6 +1036,18 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               PageRuntimeContextScope.read(context)?.currentRevision()) {
         dirty = true;
         return;
+      }
+      if (event != null &&
+          result['dismissPage'] == true &&
+          !widget.embedded &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        final owner = context.findAncestorWidgetOfExactType<ModuleDetailPage>();
+        if (owner != null &&
+            owner.pageId == widget.pageContext['pageId'] &&
+            owner.registry.ui.page(owner.pageId)?.moduleId == widget.moduleId) {
+          Navigator.of(context).pop();
+          return;
+        }
       }
       final patch = result.containsKey('runtimeContextPatch')
           ? validateRuntimeContextPatch(result['runtimeContextPatch'])

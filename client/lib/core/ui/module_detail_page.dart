@@ -216,6 +216,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                           : widget.title ?? page?.title ?? '页面不可用'),
                   titleMaxLines: page?.headerMode == 'date' ? 3 : 1,
                   compactHeader: spec?['compact'] == true,
+                  largeTitle: spec?['titleStyle'] == 'large',
                   minHeaderHeight: (spec?['minHeight'] as num?)?.toDouble(),
                   leading: spec?['backIcon'] != null
                       ? IconButton(

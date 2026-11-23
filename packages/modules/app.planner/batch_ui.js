@@ -48,6 +48,7 @@ const page = (state, title, children, footer, options = {}) => ({
   tree: {...column(children, options.spacing ?? 12), key: 'planner:batches:' + (options.key || state.screen || 'list'),
     scrollKey: 'planner:batches:' + (options.key || state.screen || 'list'),
     queueInputActions: true, footerStyle: 'flat',
+    ...(options.review ? {planReview: options.review} : {}),
     ...(footer ? {footer} : {}), ...(options.footerMessage ? {footerMessage: options.footerMessage} : {})},
 });
 const notices = state => state.error ? [{type: 'notice', tone: 'warning', text: state.error}] : [];
@@ -69,7 +70,7 @@ export async function renderBatches({state = {}, event, context = {}, formValues
       return {...await showDetail(state), clearForms: rendered.clearForms};
     }
     return {...rendered, replaceForms: {...rendered.state.draft}, state: {...state, taskDetail: rendered.state},
-      header: {...rendered.header, compact: true, backIcon: 'chevron',
+      header: {...rendered.header,
         ...(!rendered.header?.backEvent ? {backEvent: {type: 'taskBack'}} : {})}};
   }
   if (state.screen === 'create') {
@@ -139,12 +140,13 @@ export async function renderBatches({state = {}, event, context = {}, formValues
     if (event?.type === 'issues') state.screen = 'issues';
     if (event?.type === 'retry') {
       state.retryPreview = await query('series.retry.preview', {id: state.id});
+      const plan = await services.prepare(ref('series.retry.apply'), {operationKey: await ids.new(), preview: state.retryPreview});
+      state.retryPlanId = plan.planId;
       state.screen = 'retry';
     }
     if (event?.type === 'applyRetry' && state.retryPreview) {
-      if (await execute('series.retry.apply', {operationKey: await ids.new(), preview: state.retryPreview}, {
-        title: '重新补齐', confirmLabel: '确认补齐', message: '按当前规则补齐未来30天，保留已生成任务。',
-      })) {
+      if (state.retryPlanId && await ui.review(state.retryPlanId) && await services.commit(state.retryPlanId)) {
+        delete state.retryPlanId;
         state.screen = 'detail'; delete state.retryPreview;
         await ui.notify({message: '补齐结果已更新', kind: 'success'});
       }
@@ -166,15 +168,18 @@ export async function renderBatches({state = {}, event, context = {}, formValues
           changes: {title: String(draft.editTitle).trim(), estimatedMinutes: Number(draft.editDuration),
             rules: {interval: {minDays: Number(draft.editMin), maxDays: Number(draft.editMax)},
               weekdays: draft.editWeekdays.map(Number), timeWindow: {start: draft.editStart, end: draft.editEnd}, preferredTime: draft.editPreferredTime || null}}});
+        delete state.rulesPlanId;
+        if (state.preview.confirmable && state.preview.changes.length) {
+          const plan = await services.prepare(ref('series.update.apply'), {operationKey: await ids.new(), preview: state.preview});
+          state.rulesPlanId = plan.planId;
+        }
         state.screen = 'editPreview';
       }
     }
     if (event?.type === 'resumeEdit') state.screen = 'edit';
     if (event?.type === 'applyRules' && state.preview) {
-      if (await execute('series.update.apply', {operationKey: await ids.new(), preview: state.preview}, {
-        title: '保存批量规则', confirmLabel: '保存规则',
-        message: '仅对后续新生成的任务生效；已生成、已完成和手动调整的任务保持不变。',
-      })) {
+      if (state.rulesPlanId && await ui.review(state.rulesPlanId) && await services.commit(state.rulesPlanId)) {
+        delete state.rulesPlanId;
         state.screen = 'detail'; delete state.preview;
         await ui.notify({message: '规则已更新，后续新任务按新规则生成', kind: 'success'});
       }
@@ -258,7 +263,7 @@ async function showDetail(state) {
       ...(reasons.length ? [text('可修改允许时段或重复规则后，重新预览补齐。', 'muted')] : [text('当前没有补齐问题', 'muted')]),
     ], row([...(batch.status !== 'ended' ? [{...button('编辑规则', {type: 'editRules'}, 'outlined'), flex: 1}] : []),
       ...(batch.status === 'active' ? [{...button(retry ? '确认补齐' : '重新补齐', {type: retry ? 'applyRetry' : 'retry'}, 'filled'), flex: 1}] : [])]),
-    {back: 'backToDetail'});
+    {back: 'backToDetail', review: retry && state.retryPlanId ? {planId: state.retryPlanId, eventType: 'applyRetry'} : null});
   }
   const pendingRows = batch.rows.filter(item => item.status === 'pending');
   state.selected = state.selected.filter(id => pendingRows.some(item => item.taskId === id));
@@ -333,7 +338,7 @@ function editPage(state, batch) {
       text('修改已生成任务：0项', 'muted'), ...notices(state),
     ], row([{...button('继续编辑', {type: 'resumeEdit'}, 'outlined'), flex: 1},
       {...button('保存规则', {type: 'applyRules'}, 'filled', {disabled: !value.confirmable || !value.changes.length}), flex: 1}]),
-    {back: 'resumeEdit'});
+    {back: 'resumeEdit', review: state.rulesPlanId ? {planId: state.rulesPlanId, eventType: 'applyRules'} : null});
   }
   return page(state, '编辑规则', [
     {type: 'notice', tone: 'info', text: '更改仅影响后续新生成的任务，已生成任务保持不变。'},

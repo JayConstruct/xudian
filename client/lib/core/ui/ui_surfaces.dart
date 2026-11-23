@@ -41,6 +41,7 @@ class DetailPage extends StatelessWidget {
     this.actions,
     this.titleMaxLines = 1,
     this.compactHeader = false,
+    this.largeTitle = false,
     this.settingsStyle = false,
     this.maxBodyWidth,
     this.minHeaderHeight,
@@ -51,7 +52,7 @@ class DetailPage extends StatelessWidget {
   final Widget? leading;
   final List<Widget>? actions;
   final int titleMaxLines;
-  final bool compactHeader;
+  final bool compactHeader, largeTitle;
   final bool settingsStyle;
   final double? maxBodyWidth;
   final double? minHeaderHeight;
@@ -63,7 +64,7 @@ class DetailPage extends StatelessWidget {
     final wide = settingsStyle && width >= 820;
     final bodyWidth = maxBodyWidth ?? (settingsStyle ? 800.0 : 760.0);
     final margin = AppDesign.pageGutter + math.max(0, (width - bodyWidth) / 2);
-    final settingsTitle = settingsStyle
+    final settingsTitle = settingsStyle || largeTitle
         ? Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w700, fontSize: wide ? 27 : 25)
         : null;

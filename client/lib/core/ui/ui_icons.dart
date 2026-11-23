@@ -95,6 +95,7 @@ IconData? appIconData(Object? name) => switch (name) {
   'link' => Icons.link_rounded,
   'code' => Icons.code_rounded,
   'play' => Icons.play_arrow_rounded,
+  'skipNext' => Icons.skip_next_outlined,
   'pause' => Icons.pause_rounded,
   'eye' => Icons.visibility_outlined,
   'download' => Icons.download_outlined,

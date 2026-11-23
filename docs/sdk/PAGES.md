@@ -2,6 +2,8 @@
 
 [SDK 入口与兼容要求](../MODULE_SDK.md)。各能力的最低宿主 API 在对应小节说明；旧调用的回退与权限边界继续适用。
 
+API 1.56 中，`row.alignment: "start"` 使自动换行的按钮组靠行首。`row.verticalFromWidth` 指定工作区的逻辑像素宽度阈值，达到阈值时子项从上到下排列，并沿用 `spacing`。行内的 `input` 可仅指定 `hintText`，输入文本后提示消失。
+
 <a id="api-146-的规划缩放与详情"></a>
 <a id="api-147-的规划拖动意图范围"></a>
 规划看板的专用配置见[双指缩放与选中详情](PLANNER.md#api-146-的规划缩放与详情)和[拖动意图范围](PLANNER.md#api-147-的规划拖动意图范围)。
@@ -85,9 +87,9 @@ API `^1.34.0` 增加 `timeRangeTable` 本地表单：节点提供稳定 `key`、
 
 ## 交互和外部操作
 
-`ui.navigate(pageId,context)`、`ui.panel(pageId,context)`、`ui.dialog({title,fields})` 使用宿主交互；表单支持 text/multiline、number、date/datetime、boolean、select/multiSelect 与安全输入；可声明 required/maxLength，非法输入留在对话框中。`ui.review(planId)` 展示真实写集和结果，宿主控制最终确认。当前合法计划先展示增改删摘要与记录前后对比，完整原始计划可展开；未知结构回退原始审核。取消不提交，过期快照仍由提交校验拒绝，规则见 [实际数据审核](../ui/DATA_CHANGE_REVIEW.md)。
+`ui.navigate(pageId,context)`、`ui.panel(pageId,context)`、`ui.dialog({title,fields})` 使用宿主交互；表单支持 text/multiline、number、date/datetime、boolean、select/multiSelect 与安全输入；可声明 required/maxLength，非法输入留在对话框中。`ui.review(planId)` 展示真实写集和结果，宿主控制最终确认。当前合法计划用简洁弹窗显示增改删摘要与受影响的记录，未知结构在同款弹窗中展示原始详情。取消不提交，过期快照仍由提交校验拒绝，规则见 [实际数据审核](../ui/DATA_CHANGE_REVIEW.md)。
 
-宿主API `^1.27.0` 支持 `ui.review(planId, {title, message, confirmLabel, acknowledgement?})`，将日常操作显示为简洁确认框。标题、说明和按钮文字由模块从当前已校验预览生成，宿主绑定原冻结计划并负责最终确认；真实写集与完整前后值收进“查看变更详情”，存在真实删除时仍显示删除提醒。`acknowledgement` 是可选的风险确认文字，初始未勾选，勾选前确认按钮不可用，适合“安排超出截止”等需要明确接受的情况。不能用该参数绕过准备、权限、审核或提交前快照检查；未知计划结构继续回退原始审核。所有参数是非空纯文本，长度上限分别为120／6000／48／1000，未知参数拒绝；省略第二个参数保持原审核行为。
+宿主API `^1.27.0` 支持 `ui.review(planId, {title, message, confirmLabel, acknowledgement?})`，将日常操作显示为简洁确认框。标题、说明和按钮文字由模块从当前已校验预览生成，宿主绑定原冻结计划并负责最终确认；存在真实删除时仍显示删除提醒。API 1.56 的简洁确认可用 `subject`、`section` 和 `icon` 指定对象标题、摘要分组和图标，底栏提供取消和确认。`acknowledgement` 是可选的风险确认文字，初始未勾选，勾选前确认按钮不可用，供确实需要额外勾选的模块使用。API 1.57 提供最长 2000 字符的可选纯文本 `notice`，可用同一确认按钮接受提示。不能用该参数绕过准备、权限、审核或提交前快照检查；未知计划结构继续回退原始审核。所有参数是非空纯文本，长度上限分别为120／6000／48／1000，未知参数拒绝；省略第二个参数时由宿主生成简洁摘要。
 
 宿主 API `^1.33.0` 支持根节点 `planReview:{planId,eventType}` 配合 `footer:{type:"row",children:[...按钮]}`：宿主读取当前调用者的冻结计划，固定展示实际增改删数量及可打开的完整详情，并接管对应确认按钮。只有用户点击该原生按钮，才对当前页面、当前计划的一次 `ui.review` 授权，随后仍通过 `services.commit` 校验权限和数据快照。正文中的同名脚本事件、不同计划、重复请求、失效页面及需要额外风险勾选的确认继续使用普通审核。仅声明字段不会授权。确认和取消始终位于滚动内容之外。
 

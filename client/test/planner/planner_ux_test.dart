@@ -166,18 +166,18 @@ void main() {
       result = await settings('courseTeacher');
       expect(preview(result, 'coursePreview'), isNot(contains('教一 302')));
       expect(preview(result, 'coursePreview'), isNot(contains('王老师')));
-      expect(preview(result, 'selectionPreview'), contains('地点 教一 302'));
-      expect(preview(result, 'selectionPreview'), contains('老师 王老师'));
-      expect(preview(result, 'selectionPreview'), contains('来源 课程'));
-      expect(preview(result, 'selectionPreview'), contains('空闲 09:35'));
+      expect(preview(result, 'selectionPreview'), contains('教一 302'));
+      expect(preview(result, 'selectionPreview'), contains('王老师'));
+      expect(preview(result, 'selectionPreview'), contains('课程'));
+      expect(preview(result, 'selectionPreview'), contains('09:35–10:00'));
       for (final key in ['location', 'teacher', 'source', 'gaps']) {
         result = await settings(key);
       }
-      expect(preview(result, 'selectionPreview'), isNot(contains('地点 教一 302')));
-      expect(preview(result, 'selectionPreview'), isNot(contains('老师 王老师')));
-      expect(preview(result, 'selectionPreview'), isNot(contains('来源 课程')));
-      expect(preview(result, 'selectionPreview'), isNot(contains('空闲 09:35')));
-      expect(preview(result, 'selectionPreview'), contains('08:00—09:35'));
+      expect(preview(result, 'selectionPreview'), isNot(contains('教一 302')));
+      expect(preview(result, 'selectionPreview'), isNot(contains('王老师')));
+      expect(preview(result, 'selectionPreview'), isNot(contains('课程')));
+      expect(preview(result, 'selectionPreview'), isNot(contains('09:35–10:00')));
+      expect(preview(result, 'selectionPreview'), contains('08:00–09:35'));
       expect(boardOptions(await page())['allowedIntents'], [
         'move',
         'swap',
@@ -186,7 +186,42 @@ void main() {
     },
   );
 
-  test('detail settings persist and open in a panel over the board', () async {
+  test('planner record menus open their sibling route and batch tasks', () async {
+    final opened = <String>[];
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.navigate') opened.add(args['page'] as String);
+      return true;
+    };
+    for (final entry in [
+      ('app.planner.history', '已取消任务', 'app.planner.cancelled'),
+      ('app.planner.cancelled', '操作历史', 'app.planner.history'),
+    ]) {
+      final view = await page(pageId: entry.$1);
+      final actions = (object(view['header'])['actions'] as List).map(object);
+      for (final target in [(entry.$2, entry.$3), ('批量任务', 'app.planner.batches')]) {
+        final action = actions.singleWhere((item) => item['label'] == target.$1);
+        expect(action['presentation'], 'menu');
+        await page(pageId: entry.$1, state: object(view['state']), event: object(action['event']));
+        expect(opened.last, target.$2);
+      }
+    }
+  });
+
+  test('both dates in the occurrence window are required', () async {
+    final view = await page(pageId: 'app.planner.editor', context: {
+      'candidate': {
+        'id': 'instance', 'title': '复盘', 'status': 'pending',
+        'startDate': '2026-10-15', 'endDate': '2026-10-22',
+        'times': [{'start': '20:00', 'end': '22:00'}],
+        'estimatedMinutes': 15, 'priority': 2,
+      },
+    });
+    final dates = nodes(view['tree']).where((node) => node['type'] == 'dateInput');
+    expect(dates.map((node) => node['value']), ['2026-10-15', '2026-10-22']);
+    expect(dates.every((node) => node['clearable'] == false), isTrue);
+  });
+
+  test('detail settings persist and open from the board', () async {
     Future<Map<String, Object?>> settings({Map<String, Object?>? event}) =>
         page(pageId: 'app.planner.displaySettings', event: event);
     var rendered = await settings();
@@ -209,7 +244,7 @@ void main() {
     );
     var panels = 0;
     host.interaction = (_, method, args) async {
-      expect(method, 'ui.panel');
+      expect(method, 'ui.navigate');
       expect(args['page'], 'app.planner.displaySettings');
       panels++;
       return null;
@@ -225,20 +260,20 @@ void main() {
   });
 
   test(
-    'automatic display fits visible tasks with an hour of padding',
+    'automatic display opens near visible tasks and keeps the whole day available',
     () async {
-      expect(boardOptions(await page())['startMinute'], 480);
-      expect(boardOptions(await page())['endMinute'], 1320);
-      await scheduled('上午', '2026-10-13T01:15:00Z', '2026-10-13T02:30:00Z');
+      await scheduled('上午', '2026-10-13T02:15:00Z', '2026-10-13T03:30:00Z');
       await scheduled('晚上', '2026-10-14T12:00:00Z', '2026-10-14T13:15:00Z');
       final options = boardOptions(await page());
-      expect(options['startMinute'], 480);
-      expect(options['endMinute'], 1380);
+      expect(options['initialMinute'], 540);
+      expect(options['startMinute'], 0);
+      expect(options['endMinute'], 1440);
       final empty = boardOptions(
         await page(state: {'startDate': '2026-11-01'}),
       );
-      expect(empty['startMinute'], 480);
-      expect(empty['endMinute'], 1320);
+      expect(empty['initialMinute'], 480);
+      expect(empty['startMinute'], 0);
+      expect(empty['endMinute'], 1440);
     },
   );
 
@@ -250,13 +285,15 @@ void main() {
     final firstDay = boardOptions(
       await page(state: {'startDate': '2026-10-13', 'days': 1}),
     );
-    expect(firstDay['startMinute'], 1320);
+    expect(firstDay['initialMinute'], 1320);
+    expect(firstDay['startMinute'], 0);
     expect(firstDay['endMinute'], 1440);
     final secondDay = boardOptions(
       await page(state: {'startDate': '2026-10-14', 'days': 1}),
     );
     expect(secondDay['startMinute'], 0);
-    expect(secondDay['endMinute'], 120);
+    expect(secondDay['endMinute'], 1440);
+    expect(secondDay['initialMinute'], 0);
   });
 
   test(
@@ -283,8 +320,10 @@ void main() {
       expect(boardOptions(await page())['startMinute'], 0);
       expect(boardOptions(await page())['endMinute'], 1440);
       mode = 'auto';
-      await page(event: {'type': 'displayHours'});
-      expect(boardOptions(await page())['startMinute'], 480);
+      final automatic = boardOptions(await page(event: {'type': 'displayHours'}));
+      expect(automatic['startMinute'], 0);
+      expect(automatic['endMinute'], 1440);
+      expect(automatic['initialMinute'], 480);
     },
   );
 
@@ -486,13 +525,14 @@ void main() {
   Future<WorkspaceHeaderController> showPlanner(
     WidgetTester tester, {
     bool withMenu = false,
+    String pageId = 'app.planner.home',
   }) async {
     final headers = WorkspaceHeaderController();
     addTearDown(headers.dispose);
     headers.activate(
       identity: 'planner-widget-test',
       moduleId: 'app.planner',
-      pageId: 'app.planner.home',
+      pageId: pageId,
       enabled: true,
       isActive: () => true,
     );
@@ -531,7 +571,7 @@ void main() {
               host: host,
               moduleId: 'app.planner',
               handler: 'render',
-              pageContext: const {'pageId': 'app.planner.home'},
+              pageContext: {'pageId': pageId},
             ),
           ),
         ),
@@ -595,6 +635,43 @@ void main() {
     },
   );
 
+  testWidgets('swiping to an adjacent date exposes late tasks and empty drop slots', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      await scheduled('上午任务', '2026-10-13T01:00:00Z', '2026-10-13T02:00:00Z');
+      await scheduled('相邻日期的晚间任务', '2026-10-15T15:00:00Z', '2026-10-15T15:30:00Z');
+      await run('task.create', {'title': '待拖入任务', 'estimatedMinutes': 30}, module: 'app.tasks');
+    });
+    Map<String, Object?>? confirmation;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.review') confirmation = object(args['confirmation']);
+      return false;
+    };
+    await showPlanner(tester);
+    Finder keyed(String key) => find.byKey(ValueKey(key));
+    final columnWidth = tester.getSize(keyed('planner-day:2026-10-13')).width;
+    await tester.drag(keyed('planner-date-header'), Offset(-columnWidth, 0));
+    await tester.pumpAndSettle();
+    final vertical = tester.widget<SingleChildScrollView>(keyed('planner-vertical')).controller!;
+    vertical.jumpTo(vertical.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.text('相邻日期的晚间任务').hitTestable(), findsOneWidget);
+
+    final target = Offset(
+      tester.getCenter(keyed('planner-day:2026-10-15')).dx,
+      tester.getTopLeft(keyed('planner-ruler:1320')).dy,
+    );
+    final drag = await tester.startGesture(tester.getCenter(find.text('待拖入任务')));
+    await tester.pump(const Duration(milliseconds: 550));
+    await drag.moveTo(target);
+    await tester.pump();
+    await drag.up();
+    await settlePlanner(tester);
+    expect(confirmation?['items'], contains(equals({'title': '时间', 'subtitle': '22:00–22:30'})));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('details menu opens after a cancelled timeline drag', (
     tester,
   ) async {
@@ -606,7 +683,7 @@ void main() {
     await settlePlanner(tester);
     var panels = 0;
     host.interaction = (_, method, args) async {
-      if (method == 'ui.panel') {
+      if (method == 'ui.navigate') {
         expect(args['page'], 'app.planner.displaySettings');
         panels++;
       }
@@ -729,26 +806,28 @@ void main() {
       });
     });
     var reviews = 0;
+    String? destination;
     host.interaction = (_, method, args) async {
       if (method == 'ui.review') reviews++;
+      if (method == 'ui.navigate') destination = args['page'] as String?;
       return true;
     };
-    final headers = await showPlanner(tester);
-    final historyAction = (headers.content!.spec['actions'] as List)
+    final board = await showPlanner(tester);
+    final historyAction = (board.content!.spec['actions'] as List)
         .map(object)
         .singleWhere((action) => action['label'] == '操作历史');
     late Future<void> historyDispatch;
     await tester.runAsync(() async {
-      historyDispatch = headers.content!.dispatch(historyAction['event']);
+      historyDispatch = board.content!.dispatch(historyAction['event']);
     });
     await settlePlanner(tester);
-    await tester.runAsync(
-      () => historyDispatch.timeout(const Duration(seconds: 8)),
-    );
-    expect(headers.content!.spec['title'], '操作历史');
-    expect(find.text('点击撤销整次操作'), findsOneWidget);
+    await tester.runAsync(() => historyDispatch.timeout(const Duration(seconds: 8)));
+    expect(destination, 'app.planner.history');
+    final history = await showPlanner(tester, pageId: destination!);
+    expect(history.content!.spec['title'], '操作历史');
+    expect(find.text('撤销整次操作'), findsOneWidget);
     expect(find.textContaining('模块界面无效'), findsNothing);
-    await tester.tap(find.text('点击撤销整次操作'));
+    await tester.tap(find.text('撤销整次操作'));
     await settlePlanner(tester);
     expect(find.text('已撤销'), findsOneWidget);
     expect(reviews, 1);
@@ -763,23 +842,14 @@ void main() {
       expect(restored['plannedStartAt'], original['plannedStartAt']);
       expect(restored['plannedEndAt'], original['plannedEndAt']);
     });
-    expect(object(headers.content!.spec['backEvent'])['type'], 'board');
-    late Future<void> backDispatch;
-    await tester.runAsync(() async {
-      backDispatch = headers.content!.dispatch(
-        headers.content!.spec['backEvent'],
-      );
-    });
-    await settlePlanner(tester);
-    await tester.runAsync(
-      () => backDispatch.timeout(const Duration(seconds: 8)),
-    );
+    expect(history.content!.spec['backEvent'], isNull);
+    await showPlanner(tester);
     expect(find.byType(PlannerBoard), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('home keeps manual task actions without automatic scheduling', (
+  testWidgets('home keeps manual task actions alongside the automatic preview menu', (
     tester,
   ) async {
     late Map<String, Object?> original;
@@ -793,7 +863,7 @@ void main() {
     });
     final headers = await showPlanner(tester);
     final actions = (headers.content!.spec['actions'] as List).map(object);
-    expect(actions.where((action) => action['label'] == '自动安排'), isEmpty);
+    expect(object(actions.singleWhere((action) => action['label'] == '自动安排')['event'])['page'], 'auto');
     expect(find.byType(PlannerBoard), findsOneWidget);
     final board = tester.widget<PlannerBoard>(find.byType(PlannerBoard));
     final candidate = board.candidates.singleWhere(
@@ -956,7 +1026,7 @@ void main() {
         actions
             .where((a) => a['presentation'] == 'menu')
             .map((a) => a['label']),
-        ['批量任务', '操作历史', '已取消任务', '视图与显示', '待安排筛选', '规划规则', '规划设置'],
+        ['自动安排', '批量任务', '操作历史', '已取消任务', '视图与显示', '待安排筛选', '规划规则', '规划设置'],
       );
       final retired = host.directoryServices().map(object).where(
         (service) => service['moduleId'] == 'app.planner' &&
@@ -1239,9 +1309,10 @@ void main() {
     );
     expect(
       nodes(completedDetail['tree'])
-          .where((n) => n['text'] == '已完成 · 2026-10-13 08:00'),
+          .where((n) => n['text'] == '10月13日 · 08:00'),
       hasLength(1),
     );
+    expect(nodes(completedDetail['tree']).any((n) => n['type'] == 'badge' && n['text'] == '已完成'), true);
     expect(
       nodes(completedDetail['tree']).where((n) => n['text'] == '保存修改'),
       isEmpty,
@@ -1317,6 +1388,35 @@ void main() {
     expect(block(reopened)['plannedStartAt'], initialBlock['plannedStartAt']);
     expect(block(reopened)['start'], initialBlock['start']);
     expect(block(reopened)['end'], initialBlock['end']);
+  });
+
+  test('weekly availability edits stay in the draft until reviewed', () async {
+    var approved = false;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.dialog') return {'slots': '18:00-22:00'};
+      return method == 'ui.review' && approved;
+    };
+    Future<Map<String, Object?>> open(
+      Map<String, Object?> state,
+      Map<String, Object?> event, [
+      Map<String, Object?> forms = const {},
+    ]) => page(pageId: 'app.planner.tools', state: state, event: event, forms: forms);
+
+    var result = await open({'screen': 'settings'}, {'type': 'settings'});
+    expect(object(result['header'])['title'], '每周可用时间');
+    result = await open(object(result['state']), {'type': 'weekDay', 'day': 1});
+    expect(nodes(result['tree']).any((n) =>
+        n['title'] == '周一' && n['trailing'] == '18:00-22:00'), true);
+    result = await open(object(result['state']), {'type': 'saveWeekly'}, {'defaultMinutes': '45'});
+    expect(object(result['header'])['title'], '每周可用时间');
+    approved = true;
+    result = await open(object(result['state']), {'type': 'saveWeekly'});
+    expect(object(result['header'])['title'], '规划设置');
+    expect(nodes(result['tree']).any((n) =>
+        n['title'] == '每周可用时间' && '${n['subtitle']}'.contains('45 分钟')), true);
+    result = await open(object(result['state']), {'type': 'settings'});
+    expect(nodes(result['tree']).any((n) =>
+        n['title'] == '周一' && n['trailing'] == '18:00-22:00'), true);
   });
 
   test(
@@ -1634,12 +1734,12 @@ void main() {
   });
 
   test(
-    'canceled drag retains its intent and retry preserves the task duration',
+    'failed drag review retains its intent and retry preserves the task duration',
     () async {
       final original = object(
         await run('task.create', {'title': '可重试'}, module: 'app.tasks'),
       );
-      host.interaction = (_, method, args) async => false;
+      host.interaction = (_, method, args) async => throw StateError('审核暂时不可用');
       final first = await page(
         event: {
           'type': 'move',
@@ -1650,7 +1750,7 @@ void main() {
         },
       );
       expect(object(first['state'])['moveIntent'], isNotNull);
-      expect(object(first['state'])['error'], isNull);
+      expect(object(first['state'])['error'], contains('审核暂时不可用'));
       host.interaction = (_, method, args) async => true;
       final second = await page(
         state: object(first['state']),
@@ -1691,17 +1791,18 @@ void main() {
       },
     );
     expect(object(rendered['state'])['error'], isNull);
+    expect(object(rendered['state'])['moveIntent'], isNull);
     expect(calls, hasLength(1));
     expect(calls.single['method'], 'ui.review');
     final confirmation = object(calls.single['confirmation']);
     expect(confirmation['title'], '确认安排任务');
     expect(confirmation['confirmLabel'], '确认安排');
-    final message = confirmation['message'] as String;
-    expect(message, contains('普通安排\n原安排：待安排'));
-    expect(message, contains('2026-10-14 18:00 — 18:30'));
-    expect(message, contains('时长30分钟'));
-    expect(message, isNot(contains('18:45')));
-    expect(message, isNot(contains('plannedStartAt')));
+    expect(confirmation['subject'], '普通安排');
+    expect(confirmation['message'], '待安排 · 30 分钟');
+    expect(confirmation['items'], [
+      {'title': '日期', 'subtitle': '10月14日 周三'},
+      {'title': '时间', 'subtitle': '18:00–18:30'},
+    ]);
     expect(confirmation['acknowledgement'], isNull);
     expect(
       object(
@@ -1713,6 +1814,52 @@ void main() {
       ),
       original,
     );
+  });
+
+  test('a past drop can be saved and edited to earlier today, with occupancy still enforced', () async {
+    final task = object(await run('task.create', {
+      'title': '补排工作', 'estimatedMinutes': 30,
+    }, module: 'app.tasks'));
+    await scheduled('已有安排', '2026-10-12T00:30:00Z', '2026-10-12T01:00:00Z');
+    final reviews = <Map<String, Object?>>[];
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.review') reviews.add(object(args['confirmation']));
+      return true;
+    };
+    Future<Map<String, Object?>> saved() async => object(await host.query(
+      actor(), const ServiceRef('app.tasks', 'task.get', 1), {'id': task['id']},
+    ));
+    final proposal = {
+      'type': 'move', 'taskId': task['id'], 'start': '2026-10-12T07:00:00',
+      'end': '2026-10-12T07:30:00', 'intent': 'move',
+    };
+    final inspected = object(await host.query(
+      actor(), const ServiceRef('app.planner', 'planner.operation.inspect', 1),
+      {'proposal': proposal, 'timezone': 'Asia/Shanghai'},
+    ));
+    expect(inspected['valid'], true);
+    expect(inspected['conflicts'], isEmpty);
+    await page(event: proposal);
+    expect(reviews.single['notice'], '这个时段已过去，仍可保存安排。');
+    expect((await saved())['plannedStartAt'], '2026-10-11T23:00:00.000Z');
+
+    final context = {'taskId': task['id'], 'step': 'time'};
+    final detail = await page(pageId: 'app.planner.taskDetail', context: context);
+    await page(
+      pageId: 'app.planner.taskDetail', context: context, state: object(detail['state']),
+      forms: {'startDate': '2026-10-13', 'start': '06:30', 'endDate': '2026-10-13', 'end': '07:15'},
+      event: {'type': 'schedule'},
+    );
+    final edited = await saved();
+    expect(edited['plannedStartAt'], '2026-10-12T22:30:00.000Z');
+    expect(edited['plannedEndAt'], '2026-10-12T23:15:00.000Z');
+    expect(edited['completedAt'], isNull);
+    final conflict = await page(event: {
+      ...proposal, 'start': '2026-10-12T08:30:00', 'end': '2026-10-12T09:15:00',
+    });
+    expect(object(conflict['state'])['error'], contains('已有占用冲突'));
+    expect(reviews, hasLength(2));
+    expect(await saved(), edited);
   });
 
   test(
@@ -1742,10 +1889,10 @@ void main() {
       expect(object(rendered['state'])['error'], isNull);
       expect(calls, hasLength(1));
       expect(calls.single['method'], 'ui.review');
-      expect(
-        object(calls.single['confirmation'])['acknowledgement'],
-        contains('安排超出截止时间'),
-      );
+      final confirmation = object(calls.single['confirmation']);
+      expect(confirmation['confirmLabel'], '仍然安排');
+      expect(confirmation['acknowledgement'], isNull);
+      expect(confirmation['notice'], contains('截止'));
       final saved = object(
         await host.query(
           actor(),
@@ -1789,19 +1936,10 @@ void main() {
       },
     );
     expect(confirmations.single['title'], '确认交换时间');
-    final message = confirmations.single['message'] as String;
-    expect(
-      message,
-      contains(
-        '交换甲\n原安排：2026-10-14 18:00 — 18:30\n调整为：2026-10-14 20:00 — 20:30',
-      ),
-    );
-    expect(
-      message,
-      contains(
-        '交换乙\n原安排：2026-10-14 20:00 — 21:00\n调整为：2026-10-14 18:00 — 19:00',
-      ),
-    );
+    expect(confirmations.single['items'], [
+      {'title': '交换甲', 'subtitle': '10月14日 18:00–18:30 → 10月14日 20:00–20:30'},
+      {'title': '交换乙', 'subtitle': '10月14日 20:00–21:00 → 10月14日 18:00–19:00'},
+    ]);
     confirmations.clear();
     await page(
       event: {
@@ -1813,11 +1951,8 @@ void main() {
       },
     );
     expect(confirmations.single['title'], '确认调整时长');
-    expect(
-      confirmations.single['message'],
-      contains('调整为：2026-10-14 18:00 — 18:45'),
-    );
-    expect(confirmations.single['message'], contains('时长45分钟'));
+    expect(confirmations.single['items'], contains(equals({'title': '时间', 'subtitle': '18:00–18:45'})));
+    expect(confirmations.single['message'], '已安排 · 45 分钟');
   });
 
   test(

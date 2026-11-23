@@ -316,7 +316,9 @@ class TemporalInput extends StatelessWidget {
               helperMaxLines: 3,
               suffixIcon: actions,
             );
-    if (externalLabel && !editable && kind == TemporalInputKind.date) {
+    if (externalLabel &&
+        !editable &&
+        (kind == TemporalInputKind.date || kind == TemporalInputKind.time)) {
       final date = parseInputDate(currentValue);
       final display = date == null
           ? currentValue?.toString() ?? ''
