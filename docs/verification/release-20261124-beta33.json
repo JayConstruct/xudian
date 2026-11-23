@@ -1,0 +1,135 @@
+{
+  "tag": "v0.2.0-beta.33",
+  "sourceCommit": "e51ce7dba614e71b803467cef1ea0119a5c07c2e",
+  "moduleTag": "modules-20261124-planner-smart-hours",
+  "emulator": {
+    "versionCode": 4286,
+    "apkSha256": "2783b1414778d92cd1f771eff2906550bf6e59c389584aea53c93d4752b74500",
+    "module": "97bf4e5149c07c73c1764d1f6dd53d6a41744bb7468fa5ab3e881cf486cd6683",
+    "evidence": "dist/verification/20261123T194855.481795Z-emulator-update",
+    "selectedFlutterTests": 19,
+    "gestures": {
+      "top-48dp": {
+        "expanded": false,
+        "hint": "67, 时间\n继续下拉，显示全天"
+      },
+      "top-release": {
+        "expanded": false,
+        "hint": null
+      },
+      "top-72dp": {
+        "expanded": true,
+        "hint": null
+      },
+      "bottom-48dp": {
+        "expanded": false,
+        "hint": "67, 时间\n继续上拉，显示全天"
+      },
+      "bottom-release": {
+        "expanded": false,
+        "hint": null
+      },
+      "bottom-72dp": {
+        "expanded": true,
+        "hint": null
+      },
+      "task-48dp": {
+        "expanded": false,
+        "hint": "77, 时间\n继续向下拖，显示全天"
+      },
+      "task-72dp": {
+        "expanded": true,
+        "hint": null
+      },
+      "restored": {
+        "expanded": false,
+        "hint": null
+      }
+    },
+    "pastScheduling": "saved once, cancelled and confirmed undo, cold-reopened and checked unscheduled task"
+  },
+  "checks": {
+    "staticAnalysis": "passed",
+    "productionArchitecture": "passed",
+    "repositoryAndDocumentation": "passed",
+    "flutterShards": [
+      {
+        "job": "tests (1)",
+        "passed": 640
+      },
+      {
+        "job": "tests (0)",
+        "passed": 656
+      },
+      {
+        "job": "tests (2)",
+        "passed": 656
+      }
+    ]
+  },
+  "previousCandidate": {
+    "tag": "v0.2.0-beta.32",
+    "ci": "https://github.com/JayConstruct/xudian/actions/runs/45251402448",
+    "publishedApk": false,
+    "localFlutterTests": 140,
+    "reason": "One retention-policy UI assertion required exact whitespace. The final assertion checks the retained count independently of spacing."
+  },
+  "actions": [
+    {
+      "ref": "main",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45253880786",
+      "conclusion": "success"
+    },
+    {
+      "ref": "modules-20261124-planner-smart-hours",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45251402554",
+      "conclusion": "success"
+    },
+    {
+      "ref": "v0.2.0-beta.33",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45253881598",
+      "conclusion": "success"
+    }
+  ],
+  "apks": [
+    {
+      "name": "xudian-v0.2.0-beta.33-armeabi-v7a-release.apk",
+      "versionName": "0.2.0-beta.33",
+      "versionCode": 1181,
+      "abi": "armeabi-v7a",
+      "sha256": "cf5ffda5946dd48461a7bc30db48fbba631a05980f35c6e82bbf6450c7bc57e8",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 6
+    },
+    {
+      "name": "xudian-v0.2.0-beta.33-arm64-v8a-release.apk",
+      "versionName": "0.2.0-beta.33",
+      "versionCode": 2181,
+      "abi": "arm64-v8a",
+      "sha256": "3fbc57667e55e1d9786ba81d96a455340649cea345a6a766a9ca1e773ed8f38f",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 6
+    },
+    {
+      "name": "xudian-v0.2.0-beta.33-x86_64-release.apk",
+      "versionName": "0.2.0-beta.33",
+      "versionCode": 4181,
+      "abi": "x86_64",
+      "sha256": "2634bec1cf3d8a332cc50d55e1cbadabf2757485ce801ba9a1d80cdbff2d3174",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 6
+    }
+  ],
+  "module": {
+    "id": "app.planner",
+    "version": "1.17.1",
+    "hostApi": "^1.57.0",
+    "sha256": "97bf4e5149c07c73c1764d1f6dd53d6a41744bb7468fa5ab3e881cf486cd6683",
+    "size": 83041
+  },
+  "publicIndex": {
+    "url": "https://raw.githubusercontent.com/JayConstruct/xudian/module-catalog/module-index/app.planner.json",
+    "sha256": "f2f37c3fa9f537e6b77ebefe804d2cb40ad97ae22407c3e79162346029a50a82",
+    "attempts": 1
+  }
+}
