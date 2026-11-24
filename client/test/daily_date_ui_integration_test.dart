@@ -1,3 +1,5 @@
+import 'package:task_app/core/ui/temporal_input.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -458,7 +460,7 @@ void main() {
       expect(find.text('选择日期'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('workspace-date-picker')));
       await tester.pumpAndSettle();
-      expect(find.byType(DatePickerDialog), findsOneWidget);
+      expect(find.byType(DateSelectionSheet), findsOneWidget);
       await tester.tap(find.text('取消'));
       await _settle(tester);
       await tester.ensureVisible(find.byTooltip('后一天'));
@@ -697,7 +699,7 @@ void main() {
   );
 
   testWidgets(
-    'real date strip drag keeps header tasks and courses aligned and rejects a delayed rapid reversal',
+    'header date actions keep tasks and courses aligned and reject a delayed rapid reversal',
     (tester) async {
       tester.view.physicalSize = const Size(390, 1000);
       tester.view.devicePixelRatio = 1;
@@ -735,14 +737,13 @@ void main() {
           .map((element) => (element as StatefulElement).state)
           .toList();
       final strip = find.byType(DailyDateStrip);
-      final stripState = tester.state(strip);
+      expect(strip, findsNothing);
       Future<void> swipe(double dx) async {
         final reveal = DateRevealScope.read(
           tester.element(find.byType(DayOverview)),
         )!;
         await _until(tester, () => !reveal.isTransitioning);
-        await tester.ensureVisible(strip);
-        await tester.drag(strip, Offset(dx, 0));
+        await tester.tap(find.byTooltip(dx < 0 ? '后一天' : '前一天'));
         await tester.pump();
         await tester.pump();
       }
@@ -756,7 +757,7 @@ void main() {
           tester.state(find.byType(WorkspacePageTransition)),
           same(workspaceState),
         );
-        expect(tester.state(strip), same(stripState));
+        expect(strip, findsNothing);
         expect(find.byType(ModuleDetailPage), findsNothing);
         expect(find.byType(TimeGrid), findsNothing);
         expect(
@@ -863,7 +864,7 @@ void main() {
       );
       await _settle(tester);
       final strip = find.byType(DailyDateStrip);
-      final stripState = tester.state(strip);
+      expect(strip, findsNothing);
       final header = find.byKey(const ValueKey('workspace-header-region'));
       Finder headerDate(String date) =>
           find.descendant(of: header, matching: find.textContaining(date));
@@ -894,7 +895,7 @@ void main() {
         expect(find.byTooltip('前一天').hitTestable(), findsOneWidget);
         expect(find.byTooltip('后一天').hitTestable(), findsOneWidget);
         expect(find.semantics.byLabel('2026-10-11'), findsNothing);
-        expect(tester.state(strip), same(stripState));
+        expect(strip, findsNothing);
         expect(find.text('今天的任务').hitTestable(), findsNothing);
         expect(find.byType(AgendaItem).hitTestable(), findsNothing);
         expect(find.text('今天的任务', skipOffstage: false), findsOneWidget);
@@ -911,7 +912,7 @@ void main() {
       await tester.pump();
       expect(headerDate('10月10日'), findsOneWidget);
       expect(strip.hitTestable(), findsNothing);
-      expect(tester.state(strip), same(stripState));
+      expect(strip, findsNothing);
       await tester.tap(find.byTooltip('后一天'));
       await tester.pump();
       await tester.pump();
@@ -931,8 +932,8 @@ void main() {
         tester.widget<DayOverview>(find.byType(DayOverview)).selectedDate,
         '2026-10-11',
       );
-      expect(strip.hitTestable(), findsOneWidget);
-      expect(tester.state(strip), same(stripState));
+      expect(strip, findsNothing);
+      expect(strip, findsNothing);
       expect(find.text('今天的任务'), findsNothing);
       expect(find.text('明天的任务'), findsOneWidget);
       _expectCourseSummary(2);
@@ -976,12 +977,6 @@ void main() {
         const Rect.fromLTWH(0, 0, 390, 1000),
       );
       expect(sampleRect.isEmpty, isFalse);
-      final stripRect = tester.getRect(strip);
-      final oldDatePaint = await _paintedRegion(
-        tester,
-        find.byKey(screenKey),
-        stripRect,
-      );
       final background = Theme.of(tester.element(find.byType(DateReveal)))
           .scaffoldBackgroundColor;
       final backgroundPixel = [
@@ -1016,7 +1011,7 @@ void main() {
       expect(find.text('今天的任务').hitTestable(), findsNothing);
       expect(find.byType(AgendaItem).hitTestable(), findsNothing);
       expect(
-        find.text('2026-10-13 没有安排任务').hitTestable(),
+        find.text('可以为 10月13日 添加一项任务。').hitTestable(),
         findsNothing,
         reason: 'Ready task content must wait for the course contribution.',
       );
@@ -1041,21 +1036,10 @@ void main() {
         find.byKey(screenKey),
         sampleRect,
       );
-      final waitingDatePaint = await _paintedRegion(
-        tester,
-        find.byKey(screenKey),
-        stripRect,
-      );
       expect(
         _paintDifference(backgroundRegion(waitingTaskPaint), waitingTaskPaint),
         lessThan(.005),
         reason: 'Old task text and unready replacement text must be absent from paint.',
-      );
-      expect(
-        _paintDifference(backgroundRegion(waitingDatePaint), waitingDatePaint),
-        lessThan(.005),
-        reason:
-            'The business date band fades away while the course query is held.',
       );
       expect(strip.hitTestable(), findsNothing);
       expect(find.byType(AgendaItem).hitTestable(), findsNothing);
@@ -1070,15 +1054,8 @@ void main() {
         tester.widget<DayOverview>(find.byType(DayOverview)).selectedDate,
         '2026-10-13',
       );
-      expect(strip.hitTestable(), findsOneWidget);
-      expect(
-        _paintDifference(
-          oldDatePaint,
-          await _paintedRegion(tester, find.byKey(screenKey), stripRect),
-        ),
-        greaterThan(.01),
-        reason: 'After the shared reveal the five-day band shows the new date.',
-      );
+      expect(strip, findsNothing);
+      expect(find.bySemanticsLabel('10月13日 周二'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
@@ -1303,7 +1280,7 @@ void main() {
         tester.widget<DayOverview>(find.byType(DayOverview)).selectedDate,
         '2026-10-13',
       );
-      expect(find.text('2026-10-13 没有安排任务').hitTestable(), findsOneWidget);
+      expect(find.text('可以为 10月13日 添加一项任务。').hitTestable(), findsOneWidget);
       await tester.tap(find.byTooltip('前一天'));
       await _settle(tester);
       expect(currentReveal.isTransitioning, isFalse);
@@ -1311,9 +1288,9 @@ void main() {
         tester.widget<DayOverview>(find.byType(DayOverview)).selectedDate,
         '2026-10-12',
       );
-      expect(find.text('2026-10-12 没有安排任务').hitTestable(), findsOneWidget);
+      expect(find.text('可以为 10月12日 添加一项任务。').hitTestable(), findsOneWidget);
       expect(find.byType(AgendaItem, skipOffstage: false), findsNothing);
-      expect(find.byType(DailyDateStrip).hitTestable(), findsOneWidget);
+      expect(find.byType(DailyDateStrip), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();

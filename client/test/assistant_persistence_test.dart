@@ -316,7 +316,6 @@ void main() {
     baseline: const AppPreferences(),
     proposal: const AppPreferences(
       themeMode: ThemeMode.dark,
-      reduceMotion: true,
       haptics: false,
     ),
     concurrent: const AppPreferences(themeMode: ThemeMode.light),

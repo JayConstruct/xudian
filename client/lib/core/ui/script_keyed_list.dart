@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'ui_motion.dart';
+import 'responsive_content_grid.dart';
 
 class ScriptListItem {
   const ScriptListItem({required this.id, required this.builder});
@@ -24,6 +25,8 @@ class ScriptKeyedList extends StatefulWidget {
     this.duration = const Duration(milliseconds: 220),
     this.spacing = 12,
     this.scrollController,
+    this.columnStarts = const [],
+    this.firstColumnFlex = 1,
     this.padding = EdgeInsets.zero,
   });
 
@@ -32,7 +35,8 @@ class ScriptKeyedList extends StatefulWidget {
   final Object? feedbackKey;
   final Set<String> removeKeys, highlightKeys;
   final Duration duration;
-  final double spacing;
+  final double spacing, firstColumnFlex;
+  final List<String> columnStarts;
   final ScrollController? scrollController;
   final EdgeInsets padding;
 
@@ -182,6 +186,36 @@ class _ScriptKeyedListState extends State<ScriptKeyedList> {
         findChildIndexCallback: (key) => indices[key],
         itemBuilder: (_, index) => _row(entries[index]),
       );
+    }
+    if (widget.columnStarts.length == 2) {
+      final first = entries.indexWhere(
+        (entry) => entry.item.id == widget.columnStarts.first,
+      );
+      final second = entries.indexWhere(
+        (entry) => entry.item.id == widget.columnStarts.last,
+      );
+      if (first >= 0 && second > first) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ...entries.take(first).map(_row),
+            ResponsiveContentGrid(
+              firstColumnFlex: widget.firstColumnFlex,
+              spacing: 24,
+              children: [
+                for (final group in [
+                  entries.sublist(first, second),
+                  entries.sublist(second),
+                ])
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: group.map(_row).toList(),
+                  ),
+              ],
+            ),
+          ],
+        );
+      }
     }
     return Column(
       mainAxisSize: MainAxisSize.min,

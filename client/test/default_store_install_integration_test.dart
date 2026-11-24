@@ -213,7 +213,7 @@ void main() {
         },
       }),
     );
-    expect(jsonEncode(immediateTasks['tree']), contains('暂无今天待办或逾期任务'));
+    expect(jsonEncode(immediateTasks['tree']), contains('这一天还没有安排'));
     final importer = host.instances['app.import.shiguang']!.actor;
     expect(
       object(

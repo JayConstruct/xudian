@@ -1,0 +1,409 @@
+{
+  "formatVersion": 3,
+  "manifest": {
+    "id": "app.ideas",
+    "name": "想法",
+    "version": "1.1.1",
+    "hostApi": "^1.59.0",
+    "dataVersion": 1,
+    "permissions": [
+      "ui",
+      "clock.today",
+      "services.command:app.tasks/task.create@1",
+      "services.command:app.tasks/project.create@1"
+    ],
+    "dependencies": [
+      {
+        "moduleId": "app.tasks",
+        "version": "^1.8.0"
+      }
+    ],
+    "description": "随手记录想法，按日期或关键词回看，收藏并从原文创建任务或项目。",
+    "author": "JayConstruct",
+    "workflowStartup": "lazy"
+  },
+  "entryPoint": "main.js",
+  "pages": [
+    {
+      "id": "app.ideas.home",
+      "title": "想法",
+      "handler": "render",
+      "headerMode": "contributed",
+      "icon": "lightbulb",
+      "entry": {
+        "id": "app.ideas.home",
+        "opening": "detail",
+        "placement": "more",
+        "order": 35
+      }
+    },
+    {
+      "id": "app.ideas.search",
+      "title": "搜索想法",
+      "handler": "render",
+      "headerMode": "contributed"
+    },
+    {
+      "id": "app.ideas.day",
+      "title": "按日期查看",
+      "handler": "render",
+      "headerMode": "contributed"
+    }
+  ],
+  "collections": [
+    {
+      "id": "ideas",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "created": {
+            "type": "object",
+            "properties": {
+              "utc": {
+                "type": "string",
+                "minLength": 1
+              },
+              "date": {
+                "type": "string",
+                "minLength": 1
+              },
+              "time": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "utc",
+              "date",
+              "time"
+            ],
+            "additionalProperties": false
+          },
+          "modified": {
+            "type": "object",
+            "properties": {
+              "utc": {
+                "type": "string",
+                "minLength": 1
+              },
+              "date": {
+                "type": "string",
+                "minLength": 1
+              },
+              "time": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "utc",
+              "date",
+              "time"
+            ],
+            "additionalProperties": false
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "favorite": {
+            "type": "boolean"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "requestId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "task",
+                    "project"
+                  ]
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "targetId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "created": {
+                  "type": "object",
+                  "properties": {
+                    "utc": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "date": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "time": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "utc",
+                    "date",
+                    "time"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "requestId",
+                "kind",
+                "name",
+                "targetId",
+                "created"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "localDate": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "created",
+          "modified",
+          "revision",
+          "favorite",
+          "history",
+          "createdAt",
+          "localDate"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "services": [
+    {
+      "id": "idea.record",
+      "major": 1,
+      "kind": "command",
+      "handler": "recordIdea",
+      "input": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "idea.edit",
+      "major": 1,
+      "kind": "command",
+      "handler": "editIdea",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "idea.favorite",
+      "major": 1,
+      "kind": "command",
+      "handler": "favoriteIdea",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "favorite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "favorite"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "idea.delete",
+      "major": 1,
+      "kind": "command",
+      "handler": "deleteIdea",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "idea.createTarget",
+      "major": 1,
+      "kind": "command",
+      "handler": "createTarget",
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "task",
+              "project"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "kind",
+          "name",
+          "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

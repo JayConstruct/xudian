@@ -1,0 +1,721 @@
+{
+  "indexFormat": 1,
+  "moduleId": "app.ideas",
+  "repository": "JayConstruct/xudian",
+  "versions": [
+    {
+      "version": "1.0.1",
+      "manifest": {
+        "id": "app.ideas",
+        "name": "想法",
+        "version": "1.0.1",
+        "hostApi": "^1.58.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/project.create@1"
+        ],
+        "dependencies": [
+          {
+            "moduleId": "app.tasks",
+            "version": "^1.8.0"
+          }
+        ],
+        "description": "随手记录想法，按日期或关键词回看，收藏并从原文创建任务或项目。",
+        "author": "JayConstruct",
+        "workflowStartup": "lazy"
+      },
+      "services": [
+        {
+          "id": "idea.record",
+          "major": 1,
+          "kind": "command",
+          "handler": "recordIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "body": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.edit",
+          "major": 1,
+          "kind": "command",
+          "handler": "editIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.favorite",
+          "major": 1,
+          "kind": "command",
+          "handler": "favoriteIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "favorite": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "favorite"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.delete",
+          "major": 1,
+          "kind": "command",
+          "handler": "deleteIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.createTarget",
+          "major": 1,
+          "kind": "command",
+          "handler": "createTarget",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "task",
+                  "project"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "requestId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "kind",
+              "name",
+              "requestId"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-ideas-1.0.1/app.ideas-1.0.1.xmodule",
+      "size": 8425,
+      "sha256": "048fd157117d3fa1ca0e91269c79b39f9dea7a6c2738008cc43c6f5bf25ed9b3",
+      "signature": null
+    },
+    {
+      "version": "1.0.2",
+      "manifest": {
+        "id": "app.ideas",
+        "name": "想法",
+        "version": "1.0.2",
+        "hostApi": "^1.58.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/project.create@1"
+        ],
+        "dependencies": [
+          {
+            "moduleId": "app.tasks",
+            "version": "^1.8.0"
+          }
+        ],
+        "description": "随手记录想法，按日期或关键词回看，收藏并从原文创建任务或项目。",
+        "author": "JayConstruct",
+        "workflowStartup": "lazy"
+      },
+      "services": [
+        {
+          "id": "idea.record",
+          "major": 1,
+          "kind": "command",
+          "handler": "recordIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "body": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.edit",
+          "major": 1,
+          "kind": "command",
+          "handler": "editIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.favorite",
+          "major": 1,
+          "kind": "command",
+          "handler": "favoriteIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "favorite": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "favorite"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.delete",
+          "major": 1,
+          "kind": "command",
+          "handler": "deleteIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.createTarget",
+          "major": 1,
+          "kind": "command",
+          "handler": "createTarget",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "task",
+                  "project"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "requestId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "kind",
+              "name",
+              "requestId"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-ideas-1.0.2/app.ideas-1.0.2.xmodule",
+      "size": 8459,
+      "sha256": "4446705d1bd73e614c524a3d080a228f4cef03b79cdda090038f5df7e2033791",
+      "signature": null
+    },
+    {
+      "version": "1.1.1",
+      "manifest": {
+        "id": "app.ideas",
+        "name": "想法",
+        "version": "1.1.1",
+        "hostApi": "^1.59.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today",
+          "services.command:app.tasks/task.create@1",
+          "services.command:app.tasks/project.create@1"
+        ],
+        "dependencies": [
+          {
+            "moduleId": "app.tasks",
+            "version": "^1.8.0"
+          }
+        ],
+        "description": "随手记录想法，按日期或关键词回看，收藏并从原文创建任务或项目。",
+        "author": "JayConstruct",
+        "workflowStartup": "lazy"
+      },
+      "services": [
+        {
+          "id": "idea.record",
+          "major": 1,
+          "kind": "command",
+          "handler": "recordIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "body": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.edit",
+          "major": 1,
+          "kind": "command",
+          "handler": "editIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.favorite",
+          "major": 1,
+          "kind": "command",
+          "handler": "favoriteIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "favorite": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "favorite"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.delete",
+          "major": 1,
+          "kind": "command",
+          "handler": "deleteIdea",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "idea.createTarget",
+          "major": 1,
+          "kind": "command",
+          "handler": "createTarget",
+          "input": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "task",
+                  "project"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "requestId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "kind",
+              "name",
+              "requestId"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-ideas-1.1.1/app.ideas-1.1.1.xmodule",
+      "size": 33473,
+      "sha256": "75e2c9a8d7df7acdcaccc639954e84de8faec928cb2da9a61fea62f9b6736ed9",
+      "signature": null
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import '../ui/page_composition_readiness.dart';
 import '../ui/page_first_frame.dart';
 import '../ui/page_loading_placeholder.dart';
 import '../ui/date_reveal.dart';
+import '../ui/daily_widgets.dart' show AgendaTimeLayout;
 import 'date_page_cache.dart';
 import '../../app/app_icons.dart';
 
@@ -22,6 +23,7 @@ import '../ui/ui_component.dart';
 import '../ui/ui_pack.dart';
 import '../ui/temporal_input.dart';
 import '../ui/script_transition.dart';
+import '../ui/tab_content_transition.dart';
 import '../ui/script_motion.dart';
 import '../ui/script_swipe_actions.dart';
 import '../ui/script_ui_scope.dart';
@@ -112,6 +114,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   String get sessionKey =>
       '${widget.moduleId}:${widget.handler}:${canonicalJson(withoutRuntimePageContext(widget.pageContext))}';
   bool busy = false, dirty = false;
+  Object? _inFlightEvent;
   bool _refreshingForms = false, _waitingAction = false;
   final _formCacheWrites = <Future<void>>{};
   int _formCacheRevision = 0;
@@ -225,7 +228,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               ),
               IconButton(
                 tooltip: '查看实际变更详情',
-                onPressed: () => showDataChangeDetails(context, preview.summary),
+                onPressed: () =>
+                    showDataChangeDetails(context, preview.summary),
                 icon: const Icon(Icons.info_outline),
               ),
             ],
@@ -861,6 +865,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     progressTimer?.cancel();
     setState(() {
       busy = true;
+      _inFlightEvent = event;
       _refreshingForms =
           event == null || event is Map && event['type'] == 'field';
       showProgress = false;
@@ -1179,6 +1184,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         progressTimer?.cancel();
         setState(() {
           busy = false;
+          _inFlightEvent = null;
           showProgress = false;
           _pendingPlannerAdjustment = null;
         });
@@ -1481,6 +1487,20 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     return raw;
   }
 
+  void _applyScrollRequest(
+    String key,
+    ScrollController controller,
+    Object? request,
+  ) {
+    if (request == null || scrollRequests[key] == request) return;
+    scrollRequests[key] = request;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && scrollRequests[key] == request && controller.hasClients) {
+        controller.jumpTo(controller.position.minScrollExtent);
+      }
+    });
+  }
+
   Widget _slot(Object? raw, String name, String ownerKey, int depth) {
     final children = raw is List
         ? objects(raw)
@@ -1499,18 +1519,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         scrollKey,
         ScrollController.new,
       );
-      if (raw is Map && raw.containsKey('scrollRequest')) {
-        final request = raw['scrollRequest'];
-        if (scrollRequests[scrollKey] != request) {
-          scrollRequests[scrollKey] = request;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted &&
-                scrollRequests[scrollKey] == request &&
-                controller.hasClients) {
-              controller.jumpTo(0);
-            }
-          });
-        }
+      if (raw is Map) {
+        _applyScrollRequest(scrollKey, controller, raw['scrollRequest']);
       }
       return ListView.builder(
         key: PageStorageKey(scrollKey),
@@ -1565,6 +1575,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     if (ref == 'ui.dayOverview@1' &&
         PageRuntimeContextScope.read(context)?.dateTodayInMenu == true) {
       props['returnToToday'] = false;
+      if (props['daysPresentation'] == 'standalone') props['showDays'] = false;
     }
     if (ref == 'ui.dayOverview@1' && pageContext['selectedDate'] is String) {
       // This control follows presentation intent immediately, while its counts
@@ -1807,6 +1818,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         : safeNode(object(footer));
     final message = tree?['footerMessage'];
     final edge = tree?['footerStyle'] == 'edge';
+    final composer = tree?['footerStyle'] == 'composer';
+    final inset = composer || tree?['footerStyle'] == 'inset';
     final flat = edge || tree?['footerStyle'] == 'flat';
     final rendered = _pageTransition(
       Container(
@@ -1824,10 +1837,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               )
             : null,
         padding: EdgeInsets.fromLTRB(
-          edge ? AppDesign.pageGutter : 16,
+          edge || composer ? AppDesign.pageGutter : 16,
           edge ? 10 : 8,
-          edge ? AppDesign.pageGutter : 16,
-          12 + WorkspaceContentInsets.bottomOf(context),
+          edge || composer ? AppDesign.pageGutter : 16,
+          (composer ? 5 : 12) + WorkspaceContentInsets.bottomOf(context),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1841,7 +1854,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                   child: safeNode(object(message)),
                 ),
               ),
-            footer['type'] == 'messageComposer' || flat
+            footer['type'] == 'messageComposer' || flat || inset
                 ? child
                 : FloatingSurface(
                     padding: const EdgeInsets.all(12),
@@ -1907,6 +1920,101 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     return (column['spacing'] as num? ?? 12).toDouble().clamp(0, 48);
   }
 
+  int? _tabIndex(Map<String, Object?> node) {
+    if (node['type'] == 'segmented' ||
+        node['type'] == 'tabs' &&
+            (node['variant'] == 'pills' || node['variant'] == 'underline')) {
+      return (bind(node['selectedIndex']) as num?)?.toInt() ?? 0;
+    }
+    if (node['type'] == 'tabs' && node['selectedIndex'] != null) {
+      return (bind(node['selectedIndex']) as num?)?.toInt() ?? -1;
+    }
+    return null;
+  }
+
+  // A selector controls the siblings below it in its own column. Keep the
+  // selector (and any search or title above it) outside the content transition.
+  Iterable<({int first, int end, int? tab})> _tabSections(
+    List<Map<String, Object?>> children,
+  ) sync* {
+    int? tab;
+    var first = 0;
+    for (var i = 0; i < children.length; i++) {
+      final selected = _tabIndex(children[i]);
+      if (selected == null) continue;
+      if (first < i) yield (first: first, end: i, tab: tab);
+      yield (first: i, end: i + 1, tab: null);
+      first = i + 1;
+      tab = selected;
+    }
+    if (first < children.length) {
+      yield (first: first, end: children.length, tab: tab);
+    }
+  }
+
+  Widget _tabScrollView(
+    Map<String, Object?> spec,
+    List<Map<String, Object?>> children,
+    ScrollController controller,
+    String scrollKey,
+    EdgeInsets padding,
+  ) {
+    return CustomScrollView(
+      key: PageStorageKey(scrollKey),
+      controller: controller,
+      slivers: [
+        SliverPadding(
+          padding: padding,
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              for (final section in _tabSections(children))
+                Builder(
+                  builder: (_) {
+                    Widget row(int index) {
+                      final i = section.first + index;
+                      final child = children[i];
+                      return Padding(
+                        key: child['key'] == null
+                            ? null
+                            : ValueKey(child['key']),
+                        padding: EdgeInsets.only(
+                          bottom: _columnGap(spec, children, i, 0),
+                        ),
+                        child: node(child, 1),
+                      );
+                    }
+
+                    final count = section.end - section.first;
+                    final rows = count > 50
+                        ? SliverList.builder(
+                            itemCount: count,
+                            itemBuilder: (_, index) => row(index),
+                          )
+                        : SliverToBoxAdapter(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment:
+                                  spec['crossAxisAlignment'] == 'start'
+                                  ? CrossAxisAlignment.start
+                                  : CrossAxisAlignment.stretch,
+                              children: List.generate(count, row),
+                            ),
+                          );
+                    return section.tab == null
+                        ? rows
+                        : TabContentTransition.sliver(
+                            index: section.tab!,
+                            child: rows,
+                          );
+                  },
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget pageContent() {
     final spec = tree!;
     final rootChildren = objects(spec['children']);
@@ -1915,6 +2023,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       scrollKey,
       ScrollController.new,
     );
+    _applyScrollRequest(scrollKey, controller, spec['scrollRequest']);
     if (spec['followEnd'] != null &&
         scrollRequests['followEnd'] != spec['followEnd']) {
       final follow =
@@ -1975,6 +2084,53 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                               : bottom,
                         ),
                         child: safeNode(spec),
+                      )
+                    : spec['type'] == 'column' &&
+                          spec['centerLast'] == true &&
+                          rootChildren.isNotEmpty
+                    ? CustomScrollView(
+                        key: PageStorageKey(scrollKey),
+                        controller: controller,
+                        slivers: [
+                          SliverPadding(
+                            padding: scrollPadding.copyWith(bottom: 0),
+                            sliver: SliverList.builder(
+                              itemCount: rootChildren.length - 1,
+                              itemBuilder: (context, index) => Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: _columnGap(
+                                    spec,
+                                    rootChildren,
+                                    index,
+                                    0,
+                                  ),
+                                ),
+                                child: node(rootChildren[index], 1),
+                              ),
+                            ),
+                          ),
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Padding(
+                              padding: scrollPadding.copyWith(top: 0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [node(rootChildren.last, 1)],
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : spec['type'] == 'column' &&
+                          spec['template'] == null &&
+                          rootChildren.any((child) => _tabIndex(child) != null)
+                    ? _tabScrollView(
+                        spec,
+                        rootChildren,
+                        controller,
+                        scrollKey,
+                        scrollPadding,
                       )
                     : spec['type'] == 'column' &&
                           spec['template'] == null &&
@@ -2110,7 +2266,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               if (widget.embedded)
                 Padding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: AppDesign.pageGutter,
+                    horizontal:
+                        tree?['compact'] == true &&
+                            MediaQuery.sizeOf(context).width <= 360
+                        ? 12
+                        : AppDesign.pageGutter,
                     vertical: tree?['compact'] == true ? 4 : 12,
                   ),
                   child: Stack(

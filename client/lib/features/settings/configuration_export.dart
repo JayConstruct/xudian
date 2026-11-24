@@ -164,10 +164,18 @@ class ConfigurationExporter {
     return result;
   }
 
-  Object? _settingValue(String key, String value) =>
-      const {'ui.preferences', 'ui.layout', 'ui.selection'}.contains(key)
-      ? _decode(value)
-      : value;
+  Object? _settingValue(String key, String value) {
+    if (key == AppPreferencesController.storageKey) {
+      final stored = _decode(value);
+      if (stored is Map<String, dynamic>) {
+        return AppPreferences.fromJson(stored).toJson();
+      }
+      return stored;
+    }
+    return const {'ui.layout', 'ui.selection'}.contains(key)
+        ? _decode(value)
+        : value;
+  }
 
   Object? _decode(String value) {
     try {

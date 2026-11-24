@@ -107,6 +107,7 @@ class UiLayoutNavigationPreview extends StatelessWidget {
           : math.min(390.0, constraints.maxWidth + 24);
       final count = navigationVisibleCount(
         total: main.length,
+        fixedMore: profile.morePageEnabled,
         limit: profile.mainLimit,
         width: width - 24 - (profile.morePageEnabled && !desktop ? 72 : 0),
         textScale: MediaQuery.textScalerOf(context).scale(12) / 12,

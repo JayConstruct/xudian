@@ -3,6 +3,7 @@ import {connectionValue,editConnection,chooseModel,connectionTree,requestJson,pr
 const ref=id=>({moduleId:'app.ai',serviceId:id,majorVersion:1});
 let cancelled=false,requestId=null,currentGrant=null,authorizationRequired=false;
 const pendingHistory=new Map();
+const grantDenied='未获得工具授权，本次操作未执行。';
 const button=(text,event,extra={})=>({type:'button',text,event,variant:'text',...extra});
 async function persistUndo(undo) { const plan=await services.prepare(undo.ref,undo.input);if(!await ui.review(plan.planId)) return false;await services.commit(plan.planId);if(currentGrant)currentGrant.remainingWrites--;return true; }
 async function persist(id,input) { const p=await services.prepare(ref(id),input); if(await ui.review(p.planId)) return services.commit(p.planId); }
@@ -34,7 +35,7 @@ async function requestAuthorization(toolServices) {
     if (service.tool.undo?.serviceId) scopes.add(`${service.moduleId}/${service.tool.undo.serviceId}@${service.major}`);
   }
   const grant=await grants.request({scopes:[...scopes]});
-  if(!grant) { authorizationRequired=true;throw new Error('未获得工具授权，请重新申请工具授权；未自动重放写入。'); }
+  if(!grant) { authorizationRequired=true;throw new Error(grantDenied); }
   currentGrant={...grant,scopes,remainingWrites:grant.writeLimit};authorizationRequired=false;
 }
 function committedSummary(receipts) {
@@ -245,6 +246,7 @@ export async function render({state={},event,formValues={},context={}}) {
     } catch(error) { failure=authorizationError(error); }
     const summary=state.receipts.length||failure?committedSummary(state.receipts):'';
     reply=[failure?`${state.receipts.length?'部分完成':'未完成'}：${failure}。后续步骤未完成，未自动重试；请勿重复发送已提交操作。`:reply,summary,declined?`${declined} 项操作取消审核，未执行。`:''].filter(Boolean).join('\n');
+    if(failure===grantDenied&&!state.receipts.length) reply=grantDenied;
     messages=[...previousMessages,{role:'user',content:text},{role:'assistant',content:reply}];
     await checkpoint(conversationId,state,messages);
     sent=true;
@@ -264,7 +266,7 @@ export async function render({state={},event,formValues={},context={}}) {
   const children=[];
   if(state.operationStatus) children.push({type:'text',text:state.operationStatus,style:'muted'});
   if(state.historyStatus) children.push({type:'text',text:state.historyStatus,style:'muted'});
-  if(authorizationRequired) children.push(button('重新申请工具授权',{type:'authorize'}));
+
   if(projectDraft)children.unshift(
     {type:'listTile',icon:'folder',title:context.projectName,subtitle:context.projectPath||'项目直属'},
     {type:'divider'},
@@ -276,12 +278,20 @@ export async function render({state={},event,formValues={},context={}}) {
     {type:'text',text:connection?.model?'可以直接聊天，或让我协助查看任务与安排。':'点击右上角设置，连接模型后开始对话。',style:'muted'}
   ]});
   if(state.lastUndo) children.push(button('撤销上次操作',{type:'undo'}));
-  for(const [index,message] of messages.entries()) children.push({type:'chatMessage',key:`message:${index}`,role:message.role,label:message.role==='user'?'你':'AI 助手',text:message.content});
-  const footer={type:'messageComposer',key:'message',text:state.advanced?'描述要生成或更新的模块…':'输入消息…',event:{type:'send'},interrupt:'cancel'};
+  for(const [index,message] of messages.entries()) {
+    if(message.role==='assistant'&&message.content===grantDenied) children.push({type:'notice',tone:'accent',text:grantDenied});
+    else children.push({type:'chatMessage',key:`message:${index}`,role:message.role,label:message.role==='user'?'你':'AI 助手',text:message.content});
+  }
+  if(authorizationRequired||!currentGrant&&messages[messages.length-1]?.content===grantDenied) children.push({type:'row',children:[button('重新申请工具授权',{type:'authorize'},{variant:'outlined',tone:'neutral'})]});
+  const footer={type:'messageComposer',presentation:'outlined',key:'message',text:state.advanced?'描述要生成或更新的模块…':'输入消息…',event:{type:'send'},interrupt:'cancel'};
   if(state.advanced) children.push({type:'disclosure',key:'moduleSourceSection',text:'模块源码',children:[{type:'sourceEditor',key:'moduleSource',text:'模块 definition 与源码 JSON',value:state.moduleSource||'',multiline:true},button('审核并安装源码',{type:'installSource'})]});
-  return {state,clearForms:sent?['message']:[],replaceForms:seed?{message:'帮我把'+context.projectName+'的工作拆成几项任务，按分类列出，并估算每项耗时。'}:state.advanced?{moduleSource:state.moduleSource||''}:{},...(projectDraft?{header:{title:'用 AI 拆解项目',compact:true,actions:[{icon:'settings',label:'AI 设置',event:{type:'settings'},presentation:'inline'}]}}:{}),tree:{
+  return {state,clearForms:sent?['message']:[],replaceForms:seed?{message:'帮我把'+context.projectName+'的工作拆成几项任务，按分类列出，并估算每项耗时。'}:state.advanced?{moduleSource:state.moduleSource||''}:{},...(projectDraft?{header:{title:'用 AI 拆解项目',compact:true,actions:[{icon:'settings',label:'AI 设置',event:{type:'settings'},presentation:'inline'}]}}:{header:{title:'AI 助手',titleStyle:'large'}}),tree:{
     type:'column',compact:true,spacing:12,followEnd:messages.length,
-    ...(!projectDraft?{header:{type:'pageHeader',title:'AI 助手',subtitle:connection?.model?`${state.advanced?'高级模式':'普通聊天'} · ${connection.model}`:'尚未配置模型',actions:[{icon:'settings',label:'AI 设置',event:{type:'settings'}}]}}:{}),
+    ...(!projectDraft?{header:{type:'inset',padding:[20,12,20,6],children:[{type:'groupItem',position:'only',child:{
+      type:'listTile',title:'AI 助手',icon:'ai',iconTone:'accent',iconSurfaceSize:44,minHeight:78,
+      subtitle:connection?.model?(state.advanced?'高级模式':'普通聊天'):'尚未配置模型',
+      trailingAction:{icon:'settings',label:'AI 设置',event:{type:'settings'}}
+    }}]}}:{}),
     children,footer}};
 }
 export async function renderSettings(args) {

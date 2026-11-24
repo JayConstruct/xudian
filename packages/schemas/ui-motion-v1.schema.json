@@ -159,6 +159,8 @@
     },
     "swipeActions": {
       "type": "object",
+      "if": {"required": ["menuTrigger"], "properties": {"menuTrigger": {"const": "longPress"}}},
+      "else": {"properties": {"actions": {"maxItems": 3}}},
       "properties": {
         "type": {
           "const": "swipeActions"
@@ -189,6 +191,7 @@
             }
           ]
         },
+        "menuAlign": {"enum": ["start","end"]},
         "menuTrigger": {
           "enum": ["button", "longPress"]
         },
@@ -227,7 +230,7 @@
         "actions": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 3,
+          "maxItems": 5,
           "items": {
             "type": "object",
             "properties": {
@@ -242,6 +245,8 @@
               "event": {
                 "type": "object"
               },
+              "tone": {"const": "danger"},
+              "dividerBefore": {"type": "boolean"},
               "disabled": {
                 "anyOf": [
                   {

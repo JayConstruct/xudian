@@ -1,134 +1,42 @@
 import 'script_content_widgets.dart' show scriptToneSurface;
+
 import 'package:flutter/material.dart';
 
-import 'ui_motion.dart';
+import 'sliding_segments.dart';
 
-/// Equal-width choices wrap on narrow or large-text layouts without clipping.
 class ScriptSegmentedControl extends StatelessWidget {
   const ScriptSegmentedControl({
     super.key,
     required this.labels,
     required this.selectedIndex,
     required this.onSelected,
-    this.sliding = false,
+    this.scrollable = false,
+    this.compact = false,
+    this.icons = const [],
   });
-
-  final bool sliding;
   final List<String> labels;
   final int selectedIndex;
   final ValueChanged<int>? onSelected;
+  final bool scrollable, compact;
+  final List<IconData?> icons;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final minimum = MediaQuery.textScalerOf(context).scale(16) * 4 + 24;
-        final columns = (constraints.maxWidth / minimum).floor().clamp(
-          1,
-          labels.length,
-        );
-        final width = (constraints.maxWidth - 8) / columns;
-        final slide = sliding && columns == labels.length;
-        return Material(
-          color: slide
-              ? scheme.surfaceContainerHighest
-              : scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Stack(
-              children: [
-                if (slide &&
-                    selectedIndex >= 0 &&
-                    selectedIndex < labels.length)
-                  Positioned.fill(
-                    child: AnimatedAlign(
-                      alignment: AlignmentDirectional(
-                        labels.length == 1
-                            ? 0
-                            : 2 * selectedIndex / (labels.length - 1) - 1,
-                        0,
-                      ),
-                      duration: AppMotion.duration(
-                        context,
-                        const Duration(milliseconds: 220),
-                      ),
-                      curve: Curves.easeInOut,
-                      child: FractionallySizedBox(
-                        widthFactor: 1 / labels.length,
-                        heightFactor: 1,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: scheme.surface,
-                            borderRadius: BorderRadius.circular(11),
-                            boxShadow: [
-                              BoxShadow(
-                                color: scheme.shadow.withValues(alpha: .08),
-                                offset: const Offset(0, 1),
-                                blurRadius: 3,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                Wrap(
-                  children: [
-                    for (var index = 0; index < labels.length; index++)
-                      SizedBox(
-                        width: width,
-                        child: Semantics(
-                          selected: selectedIndex == index,
-                          button: true,
-                          child: Material(
-                            color: !slide && selectedIndex == index
-                                ? scheme.primary.withValues(alpha: .12)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(11),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(11),
-                              onTap: onSelected == null
-                                  ? null
-                                  : () => onSelected!(index),
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  minHeight: 48,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 10,
-                                  ),
-                                  child: Text(
-                                    labels[index],
-                                    textAlign: TextAlign.center,
-                                    style: theme.textTheme.labelLarge?.copyWith(
-                                      color: selectedIndex == index
-                                          ? scheme.primary
-                                          : scheme.onSurfaceVariant,
-                                      fontWeight: selectedIndex == index
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => SlidingSegments<int>(
+    segments: [
+      for (final (i, label) in labels.indexed)
+        ButtonSegment(
+          value: i,
+          label: Text(label),
+          icon: i < icons.length && icons[i] != null
+              ? Icon(icons[i], size: 15)
+              : null,
+        ),
+    ],
+    selected: selectedIndex,
+    minSegmentHeight: compact ? 32 : 48,
+    onChanged: onSelected,
+    scrollable: scrollable,
+  );
 }
 
 class ScriptFormSection extends StatelessWidget {

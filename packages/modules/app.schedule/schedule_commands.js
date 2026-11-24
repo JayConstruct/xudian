@@ -37,18 +37,23 @@ export async function saveCourse({course,meeting,orphanPolicy,expectedCourse,exp
   }
   return {writes,events:[{type:'schedule.updated',timetableId:t.id}],result:{id:value.id}};
 }
-export async function saveChange({change}) {
+export async function saveChange({change,expectedChange}) {
   const {t,courses,meetings,changes}=await snapshot(change.timetableId);
   const value={...change,id:change.id || await ids.new()}; validateChange(value,t,meetings,courses);
   const writes=[];
   const current=changes.find(c=>c.kind!=='extra'&&value.kind!=='extra'&&c.meetingId===value.meetingId&&c.originalDate===value.originalDate);
+  if(expectedChange!==undefined) {
+    const previous=value.kind==='extra'?changes.find(c=>c.id===value.id):current;
+    if(JSON.stringify(normalized(previous||null))!==JSON.stringify(normalized(expectedChange)))throw new Error('本次调课已发生变化，请重新打开后编辑');
+  }
   if(current&&current.id!==value.id) writes.push({collection:'occurrenceChanges',id:current.id,value:null});
   writes.push({collection:'occurrenceChanges',id:value.id,value});
   return {writes,events:[{type:'schedule.updated',timetableId:t.id}],result:{id:value.id}};
 }
-export async function deleteEntity({collection,id}) {
+export async function deleteEntity({collection,id,expected}) {
   if(!['courses','meetings','occurrenceChanges','timetables'].includes(collection)) throw new Error('不可删除该集合');
   const value=await data.get(collection,id); if(!value) throw new Error('内容不存在');
+  if(expected&&JSON.stringify(normalized(value))!==JSON.stringify(normalized(expected)))throw new Error('本次变更已更新，请重新查看后撤销');
   const tid=collection==='timetables'?id:value.timetableId,{courses,meetings,changes}=await snapshot(tid);
   const removed=new Map([[collection,new Set([id])]]);
   if(collection==='timetables') { removed.set('courses',new Set(courses.map(x=>x.id))); removed.set('meetings',new Set(meetings.map(x=>x.id))); removed.set('occurrenceChanges',new Set(changes.map(x=>x.id))); }
@@ -67,9 +72,9 @@ export async function deleteEntity({collection,id}) {
 
 export const ref=id=>({moduleId:'app.schedule',serviceId:id,majorVersion:1});
 
-export async function command(id,input) {
+export async function command(id,input,confirmation) {
   const plan=await services.prepare(ref(id),input);
   if(plan.result?.blocked) return plan;
-  if(await ui.review(plan.planId)) return {result:await services.commit(plan.planId)};
+  if(await ui.review(plan.planId,confirmation)) return {result:await services.commit(plan.planId)};
   return null;
 }

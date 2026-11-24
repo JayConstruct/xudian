@@ -1,3 +1,4 @@
+import '../../core/ui/tab_content_transition.dart';
 import 'entry_context_picker.dart';
 import '../../core/ui/ui_icon.dart';
 import '../../core/ui/native_ui.dart';
@@ -256,7 +257,7 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
         children: [
           const SettingsHeading('设备配置'),
           const SizedBox(height: 10),
-          SettingsSegments<bool>(
+          SlidingSegments<bool>(
             segments: const [
               ButtonSegment(value: false, label: Text('手机 / 窄屏')),
               ButtonSegment(value: true, label: Text('电脑 / 宽屏')),
@@ -269,86 +270,94 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
             }),
           ),
           const SizedBox(height: 16),
-          SettingsGroup(
-            title: '入口与位置',
-            children: [
-              SettingsEntry(
-                title: '编排入口',
-                subtitle: '把图标拖到导航、菜单或更多',
-                icon: Icons.dashboard_outlined,
-                onTap: () => _openArea(UiLayoutPreviewArea.navigation),
-              ),
-              SettingsEntry(
-                title: '入口目录',
-                subtitle: '打开入口，或查看它在 App 中的位置',
-                icon: Icons.list,
-                onTap: _directory,
-              ),
-              SettingsEntry(
-                title: '常用与隐藏入口',
-                subtitle: '调整设置首页的快捷方式',
-                icon: Icons.push_pin_outlined,
-                onTap: () => _openArea(UiLayoutPreviewArea.other),
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: '页面编排',
-            children: [
-              SettingsEntry(
-                title: '页面内容布局',
-                icon: Icons.view_quilt_outlined,
-                onTap: () async {
-                  final choices = widget.registry.ui.pages
-                      .where((p) => p.slots.isNotEmpty)
-                      .toList();
-                  final result = await showModalBottomSheet<String>(
-                    showDragHandle: true,
-                    useSafeArea: true,
-                    isScrollControlled: true,
-                    context: context,
-                    builder: (_) => UiLayoutPicker(
-                      title: '选择编辑页面',
-                      choices: [
-                        for (final p in choices)
-                          UiLayoutChoice(
-                            value: p.id,
-                            label: p.title,
-                            detail: p.slots.map((s) => s.label).join('、'),
-                            keywords: p.id,
-                          ),
-                      ],
+          TabContentTransition(
+            index: desktop ? 1 : 0,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SettingsGroup(
+                  title: '入口与位置',
+                  children: [
+                    SettingsEntry(
+                      title: '编排入口',
+                      subtitle: '把图标拖到导航、菜单或更多',
+                      icon: Icons.dashboard_outlined,
+                      onTap: () => _openArea(UiLayoutPreviewArea.navigation),
                     ),
-                  );
-                  if (mounted && result != null) await _openScope(result);
-                },
-              ),
-              SettingsEntry(
-                title: '高级编辑',
-                subtitle: warnings.isEmpty
-                    ? null
-                    : '${warnings.length} 项配置需要检查',
-                icon: Icons.tune,
-                onTap: () => _openScope(null),
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: '本次草稿',
-            children: [
-              SettingsEntry(
-                title: '预览结构',
-                icon: Icons.visibility_outlined,
-                onTap: _preview,
-              ),
-              SettingsEntry(
-                title: _changes().isEmpty
-                    ? '查看变更'
-                    : '查看变更（${_changes().length}）',
-                icon: Icons.compare_arrows,
-                onTap: _reviewChanges,
-              ),
-            ],
+                    SettingsEntry(
+                      title: '入口目录',
+                      subtitle: '打开入口，或查看它在 App 中的位置',
+                      icon: Icons.list,
+                      onTap: _directory,
+                    ),
+                    SettingsEntry(
+                      title: '常用与隐藏入口',
+                      subtitle: '调整设置首页的快捷方式',
+                      icon: Icons.push_pin_outlined,
+                      onTap: () => _openArea(UiLayoutPreviewArea.other),
+                    ),
+                  ],
+                ),
+                SettingsGroup(
+                  title: '页面编排',
+                  children: [
+                    SettingsEntry(
+                      title: '页面内容布局',
+                      icon: Icons.view_quilt_outlined,
+                      onTap: () async {
+                        final choices = widget.registry.ui.pages
+                            .where((p) => p.slots.isNotEmpty)
+                            .toList();
+                        final result = await showModalBottomSheet<String>(
+                          showDragHandle: true,
+                          useSafeArea: true,
+                          isScrollControlled: true,
+                          context: context,
+                          builder: (_) => UiLayoutPicker(
+                            title: '选择编辑页面',
+                            choices: [
+                              for (final p in choices)
+                                UiLayoutChoice(
+                                  value: p.id,
+                                  label: p.title,
+                                  detail: p.slots.map((s) => s.label).join('、'),
+                                  keywords: p.id,
+                                ),
+                            ],
+                          ),
+                        );
+                        if (mounted && result != null) await _openScope(result);
+                      },
+                    ),
+                    SettingsEntry(
+                      title: '高级编辑',
+                      subtitle: warnings.isEmpty
+                          ? null
+                          : '${warnings.length} 项配置需要检查',
+                      icon: Icons.tune,
+                      onTap: () => _openScope(null),
+                    ),
+                  ],
+                ),
+                SettingsGroup(
+                  title: '本次草稿',
+                  children: [
+                    SettingsEntry(
+                      title: '预览结构',
+                      icon: Icons.visibility_outlined,
+                      onTap: _preview,
+                    ),
+                    SettingsEntry(
+                      title: _changes().isEmpty
+                          ? '查看变更'
+                          : '查看变更（${_changes().length}）',
+                      icon: Icons.compare_arrows,
+                      onTap: _reviewChanges,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           if (error != null)
             Text(
@@ -1091,8 +1100,8 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
             )
             .length;
     final profileSelector = NativeUi(
-      child: SegmentedButton<bool>(
-        showSelectedIcon: !compactToolbar,
+      child: SlidingSegments<bool>(
+        minSegmentWidth: compactToolbar ? 48 : 100,
         segments: [
           ButtonSegment(
             value: false,
@@ -1107,11 +1116,11 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
             icon: compactToolbar ? const UiIcon(Icons.laptop) : null,
           ),
         ],
-        selected: {desktop},
-        onSelectionChanged: saving
+        selected: desktop,
+        onChanged: saving
             ? null
             : (value) => _update(() {
-                desktop = value.single;
+                desktop = value;
                 selectedId = null;
                 collapsedGroups.clear();
               }),
@@ -1204,7 +1213,7 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
             children: [
               Expanded(
                 child: CustomScrollView(
-                  key: ValueKey('layout-list-$desktop-$pageId'),
+                  key: ValueKey('layout-list-$pageId'),
                   slivers: [
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(
@@ -1266,9 +1275,12 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
                     ),
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      sliver: SliverList.builder(
-                        itemCount: rows.length,
-                        itemBuilder: (_, i) => rows[i](),
+                      sliver: TabContentTransition.sliver(
+                        index: desktop ? 1 : 0,
+                        child: SliverList.builder(
+                          itemCount: rows.length,
+                          itemBuilder: (_, i) => rows[i](),
+                        ),
                       ),
                     ),
                     SliverPadding(
@@ -1497,16 +1509,19 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
               ),
             const Divider(height: 1),
             Expanded(
-              child: split && (showTools || (childPage && selectedId != null))
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: list),
-                        const VerticalDivider(width: 1),
-                        SizedBox(width: 360 * textScale, child: _inspector()),
-                      ],
-                    )
-                  : list,
+              child: TabContentTransition(
+                index: desktop ? 1 : 0,
+                child: split && (showTools || (childPage && selectedId != null))
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: list),
+                          const VerticalDivider(width: 1),
+                          SizedBox(width: 360 * textScale, child: _inspector()),
+                        ],
+                      )
+                    : list,
+              ),
             ),
           ],
         ),

@@ -263,6 +263,93 @@ void main() {
     },
   );
 
+  test('a single lesson can be moved, cancelled, and restored through the reviewed detail actions', () async {
+    await command('schedule.timetable.save', {'timetable': _table()});
+    await command('schedule.course.save', {
+      'course': {'id': 'math', 'timetableId': 'table', 'name': '高等数学'},
+      'meeting': {
+        'id': 'mon',
+        'weekday': 1,
+        'startPeriod': 1,
+        'endPeriod': 2,
+        'weeks': [1, 2],
+        'location': 'A101',
+      },
+    });
+    const reference = {
+      'timetableId': 'table',
+      'meetingId': 'mon',
+      'originalDate': '2026-09-07',
+      'occurrenceId': 'mon:2026-09-07',
+    };
+    var approve = false;
+    final reviews = <Map<String, Object?>>[];
+    Map<String, Object?>? navigation;
+    host.interaction = (_, method, args) async {
+      if (method == 'ui.navigate') {
+        navigation = args;
+        return true;
+      }
+      expect(method, 'ui.review');
+      reviews.add(object(args['confirmation']));
+      return approve;
+    };
+    Future<List<Map<String, Object?>>> details([Object? event]) async => _nodes(
+      (await render('occurrence', context: reference, event: event))['tree'],
+    );
+    expect(await details(), contains(containsPair('text', '原计划')));
+    await details({'type': 'singleChange'});
+    expect(navigation?['page'], 'app.schedule.occurrenceEditor');
+    final editorContext = object(navigation?['context']);
+    var editor = await render('occurrenceEditor', context: editorContext);
+    Future<void> send(
+      Map<String, Object?> event, [
+      Map<String, Object?> forms = const {},
+    ]) async {
+      editor = await render(
+        'occurrenceEditor',
+        context: editorContext,
+        state: editor['state'],
+        event: event,
+        forms: forms,
+      );
+    }
+
+    await send(
+      {'type': 'save'},
+      {
+        'date': '2026-09-08',
+        'startPeriod': '2',
+        'endPeriod': '2',
+        'location': 'B203',
+      },
+    );
+    expect(editor['dismissPage'], isNull);
+    expect(_nodes(editor['tree']), contains(containsPair('value', 'B203')));
+    expect(await store.query(actor, 'occurrenceChanges', {}), isEmpty);
+    expect(
+      object((reviews.single['items'] as List).first)['subtitle'],
+      '9月7日 → 9月8日',
+    );
+    approve = true;
+    await send({'type': 'save'});
+    expect(editor['dismissPage'], true);
+    var nodes = await details();
+    expect(nodes, contains(containsPair('text', '已调整')));
+    expect(nodes, contains(containsPair('text', '原上课日期')));
+    editor = await render('occurrenceEditor', context: editorContext);
+    await send({'type': 'kind', 'value': 'cancel'});
+    await send({'type': 'save'});
+    nodes = await details();
+    expect(nodes, contains(containsPair('text', '已取消')));
+    expect(nodes.where((node) => node['title'] == '单次调课'), isEmpty);
+    final undo = nodes.singleWhere((node) => node['title'] == '撤销本次变更');
+    nodes = await details(undo['event']);
+    expect(nodes, contains(containsPair('text', '原计划')));
+    expect(reviews.last['confirmLabel'], '确认撤销');
+    expect(await store.query(actor, 'occurrenceChanges', {}), isEmpty);
+  });
+
   test('display height saves per timetable, survives restart and restores defaults', () async {
     await command('schedule.timetable.save', {'timetable': _table()});
     await command('schedule.timetable.save', {
@@ -1392,6 +1479,32 @@ void main() {
         );
         expect(tester.takeException(), isNull);
         if (width < 820) {
+          Future<void> tapAndSettle(String label) async {
+            final target = find.text(label).last;
+            await tester.ensureVisible(target);
+            await tester.pumpAndSettle();
+            await tester.tap(target);
+            await _settle(tester);
+            await tester.pumpAndSettle();
+          }
+
+          await tapAndSettle('单次调课');
+          expect(find.text('本次安排'), findsOneWidget);
+          await tapAndSettle('取消');
+          expect(find.text('课程详情'), findsOneWidget);
+          await tapAndSettle('单次调课');
+          await tapAndSettle('继续');
+          expect(find.text('确认单次调课'), findsOneWidget);
+          await tapAndSettle('取消');
+          expect(find.text('本次安排'), findsOneWidget);
+          await tapAndSettle('取消');
+          expect(find.text('课程详情'), findsOneWidget);
+          expect(
+            await tester.runAsync(
+              () => store.query(actor, 'occurrenceChanges', {}),
+            ),
+            before,
+          );
           Navigator.of(tester.element(find.byType(BottomSheet))).pop();
           await tester.pumpAndSettle();
           await tester.tap(find.byTooltip('页面菜单'));

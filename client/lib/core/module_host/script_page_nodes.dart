@@ -1,6 +1,30 @@
 part of 'script_page.dart';
 
 extension _ScriptPageNodes on _ScriptPageState {
+  bool _tabSelectionBlocked(
+    Map<String, Object?> spec,
+    List<Map<String, Object?>> items,
+  ) {
+    if (staleTree || bind(spec['disabled']) == true || _waitingAction) {
+      return true;
+    }
+    if (!_actionBusy || spec['variant'] == 'sliding') return false;
+    if (_inFlightEvent == null) return true;
+    // The render queue coalesces taps on this selector, including reversals.
+    // Other actions (save, navigation, modal review) retain their input lock.
+    final active = canonicalJson(_inFlightEvent);
+    for (final (index, item) in items.indexed) {
+      final event = bind(item['event']);
+      if (event is Map) {
+        final payload = spec['type'] == 'tabs'
+            ? {...object(event), 'value': index}
+            : event;
+        if (canonicalJson(payload) == active) return false;
+      }
+    }
+    return true;
+  }
+
   bool _swipeContentSafe(Map<String, Object?> spec, [int depth = 0]) {
     if (depth > 32 ||
         !const {
@@ -283,6 +307,12 @@ extension _ScriptPageNodes on _ScriptPageState {
         highlightKeys: highlightKeys.cast<String>().toSet(),
         duration: Duration(milliseconds: duration.toInt()),
         spacing: spacing.toDouble(),
+        columnStarts: (spec['columnStarts'] as List? ?? const [])
+            .whereType<String>()
+            .toList(),
+        firstColumnFlex: (spec['firstColumnFlex'] as num? ?? 1)
+            .toDouble()
+            .clamp(.25, 4),
         scrollController: scrolling
             ? scrollControllers.putIfAbsent(
                 '${tree?['scrollKey'] ?? 'page'}',
@@ -341,6 +371,36 @@ extension _ScriptPageNodes on _ScriptPageState {
     final text = '${bind(spec['text']) ?? ''}';
     final event = bind(spec['event']);
     switch (spec['type']) {
+      case 'sectionLabel':
+        return ScriptSectionLabel(
+          title: '${bind(spec['title']) ?? ''}',
+          caption: '${bind(spec['caption']) ?? ''}',
+          chevron: spec['chevron'] == true,
+          onTap: event == null || busy ? null : () => _render(event),
+        );
+      case 'timelineItem':
+        if (spec['variant'] == 'compact') {
+          return ScriptTimelineEntry(
+            time: '${spec['time'] ?? ''}',
+            detailIcon: _icon(spec['detailIcon']),
+            first: spec['first'] == true,
+            last: spec['last'] == true,
+            filled: spec['filled'] == true,
+            divider: spec['divider'] == true,
+            child: node(object(spec['child']), depth + 1),
+          );
+        }
+        final scheme = Theme.of(uiContext).colorScheme;
+        return AgendaTimeLayout(
+          startTime: '${spec['time'] ?? ''}',
+          endTime: '${spec['detail'] ?? ''}',
+          first: spec['first'] == true,
+          last: spec['last'] == true,
+          marker: scheme.primary,
+          hollow: spec['filled'] != true,
+          topAligned: true,
+          child: node(object(spec['child']), depth + 1),
+        );
       case 'pageHeader':
         return NativeUi(
           ref: 'ui.chrome.pageHeader@1',
@@ -401,6 +461,7 @@ extension _ScriptPageNodes on _ScriptPageState {
           () => TextEditingController(text: '${formValues[key] ?? ''}'),
         );
         return ConversationComposer(
+          outlined: spec['presentation'] == 'outlined',
           controller: controller,
           focusNode: focusNodes.putIfAbsent(key, FocusNode.new),
           hint: text,
@@ -454,6 +515,13 @@ extension _ScriptPageNodes on _ScriptPageState {
           effect: effect as String,
           visible: visible,
           collapse: collapse,
+          onShown: spec['focusOnShow'] is String
+              ? () {
+                  if (workspaceActive && routeActive) {
+                    focusNodes[spec['focusOnShow']]?.requestFocus();
+                  }
+                }
+              : null,
           replayKey: replayKey,
           navigationDirection: direction as String?,
           duration: Duration(milliseconds: duration.toInt()),
@@ -465,29 +533,48 @@ extension _ScriptPageNodes on _ScriptPageState {
           final key = child.key;
           if (key != null) keyCounts[key] = (keyCounts[key] ?? 0) + 1;
         }
+        final alignment = spec['crossAxisAlignment'] == 'start'
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.stretch;
+        final fills = spec['fillHeight'] == true;
+        Widget spaced(int i) {
+          final child = children[i];
+          final key = keyCounts[child.key] == 1 ? child.key : null;
+          if (fills && i == children.length - 1) {
+            return Expanded(key: key, child: child);
+          }
+          return Padding(
+            key: key,
+            padding: EdgeInsets.only(
+              bottom: _columnGap(spec, childSpecs, i, depth),
+            ),
+            child: child,
+          );
+        }
+        final rows = <Widget>[];
+        for (final section in _tabSections(childSpecs)) {
+          final content = [
+            for (var i = section.first; i < section.end; i++) spaced(i),
+          ];
+          if (section.tab == null) {
+            rows.addAll(content);
+          } else {
+            final fill = fills && section.end == children.length;
+            final group = TabContentTransition(
+              index: section.tab!,
+              child: Column(
+                mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+                crossAxisAlignment: alignment,
+                children: content,
+              ),
+            );
+            rows.add(fill ? Expanded(child: group) : group);
+          }
+        }
         return Column(
           key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
-          crossAxisAlignment: spec['crossAxisAlignment'] == 'start'
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < children.length; i++)
-              if (spec['fillHeight'] == true && i == children.length - 1)
-                Expanded(
-                  key: keyCounts[children[i].key] == 1 ? children[i].key : null,
-                  child: children[i],
-                )
-              else
-                Padding(
-                  // Keys must own the sibling element, not only its inner
-                  // control, when rows are inserted before a focused input.
-                  key: keyCounts[children[i].key] == 1 ? children[i].key : null,
-                  padding: EdgeInsets.only(
-                    bottom: _columnGap(spec, childSpecs, i, depth),
-                  ),
-                  child: children[i],
-                ),
-          ],
+          crossAxisAlignment: alignment,
+          children: rows,
         );
       case 'row':
         final spacing = (spec['spacing'] as num? ?? 8)
@@ -503,6 +590,18 @@ extension _ScriptPageNodes on _ScriptPageState {
               spacing: spacing,
               children: children,
             ),
+          );
+        }
+        final wrapBelow = spec['wrapBelow'];
+        if (wrapBelow is num &&
+            MediaQuery.sizeOf(uiContext).width <
+                MediaQuery.textScalerOf(uiContext).scale(wrapBelow.toDouble()) +
+                    40) {
+          return Wrap(
+            spacing: spacing,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: children,
           );
         }
         if (spec['layout'] == 'flex') {
@@ -553,15 +652,12 @@ extension _ScriptPageNodes on _ScriptPageState {
         if (items.isEmpty || items.length > 12) {
           throw const FormatException('Invalid segmented choices');
         }
-        final sliding = spec['variant'] == 'sliding';
         return ScriptSegmentedControl(
           key: spec['key'] == null ? null : ValueKey('${spec['key']}'),
           labels: [for (final item in items) '${bind(item['label']) ?? ''}'],
-          sliding: sliding,
           selectedIndex: (bind(spec['selectedIndex']) as num? ?? 0).toInt(),
           // Same-level navigation may queue the latest destination during a render.
-          onSelected:
-              (!sliding && busy) || staleTree || bind(spec['disabled']) == true
+          onSelected: _tabSelectionBlocked(spec, items)
               ? null
               : (index) => _render(bind(items[index]['event'])),
         );
@@ -577,6 +673,25 @@ extension _ScriptPageNodes on _ScriptPageState {
           children: children,
         );
       case 'notice':
+        if (spec['presentation'] == 'inline') {
+          final color = Theme.of(uiContext).colorScheme.error;
+          return Semantics(
+            liveRegion: true,
+            child: Row(
+              children: [
+                UiIcon(Icons.error_outline, size: 15, color: color),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    text,
+                    style: Theme.of(uiContext).textTheme.bodySmall
+                        ?.copyWith(color: color),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
         final action = spec['action'] is Map ? object(spec['action']) : null;
         return ScriptNotice(
           text: text,
@@ -689,34 +804,70 @@ extension _ScriptPageNodes on _ScriptPageState {
         }
         if (spec['variant'] == 'outlined' || spec['event'] != null) {
           final scheme = Theme.of(uiContext).colorScheme;
-          final shape = AppDesign.smoothShape(
-            side: BorderSide(
-              color: spec['variant'] == 'outlined'
-                  ? scheme.outlineVariant.withValues(alpha: .65)
-                  : Colors.transparent,
-            ),
-          );
-          return Material(
-            color: scheme.surface,
-            shape: shape,
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              customBorder: shape,
-              onTap:
-                  event == null || _actionBusy || bind(spec['disabled']) == true
-                  ? null
-                  : () => _commandEvent(event, null),
-              child: Padding(
-                padding: EdgeInsets.all(
-                  (spec['padding'] as num? ?? 14).toDouble().clamp(0, 48),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
+          final radius = (spec['radius'] as num? ?? AppDesign.radius)
+              .toDouble()
+              .clamp(0.0, 48.0);
+          final focus = spec['focusKey'] is String
+              ? focusNodes.putIfAbsent(
+                  spec['focusKey'] as String,
+                  FocusNode.new,
+                )
+              : null;
+          final selected = spec['tone'] == 'selected';
+          Widget surface(bool focused) {
+            final shape = AppDesign.smoothShape(
+              radius: radius,
+              side: BorderSide(
+                width: focused ? 1.6 : 1,
+                color: spec['tone'] == 'danger'
+                    ? scheme.error.withValues(alpha: .65)
+                    : focused
+                    ? scheme.primary
+                    : focus != null
+                    ? Color.lerp(scheme.outlineVariant, scheme.outline, .4)!
+                    : selected
+                    ? scheme.primary.withValues(alpha: .20)
+                    : spec['variant'] == 'outlined'
+                    ? scheme.outlineVariant.withValues(alpha: .65)
+                    : Colors.transparent,
+              ),
+            );
+            return Material(
+              color: selected
+                  ? Color.alphaBlend(
+                      scheme.primary.withValues(alpha: .085),
+                      scheme.surface,
+                    )
+                  : scheme.surface,
+              shape: shape,
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                customBorder: shape,
+                onTap:
+                    event == null ||
+                        _actionBusy ||
+                        bind(spec['disabled']) == true
+                    ? null
+                    : () => _commandEvent(event, null),
+                child: Padding(
+                  padding: EdgeInsets.all(
+                    (spec['padding'] as num? ?? 14).toDouble().clamp(0, 48),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: children,
+                  ),
                 ),
               ),
-            ),
-          );
+            );
+          }
+
+          return focus == null
+              ? surface(false)
+              : ListenableBuilder(
+                  listenable: focus,
+                  builder: (_, _) => surface(focus.hasFocus),
+                );
         }
         if (spec['tone'] == 'soft' || spec['tone'] == 'selected') {
           final scheme = Theme.of(uiContext).colorScheme;
@@ -769,6 +920,10 @@ extension _ScriptPageNodes on _ScriptPageState {
           'caption' || 'muted' => theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
+          'prose' => theme.textTheme.bodyLarge?.copyWith(
+            fontSize: 16,
+            height: 1.65,
+          ),
           'body' => theme.textTheme.bodyMedium,
           _ => null,
         };
@@ -782,6 +937,34 @@ extension _ScriptPageNodes on _ScriptPageState {
           'muted' => theme.colorScheme.onSurfaceVariant,
           _ => null,
         };
+        final query = bind(spec['highlight']);
+        if (query is String && query.isNotEmpty) {
+          final spans = <InlineSpan>[];
+          var start = 0;
+          for (final match in RegExp(
+            RegExp.escape(query),
+            caseSensitive: false,
+          ).allMatches(text)) {
+            spans.add(TextSpan(text: text.substring(start, match.start)));
+            spans.add(
+              TextSpan(
+                text: match.group(0),
+                style: TextStyle(
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  color: theme.colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
+            start = match.end;
+          }
+          spans.add(TextSpan(text: text.substring(start)));
+          return Text.rich(
+            TextSpan(children: spans),
+            style: baseStyle,
+            semanticsLabel: text,
+          );
+        }
         return Text(
           text,
           maxLines: maxLines as int?,
@@ -1089,9 +1272,86 @@ extension _ScriptPageNodes on _ScriptPageState {
             : () {
                 _commandEvent(event, spec['command']);
               };
+        if (spec['presentation'] == 'plainIcon') {
+          return IconButton(
+            onPressed: press,
+            tooltip: text,
+            icon: UiIcon(_icon(spec['icon']), size: 18),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 38),
+            padding: EdgeInsets.zero,
+            style: const ButtonStyle(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          );
+        }
+        if ((spec['presentation'], _icon(spec['icon'])) case (
+          'icon',
+          final IconData glyph,
+        )) {
+          return IconButton.outlined(
+            onPressed: press,
+            tooltip: text,
+            icon: UiIcon(glyph, size: 18),
+          );
+        }
         final errorColor = Theme.of(uiContext).colorScheme.error;
-        final baseStyle =
-            spec['presentation'] == 'link' && spec['variant'] == 'text'
+        final compactButton = spec['presentation'] == 'compact';
+        final searchButton = spec['presentation'] == 'search';
+        final baseStyle = compactButton || searchButton
+            ? appUiButtonStyle.copyWith(
+                minimumSize: WidgetStatePropertyAll(
+                  Size(
+                    spec['variant'] == 'filled' ? 76 : 30,
+                    searchButton
+                        ? 38
+                        : spec['variant'] == 'filled'
+                        ? 35
+                        : 29,
+                  ),
+                ),
+                padding: WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(
+                    horizontal: searchButton ? 11 : 8,
+                    vertical: 3,
+                  ),
+                ),
+                alignment: searchButton
+                    ? AlignmentDirectional.centerStart
+                    : Alignment.center,
+                textStyle: WidgetStatePropertyAll(
+                  searchButton || spec['variant'] == 'filled'
+                      ? Theme.of(uiContext).textTheme.labelLarge
+                      : Theme.of(uiContext).textTheme.labelMedium,
+                ),
+                foregroundColor: spec['variant'] != 'filled'
+                    ? WidgetStatePropertyAll(
+                        searchButton
+                            ? Theme.of(uiContext).colorScheme.onSurfaceVariant
+                            : Theme.of(uiContext).colorScheme.primary,
+                      )
+                    : null,
+                backgroundColor: spec['variant'] == 'outlined'
+                    ? WidgetStatePropertyAll(
+                        Theme.of(uiContext).colorScheme.surface,
+                      )
+                    : null,
+                side: spec['variant'] == 'outlined'
+                    ? WidgetStatePropertyAll(
+                        BorderSide(
+                          color: Theme.of(uiContext).colorScheme.outlineVariant,
+                        ),
+                      )
+                    : null,
+                shape: WidgetStatePropertyAll(
+                  AppDesign.smoothShape(
+                    radius: compactButton && spec['variant'] != 'filled'
+                        ? 9
+                        : 12,
+                  ),
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              )
+            : spec['presentation'] == 'link' && spec['variant'] == 'text'
             ? appUiButtonStyle.copyWith(
                 alignment: AlignmentDirectional.centerStart,
                 minimumSize: const WidgetStatePropertyAll(Size(48, 30)),
@@ -1122,15 +1382,25 @@ extension _ScriptPageNodes on _ScriptPageState {
         final link =
             spec['variant'] == 'text' && spec['presentation'] == 'link';
         final buttonIcon = _icon(spec['icon']);
-        final buttonLabel = buttonIcon == null
+        final trailingIcon = _icon(spec['trailingIcon']);
+        final buttonLabel = buttonIcon == null && trailingIcon == null
             ? Text(text)
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  UiIcon(buttonIcon, size: link ? 16 : 20),
-                  SizedBox(width: link ? 6 : 8),
+                  if (buttonIcon != null) ...[
+                    UiIcon(
+                      buttonIcon,
+                      size: link || compactButton || searchButton ? 16 : 20,
+                    ),
+                    SizedBox(width: link || compactButton ? 5 : 8),
+                  ],
                   Flexible(child: Text(text)),
+                  if (trailingIcon != null) ...[
+                    const SizedBox(width: 5),
+                    UiIcon(trailingIcon, size: 15),
+                  ],
                 ],
               );
         if (spec.containsKey('feedback')) {
@@ -1422,6 +1692,12 @@ extension _ScriptPageNodes on _ScriptPageState {
               : (bind(spec['value']) as num).toDouble().clamp(0, 1),
         );
       case 'emptyState':
+        final illustrated = spec['presentation'] == 'illustrated';
+        final art = spec['artwork'];
+        final bytes = art is String && art.endsWith('.png')
+            ? widget.host.instances[widget.moduleId]?.package.files[art]
+            : null;
+        final emptyTheme = Theme.of(uiContext);
         return Padding(
           padding: spec['padding'] is num
               ? EdgeInsets.all(
@@ -1431,7 +1707,21 @@ extension _ScriptPageNodes on _ScriptPageState {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (_icon(spec['icon']) case final icon?)
+              if (illustrated && bytes != null)
+                Image.memory(
+                  bytes,
+                  width: 94,
+                  height: 76,
+                  cacheWidth: 282,
+                  cacheHeight: 228,
+                  excludeFromSemantics: true,
+                  errorBuilder: (_, _, _) => UiIcon(
+                    _icon(spec['icon']),
+                    size: 32,
+                    color: emptyTheme.colorScheme.primary,
+                  ),
+                )
+              else if (_icon(spec['icon']) case final icon?)
                 if (spec['iconSurface'] == true)
                   ScriptGlyph(
                     icon: icon,
@@ -1443,18 +1733,37 @@ extension _ScriptPageNodes on _ScriptPageState {
                     size: 24,
                   )
                 else
-                  UiIcon(icon, size: 28),
-              const SizedBox(height: 8),
+                  UiIcon(
+                    icon,
+                    size: illustrated ? 32 : 28,
+                    color: illustrated ? emptyTheme.colorScheme.primary : null,
+                  ),
+              SizedBox(height: illustrated ? 15 : 8),
               Text(
                 '${bind(spec['title']) ?? ''}',
                 textAlign: TextAlign.center,
-                style: Theme.of(uiContext).textTheme.titleMedium,
+                style: illustrated
+                    ? emptyTheme.textTheme.titleMedium?.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      )
+                    : emptyTheme.textTheme.titleMedium,
               ),
-              const SizedBox(height: 4),
-              Text(
-                text,
-                textAlign: TextAlign.center,
-                style: Theme.of(uiContext).textTheme.bodySmall,
+              SizedBox(height: illustrated ? 7 : 4),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: illustrated ? 266 : double.infinity,
+                ),
+                child: Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: illustrated
+                      ? emptyTheme.textTheme.bodyMedium?.copyWith(
+                          height: 1.7,
+                          color: emptyTheme.colorScheme.onSurfaceVariant,
+                        )
+                      : emptyTheme.textTheme.bodySmall,
+                ),
               ),
             ],
           ),
@@ -1528,39 +1837,31 @@ extension _ScriptPageNodes on _ScriptPageState {
       case 'list':
         return Column(children: children);
       case 'tabs':
-        if (spec['variant'] == 'pills' || spec['variant'] == 'underline') {
-          final items = objects(spec['items']);
-          if (items.isEmpty || items.length > 20) {
+        final items = objects(spec['items']);
+        final selected = _tabIndex(spec);
+        if (selected != null) {
+          if ((spec['variant'] == 'pills' || spec['variant'] == 'underline') &&
+              (items.isEmpty || items.length > 20)) {
             throw const FormatException('Invalid tab choices');
           }
-          return ScriptTabChoices(
+          return ScriptSegmentedControl(
+            key: spec['key'] == null ? null : ValueKey(spec['key']),
+            icons: [for (final item in items) _icon(item['icon'])],
+            compact: spec['density'] == 'compact',
             labels: [for (final item in items) '${bind(item['label']) ?? ''}'],
-            selectedIndex: (bind(spec['selectedIndex']) as num? ?? 0).toInt(),
-            underlined: spec['variant'] == 'underline',
+            selectedIndex: selected,
             scrollable: spec['scrollable'] == true,
-            onSelected: _actionBusy || bind(spec['disabled']) == true
+            onSelected: _tabSelectionBlocked(spec, items)
                 ? null
                 : (index) => _changeControl(spec, index, items[index]['event']),
           );
         }
-        final tabs = <Widget>[
-          for (final entry in objects(spec['items']).asMap().entries)
-            if (spec['selectedIndex'] != null)
-              ChoiceChip(
-                showCheckmark: false,
-                shape: const StadiumBorder(),
-                label: Text('${entry.value['label']}'),
-                selected: bind(spec['selectedIndex']) == entry.key,
-                onSelected: busy || bind(spec['disabled']) == true
-                    ? null
-                    : (_) =>
-                          _changeControl(spec, entry.key, entry.value['event']),
-              )
-            else
-              TextButton(
-                onPressed: busy ? null : () => _render(entry.value['event']),
-                child: Text('${entry.value['label']}'),
-              ),
+        final tabs = [
+          for (final item in items)
+            TextButton(
+              onPressed: busy ? null : () => _render(item['event']),
+              child: Text('${item['label']}'),
+            ),
         ];
         if (spec['scrollable'] == true) {
           return SingleChildScrollView(
@@ -1616,7 +1917,10 @@ extension _ScriptPageNodes on _ScriptPageState {
           enableSuggestions: spec['inputMode'] != 'url',
           textInputAction: spec['inputMode'] == 'search'
               ? TextInputAction.search
+              : spec['keepFocusOnSubmit'] == true
+              ? TextInputAction.done
               : null,
+          onEditingComplete: spec['keepFocusOnSubmit'] == true ? () {} : null,
           minLines:
               spec['minLines'] as int? ??
               (spec['multiline'] == true || spec['type'] == 'sourceEditor'
@@ -1633,6 +1937,15 @@ extension _ScriptPageNodes on _ScriptPageState {
                           uiContext,
                           search: search,
                           highlighted: search && controller.text.isNotEmpty,
+                        )
+                      : spec['presentation'] == 'borderless'
+                      ? const InputDecoration.collapsed(hintText: '').copyWith(
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
                         )
                       : const InputDecoration())
                   .copyWith(
@@ -1697,6 +2010,9 @@ extension _ScriptPageNodes on _ScriptPageState {
                   'value': v,
                 }, spec['command']),
         );
+        if (spec['presentation'] == 'borderless' || search) {
+          return Semantics(container: true, child: control);
+        }
         return labeled
             ? ScriptFieldLabel(label: text, child: control)
             : control;
@@ -1753,6 +2069,8 @@ extension _ScriptPageNodes on _ScriptPageState {
           key: inputKey,
           kind: kind,
           label: text,
+          buttonCaption: spec['caption'] as String?,
+          buttonLabel: spec['presentation'] == 'button' ? text : null,
           value: formValues[key],
           controller: controller,
           focusNode: focusNodes.putIfAbsent(key, FocusNode.new),

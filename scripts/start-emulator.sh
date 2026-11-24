@@ -238,11 +238,12 @@ if [[ -z "$state" ]]; then
   command -v python3 >/dev/null || fail '找不到 python3。'
   # Encode as UTF-16LE so paths with spaces, quotes or Chinese remain literal.
   # Only the emulator process is launched here; all device operations use Linux ADB.
-  encoded_command="$(python3 - "$emulator" "$avd" "$port" "$cold_boot" "$boot_timeout" "${launch_arguments[@]}" <<'PY'
+  encoded_command="$(python3 - "$emulator" "$avd" "$port" "$cold_boot" "$boot_timeout" "$start_root/scripts/emulator-launch.ps1" "${launch_arguments[@]}" <<'PY'
 import base64
 import sys
+from pathlib import Path
 
-executable, avd, port, cold_boot, boot_timeout, *arguments = sys.argv[1:]
+executable, avd, port, cold_boot, boot_timeout, launcher, *arguments = sys.argv[1:]
 literal = "'" + executable.replace("'", "''") + "'"
 argument_literals = ', '.join("'" + argument.replace("'", "''") + "'" for argument in arguments)
 command = f"""$ErrorActionPreference = 'Stop'
@@ -274,8 +275,9 @@ $existing = @($processes | Where-Object {{
 if ($existing) {{
     Write-Output 'Emulator process already running; waiting for Android.'
 }} else {{
-    $process = Start-Process -FilePath $emulatorPath -ArgumentList {argument_literals} -PassThru
-    Write-Output "Emulator started, PID: $($process.Id)"
+    & {{
+{Path(launcher).read_text()}
+    }} -EmulatorPath $emulatorPath -EmulatorArguments @({argument_literals}) -TimeoutSeconds {boot_timeout}
 }}
 """
 print(base64.b64encode(command.encode('utf-16le')).decode('ascii'))

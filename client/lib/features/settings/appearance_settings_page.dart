@@ -183,24 +183,6 @@ class _AppearanceSettingsPageState
                   title: '交互反馈',
                   children: [
                     SettingsAnchor(
-                      '减少动画',
-                      child: NativeUi(
-                        child: SwitchListTile(
-                          secondary: const SettingsGlyph(
-                            Icons.animation_rounded,
-                          ),
-                          title: const Text('减少动画'),
-                          subtitle: const Text('减少位移与按压动效；系统减少动画偏好始终生效'),
-                          value: preferences.reduceMotion,
-                          onChanged: saving
-                              ? null
-                              : (value) => _update(
-                                  preferences.copyWith(reduceMotion: value),
-                                ),
-                        ),
-                      ),
-                    ),
-                    SettingsAnchor(
                       '触感反馈',
                       child: NativeUi(
                         child: SwitchListTile(

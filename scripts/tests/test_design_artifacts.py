@@ -181,6 +181,102 @@ class PageCatalogTest(unittest.TestCase):
         self.assertEqual(design.query_pages(pages, ['设置首页', 'UI-20'], False, category='课表与教务'),
                          ([pages[2]], ['UI-20']))
 
+    def test_gallery_resolves_module_per_state_and_keeps_one_link_per_state(self):
+        self.catalog.write_text(
+            '| 日程与任务 | 宿主 | overview | 概览 | — | [设置](settings/light.png)<br>'
+            '[完成复盘](settings/light.png "app.views.today") | — |\n')
+        manifest = self.root / 'packages/modules/app.views.today/module.json'
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(json.dumps({'manifest': {'id': 'app.views.today', 'name': '日程'}}))
+        pages = design.read_page_catalog(self.catalog)
+        self.assertEqual([i['module'] for i in pages[0]['images']], ['宿主', 'app.views.today'])
+        output = self.root / 'design/汇总/目录.html'
+        with patch.object(design, 'ROOT', self.root):
+            design.write_gallery(pages, output)
+        gallery = output.read_text()
+        self.assertEqual(gallery.count('href="../settings/light.png"'), 2)
+        self.assertEqual(gallery.count('data-module="app.views.today"'), 1)
+        self.assertIn('<option value="app.views.today">日程</option>', gallery)
+        self.assertIn('<h3>日程</h3>', gallery)
+        self.assertEqual(gallery.count('data-page="overview"><h4>概览</h4>'), 2)
+        links = list(output.parent.glob('*/*/*/*.png'))
+        self.assertEqual({p.relative_to(output.parent).as_posix() for p in links},
+                         {'日程与任务/应用宿主/概览/设置.png', '日程与任务/日程/概览/完成复盘.png'})
+        for link in links:
+            self.assertFalse(link.readlink().is_absolute())
+            self.assertEqual(link.resolve(), self.root / 'design/settings/light.png')
+
+    def test_gallery_refresh_moves_a_page_and_preserves_original_and_local_files(self):
+        page = '| 应用设置 | 宿主 | settings | 设置首页 | — | [浅色/手机](settings/light.png) | — |'
+        self.catalog.write_text(page)
+        output = self.root / 'design/看图目录/目录.html'
+        with patch.object(design, 'ROOT', self.root):
+            design.write_gallery(design.read_page_catalog(self.catalog), output)
+            old_folder = output.parent / '应用设置/应用宿主/设置首页'
+            old_link = old_folder / '浅色／手机.png'
+            self.assertTrue(old_link.is_file())
+            note = old_folder.parent / '说明.txt'
+            note.write_text('备注')
+            self.catalog.write_text(page.replace('应用设置', '全局与通用'))
+            pages = design.read_page_catalog(self.catalog)
+            design.write_gallery(pages, output)
+            self.assertFalse(old_folder.exists())
+            self.assertEqual(note.read_text(), '备注')
+            new_link = output.parent / '全局与通用/应用宿主/设置首页/浅色／手机.png'
+            self.assertEqual(new_link.read_bytes(), b'image fixture')
+            design.write_gallery(pages, output)
+            self.assertTrue(new_link.is_symlink())
+            new_link.unlink()
+            new_link.write_text('本机文件')
+            with self.assertRaisesRegex(ValueError, '已有文件冲突'):
+                design.write_gallery(pages, output)
+            self.assertEqual(new_link.read_text(), '本机文件')
+
+    def test_review_preserves_order_and_scopes_decisions_to_image_contents(self):
+        pages = design.read_page_catalog(self.catalog)
+        light = 'design/settings/light.png'
+        dark = 'design/settings/dark.png'
+        (self.root / dark).write_bytes(b'dark fixture')
+        spec = self.root / 'design/current-review.json'
+        with patch.object(design, 'ROOT', self.root):
+            self.assertIsNone(design.current_review(pages))
+            spec.write_text('{}')
+            self.assertIsNone(design.current_review(pages))
+            spec.write_text(json.dumps({'title': '设置', 'images': [dark, light]}))
+            images = design.current_review(pages)['images']
+            self.assertEqual([item['path'] for item in images], [dark, light])
+            (self.root / dark).write_bytes(b'revised')
+            revised = design.current_review(pages)['images']
+            self.assertNotEqual(images[0]['digest'], revised[0]['digest'])
+            self.assertEqual(images[1], revised[1])
+            for paths, reason in (([dark, dark], '重复'), (['other.png'], '未登记')):
+                spec.write_text(json.dumps({'title': '设置', 'images': paths}))
+                with self.assertRaisesRegex(ValueError, reason):
+                    design.current_review(pages)
+
+    def test_revision_replacement_clears_only_comments_for_obsolete_images(self):
+        light, dark = ('design/settings/light.png', 'design/settings/dark.png')
+        (self.root / dark).write_bytes(b'dark')
+        spec = self.root / 'design/current-review.json'
+        spec.write_text(json.dumps({'title': '审核', 'images': [light, dark]}))
+        output = self.root / 'design/看图目录/目录.html'
+        report = output.with_name('本轮评论.json')
+        with patch.object(design, 'ROOT', self.root):
+            pages = design.read_page_catalog(self.catalog)
+            images = design.current_review(pages)['images']
+            design.write_gallery(pages, output)
+            report.write_text(json.dumps({'format': 'design-gallery-comments-v1', 'images': [
+                {**item, 'comments': [{'text': '反馈'}]} for item in images]}))
+            # Taking a still-current image out of the round preserves its comments.
+            spec.write_text(json.dumps({'title': '审核', 'images': [dark]}))
+            design.write_gallery(pages, output)
+            self.assertEqual(len(json.loads(report.read_text())['images']), 2)
+            (self.root / dark).write_bytes(b'revised')
+            design.write_gallery(pages, output)
+            self.assertEqual(json.loads(report.read_text())['images'], [{**images[0], 'comments': [{'text': '反馈'}]}])
+            design.write_gallery(pages, output)
+            self.assertIn(dark + ':' + images[1]['digest'], output.read_text())
+
     def test_published_catalog_and_batch_cli(self):
         script = Path(design.__file__)
         pages = design.read_page_catalog(script.parents[1] / 'design/PAGES.md')

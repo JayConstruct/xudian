@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -14,18 +13,7 @@ import 'package:task_app/core/ui/ui_component.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
-Future<ScriptPackage> compactProvider() async => ScriptPackage.verify(
-  await ScriptPackage.build(
-    object(
-      jsonDecode(
-        await File('../packages/modules/example.ui.compact/module.json')
-            .readAsString(),
-      ),
-    ),
-    {},
-  ),
-  allowUnsignedLocal: true,
-);
+import 'support/module_fixtures.dart' show archivedCompactPack;
 
 Future<ScriptPackage> consumer({bool declaresProvider = true}) async =>
     ScriptPackage.verify(
@@ -85,7 +73,7 @@ void main() {
     directory = await Directory.systemTemp.createTemp('registered-buttons-');
     host = ModuleHost(store: store, directory: directory);
     await host.initialize();
-    await host.install(await compactProvider());
+    await host.install(await archivedCompactPack());
     final now = DateTime.now();
     await db
         .into(db.tasks)

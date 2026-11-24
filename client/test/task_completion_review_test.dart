@@ -98,7 +98,7 @@ void main() {
     final row = nodes(review['tree'])
         .singleWhere((node) => node['type'] == 'taskItem');
     expect(row['completed'], true);
-    expect(row['subtitle'], contains('已完成 · 2026-10-22 02:30'));
+    expect(row['subtitle'], contains('10月22日 · 02:30'));
     expect(row['subtitle'], isNot(contains('Asia/Shanghai')));
     await page('review', event: {...object(row['event']), 'value': false});
     final reopened = await task(created['id'] as String);
@@ -224,13 +224,13 @@ void main() {
     );
     final before = nodes((await page('review'))['tree'])
         .singleWhere((node) => node['type'] == 'taskItem');
-    expect(before['subtitle'], startsWith('已完成 · 2026-10-22 02:30'));
+    expect(before['subtitle'], startsWith('10月22日 · 02:30'));
     await command('task.updateFields', {
       'id': created['id'],
       'changes': {'plannedDate': null},
     });
     final after = nodes((await page('review'))['tree'])
         .singleWhere((node) => node['type'] == 'taskItem');
-    expect(after['subtitle'], '已完成 · 2026-10-22 02:30');
+    expect(after['subtitle'], '10月22日 · 02:30');
   });
 }

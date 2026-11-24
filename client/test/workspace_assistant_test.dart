@@ -89,7 +89,7 @@ void main() {
     () async {
       await initialize();
       final ai = await sourcePackage('app.ai');
-      expect(ai.manifest['hostApi'], '^1.31.0');
+      expect(ai.manifest['hostApi'], '^1.56.0');
       await host.install(ai);
       final registrations = ScriptAppModule(host, ai).ui;
       final page = registrations.whereType<UiPageRegistration>().singleWhere(

@@ -100,7 +100,7 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('real courses and timed tasks interleave, with one next-course banner and original navigation', () async {
+  test('real courses and timed tasks interleave, with one in-place next-course badge and original navigation', () async {
     final page = await render();
     final rows = nodes(page['tree'])
         .where(
@@ -112,8 +112,8 @@ void main() {
       ['9 点任务', '交互设计', '14 点任务', '待安排任务'],
     );
     expect(
-      rows.singleWhere((row) => row['hideTime'] == true)['badge'],
-      '还有 10 分钟',
+      rows.singleWhere((row) => row['highlighted'] == true)['badge'],
+      '10 分钟后',
     );
     expect(
       nodes(page['tree'])
@@ -262,7 +262,7 @@ void main() {
         nodes(
           page['tree'],
         ).singleWhere((node) => node['key'] == 'feed:pending-heading')['count'],
-        2,
+        '2 项',
       );
     },
   );

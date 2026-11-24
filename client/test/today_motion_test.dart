@@ -171,8 +171,8 @@ void main() {
       expect(tester.element(find.byType(TextField)), same(original));
       expect(field.controller!.value, value);
       expect(field.focusNode!.hasFocus, true);
-      await tester.ensureVisible(find.widgetWithText(FilledButton, '收起添加'));
-      await tester.tap(find.widgetWithText(FilledButton, '收起添加'));
+      await tester.ensureVisible(find.byTooltip('收起'));
+      await tester.tap(find.byTooltip('收起'));
       await settle(tester);
       expect(find.byType(TextField), findsNothing);
       expect(field.focusNode!.hasFocus, false);
@@ -182,7 +182,7 @@ void main() {
       expect(tester.element(find.byType(TextField)), same(original));
       expect(field.controller!.text, value.text);
       expect(field.controller!.selection, value.selection);
-      expect(field.focusNode!.hasFocus, false);
+      expect(field.focusNode!.hasFocus, true);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

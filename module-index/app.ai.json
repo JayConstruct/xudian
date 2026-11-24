@@ -538,6 +538,89 @@
       "size": 12217,
       "sha256": "828cecafcf93b04cbf23bb414fdcd7eb13b60c50a73f4b22b540a008714f9b1d",
       "signature": null
+    },
+    {
+      "version": "1.7.4",
+      "manifest": {
+        "id": "app.ai",
+        "name": "AI 助手",
+        "version": "1.7.4",
+        "hostApi": "^1.56.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "http",
+          "secrets",
+          "grants.request",
+          "grants.revoke",
+          "packages.prepare",
+          "packages.review",
+          "clock.today"
+        ],
+        "dependencies": [],
+        "defaultInstall": true,
+        "httpOrigins": [],
+        "description": "提供 AI 助手入口和宿主服务接口。",
+        "author": "JayConstruct"
+      },
+      "services": [
+        {
+          "id": "ai.connection.save",
+          "major": 1,
+          "handler": "saveConnection",
+          "kind": "command",
+          "input": {
+            "type": "object"
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "ai.history.save",
+          "major": 1,
+          "handler": "saveHistory",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "properties": {
+              "conversationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            }
+          },
+          "output": {
+            "type": "object"
+          }
+        },
+        {
+          "id": "ai.preferences.save",
+          "major": 1,
+          "handler": "savePreferences",
+          "kind": "command",
+          "input": {
+            "type": "object",
+            "required": [
+              "advanced"
+            ],
+            "properties": {
+              "advanced": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object"
+          }
+        }
+      ],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261124-workspace/app.ai-1.7.4.xmodule",
+      "size": 12456,
+      "sha256": "c7762b1a18080a07c47c9817e99e9cc72e5a3f7e4705660075beb66aa474ee1f",
+      "signature": null
     }
   ]
 }

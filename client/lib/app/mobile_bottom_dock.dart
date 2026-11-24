@@ -26,6 +26,7 @@ class MobileBottomDock extends StatelessWidget {
     this.moreSelected = false,
     this.annotate = false,
     this.entryModuleIds = const {},
+    this.wrapDestination,
     this.onSizeChanged,
     this.onAssistant,
   });
@@ -40,6 +41,9 @@ class MobileBottomDock extends StatelessWidget {
   final bool moreSelected;
   final bool annotate;
   final Map<String, String> entryModuleIds;
+
+  /// Allows a layout editor to decorate each real destination with a drag target.
+  final Widget Function(String id, Widget child)? wrapDestination;
   final ValueChanged<Size>? onSizeChanged;
 
   /// Page-scoped assistance. A missing callback hides the separate AI button.
@@ -140,7 +144,9 @@ class MobileBottomDock extends StatelessWidget {
           (moreSelected || (hasMore && selectedIndex >= visibleCount)),
       duration: duration,
       onSelected: onSelected,
-      annotate: _annotated,
+      annotate: (id, label, child) =>
+          _annotated(id, label, wrapDestination?.call(id, child) ?? child),
+      editing: wrapDestination != null,
     );
   }
 
@@ -167,12 +173,13 @@ class _FloatingDockNavigation extends StatefulWidget {
     required this.duration,
     required this.onSelected,
     required this.annotate,
+    required this.editing,
     this.onAssistant,
   });
 
   final List<AppDestination> destinations;
   final int selectedIndex;
-  final bool hasMore, moreSelected;
+  final bool hasMore, moreSelected, editing;
   final Duration duration;
   final ValueChanged<int> onSelected;
   final Widget Function(String id, String label, Widget child) annotate;
@@ -373,13 +380,20 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
                             final extent = slots.maxWidth / count;
                             return Listener(
                               behavior: HitTestBehavior.opaque,
-                              onPointerDown: (event) =>
-                                  _down(event, slots.maxWidth, rtl),
-                              onPointerMove: (event) =>
-                                  _move(event, slots.maxWidth, rtl),
-                              onPointerUp: (event) => _end(event, extent, rtl),
-                              onPointerCancel: (event) =>
-                                  _end(event, extent, rtl),
+                              onPointerDown: widget.editing
+                                  ? null
+                                  : (event) =>
+                                        _down(event, slots.maxWidth, rtl),
+                              onPointerMove: widget.editing
+                                  ? null
+                                  : (event) =>
+                                        _move(event, slots.maxWidth, rtl),
+                              onPointerUp: widget.editing
+                                  ? null
+                                  : (event) => _end(event, extent, rtl),
+                              onPointerCancel: widget.editing
+                                  ? null
+                                  : (event) => _end(event, extent, rtl),
                               child: Stack(
                                 clipBehavior: Clip.none,
                                 children: [
@@ -475,7 +489,9 @@ class _FloatingDockNavigationState extends State<_FloatingDockNavigation>
                                               highlighted:
                                                   i == (preview ?? selected),
                                               duration: widget.duration,
-                                              motion: motion,
+                                              motion: widget.editing
+                                                  ? null
+                                                  : motion,
                                               emphasis: () => (
                                                 amount:
                                                     selected < 0 &&
@@ -678,10 +694,9 @@ class _DockDestinationState extends State<_DockDestination> {
                       ? FontWeight.w600
                       : FontWeight.w400,
                 ),
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(widget.label, maxLines: 1),
                 ),
               ),
             ),

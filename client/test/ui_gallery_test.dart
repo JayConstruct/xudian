@@ -18,6 +18,8 @@ import 'package:task_app/core/ui/script_transition.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
 
+import 'support/module_fixtures.dart' show archivedCompactPack;
+
 Future<void> settle(WidgetTester tester) async {
   for (var i = 0; i < 20; i++) {
     await tester.runAsync(
@@ -144,8 +146,8 @@ void main() {
       await tester.tap(filled);
       await settle(tester);
       expect(find.text('已执行：filled'), findsOneWidget);
-      await tester.ensureVisible(find.widgetWithText(ChoiceChip, '禁用'));
-      await tester.tap(find.widgetWithText(ChoiceChip, '禁用'));
+      await tester.ensureVisible(find.text('禁用'));
+      await tester.tap(find.text('禁用'));
       await settle(tester);
       expect(
         tester.widget<FilledButton>(filled).onPressed,
@@ -190,8 +192,8 @@ void main() {
         await show(tester, demo: 'date', brightness: config.brightness);
         expect(find.text('查看调用方式'), findsOneWidget);
         expect(find.byType(ExpansionTile), findsNothing);
-        await reveal(tester, find.widgetWithText(ChoiceChip, '已选'));
-        await tester.tap(find.widgetWithText(ChoiceChip, '已选'));
+        await reveal(tester, find.text('已选'));
+        await tester.tap(find.text('已选'));
         await settle(tester);
         expect(find.text('当前值：2026-10-10'), findsOneWidget);
         await reveal(tester, find.text('查看调用方式'));
@@ -224,7 +226,7 @@ void main() {
     'real date clearing, multi-select, drafts and selected UI stay synchronized',
     (tester) async {
       await show(tester, demo: 'date');
-      await tester.tap(find.widgetWithText(ChoiceChip, '已选'));
+      await tester.tap(find.text('已选'));
       await settle(tester);
       await tester.tap(find.byTooltip('清除日期选择器'));
       await settle(tester);
@@ -246,13 +248,7 @@ void main() {
         '本地未提交草稿',
       );
       await tester.runAsync(() async {
-        await host.install(
-          await ScriptPackage.verify(
-            await File('../dist/modules/example.ui.compact.xmodule')
-                .readAsBytes(),
-            allowUnsignedLocal: true,
-          ),
-        );
+        await host.install(await archivedCompactPack());
       });
       final container = ProviderScope.containerOf(
         tester.element(find.byType(ScriptPage)),
@@ -391,7 +387,7 @@ void main() {
       );
       expect(transition.duration, const Duration(milliseconds: 350));
       for (final label in ['缩放', '滑动', '淡入']) {
-        await tester.tap(find.widgetWithText(ChoiceChip, label));
+        await tester.tap(find.text(label));
         await settle(tester);
         expect(tester.takeException(), isNull);
       }

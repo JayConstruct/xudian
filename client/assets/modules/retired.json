@@ -1,4 +1,5 @@
 [
   "app.views.inbox",
-  "app.views.projects"
+  "app.views.projects",
+  "example.ui.compact"
 ]

@@ -38,7 +38,10 @@ Widget? dailyUiComponent(
           ? null
           : (date) => events['change']!(date),
       days: [
-        for (final day in props['days'] as List? ?? [])
+        for (final day
+            in (props['showDays'] == false
+                ? const []
+                : props['days'] as List? ?? []))
           Map<String, Object?>.from(day as Map),
       ],
     ),
@@ -46,6 +49,7 @@ Widget? dailyUiComponent(
       title: '${props['title'] ?? ''}',
       subtitle: props['subtitle'] as String?,
       count: props['count'],
+      presentation: props['presentation'] as String?,
       countAtEnd: props['countPosition'] == 'end',
       actionLabel: props['actionLabel'] as String?,
       actionIcon: props['actionIcon'] as String?,
@@ -57,10 +61,14 @@ Widget? dailyUiComponent(
     'ui.agendaItem@1' => AgendaItem(
       title: '${props['title'] ?? ''}',
       subtitle: props['subtitle'] as String?,
+      timeline: props['presentation'] == 'timeline',
+      first: props['first'] == true,
+      last: props['last'] == true,
       startTime: '${props['startTime'] ?? ''}',
       endTime: '${props['endTime'] ?? ''}',
       color: props['color'] as String?,
       badge: props['badge'] as String?,
+      highlighted: props['highlighted'] == true,
       compact: props['compact'] == true,
       hideTime: props['hideTime'] == true,
       eyebrow: props['eyebrow'] as String?,
@@ -74,6 +82,10 @@ Widget? dailyUiComponent(
       subtitle: props['subtitle'] as String?,
       completed: props['completed'] == true,
       compact: props['compact'] == true,
+      timeline: props['presentation'] == 'timeline',
+      record: props['presentation'] == 'record',
+      first: props['first'] == true,
+      last: props['last'] == true,
       startTime: props['startTime'] as String?,
       endTime: props['endTime'] as String?,
       color: props['color'] as String?,
@@ -271,9 +283,8 @@ class DayOverview extends StatelessWidget {
                       minimumSize: const Size(48, 48),
                     ),
                     onPressed: () async {
-                      final selected = await showDatePicker(
+                      final selected = await showAppDateSheet(
                         context: context,
-                        locale: const Locale('zh', 'CN'),
                         helpText: '选择日期',
                         initialDate: value,
                         firstDate: DateTime(1),
@@ -492,6 +503,7 @@ class DailySectionHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.presentation,
     this.count,
     this.countAtEnd = false,
     this.actionLabel,
@@ -500,7 +512,7 @@ class DailySectionHeader extends StatelessWidget {
     this.compact = false,
   });
   final String title;
-  final String? subtitle, actionLabel, actionIcon;
+  final String? subtitle, actionLabel, actionIcon, presentation;
   final Object? count;
   final bool countAtEnd;
   final VoidCallback? onAction;
@@ -509,6 +521,57 @@ class DailySectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (presentation == 'summary' || presentation == 'group') {
+      final summary = presentation == 'summary';
+      return Padding(
+        padding: EdgeInsets.only(top: summary ? 0 : 8, bottom: summary ? 0 : 4),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: summary ? 52 : 35),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: summary
+                      ? theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        )
+                      : theme.textTheme.titleMedium?.copyWith(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                ),
+              ),
+              if (count != null)
+                Text(
+                  '$count',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              if (actionLabel != null)
+                Tooltip(
+                  message: actionLabel!,
+                  child: TextButton.icon(
+                    onPressed: onAction,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      minimumSize: const Size(48, 48),
+                    ),
+                    icon: UiIcon(
+                      actionIcon == 'add'
+                          ? Icons.add_rounded
+                          : Icons.keyboard_arrow_up_rounded,
+                      size: 17,
+                    ),
+                    label: Text(actionLabel!),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
     final heading = Text.rich(
       TextSpan(
         children: [
@@ -609,6 +672,10 @@ class AgendaItem extends StatelessWidget {
     this.badge,
     this.onPressed,
     this.compact = false,
+    this.timeline = false,
+    this.highlighted = false,
+    this.first = false,
+    this.last = false,
     this.hideTime = false,
     this.eyebrow,
     this.icon,
@@ -616,7 +683,7 @@ class AgendaItem extends StatelessWidget {
   final String title, startTime, endTime;
   final String? subtitle, color, badge;
   final VoidCallback? onPressed;
-  final bool compact, hideTime;
+  final bool compact, hideTime, timeline, highlighted, first, last;
   final String? eyebrow, icon;
 
   Color accent(BuildContext context) {
@@ -632,6 +699,101 @@ class AgendaItem extends StatelessWidget {
     final theme = Theme.of(context);
     final tint = accent(context);
     final dark = theme.brightness == Brightness.dark;
+    if (timeline) {
+      final scheme = theme.colorScheme;
+      final marker = highlighted ? scheme.primary : const Color(0xFF7F9D80);
+      final badgeStyle = theme.textTheme.labelSmall?.copyWith(
+        color: scheme.onPrimaryContainer,
+        fontWeight: FontWeight.w600,
+      );
+      final badgeLabel = badge == null ? null : Text(badge!, style: badgeStyle);
+      return AgendaTimeLayout(
+        startTime: startTime,
+        endTime: endTime,
+        marker: marker,
+        first: first,
+        last: last,
+        emphasized: highlighted,
+        child: Material(
+          color: highlighted ? scheme.primaryContainer : scheme.surface,
+          shape: AppDesign.smoothShape(
+            radius: 15,
+            side: BorderSide(color: scheme.outlineVariant, width: .8),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 61),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final wrapBadge =
+                        box.maxWidth <
+                        235 * MediaQuery.textScalerOf(context).scale(14) / 14;
+                    return Row(
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: ShapeDecoration(
+                            shape: AppDesign.smoothShape(radius: 9),
+                            color: highlighted
+                                ? scheme.surface
+                                : Color.alphaBlend(
+                                    marker.withValues(alpha: .18),
+                                    scheme.surface,
+                                  ),
+                          ),
+                          child: UiIcon(
+                            appIconData(icon ?? 'school'),
+                            size: 18,
+                            color: highlighted ? scheme.primary : marker,
+                          ),
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (subtitle?.isNotEmpty == true)
+                                Text(
+                                  subtitle!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              if (wrapBadge && badgeLabel != null) badgeLabel,
+                            ],
+                          ),
+                        ),
+                        if (!wrapBadge && badgeLabel != null) ...[
+                          const SizedBox(width: 4),
+                          badgeLabel,
+                        ],
+                        if (onPressed != null && !wrapBadge)
+                          const UiIcon(Icons.chevron_right_rounded, size: 14),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (compact) {
       final surface = Material(
         color: Color.alphaBlend(
@@ -841,6 +1003,10 @@ class DailyTaskItem extends StatelessWidget {
     this.onOpen,
     this.details,
     this.compact = false,
+    this.timeline = false,
+    this.record = false,
+    this.first = false,
+    this.last = false,
     this.startTime,
     this.endTime,
     this.color,
@@ -852,13 +1018,36 @@ class DailyTaskItem extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
   final VoidCallback? onOpen;
   final Widget? details;
-  final bool compact;
+  final bool compact, timeline, record, first, last;
   final String? startTime, endTime, color;
   final Object? colorKey;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (record) {
+      final scheme = theme.colorScheme;
+      return ListTile(
+        leading: IconButton(
+          tooltip: completed ? '重新打开$title' : '完成$title',
+          onPressed: onChanged == null ? null : () => onChanged!(!completed),
+          icon: Icon(
+            completed ? Icons.check_circle_outline : Icons.circle_outlined,
+            color: scheme.onSurfaceVariant,
+            size: 20,
+          ),
+        ),
+        title: Text(title, style: theme.textTheme.titleSmall),
+        subtitle: subtitle == null ? null : Text(subtitle!),
+        trailing: onOpen == null
+            ? null
+            : const Icon(Icons.chevron_right, size: 18),
+        minTileHeight: 60,
+        horizontalTitleGap: 4,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        onTap: onOpen,
+      );
+    }
     if (compact) {
       final colored = color != null || colorKey != null;
       final tint = colored
@@ -877,9 +1066,19 @@ class DailyTaskItem extends StatelessWidget {
               theme.colorScheme.onSurface,
             )
           : theme.colorScheme.onSurface;
+      final timed = startTime != null && endTime != null;
+      final scheme = theme.colorScheme;
       final surface = Material(
-        color: background,
-        shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
+        type: timeline && timed
+            ? MaterialType.transparency
+            : MaterialType.canvas,
+        color: timeline ? (timed ? null : scheme.surface) : background,
+        shape: AppDesign.smoothShape(
+          radius: timeline ? 16 : AppDesign.controlRadius,
+          side: timeline && !timed
+              ? BorderSide(color: scheme.outlineVariant, width: .8)
+              : BorderSide.none,
+        ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -892,13 +1091,27 @@ class DailyTaskItem extends StatelessWidget {
                   child: Checkbox(
                     semanticLabel: completed ? '重新打开$title' : '完成$title',
                     value: completed,
+                    fillColor: timeline
+                        ? WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.selected)
+                                ? scheme.primaryContainer
+                                : scheme.surface,
+                          )
+                        : null,
+                    checkColor: timeline ? scheme.primary : null,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(timeline ? 6 : 4),
                     ),
-                    side: BorderSide(
-                      color: theme.colorScheme.outline,
-                      width: 1.5,
-                    ),
+                    side: timeline
+                        ? WidgetStateBorderSide.resolveWith(
+                            (states) => BorderSide(
+                              color: states.contains(WidgetState.selected)
+                                  ? scheme.primary
+                                  : scheme.outline,
+                              width: 1,
+                            ),
+                          )
+                        : BorderSide(color: scheme.outline, width: 1.5),
                     onChanged: onChanged == null
                         ? null
                         : (value) => onChanged!(value == true),
@@ -908,7 +1121,9 @@ class DailyTaskItem extends StatelessWidget {
                   child: InkWell(
                     onTap: onOpen,
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
+                      constraints: BoxConstraints(
+                        minHeight: timeline ? 62 : 48,
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(0, 10, 12, 10),
                         child: Column(
@@ -923,6 +1138,8 @@ class DailyTaskItem extends StatelessWidget {
                                     : FontWeight.w600,
                                 color: completed
                                     ? theme.colorScheme.onSurfaceVariant
+                                    : timeline
+                                    ? scheme.onSurface
                                     : foreground,
                                 decoration: completed
                                     ? TextDecoration.lineThrough
@@ -956,6 +1173,9 @@ class DailyTaskItem extends StatelessWidget {
           : AgendaTimeLayout(
               startTime: startTime!,
               endTime: endTime!,
+              marker: timeline ? scheme.outline : null,
+              first: first,
+              last: last,
               child: surface,
             );
     }
@@ -1040,14 +1260,119 @@ class AgendaTimeLayout extends StatelessWidget {
     required this.startTime,
     required this.endTime,
     required this.child,
+    this.marker,
+    this.first = false,
+    this.last = false,
+    this.emphasized = false,
+    this.hollow = false,
+    this.topAligned = false,
   });
+  final bool hollow, topAligned;
   final String startTime, endTime;
   final Widget child;
+  final Color? marker;
+  final bool first, last, emphasized;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    if (marker != null) {
+      final scheme = theme.colorScheme;
+      final narrow = MediaQuery.sizeOf(context).width <= 360;
+      final timeWidth = narrow ? 51.0 : 48.0 * scale.clamp(1.0, 1.35);
+      final timeGap = narrow ? 14.0 : 26.0;
+      return Stack(
+        children: [
+          PositionedDirectional(
+            start: timeWidth + (narrow ? 2 : 6),
+            top: 0,
+            bottom: 0,
+            width: 9,
+            child: Column(
+              children: [
+                if (topAligned)
+                  SizedBox(
+                    height: 18,
+                    child: VerticalDivider(
+                      width: 1,
+                      color: first ? Colors.transparent : scheme.outlineVariant,
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: first ? Colors.transparent : scheme.outlineVariant,
+                    ),
+                  ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: hollow ? scheme.surface : marker,
+                    border: hollow ? Border.all(color: marker!) : null,
+                  ),
+                  child: const SizedBox.square(dimension: 9),
+                ),
+                Expanded(
+                  child: VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: last ? Colors.transparent : scheme.outlineVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 72),
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: topAligned ? 10 : 4),
+              child: Row(
+                crossAxisAlignment: topAligned
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: timeWidth,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            startTime,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: emphasized
+                                  ? scheme.primary
+                                  : scheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            endTime,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: timeGap),
+                  Expanded(child: child),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 280 * scale) {

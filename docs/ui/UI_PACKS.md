@@ -11,7 +11,7 @@
 配置保存在现有 `AppSettings` 的 `ui.selection`，无需数据库结构迁移：
 
 ```json
-{"formatVersion":1,"globalPackId":"app.ui.default","modulePackIds":{"app.views.today":"example.ui.compact"}}
+{"formatVersion":1,"globalPackId":"app.ui.default","modulePackIds":{"app.views.today":"diagnostic.ui.coverage"}}
 ```
 
 组件按模块选择、全局选择、内置默认的顺序解析；模块显式选择“内置默认”时使用默认组件与样式，不继承全局包。导航使用全局选择。停用、卸载或加载失败的包不删除选择，界面回退并标明不可用，重新启用后恢复。保存成功后才发布选择；草稿保存检查持久化基线，拒绝覆盖其他操作的新配置。
@@ -84,7 +84,7 @@ ui.component('ui.button@1', {
 
 原子节点支持 column、row、wrap、card、text、button、icon、divider、spacer、padding、expanded、scroll、list。以当前目录与验证器为准，不能把任意 Flutter 控件名作为原子节点。
 
-示例源码为 `packages/modules/example.ui.compact/module.json`，产物为 `dist/modules/example.ui.compact.xmodule`。它使用绿色浅／深色配置、紧凑间距、描边按钮，以及保留默认内容的模板与导航包装。导入后在“界面风格”预览并保存。
+紧凑界面示例已退出分发。旧选择按缺失界面包的规则自动回退。
 
 ## 性能与验证
 
@@ -107,15 +107,15 @@ API 1.12 支持 UI 包向这些分类注册自己的公开组件。`ui.examples(
 
 ## 注册组件示例与跨模块消费（API 1.12）
 
-UI 包的 recipe 可添加 `example`，与 `tree`、自定义契约字段并列。自定义引用仍须使用提供者包的命名空间。下面条目可放入 `uiPack.components`，manifest 的 `hostApi` 使用 `^1.12.0`：
+UI 包的 recipe 可添加 `example`，与 `tree`、自定义契约字段并列。自定义引用仍须使用提供者包的命名空间。假设提供者的模块 ID 为 `example.ui.buttons`，其 `hostApi` 为 `^1.12.0`。在 `uiPack.components` 中注册描边按钮。
 
 ```json
 {
-  "example.ui.compact.outlineButton@1": {
+  "example.ui.buttons.outlineButton@1": {
     "propsSchema": {"type":"object","properties":{"label":{"type":"string"}},"required":["label"],"additionalProperties":false},
     "events": ["press"],
     "tree": {"type":"primitive","name":"button","props":{"label":{"bind":["props","label"]},"variant":"outlined"},"event":"press"},
-    "example": {"category":"actions","name":"描边操作按钮","description":"紧凑界面包公开的描边按钮","props":{"label":"执行示例"},"events":["press"]}
+    "example": {"category":"actions","name":"描边操作按钮","description":"带描边的次要操作按钮","props":{"label":"执行示例"},"events":["press"]}
   }
 }
 ```
@@ -131,10 +131,10 @@ const tree = {type:'componentExample', providerId:sample.providerId,
   ref:sample.ref, events:{press:{type:'demoPressed'}}};
 ```
 
-业务模块消费自定义引用时在 manifest 的 `dependencies` 声明 `example.ui.compact`，随后使用标准接口；依赖检查保持有效，示例浏览的局部权限不会授予其他引用：
+业务模块消费自定义引用时在 manifest 的 `dependencies` 声明 `example.ui.buttons`，随后使用标准接口；依赖检查保持有效，示例浏览的局部权限不会授予其他引用：
 
 ```js
-ui.component('example.ui.compact.outlineButton@1', {
+ui.component('example.ui.buttons.outlineButton@1', {
   props:{label:'保存'}, events:{press:{type:'save'}}
 })
 ```

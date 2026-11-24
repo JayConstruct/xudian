@@ -155,9 +155,7 @@ void main() {
     );
   }
 
-  testWidgets('catalog filters use continuous control outlines', (
-    tester,
-  ) async {
+  testWidgets('catalog filters share the sliding track', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppDesign.theme(Brightness.light),
@@ -172,15 +170,13 @@ void main() {
         ),
       ),
     );
-    final segments = find.byType(SettingsSegments<String>);
-    final box = tester.widget<DecoratedBox>(
-      find.descendant(of: segments, matching: find.byType(DecoratedBox)).first,
+    final segments = tester.widget<SlidingSegments<String>>(
+      find.byType(SlidingSegments<String>),
     );
-    final decoration = box.decoration as ShapeDecoration;
-    expect(decoration.shape, isA<RoundedSuperellipseBorder>());
+    expect(segments.selected, '全部');
     expect(
-      (decoration.shape as RoundedSuperellipseBorder).borderRadius,
-      BorderRadius.circular(AppDesign.controlRadius),
+      segments.segments.map((s) => s.value),
+      ModuleCatalogFilters.statuses,
     );
     await tester.tap(find.text('全部分类'));
     await tester.pumpAndSettle();

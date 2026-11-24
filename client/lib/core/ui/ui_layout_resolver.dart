@@ -173,10 +173,16 @@ int navigationVisibleCount({
   required double width,
   required double textScale,
   required bool desktop,
+  bool fixedMore = false,
 }) {
   if (total == 0) return 0;
   final requested = limit == null ? total : limit.clamp(1, total);
   if (desktop) return requested;
+  // The floating dock shrinks labels within each accessible tap target. Keep
+  // all configured items visible when they and the fixed entry physically fit.
+  if (fixedMore && (requested + 1) * 48 + 8 <= width && total == requested) {
+    return requested;
+  }
   final capacity = (width / (64 * textScale.clamp(1, 2))).floor().clamp(
     2,
     total + 1,

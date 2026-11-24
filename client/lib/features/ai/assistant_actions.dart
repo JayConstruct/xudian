@@ -183,13 +183,12 @@ List<AssistantToolSchema> assistantToolSchemas(AssistantGrant grant) => [
   if (grant.settings)
     AssistantToolSchema(
       name: 'settings_patch',
-      description: '调整主题、减少动画或触觉反馈。不能改模型端点、密钥或权限。',
+      description: '调整主题或触觉反馈。不能改模型端点、密钥或权限。',
       parameters: _objectSchema({
         'theme': {
           'type': 'string',
           'enum': ['system', 'light', 'dark'],
         },
-        'reduceMotion': {'type': 'boolean'},
         'haptics': {'type': 'boolean'},
       }, []),
     ),
@@ -502,7 +501,7 @@ class AssistantActions {
           },
         );
       case 'settings_patch':
-        _keys(arguments, const {'theme', 'reduceMotion', 'haptics'}, const {});
+        _keys(arguments, const {'theme', 'haptics'}, const {});
         if (arguments.isEmpty) throw ArgumentError('设置变更不能为空');
         final before = await ref.read(appPreferencesProvider.future);
         final theme = arguments.containsKey('theme')
@@ -510,9 +509,6 @@ class AssistantActions {
             : before.themeMode;
         final after = before.copyWith(
           themeMode: theme,
-          reduceMotion: arguments.containsKey('reduceMotion')
-              ? _boolean(arguments, 'reduceMotion')
-              : before.reduceMotion,
           haptics: arguments.containsKey('haptics')
               ? _boolean(arguments, 'haptics')
               : before.haptics,

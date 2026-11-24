@@ -102,7 +102,8 @@ void main() {
     expect(attempts, 2);
     expect(find.byType(AppErrorState), findsNothing);
     expect(find.text('深色'), findsOneWidget);
-    expect(find.text('减少动画'), findsOneWidget);
+    expect(find.text('减少动画'), findsNothing);
+    expect(find.text('触感反馈'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

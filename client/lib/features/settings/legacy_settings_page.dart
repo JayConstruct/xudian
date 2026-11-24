@@ -170,20 +170,6 @@ class _LegacySettingsPageState extends ConsumerState<LegacySettingsPage> {
                   const Divider(indent: 56, endIndent: 18),
                   NativeUi(
                     child: SwitchListTile(
-                      secondary: const UiIcon(Icons.animation_rounded),
-                      title: const Text('减少动画'),
-                      subtitle: const Text('减少底栏位移与按压动效，遵循系统偏好'),
-                      value: preferences.reduceMotion,
-                      onChanged: saving
-                          ? null
-                          : (value) => _update(
-                              preferences.copyWith(reduceMotion: value),
-                            ),
-                    ),
-                  ),
-                  const Divider(indent: 56, endIndent: 18),
-                  NativeUi(
-                    child: SwitchListTile(
                       secondary: const UiIcon(Icons.vibration_rounded),
                       title: const Text('触感反馈'),
                       subtitle: const Text('切换底部导航时轻触振动'),

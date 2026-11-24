@@ -187,7 +187,16 @@ def _scroll_to_top(emulator, nodes, *, description='审核内容'):
 
 
 def _select_download(emulator, filename):
-    nodes = emulator.nodes()
+    # The first accessibility tree can still belong to the host during
+    # DocumentsUI's activity transition.
+    for _ in range(12):
+        nodes = emulator.nodes()
+        if (_drawer_nodes(emulator, nodes) is not None
+                or _find(emulator, nodes, [filename, '显示根目录', 'Show roots',
+                                           '列表视图', 'List view']) is not None):
+            break
+    else:
+        raise RuntimeError('等待 Android 文件选择器就绪超时')
     if _drawer_nodes(emulator, nodes) is not None:
         nodes = _select_download_root(emulator, nodes)
     target = _find(emulator, nodes, [filename])
@@ -204,7 +213,11 @@ def _select_download(emulator, filename):
         roots = _find(emulator, nodes, ['显示根目录', 'Show roots'])
         if roots is not None:
             emulator.tap_node(roots)
-            nodes = emulator.nodes()
+            for _ in range(12):
+                nodes = emulator.nodes()
+                if (_drawer_nodes(emulator, nodes) is not None
+                        or _find(emulator, nodes, ['显示根目录', 'Show roots']) is None):
+                    break
         nodes = _select_download_root(emulator, nodes)
         listing = _find(emulator, nodes, ['列表视图', 'List view'])
         if listing is not None:

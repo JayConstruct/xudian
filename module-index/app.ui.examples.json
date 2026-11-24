@@ -113,6 +113,29 @@
       "size": 16740,
       "sha256": "0e336d587491cbf282be1cc41c7d280681c61e7c7602e0f1636a5206333a4919",
       "signature": null
+    },
+    {
+      "version": "1.5.1",
+      "manifest": {
+        "id": "app.ui.examples",
+        "name": "UI 示例",
+        "version": "1.5.1",
+        "hostApi": "^1.50.0",
+        "dataVersion": 1,
+        "permissions": [
+          "ui",
+          "clock.today"
+        ],
+        "dependencies": [],
+        "defaultInstall": false,
+        "description": "分类浏览真实 UI、控件与动画，查看调用方式并固定常用演示。",
+        "author": "JayConstruct"
+      },
+      "services": [],
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261124-workspace/app.ui.examples-1.5.1.xmodule",
+      "size": 16695,
+      "sha256": "e465438645cbf44b6f13b860862d73bff0eb69c3d21f598653f5fb8a679c0804",
+      "signature": null
     }
   ]
 }

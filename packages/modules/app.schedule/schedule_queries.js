@@ -106,7 +106,7 @@ export async function currentOccurrence(t,reference) {
   if(change?.kind==='cancel') return {cancelled:true,change,meeting,course:courses.find(c=>c.id===meeting?.courseId)};
   const day=change?.date||(meeting?reference.originalDate:reference.date)||reference.originalDate;
   if(!day)return null;
-  const item=occurrences(t,courses,meetings,changes,day,addDays(day,1)).find(x=>x.occurrenceId===reference.occurrenceId || x.meetingId===reference.meetingId&&x.originalDate===reference.originalDate);
+  const item=occurrences(t,courses,meetings,changes,day,addDays(day,1)).find(x=>x.occurrenceId===reference.occurrenceId || reference.meetingId&&x.meetingId===reference.meetingId&&x.originalDate===reference.originalDate);
   return item?{item,change,meeting,course:courses.find(c=>c.id===item.courseId)}:null;
 }
 

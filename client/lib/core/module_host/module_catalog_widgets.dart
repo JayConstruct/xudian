@@ -73,33 +73,16 @@ class ModuleCatalogFilters extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final scale = MediaQuery.textScalerOf(context).scale(13);
-            if (constraints.maxWidth < 5 * (3 * scale + 8)) {
-              return Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  for (final option in statuses)
-                    ChoiceChip(
-                      label: _statusLabel(option),
-                      selected: option == status,
-                      onSelected: (_) => onStatusChanged(option),
-                    ),
-                ],
-              );
-            }
-            return SettingsSegments<String>(
-              key: const ValueKey('catalog-filter-status'),
-              segments: [
-                for (final option in statuses)
-                  ButtonSegment(value: option, label: _statusLabel(option)),
-              ],
-              selected: status,
-              onChanged: onStatusChanged,
-            );
-          },
+        SlidingSegments<String>(
+          scrollable: true,
+          minSegmentWidth: 56,
+          key: const ValueKey('catalog-filter-status'),
+          segments: [
+            for (final option in statuses)
+              ButtonSegment(value: option, label: _statusLabel(option)),
+          ],
+          selected: status,
+          onChanged: onStatusChanged,
         ),
         const SizedBox(height: 6),
         Row(

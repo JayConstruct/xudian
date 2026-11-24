@@ -39,22 +39,14 @@ void main() {
       );
       await tester.tap(find.byTooltip('选择日期'));
       await tester.pumpAndSettle();
-      final picker = tester.element(find.byType(DatePickerDialog));
-      final style = DatePickerTheme.of(picker);
-      expect(style.backgroundColor, theme.colorScheme.surface);
-      expect(style.shape, isA<RoundedSuperellipseBorder>());
-      expect(
-        style.dayBackgroundColor!.resolve({WidgetState.selected}),
-        theme.colorScheme.primaryContainer,
+      final selected = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, '8'),
       );
       expect(
-        style.dayForegroundColor!.resolve({WidgetState.selected}),
-        theme.colorScheme.onPrimaryContainer,
+        selected.style!.backgroundColor!.resolve({}),
+        theme.colorScheme.primary,
       );
-      expect(
-        style.dayForegroundColor!.resolve({WidgetState.disabled}),
-        isNot(style.dayForegroundColor!.resolve({})),
-      );
+      expect(find.byType(BottomSheet), findsOneWidget);
       expect(find.text('选择日期'), findsWidgets);
       await tester.tap(find.text('15').last);
       await tester.tap(find.text('确定'));
@@ -63,6 +55,51 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+    'calendar switches year and validates typed dates before applying',
+    (tester) async {
+      final changes = <Object?>[];
+      await tester.pumpWidget(
+        temporalTestApp(
+          home: Scaffold(
+            body: TemporalInput(
+              kind: TemporalInputKind.date,
+              value: '2026-11-24',
+              label: '日期',
+              minDate: '2025-01-01',
+              maxDate: '2028-12-31',
+              onChanged: changes.add,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('选择日期'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2026年11月'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择年份'), findsOneWidget);
+      await tester.tap(find.text('2028'));
+      await tester.pumpAndSettle();
+      expect(find.text('2028年11月'), findsOneWidget);
+      await tester.tap(find.byTooltip('输入日期'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '2026-11-31');
+      await tester.pump();
+      expect(find.text('11 月只有 30 天，请输入有效日期。'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, '确定'))
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(find.byType(TextField), '2028-02-29');
+      await tester.pump();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      expect(changes, ['2028-02-29']);
+    },
+  );
 
   test(
     'civil dates, time, ranges and numeric limits reject invalid values',
@@ -142,7 +179,7 @@ void main() {
     await tester.tap(find.byTooltip('选择计划日'));
     await tester.pumpAndSettle();
     var labels = MaterialLocalizations.of(
-      tester.element(find.byType(DatePickerDialog)),
+      tester.element(find.byType(DateSelectionSheet)),
     );
     await tester.tap(find.text(labels.cancelButtonLabel));
     await tester.pumpAndSettle();
@@ -152,7 +189,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('15').last);
     labels = MaterialLocalizations.of(
-      tester.element(find.byType(DatePickerDialog)),
+      tester.element(find.byType(DateSelectionSheet)),
     );
     await tester.tap(find.text(labels.okButtonLabel));
     await tester.pumpAndSettle();
@@ -186,7 +223,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('15').last);
     var labels = MaterialLocalizations.of(
-      tester.element(find.byType(DatePickerDialog)),
+      tester.element(find.byType(DateSelectionSheet)),
     );
     await tester.tap(find.text(labels.okButtonLabel));
     await tester.pumpAndSettle();
@@ -288,8 +325,8 @@ void main() {
       await tester.tap(find.byTooltip('选择结束日期'));
       await tester.pumpAndSettle();
       expect(find.byType(DateRangePickerDialog), findsNothing);
-      final picker = tester.widget<DatePickerDialog>(
-        find.byType(DatePickerDialog),
+      final picker = tester.widget<DateSelectionSheet>(
+        find.byType(DateSelectionSheet),
       );
       expect(picker.firstDate, DateTime(2026, 9, 30));
       expect(picker.initialDate, DateTime(2026, 10, 2));
@@ -304,12 +341,8 @@ void main() {
       expect(changes.single, {'start': '2026-09-30', 'end': '2026-10-15'});
       await tester.tap(find.byTooltip('选择开始日期'));
       await tester.pumpAndSettle();
-      expect(
-        tester.widget<DatePickerDialog>(find.byType(DatePickerDialog)).lastDate,
-        DateTime(2026, 10, 15),
-      );
       current = false;
-      await tester.tap(find.text('确定'));
+      await tester.tap(find.text('下一步'));
       await tester.pumpAndSettle();
       expect(changes, hasLength(1));
       current = true;
@@ -321,13 +354,15 @@ void main() {
       await tester.pumpAndSettle();
       // Clearing the range reopens the current month, which can differ from
       // the October fixture above.
-      final reopened = tester.widget<DatePickerDialog>(
-        find.byType(DatePickerDialog),
+      final reopened = tester.widget<DateSelectionSheet>(
+        find.byType(DateSelectionSheet),
       );
       final selectedDate = formatInputDate(
-        DateTime(reopened.initialDate!.year, reopened.initialDate!.month, 15),
+        DateTime(reopened.initialDate.year, reopened.initialDate.month, 15),
       );
       await tester.tap(find.text('15').last);
+      await tester.tap(find.text('下一步'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('确定'));
       await tester.pumpAndSettle();
       expect(value, {'start': selectedDate, 'end': selectedDate});
@@ -452,7 +487,7 @@ void main() {
           if (kind == TemporalInputKind.time) {
             expect(find.byType(CupertinoPicker), findsNWidgets(2));
           } else {
-            expect(find.byType(DatePickerDialog), findsOneWidget);
+            expect(find.byType(DateSelectionSheet), findsOneWidget);
             expect(find.text('取消'), findsOneWidget);
           }
           await tester.tap(find.text('取消'));

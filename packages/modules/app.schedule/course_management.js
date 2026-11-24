@@ -6,25 +6,20 @@ import {command} from './schedule_commands.js';
 import {snapshot} from './schedule_queries.js';
 import {listTile} from './view_helpers.js';
 
-const weekdays=['周一','周二','周三','周四','周五','周六','周日'];
+import {card,divider,divided,pair,weekdayNames as weekdays,fixedActions as footer} from './course_layout.js';
 export const orphanPolicies=[
   {value:'ask',label:'有失效调课时阻止保存'},
   {value:'discard',label:'撤销失效调课'},
   {value:'extra',label:'保留为临时课程'}
 ];
 const formKey=field=>'schedule.course.'+field;
-const divider={type:'divider',height:1};
-const divided=rows=>rows.flatMap((row,index)=>index?[divider,row]:[row]);
-const card=(children,padding=0)=>({type:'card',variant:'outlined',padding,children});
 const inset=(child,padding=[0,0,0,0])=>({type:'inset',padding,children:[child]});
-const pair=(...children)=>({type:'row',layout:'flex',spacing:10,crossAxisAlignment:'start',children:children.map(child=>({...child,flex:1}))});
 const caption=title=>({type:'sectionHeader',title,compact:true});
-const footer=(...children)=>({footerStyle:'edge',footer:pair(...children)});
 const header=(title,options)=>({title,minHeight:65,...options});
 const editorEvent=(courseId,meetingId)=>({type:'course',courseId,meetingId});
 const deleteEvent=(collection,id)=>({type:'delete',collection,id});
 
-function weekRanges(weeks) {
+export function weekRanges(weeks) {
   const ranges=[];
   for(const week of [...new Set(weeks)].sort((a,b)=>a-b)) {
     const last=ranges.at(-1);

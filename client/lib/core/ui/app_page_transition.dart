@@ -5,10 +5,25 @@ import 'ui_motion.dart';
 
 /// Shared motion for Material routes, including module and settings pages.
 class AppPageTransitionsBuilder extends PageTransitionsBuilder {
-  const AppPageTransitionsBuilder();
+  const AppPageTransitionsBuilder({this.reduceMotion = false});
+
+  /// Routes created under this builder finish immediately after the first
+  /// frame. A zero duration avoids holding a route on screen without motion.
+  final bool reduceMotion;
 
   @override
-  Duration get transitionDuration => AppMotion.pageTransition;
+  bool operator ==(Object other) =>
+      other is AppPageTransitionsBuilder && other.reduceMotion == reduceMotion;
+
+  @override
+  int get hashCode => reduceMotion.hashCode;
+
+  @override
+  Duration get transitionDuration =>
+      reduceMotion ? Duration.zero : AppMotion.pageTransition;
+
+  @override
+  Duration get reverseTransitionDuration => transitionDuration;
 
   @override
   Widget buildTransitions<T>(
@@ -18,7 +33,7 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    if (AppMotion.reduced(context)) return child;
+    if (reduceMotion || AppMotion.reduced(context)) return child;
     if (Theme.of(context).platform == TargetPlatform.iOS) {
       return const CupertinoPageTransitionsBuilder().buildTransitions(
         route,

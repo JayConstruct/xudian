@@ -139,8 +139,8 @@ class HostSettingsPage extends ConsumerWidget {
                 '设置 › 个性化',
                 Icons.palette_outlined,
                 () => AppearanceSettingsPage(registry: registry),
-                labels: ['外观主题', '减少动画', '触感反馈'],
-                aliases: '主题 深色 浅色 振动 动效',
+                labels: ['外观主题', '触感反馈'],
+                aliases: '主题 深色 浅色 振动',
               );
               index(
                 '界面风格',

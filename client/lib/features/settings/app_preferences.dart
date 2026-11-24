@@ -10,17 +10,14 @@ import '../../data/providers.dart';
 class AppPreferences {
   const AppPreferences({
     this.themeMode = ThemeMode.system,
-    this.reduceMotion = false,
     this.haptics = true,
   });
 
   final ThemeMode themeMode;
-  final bool reduceMotion;
   final bool haptics;
 
   Map<String, Object?> toJson() => {
     'theme': themeMode.name,
-    'reduceMotion': reduceMotion,
     'haptics': haptics,
   };
 
@@ -30,19 +27,14 @@ class AppPreferences {
           (mode) => mode.name == values['theme'],
           orElse: () => ThemeMode.system,
         ),
-        reduceMotion: values['reduceMotion'] == true,
         haptics: values['haptics'] != false,
       );
 
-  AppPreferences copyWith({
-    ThemeMode? themeMode,
-    bool? reduceMotion,
-    bool? haptics,
-  }) => AppPreferences(
-    themeMode: themeMode ?? this.themeMode,
-    reduceMotion: reduceMotion ?? this.reduceMotion,
-    haptics: haptics ?? this.haptics,
-  );
+  AppPreferences copyWith({ThemeMode? themeMode, bool? haptics}) =>
+      AppPreferences(
+        themeMode: themeMode ?? this.themeMode,
+        haptics: haptics ?? this.haptics,
+      );
 }
 
 final appPreferencesProvider =
@@ -61,14 +53,8 @@ class AppPreferencesController extends AsyncNotifier<AppPreferences> {
     )..where((row) => row.key.equals(storageKey))).getSingleOrNull();
     if (row == null) return const AppPreferences();
     try {
-      final values = jsonDecode(row.value) as Map<String, dynamic>;
-      return AppPreferences(
-        themeMode: ThemeMode.values.firstWhere(
-          (mode) => mode.name == values['theme'],
-          orElse: () => ThemeMode.system,
-        ),
-        reduceMotion: values['reduceMotion'] == true,
-        haptics: values['haptics'] != false,
+      return AppPreferences.fromJson(
+        jsonDecode(row.value) as Map<String, dynamic>,
       );
     } on FormatException {
       return const AppPreferences();
@@ -85,11 +71,7 @@ class AppPreferencesController extends AsyncNotifier<AppPreferences> {
         .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             key: storageKey,
-            value: jsonEncode({
-              'theme': preferences.themeMode.name,
-              'reduceMotion': preferences.reduceMotion,
-              'haptics': preferences.haptics,
-            }),
+            value: jsonEncode(preferences.toJson()),
           ),
         );
     state = AsyncData(preferences);

@@ -146,8 +146,8 @@ void main() {
       final today = find.byKey(const ValueKey('palette-today'));
       final schedule = find.byKey(const ValueKey('palette-schedule'));
       expect(
-        tester.getBottomLeft(zone).dy,
-        lessThan(tester.getTopLeft(today).dy),
+        tester.getTopLeft(zone).dy,
+        greaterThan(tester.getBottomLeft(today).dy),
       );
       expect(
         tester.getTopLeft(schedule).dx,
@@ -208,7 +208,10 @@ void main() {
       }
 
       final cancelled = await hover('header');
-      expect(find.text('右上角菜单预览'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('layout-preview-fixed-settings')),
+        findsOneWidget,
+      );
       await cancelled.up();
       await tester.pumpAndSettle();
       expect(
@@ -216,7 +219,10 @@ void main() {
         isFalse,
       );
       final move = await hover('more');
-      expect(find.text('更多预览'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('more-workspace-settings')),
+        findsOneWidget,
+      );
       final target = find.byKey(const ValueKey('drop-more-0'));
       await move.moveTo(tester.getCenter(target));
       await tester.pump();
@@ -230,6 +236,66 @@ void main() {
       expect(
         container.read(uiLayoutProvider).requireValue.narrow.mounts,
         isEmpty,
+      );
+      expect(pageBuilds, 0);
+    },
+  );
+
+  testWidgets(
+    'long pressing a dock icon or a More row reorders the actual preview',
+    (tester) async {
+      phoneViewport(tester);
+      await initialize();
+      await container
+          .read(uiLayoutProvider.notifier)
+          .save(
+            UiLayout(
+              narrow: UiLayoutProfile(
+                mounts: {
+                  'hidden': const UiMount(
+                    placement: UiPlacement.more,
+                    order: 1,
+                  ),
+                },
+              ),
+            ),
+          );
+      await show(tester);
+      await tester.tap(find.text('编排入口'));
+      await tester.pumpAndSettle();
+      Future<void> reorder(Finder source, Finder target) async {
+        final gesture = await tester.startGesture(tester.getCenter(source));
+        await tester.pump(const Duration(milliseconds: 650));
+        final destination = tester.getCenter(target);
+        await gesture.moveTo(destination);
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      final dock = find.byType(MobileBottomDock);
+      final firstId = tester.widget<MobileBottomDock>(dock).destinations[1].id;
+      final secondId = tester.widget<MobileBottomDock>(dock).destinations[2].id;
+      await reorder(
+        find.byKey(ValueKey(secondId)),
+        find.byKey(const ValueKey('drop-main-0')),
+      );
+      expect(
+        tester.widget<MobileBottomDock>(dock).destinations.map((x) => x.id),
+        ['app.shell.more', secondId, firstId],
+      );
+      await tester.tap(find.byKey(const ValueKey('zone-more')));
+      await tester.pumpAndSettle();
+      final modules = find.byKey(const ValueKey('more-entry-modules'));
+      final hidden = find.byKey(const ValueKey('more-entry-hidden'));
+      expect(
+        tester.getCenter(hidden).dy,
+        greaterThan(tester.getCenter(modules).dy),
+      );
+      await reorder(hidden, find.byKey(const ValueKey('drop-more-0')));
+      expect(
+        tester.getCenter(hidden).dy,
+        lessThan(tester.getCenter(modules).dy),
       );
       expect(pageBuilds, 0);
     },

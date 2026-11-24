@@ -1,3 +1,6 @@
+import '../../core/ui/tab_content_transition.dart';
+import '../../core/ui/sliding_segments.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -211,17 +214,17 @@ class _AssistantPanelState extends ConsumerState<AssistantPanel> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      SegmentedButton<bool>(
+                      SlidingSegments<bool>(
                         key: const ValueKey('assistant-mode'),
                         segments: const [
                           ButtonSegment(value: false, label: Text('对话')),
                           ButtonSegment(value: true, label: Text('高级开发')),
                         ],
-                        selected: {controller.advanced},
-                        onSelectionChanged: controller.enabled
+                        selected: controller.advanced,
+                        onChanged: controller.enabled
                             ? (selected) {
                                 FocusManager.instance.primaryFocus?.unfocus();
-                                controller.setAdvanced(selected.single);
+                                controller.setAdvanced(selected);
                               }
                             : null,
                       ),
@@ -240,26 +243,29 @@ class _AssistantPanelState extends ConsumerState<AssistantPanel> {
                 ),
               ),
               Expanded(
-                child: IndexedStack(
+                child: TabContentTransition(
                   index: controller.advanced ? 1 : 0,
-                  children: [
-                    ExcludeFocus(
-                      excluding: controller.advanced,
-                      child: TickerMode(
-                        enabled: !controller.advanced,
-                        child: _conversation(context, controller),
+                  child: IndexedStack(
+                    index: controller.advanced ? 1 : 0,
+                    children: [
+                      ExcludeFocus(
+                        excluding: controller.advanced,
+                        child: TickerMode(
+                          enabled: !controller.advanced,
+                          child: _conversation(context, controller),
+                        ),
                       ),
-                    ),
-                    ExcludeFocus(
-                      excluding: !controller.advanced,
-                      child: TickerMode(
-                        enabled: controller.advanced,
-                        child: developerOpened
-                            ? Builder(builder: widget.developerBuilder)
-                            : const SizedBox.shrink(),
+                      ExcludeFocus(
+                        excluding: !controller.advanced,
+                        child: TickerMode(
+                          enabled: controller.advanced,
+                          child: developerOpened
+                              ? Builder(builder: widget.developerBuilder)
+                              : const SizedBox.shrink(),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],

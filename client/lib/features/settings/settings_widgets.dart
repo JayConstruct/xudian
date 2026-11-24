@@ -1,3 +1,4 @@
+export '../../core/ui/sliding_segments.dart';
 import '../../core/ui/native_ui.dart';
 import '../../core/ui/ui_icon.dart';
 import 'settings_focus.dart';
@@ -153,85 +154,6 @@ class SettingsSearchField extends StatelessWidget {
                       },
                     ),
             ),
-      ),
-    );
-  }
-}
-
-class SettingsSegments<T extends Object> extends StatelessWidget {
-  const SettingsSegments({
-    super.key,
-    required this.segments,
-    required this.selected,
-    required this.onChanged,
-  });
-  final List<ButtonSegment<T>> segments;
-  final T selected;
-  final ValueChanged<T> onChanged;
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: ShapeDecoration(
-        color: scheme.surfaceContainer,
-        shape: AppDesign.smoothShape(
-          radius: AppDesign.controlRadius,
-          side: BorderSide(color: scheme.outlineVariant, width: .8),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned.fill(
-              child: Row(
-                children: [
-                  for (final segment in segments)
-                    Expanded(
-                      child: DecoratedBox(
-                        decoration: ShapeDecoration(
-                          color: segment.value == selected
-                              ? scheme.surface
-                              : Colors.transparent,
-                          shape: AppDesign.smoothShape(
-                            radius: 11,
-                            side: segment.value == selected
-                                ? BorderSide(
-                                    color: scheme.outlineVariant,
-                                    width: .7,
-                                  )
-                                : BorderSide.none,
-                          ),
-                        ),
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            SegmentedButton<T>(
-              segments: segments,
-              selected: {selected},
-              expandedInsets: EdgeInsets.zero,
-              showSelectedIcon: false,
-              onSelectionChanged: (values) => onChanged(values.single),
-              style: SegmentedButton.styleFrom(
-                foregroundColor: scheme.onSurfaceVariant,
-                selectedForegroundColor: scheme.onPrimaryContainer,
-                backgroundColor: Colors.transparent,
-                selectedBackgroundColor: Colors.transparent,
-                side: BorderSide.none,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                textStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -456,36 +378,37 @@ class SettingsEmptyState extends StatelessWidget {
     required this.title,
     required this.detail,
     this.icon = Icons.search,
+    this.grouped = true,
   });
 
   final String title, detail;
   final IconData icon;
+  final bool grouped;
 
   @override
-  Widget build(BuildContext context) => SettingsGroupSurface(
-    children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
-        child: Column(
-          children: [
-            SettingsGlyph(icon, size: 46, radius: 14, iconSize: 22),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              detail,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12.5, color: AppDesign.muted(context)),
-            ),
-          ],
-        ),
+  Widget build(BuildContext context) {
+    final body = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+      child: Column(
+        children: [
+          SettingsGlyph(icon, size: 46, radius: 14, iconSize: 22),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            detail,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, color: AppDesign.muted(context)),
+          ),
+        ],
       ),
-    ],
-  );
+    );
+    return grouped ? SettingsGroupSurface(children: [body]) : body;
+  }
 }
 
 class SettingsGlyph extends StatelessWidget {

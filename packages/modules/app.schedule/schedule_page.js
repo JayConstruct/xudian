@@ -7,6 +7,7 @@ import {listTile} from './view_helpers.js';
 import {renderSettings,renderTimetables,renderSemester,renderPeriods,updateSemester,updatePeriods} from './schedule_settings_pages.js';
 import {renderGrid,updateDisplay} from './schedule_grid_page.js';
 import {handleEditing,renderOccurrence,renderChanges} from './schedule_editing_pages.js';
+import {renderOccurrenceEditor} from './occurrence_editor.js';
 import {renderCourseManagement} from './course_management.js';
 import {handleImport,renderImports} from './schedule_import_page.js';
 import {renderToday} from './today_page.js';
@@ -30,6 +31,7 @@ export async function render({state={},context={},event,formValues={}}) {
   let timetables=await data.query('timetables');
   let t=timetables.find(x=>x.id===(state.timetableId||context.timetableId||selectedTimetableId)) || timetables[0];
   const page=context.pageId||'app.schedule.home';
+  if((page==='app.schedule.occurrence'||page==='app.schedule.occurrenceEditor') && context.timetableId)t=timetables.find(table=>table.id===context.timetableId);
   const gridPage=page==='app.schedule.home'||page==='app.schedule.display';
   if(page==='app.schedule.display' && state.displayControls===undefined)state.displayControls=true;
   if(page==='app.schedule.display' && state.displayRequest!==context.displayRequest) {state.displayControls=true;state.displayRequest=context.displayRequest;}
@@ -45,7 +47,7 @@ export async function render({state={},context={},event,formValues={}}) {
   if(event?.type==='occurrence' && t) await ui.panel('app.schedule.occurrence',{timetableId:t.id,...occurrenceReference(event.item)},{adaptive:true});
   if(event?.type==='singleChange' && t) {
     const current=await currentOccurrence(t,context);
-    if(current?.item) event={type:'editOccurrence',item:current.item,change:current.change};
+    if(current?.item) event={type:'editOccurrence',item:current.item,change:current.change,meeting:current.meeting};
     else state.notice='这次课程已取消或不存在，请刷新后查看';
   }
   if(event?.type==='editRecurrence' && t) {
@@ -77,6 +79,13 @@ export async function render({state={},context={},event,formValues={}}) {
   if(page==='app.schedule.settings') return renderSettings({t,timetables,state,children});
   if(page==='app.schedule.imports') return renderImports({t,state,children});
   if(page==='app.schedule.timetables') return renderTimetables({t,timetables,state,children});
+  if(page==='app.schedule.occurrenceEditor')return renderOccurrenceEditor({
+    t:timetables.find(table=>table.id===context.timetableId),context,state,event,formValues
+  });
+  if(page==='app.schedule.occurrence') {
+    const target=context.timetableId?timetables.find(table=>table.id===context.timetableId):t;
+    return renderOccurrence({t:target,state,context,children});
+  }
   if(!t) {
     children.push(text('创建课表或导入 JSON 备份后开始使用'),listTile('新建课表','默认12节作息','calendar',{type:'newTimetable'}),go('导入与备份','imports','导入 JSON 备份','importExport'));
     const header=page==='app.schedule.home'?{title:'课表',actions:[{label:'课表设置',event:{type:'navigate',page:'settings'}}]}:page==='app.schedule.courses'?{title:'课程管理'}:undefined;
@@ -85,7 +94,6 @@ export async function render({state={},context={},event,formValues={}}) {
   state.timetableId=t.id;
   if(page==='app.schedule.semester') return renderSemester({t,state,event,children});
   if(page==='app.schedule.periods') return renderPeriods({t,state,children});
-  if(page==='app.schedule.occurrence') return renderOccurrence({t,state,context,children});
   if(page==='app.schedule.courses') return renderCourseManagement({t,state,event,formValues,children});
   if(page==='app.schedule.changes') return renderChanges({t,state,children});
   if(page==='app.schedule.today') return renderToday({t,state,children});

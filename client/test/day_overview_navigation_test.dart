@@ -77,13 +77,14 @@ void main() {
         );
         await tester.tap(button);
         await tester.pumpAndSettle();
-        final picker = tester.widget<DatePickerDialog>(
-          find.byType(DatePickerDialog),
+        final picker = tester.widget<DateSelectionSheet>(
+          find.byType(DateSelectionSheet),
         );
         expect(picker.initialDate, DateTime(2026, 10, 3));
         expect(
-          Localizations.localeOf(tester.element(find.byType(DatePickerDialog)))
-              .languageCode,
+          Localizations.localeOf(
+            tester.element(find.byType(DateSelectionSheet)),
+          ).languageCode,
           'zh',
         );
         await tester.tap(find.text('取消'));
@@ -141,7 +142,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<DatePickerDialog>(find.byType(DatePickerDialog))
+            .widget<DateSelectionSheet>(find.byType(DateSelectionSheet))
             .initialDate,
         DateTime(2026, 10, 3),
       );

@@ -230,9 +230,9 @@ void main() {
       expect(find.text('编辑 · 第一页'), findsOneWidget);
       expect(
         tester
-            .widget<SegmentedButton<bool>>(find.byType(SegmentedButton<bool>))
+            .widget<SlidingSegments<bool>>(find.byType(SlidingSegments<bool>))
             .selected,
-        {true},
+        true,
       );
       expect(tester.takeException(), isNull);
       await tester.scrollUntilVisible(
@@ -1204,9 +1204,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<SegmentedButton<bool>>(find.byType(SegmentedButton<bool>))
+            .widget<SlidingSegments<bool>>(find.byType(SlidingSegments<bool>))
             .selected,
-        {true},
+        true,
       );
       expect(
         tester
@@ -1591,7 +1591,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ChoiceChip, '第二页'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SlidingSegments<int>),
+          matching: find.text('第二页'),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.text('第二个内容'), findsOneWidget);
       visible.value = false;
@@ -1835,7 +1840,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('循环内容嵌套'), findsOneWidget);
-    await tester.tap(find.widgetWithText(ChoiceChip, '有效分支'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SlidingSegments<int>),
+        matching: find.text('有效分支'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('有效内容未受影响'), findsOneWidget);
     expect(tester.takeException(), isNull);

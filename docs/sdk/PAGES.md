@@ -22,7 +22,7 @@ API 1.56 中，`row.alignment: "start"` 使自动换行的按钮组靠行首。`
 - `row.layout:'flex'` 的子节点可声明 `flex:1` 填充分配空间或 `width:70` 固定宽度；省略时使用内容自然宽度。`row.spacing` 为 0～48（默认8），`crossAxisAlignment:'start'` 顶部对齐，默认居中。普通 `row` 仍为可换行布局。`column.crossAxisAlignment:'start'` 取消横向拉伸，`trailingSpacing:false` 省略最后一项下方留白。
 - `text.style` 增加 `headline`（24px粗体）、`body`、`caption`；`weight:'bold'|'semibold'`、`color:'primary'|'muted'`、`align:'center'|'end'` 可独立配置，文字继续适配系统字号。`maxLines` 支持1～10的整数，`overflow:'ellipsis'` 可将长标题在设定行数内省略，无障碍标签仍保留完整原文；省略配置时继续自然换行。`divider.height` 可配置分隔行总高度。
 - `input.presentation:'search'` 将 `text` 显示为搜索占位而非浮动字段标签，其余输入、清空、防抖与草稿能力不变。`button.icon` 可显示共享图标。
-- `tabs {variant:'pills'|'underline',items:[{label,event}],selectedIndex,scrollable?}` 提供紧凑状态筛选与下划线页签；每项保留48px操作区域与选中语义，`scrollable:true` 横向滚动，大字号或窄屏也自动允许横向滚动。
+- `tabs {variant:'pills'|'underline',items:[{label,event}],selectedIndex,scrollable?}` 保留已有筛选与页签声明。指定 `selectedIndex` 时，宿主使用与项目页相同的滑块，每项保留 48px 操作区域与选中语义。`scrollable:true` 可在空间不足时横向滚动，其余选项在窄屏或大字号时换行。
 - 根节点 `footerStyle:'flat'` 让既有固定 `footer` 采用整宽内容底色、16px水平边距与顶部细分隔；省略时保留浮动底栏。`footerMessage` 仍单独位于按钮上方。双按钮可用 `row.layout:'flex'` 与各子按钮 `flex:1` 等宽呈现。普通根布局继续采用20px水平、16px顶端边距。
 - 全屏子路由的 `header.compact:true` 使用20px粗体标题、48px返回区及8px标题间距。`header.backIcon:'chevron'` 将返回图标替换为共享左箭头，继续优先处理 `backEvent`，无内部返回时退出当前路由；省略时保持原顶栏呈现，面板样式不变。
 
@@ -60,6 +60,14 @@ API 1.1 的 `toolbar` 使用 title/event 显示居中可点击标题，leading/t
 
 contributions 通过宿主公开槽位提供入口；kind 为 content 时内嵌声明式内容，其他贡献默认显示面板启动入口。页面可以声明 entry 或 entries，使多个稳定入口指向同一页面；context.pageId 由宿主注入。页面可公开 slots，由已有布局设置挂载其他模块入口。入口模块/页面 ID 和窄/宽布局配置持续保留。
 
+宿主 API `1.56.0` 支持在详情页声明 `header.titleStyle: "large"`。公用日期控件以底部面板显示月历、年份和手动输入，时间控件提供小时与分钟滚轮。`timeInput` 与 `dateInput` 都可使用 `presentation: "labeled"` 将标签放在字段上方。 声明 `notice.tone: "accent"` 可用当前主题的强调底色突出状态。
+
+`ui.dialog` 的页式表单可设置 `fullWidthActions: true` 并排显示取消与提交。字段的 `section` 指定分组标题，相邻且 `row` 相同的字段可并排。
+
+- `checkbox` 的 `subtitle` 显示第二行说明，`icon` 使用共享图标。如果同时提供 `detail`，辅助位置优先显示该文字。`minHeight` 以逻辑像素设置紧凑行的最小高度，范围为 32 至 240。多行文字和系统字号可以撑高行。
+- `button` 使用 `variant: "text", presentation: "link"` 可左对齐显示紧凑文字操作。普通描边按钮可设置 `variant: "outlined", tone: "neutral"`，使用与表单取消按钮相同的中性色。共享图标 `skipNext` 可用于跳过操作。
+- `taskItem` 与 `agendaItem` 支持 `presentation: "timeline"`。`taskItem` 的 `presentation: "record"` 显示复盘记录，点击左侧完成标记触发 `event`，点击标题行触发 `openEvent`。模块可通过 `subtitle` 显示记录时间和项目名称。
+
 ## 时间范围表单
 
 API `^1.34.0` 增加 `timeRangeTable` 本地表单：节点提供稳定 `key`、`value`、`baseline`。值为 `{durationMinutes:"45",rows:[{id:"1",label:"第 1 节",start:"08:00",end:"08:45",manualEnd:false}]}`，基线使用相同结构。组件在本地处理时长和时间滚轮，修改开始时间时只为未标记手动的结束时间计算同日结果；手动结束时间始终保留。时长修改只作用于后续开始时间编辑，已有行不批量改写。表单回传完整草稿及 `dirty/resetDisabled/saveDisabled/error` 到 `formValues[key]`，编辑不触发页面 handler；固定保存按钮可绑定这些状态。保存时模块仍须重新验证值、数据基线与引用关系，不能信任表单提供的状态标记。
@@ -81,7 +89,7 @@ API `^1.34.0` 增加 `timeRangeTable` 本地表单：节点提供稳定 `key`、
 
 `feedbackKey` 是可选的有限数字或字符串。同一 scope 中，调用方只在业务提交成功后发布新的 token，并在随后刷新时复用；清空 token 不重新启用刚消费的 token，页面首次挂载会消费已有 token 而不重放。每次操作应使用不同 token，不将审核等待、取消、提交失败或普通查询结果作为成功反馈。
 
-新的 token 仅对本次差量生效：`removeKeys` 中已从当前 children 消失的旧行渐隐并收拢，仍存在的行只更新数据；`highlightKeys` 中真正新增的行短暂显示 900ms 背景高亮，不改变已有行透明度。两者都是字符串数组，默认空。普通删除、翻页、外部写入不带新 token 时立即更新；历史日期的已完成任务如果仍在查询结果中，不执行退出。退出开始即禁用点击、焦点和无障碍遍历；连续提交与同 token 刷新保留每条退出的原截止时间，离屏行也按时释放。系统或应用“减少动画”立即更新最终列表并跳过高亮，开启该设置也会结束在途退出。
+新的 token 仅对本次差量生效：`removeKeys` 中已从当前 children 消失的旧行渐隐并收拢，仍存在的行只更新数据；`highlightKeys` 中真正新增的行短暂显示 900ms 背景高亮，不改变已有行透明度。两者都是字符串数组，默认空。普通删除、翻页、外部写入不带新 token 时立即更新；历史日期的已完成任务如果仍在查询结果中，不执行退出。退出开始即禁用点击、焦点和无障碍遍历；连续提交与同 token 刷新保留每条退出的原截止时间，离屏行也按时释放。系统“减少动画”立即更新最终列表并跳过高亮，开启该设置也会结束在途退出。
 
 `duration` 控制退出时长，为 100–2000ms 的整数，默认 220ms；`spacing` 为 0–48 的有限数字，默认 12。UI 包仍可替换每个行组件，列表只负责稳定身份与通用呈现，不调用业务服务。这是视觉差量更新，服务查询、脚本执行和跨桥传输仍按既有刷新流程完成；不是 SQLite 或跨桥的局部更新协议。日程 `app.views.today 1.6.2` 使用此节点，在任务创建、完成的审核提交成功后提供反馈；快速添加仍使用独立的可折叠 `transition`。
 
@@ -100,3 +108,11 @@ API `^1.34.0` 增加 `timeRangeTable` 本地表单：节点提供稳定 `key`、
 `ui.navigate` 指向可用工作区时，宿主关闭覆盖工作区的详情路由和模态面板，再激活目标并传递上下文；目标不可用时保留当前页面。目标模块随后打开的确认详情页直接显示，不需要用户手动返回工作区。`ui.panel` 继续打开面板，不切换工作区。
 
 跨宿主调用被拒绝时，脚本捕获的 Error 的 `message` 和 `String(error)` 提供业务正文，去除重复异常前缀与调用堆栈；原始异常文本保存在 `error.diagnostic` 供诊断使用，不应展示给用户。未捕获的页面异常也以业务正文和重试操作显示，原始异常仍供宿主诊断。
+
+API 1.58 增加通用的 `timelineItem`，使用 `time`、`detail`、`first`、`last`、`filled` 和 `child` 复用日程时间轴。正文节点可用 `text.highlight` 突出字面关键词。单行输入的 `keepFocusOnSubmit: true` 支持键盘提交后继续输入。紧凑表单可用 `fullWidthActions: true` 并排显示取消与提交按钮，必填文本为空时禁用提交。
+
+空列表可以用根列的 `centerLast: true` 把最后一个子项居中放在表头下面，并在小屏幕上滚动。`footerStyle: "inset"` 为带有自身边框的底栏保留安全间距。`input.presentation: "borderless"` 可嵌入这类输入栏。
+
+`dateInput.presentation: "button"` 将模块提供的日期标题显示为月历入口。`button.presentation: "icon"` 以图标显示操作，`text` 用作无障碍标签。
+
+宿主 API 1.59 支持紧凑时间线。模块可在 `timelineItem` 选择 `variant: compact`，使用 `detailIcon` 和 `divider` 标记条目。`sectionLabel` 可分别声明标题、说明、点击事件与箭头。`emptyState` 的 `illustrated` 展示可从当前模块包的 `artwork` 路径读取 PNG，缺图时使用声明的图标。根节点的 `header` 和 `footerStyle: composer` 可固定筛选区和记录框，`card.focusKey` 可跟随输入焦点。紧凑表单字段支持图标元信息 `metadata`、引用样式 `summary.presentation: quote` 和目的地说明 `destination`。长按菜单动作支持 `dividerBefore` 与 `tone: danger`。

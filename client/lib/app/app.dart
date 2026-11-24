@@ -12,6 +12,7 @@ import '../features/settings/app_preferences.dart';
 import '../core/ui/ui_annotation.dart';
 import '../core/ui/ui_component.dart';
 import '../core/ui/app_navigation.dart';
+import '../core/ui/app_page_transition.dart';
 import '../core/ui/global_overlay_host.dart';
 import 'app_shell.dart';
 import 'app_scroll_behavior.dart';
@@ -58,12 +59,20 @@ class XudianApp extends ConsumerWidget {
       darkTheme: AppDesign.theme(Brightness.dark, haptics: preferences.haptics),
       themeMode: preferences.themeMode,
       builder: (context, child) {
-        final media = MediaQuery.of(context);
-        return MediaQuery(
-          data: media.copyWith(
-            disableAnimations:
-                media.disableAnimations || preferences.reduceMotion,
+        final reduceMotion = MediaQuery.disableAnimationsOf(context);
+        // The theme sits above the Navigator so routes created from this
+        // point read a zero transition duration instead of waiting out an
+        // animation that was visually skipped.
+        final theme = Theme.of(context).copyWith(
+          pageTransitionsTheme: PageTransitionsTheme(
+            builders: {
+              for (final platform in TargetPlatform.values)
+                platform: AppPageTransitionsBuilder(reduceMotion: reduceMotion),
+            },
           ),
+        );
+        return Theme(
+          data: theme,
           child: UiPackScope(
             child: Builder(
               builder: (context) => AnnotatedRegion<SystemUiOverlayStyle>(

@@ -1,3 +1,6 @@
+import '../../core/ui/tab_content_transition.dart';
+import '../../core/ui/sliding_segments.dart';
+
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
@@ -483,11 +486,14 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
           Future<void> refresh() async {
-            logs = await store.listForModule(
+            final requested = statusFilter;
+            final result = await store.listForModule(
               module.id,
               status: statusFilter == 'all' ? null : statusFilter,
             );
-            setDialogState(() {});
+            if (context.mounted && statusFilter == requested) {
+              setDialogState(() => logs = result);
+            }
           }
 
           return AlertDialog(
@@ -499,73 +505,82 @@ class _ModuleManagerPageState extends ConsumerState<ModuleManagerPage> {
                 children: [
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: SegmentedButton<String>(
+                    child: SlidingSegments<String>(
                       segments: const [
                         ButtonSegment(value: 'all', label: Text('全部')),
                         ButtonSegment(value: 'failure', label: Text('失败')),
                         ButtonSegment(value: 'skipped', label: Text('跳过')),
                         ButtonSegment(value: 'success', label: Text('成功')),
                       ],
-                      selected: {statusFilter},
-                      onSelectionChanged: (value) async {
-                        statusFilter = value.first;
+                      selected: statusFilter,
+                      onChanged: (value) async {
+                        statusFilter = value;
                         await refresh();
                       },
                     ),
                   ),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: logs.isEmpty
-                        ? const Center(child: Text('暂无运行记录'))
-                        : ListView.separated(
-                            itemCount: logs.length,
-                            separatorBuilder: (_, _) =>
-                                const Divider(height: 1),
-                            itemBuilder: (_, index) {
-                              final log = logs[index];
-                              final detail = <String>[
-                                log.eventType,
-                                '${log.entityType}:${log.entityId}',
-                                '动作 ${log.actionCount}',
-                                '深度 ${log.automationDepth}',
-                                if (log.sourceExecutionId != null)
-                                  '重试 #${log.sourceExecutionId}',
-                              ].join(' · ');
-                              return ListTile(
-                                dense: true,
-                                leading: Icon(_ruleStatusIcon(log.status)),
-                                title: Text(
-                                  '${log.ruleId} · '
-                                  '${_ruleStatusText(log.status)}',
-                                ),
-                                subtitle: Text(
-                                  log.message == null
-                                      ? detail
-                                      : '$detail\n${log.message}',
-                                ),
-                                isThreeLine: log.message != null,
-                                trailing: Wrap(
-                                  spacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    if (log.status == 'failure')
-                                      IconButton(
-                                        tooltip: '重试此规则',
-                                        icon: const Icon(Icons.replay),
-                                        onPressed: () async {
-                                          await engine.retry(log);
-                                          await refresh();
-                                        },
+                    child: TabContentTransition(
+                      index: const [
+                        'all',
+                        'failure',
+                        'skipped',
+                        'success',
+                      ].indexOf(statusFilter),
+                      child: logs.isEmpty
+                          ? const Center(child: Text('暂无运行记录'))
+                          : ListView.separated(
+                              itemCount: logs.length,
+                              separatorBuilder: (_, _) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (_, index) {
+                                final log = logs[index];
+                                final detail = <String>[
+                                  log.eventType,
+                                  '${log.entityType}:${log.entityId}',
+                                  '动作 ${log.actionCount}',
+                                  '深度 ${log.automationDepth}',
+                                  if (log.sourceExecutionId != null)
+                                    '重试 #${log.sourceExecutionId}',
+                                ].join(' · ');
+                                return ListTile(
+                                  dense: true,
+                                  leading: Icon(_ruleStatusIcon(log.status)),
+                                  title: Text(
+                                    '${log.ruleId} · '
+                                    '${_ruleStatusText(log.status)}',
+                                  ),
+                                  subtitle: Text(
+                                    log.message == null
+                                        ? detail
+                                        : '$detail\n${log.message}',
+                                  ),
+                                  isThreeLine: log.message != null,
+                                  trailing: Wrap(
+                                    spacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      if (log.status == 'failure')
+                                        IconButton(
+                                          tooltip: '重试此规则',
+                                          icon: const Icon(Icons.replay),
+                                          onPressed: () async {
+                                            await engine.retry(log);
+                                            await refresh();
+                                          },
+                                        ),
+                                      Text(
+                                        _formatTime(log.createdAt),
+                                        textAlign: TextAlign.end,
                                       ),
-                                    Text(
-                                      _formatTime(log.createdAt),
-                                      textAlign: TextAlign.end,
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
                   ),
                 ],
               ),

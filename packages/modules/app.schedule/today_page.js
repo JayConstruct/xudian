@@ -1,6 +1,7 @@
 import {ui,clock} from '@xudian/sdk';
 import {occurrenceReference,queryToday,queryTodayFeed} from './schedule_queries.js';
-import {button,text} from './page_controls.js';
+import {button} from './page_controls.js';
+import {summary,lessonDate,section,courseRow,periodLabel,pageResult} from './course_layout.js';
 
 export async function renderTodayFeed({state={},event,context={}}={}) {
   state={...state};
@@ -26,8 +27,10 @@ export async function renderTodayFeed({state={},event,context={}}={}) {
 }
 
 export async function renderToday({t,state,children}) {
-  const today=await queryToday({timetableId:t.id});children.push({type:'sectionHeader',title:today.date,subtitle:`第 ${today.teachingWeek} 教学周`,count:today.items.length});
-  if(!today.items.length)children.push(text('今天没有课程'));
-  for(const item of today.items)children.push({type:'agendaItem',key:item.occurrenceId,title:item.title,startTime:t.periods[item.startPeriod-1].start,endTime:t.periods[item.endPeriod-1].end,color:item.color,subtitle:`第 ${item.startPeriod}–${item.endPeriod} 节 · ${item.location||'未填地点'} · ${item.teacher||'未填教师'}`,event:{type:'occurrence',item}});
-  return {state,tree:{type:'column',children}};
+  const today=await queryToday({timetableId:t.id});
+  const rows=today.items.map(item=>courseRow(item.title,[periodLabel(item.startPeriod,item.endPeriod),item.location,item.teacher].filter(Boolean).join(' · '),'school',
+    {type:'occurrence',item},t.periods[item.startPeriod-1].start+'\n'+t.periods[item.endPeriod-1].end));
+  if(!rows.length)rows.push({type:'emptyState',icon:'calendar',iconSurface:true,title:'今天没有课程',padding:31});
+  children.push(summary(lessonDate(today.date),`第 ${today.teachingWeek} 教学周 · ${t.name}`,'calendar'),section('今日课程',rows,today.items.length+' 门'));
+  return pageResult(state,'今日课程',children);
 }

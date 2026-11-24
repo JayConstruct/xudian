@@ -138,7 +138,7 @@ void main() {
         }
 
         Future<void> section(String label) async {
-          final chip = find.widgetWithText(ChoiceChip, label);
+          final chip = find.text(label);
           await reveal(chip, delta: -200);
           await tester.tap(chip);
           await tester.pumpAndSettle();
@@ -165,8 +165,8 @@ void main() {
         await tester.pumpAndSettle();
 
         await section('状态反馈');
-        await reveal(find.widgetWithText(ChoiceChip, '错误'));
-        await tester.tap(find.widgetWithText(ChoiceChip, '错误'));
+        await reveal(find.text('错误'));
+        await tester.tap(find.text('错误'));
         await tester.pumpAndSettle();
         await reveal(find.text('重试示例'));
         await tester.tap(find.text('重试示例'));
@@ -226,10 +226,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ChoiceChip, '跨模块页签'));
+      await tester.tap(find.text('跨模块页签'));
       await tester.pumpAndSettle();
       expect(find.textContaining('此内容来自另一个模块'), findsWidgets);
-      await tester.tap(find.widgetWithText(ChoiceChip, '缺少上下文示例'));
+      await tester.tap(find.text('缺少上下文示例'));
       await tester.pumpAndSettle();
       expect(find.textContaining('页面缺少上下文'), findsOneWidget);
       await tester.tap(find.text('暂时保留'));

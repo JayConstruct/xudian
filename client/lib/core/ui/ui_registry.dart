@@ -119,6 +119,14 @@ class UiRegistry {
   UiPageRegistration? page(String id) =>
       (_pageMap ??= {for (final page in pages) page.id: page})[id];
 
+  /// Two tools can share a short entry label, but lead to different pages.
+  String entryLabel(UiEntryRegistration entry) =>
+      entries.any(
+        (other) => other.pageId != entry.pageId && other.label == entry.label,
+      )
+      ? page(entry.pageId)?.title ?? entry.label
+      : entry.label;
+
   List<AppDestination> get primaryDestinations => List.unmodifiable(
     (_items[UiSlot.navigationPrimary] ?? const [])
         .whereType<NavigationRegistration>()

@@ -32,9 +32,32 @@ extension _AppShellHostInteraction on _AppShellState {
               : PlanConfirmation.parse(rawConfirmation),
         );
       case 'packages.review':
-        return reviewDialog(context, '审核模块文件、数据、界面和权限', args, packageReview: true);
+        return reviewDialog(
+          context,
+          '审核模块文件、数据、界面和权限',
+          args,
+          packageReview: true,
+        );
       case 'grants.request':
-        return reviewDialog(context, '授权模块调用（30分钟，最多20次写入）', args);
+        final directory = (host?.directoryServices() ?? []).map(object);
+        final names = <String, String>{
+          for (final service in directory)
+            '${service['moduleId']}/${service['id']}@${service['major']}':
+                (service['tool'] as Map?)?['description'] as String? ??
+                service['description'] as String? ??
+                service['id'] as String,
+        };
+        return showServiceGrantReview(
+          context,
+          moduleId: caller.moduleId,
+          moduleName:
+              host?.instances[caller.moduleId]?.package.title ??
+              caller.moduleId,
+          scopes: (args['scopes'] as List).cast<String>(),
+          names: names,
+          minutes: args['minutes'] as int,
+          limit: args['writeLimit'] as int,
+        );
       case 'browser.capture':
         return platformBridge!.invoke(
           caller,
@@ -74,7 +97,10 @@ extension _AppShellHostInteraction on _AppShellState {
           context: context,
           useSafeArea: args['presentation'] != 'page',
           barrierColor: args['presentation'] == 'compact'
-              ? Theme.of(context).colorScheme.scrim.withValues(alpha: .4)
+              ? args['fullWidthActions'] == true
+                    ? Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: .34)
+                    : Theme.of(context).colorScheme.scrim.withValues(alpha: .4)
               : null,
           animationStyle: args['presentation'] == 'compact'
               ? AppMotion.dialogStyle(context)
@@ -198,26 +224,35 @@ extension _AppShellHostInteraction on _AppShellState {
                 context: context,
                 barrierDismissible: true,
                 barrierLabel: '关闭面板',
-                pageBuilder: (panelContext, _, _) => SafeArea(
-                  child: Align(
+                barrierColor: Theme.of(context).colorScheme.scrim
+                    .withValues(alpha: .33),
+                pageBuilder: (panelContext, _, _) {
+                  final surface = Theme.of(panelContext)
+                      .scaffoldBackgroundColor;
+                  return Align(
                     alignment: Alignment.centerRight,
                     child: SizedBox(
                       width: 480,
+                      height: double.infinity,
                       child: Material(
-                        elevation: 16,
-                        color: Theme.of(context).colorScheme.surface,
-                        child: ModuleDetailPage(
-                          registry: widget.registry,
-                          pageId: pageId,
-                          pageContext: PageContext(values: values),
-                          title: page.title,
-                          panel: true,
-                          child: child,
+                        elevation: 12,
+                        color: surface,
+                        child: SafeArea(
+                          bottom: false,
+                          child: ModuleDetailPage(
+                            registry: widget.registry,
+                            pageId: pageId,
+                            pageContext: PageContext(values: values),
+                            title: page.title,
+                            panel: true,
+                            panelColor: surface,
+                            child: child,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             );
           } else {
@@ -225,35 +260,47 @@ extension _AppShellHostInteraction on _AppShellState {
             final heightFactor =
                 requestedHeight is num && requestedHeight.isFinite
                 ? requestedHeight.toDouble().clamp(.5, .95)
+                : adaptive
+                ? .922
                 : .9;
-            unawaited(
-              showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                useSafeArea: true,
-                showDragHandle: adaptive,
-                builder: (panelContext) => AnimatedPadding(
-                  duration: AppMotion.duration(
-                    panelContext,
-                    const Duration(milliseconds: 180),
-                  ),
-                  curve: AppMotion.enter,
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.viewInsetsOf(panelContext).bottom,
-                  ),
-                  child: FractionallySizedBox(
-                    heightFactor: heightFactor,
-                    child: ModuleDetailPage(
-                      registry: widget.registry,
-                      pageId: pageId,
-                      pageContext: PageContext(values: values),
-                      title: page.title,
-                      panel: true,
-                      child: child,
-                    ),
-                  ),
+            Widget panelBody(BuildContext panelContext) => AnimatedPadding(
+              duration: AppMotion.duration(
+                panelContext,
+                const Duration(milliseconds: 180),
+              ),
+              curve: AppMotion.enter,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(panelContext).bottom,
+              ),
+              child: FractionallySizedBox(
+                heightFactor: heightFactor,
+                child: ModuleDetailPage(
+                  registry: widget.registry,
+                  pageId: pageId,
+                  pageContext: PageContext(values: values),
+                  title: page.title,
+                  panel: true,
+                  panelColor: adaptive
+                      ? AppDesign.modalSurface(Theme.of(panelContext))
+                      : null,
+                  child: child,
                 ),
               ),
+            );
+            unawaited(
+              adaptive
+                  ? showSettingsModal<void>(
+                      context: context,
+                      compactFrame: true,
+                      builder: panelBody,
+                    )
+                  : showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      useSafeArea: true,
+                      showDragHandle: false,
+                      builder: panelBody,
+                    ),
             );
           }
         } else {

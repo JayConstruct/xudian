@@ -1,3 +1,4 @@
+import '../ui/tab_content_transition.dart';
 import '../../features/settings/settings_widgets.dart';
 import '../ui/ui_icon.dart';
 import '../ui/native_ui.dart';
@@ -824,48 +825,67 @@ class _ModuleCatalogPageState extends ConsumerState<ModuleCatalogPage> {
                       ),
                     ),
                   ],
-                  if (catalog?.modules.isEmpty == true)
-                    const SettingsEmptyState(
-                      icon: Icons.extension_outlined,
-                      title: '目录中没有模块',
-                      detail: '请在商店设置中检查目录仓库。',
-                    )
-                  else if (catalog != null && modules.isEmpty)
-                    if (loading && filter == '可更新')
-                      const SettingsNote('正在检查模块版本…')
-                    else ...[
-                      const SettingsEmptyState(
-                        title: '没有符合筛选条件的模块',
-                        detail: '调整分类或安装状态，或清除筛选。',
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15),
-                        child: Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: OutlinedButton(
-                            onPressed: clearFilters,
-                            child: const Text('清除筛选'),
-                          ),
-                        ),
-                      ),
-                    ],
                 ],
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AppDesign.pageGutter,
-              0,
-              AppDesign.pageGutter,
-              20,
-            ),
-            sliver: ModuleCatalogSliverGrid(
-              itemCount: modules.length,
-              itemBuilder: (tileContext, index) =>
-                  moduleCard(context, modules[index]),
-              groupedItemBuilder: (tileContext, index) =>
-                  moduleCard(context, modules[index], grouped: true),
+          TabContentTransition.sliver(
+            index: ModuleCatalogFilters.statuses.indexOf(filter),
+            child: SliverMainAxisGroup(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDesign.pageGutter,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (catalog?.modules.isEmpty == true)
+                          const SettingsEmptyState(
+                            icon: Icons.extension_outlined,
+                            title: '目录中没有模块',
+                            detail: '请在商店设置中检查目录仓库。',
+                          )
+                        else if (catalog != null && modules.isEmpty)
+                          if (loading && filter == '可更新')
+                            const SettingsNote('正在检查模块版本…')
+                          else ...[
+                            const SettingsEmptyState(
+                              title: '没有符合筛选条件的模块',
+                              detail: '调整分类或安装状态，或清除筛选。',
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 15),
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: OutlinedButton(
+                                  onPressed: clearFilters,
+                                  child: const Text('清除筛选'),
+                                ),
+                              ),
+                            ),
+                          ],
+                      ],
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppDesign.pageGutter,
+                    0,
+                    AppDesign.pageGutter,
+                    20,
+                  ),
+                  sliver: ModuleCatalogSliverGrid(
+                    itemCount: modules.length,
+                    itemBuilder: (tileContext, index) =>
+                        moduleCard(context, modules[index]),
+                    groupedItemBuilder: (tileContext, index) =>
+                        moduleCard(context, modules[index], grouped: true),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

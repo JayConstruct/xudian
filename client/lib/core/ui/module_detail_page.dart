@@ -23,6 +23,7 @@ class ModuleDetailPage extends StatefulWidget {
     this.pageContext = const PageContext(),
     this.child,
     this.panel = false,
+    this.panelColor,
   });
 
   final ModuleRegistry registry;
@@ -31,6 +32,7 @@ class ModuleDetailPage extends StatefulWidget {
   final PageContext pageContext;
   final Widget? child;
   final bool panel;
+  final Color? panelColor;
 
   @override
   State<ModuleDetailPage> createState() => _ModuleDetailPageState();
@@ -157,7 +159,9 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
               ? WorkspaceContentInsets(
                   bottom: 0,
                   child: Material(
-                    color: Theme.of(context).colorScheme.surface,
+                    color:
+                        widget.panelColor ??
+                        Theme.of(context).colorScheme.surface,
                     child: SafeArea(
                       top: false,
                       child: Column(
@@ -228,11 +232,13 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                           onPressed: hasInternalBack
                               ? _back
                               : () => Navigator.maybePop(context),
-                          icon: UiIcon(
-                            spec?['backIcon'] == 'close'
-                                ? Icons.close_rounded
-                                : Icons.chevron_left,
-                          ),
+                          icon: spec?['backIcon'] == 'arrow'
+                              ? const Icon(Icons.arrow_back_rounded, size: 22)
+                              : UiIcon(
+                                  spec?['backIcon'] == 'close'
+                                      ? Icons.close_rounded
+                                      : Icons.chevron_left,
+                                ),
                         )
                       : hasInternalBack
                       ? BackButton(onPressed: _back)

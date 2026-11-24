@@ -22,6 +22,7 @@ class StartEmulatorTest(unittest.TestCase):
         scripts.mkdir()
         shutil.copyfile(SCRIPT, scripts / SCRIPT.name)
         shutil.copyfile(SCRIPT.with_name('emulator-console.ps1'), scripts / 'emulator-console.ps1')
+        shutil.copyfile(SCRIPT.with_name('emulator-launch.ps1'), scripts / 'emulator-launch.ps1')
         (scripts / 'dev-env.sh').write_text('# Test toolchain is provided through PATH.\n')
         self.bin = self.root / 'bin'
         self.bin.mkdir()

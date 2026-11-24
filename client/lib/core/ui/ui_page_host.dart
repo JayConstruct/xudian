@@ -1,3 +1,5 @@
+import 'tab_content_transition.dart';
+import 'sliding_segments.dart';
 import 'ui_icon.dart';
 import 'native_ui.dart';
 import 'ui_toast.dart';
@@ -607,34 +609,30 @@ class _UiPageHostState extends ConsumerState<UiPageHost> {
             ? MainAxisSize.min
             : MainAxisSize.max,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (
-                  var entryIndex = 0;
-                  entryIndex < entries.length;
-                  entryIndex++
-                )
-                  Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: NativeUi(
-                      child: ChoiceChip(
-                        label: Text(entries[entryIndex].label),
-                        selected: entryIndex == active,
-                        onSelected: (_) => setState(
-                          () => position.tabs[slot.id] = entries[entryIndex].id,
-                        ),
-                      ),
-                    ),
-                  ),
+          NativeUi(
+            child: SlidingSegments<int>(
+              segments: [
+                for (final (i, entry) in entries.indexed)
+                  ButtonSegment(value: i, label: Text(entry.label)),
               ],
+              selected: active,
+              scrollable: true,
+              onChanged: (index) =>
+                  setState(() => position.tabs[slot.id] = entries[index].id),
             ),
           ),
           if (widget.inlineContent)
-            childFor(entries[active], active)
+            TabContentTransition(
+              index: active,
+              child: childFor(entries[active], active),
+            )
           else
-            Expanded(child: childFor(entries[active], active)),
+            Expanded(
+              child: TabContentTransition(
+                index: active,
+                child: childFor(entries[active], active),
+              ),
+            ),
         ],
       );
     } else if (slot.inline || widget.inlineContent) {

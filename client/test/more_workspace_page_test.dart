@@ -66,7 +66,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('可在设置中添加更多常用入口。'), findsOneWidget);
+    expect(find.text('还没有常用入口'), findsOneWidget);
     await tester.tap(find.text('设置'));
     expect(settingsCalls, 1);
     expect(tester.takeException(), isNull);

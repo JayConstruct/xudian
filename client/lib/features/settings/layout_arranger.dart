@@ -1,3 +1,4 @@
+import '../../core/ui/tab_content_transition.dart';
 import '../../app/workspace_sidebar_item.dart';
 
 import 'dart:math' as math;
@@ -7,13 +8,10 @@ import 'package:flutter/material.dart';
 import '../../app/design_system.dart';
 import '../../app/mobile_bottom_dock.dart';
 import '../../app/more_workspace_page.dart';
-import '../../core/module_host/time_grid.dart';
 import '../../core/ui/app_destination.dart';
 import '../../core/ui/ui_composition.dart';
 import '../../core/ui/ui_layout_resolver.dart';
 import '../../core/ui/ui_registry.dart';
-import '../../core/ui/ui_registration.dart';
-import '../../core/ui/ui_slot.dart';
 import '../../core/ui/ui_icon.dart';
 import '../../core/ui/workspace_popup_menu.dart';
 import 'settings_widgets.dart';
@@ -54,6 +52,7 @@ class LayoutArranger extends StatefulWidget {
 class _LayoutArrangerState extends State<LayoutArranger> {
   late UiPlacement zone = widget.initialZone;
   String? dragging;
+  int? insertion;
   final previewScroll = ScrollController();
   @override
   void dispose() {
@@ -77,6 +76,7 @@ class _LayoutArrangerState extends State<LayoutArranger> {
           );
     return navigationVisibleCount(
       total: main.length,
+      fixedMore: widget.profile.morePageEnabled,
       limit: widget.profile.mainLimit,
       width:
           w - 24 - (widget.profile.morePageEnabled && !widget.desktop ? 72 : 0),
@@ -92,23 +92,18 @@ class _LayoutArrangerState extends State<LayoutArranger> {
   };
   void switchTo(UiPlacement next) {
     if (zone == next) return;
-    setState(() => zone = next);
-    if (dragging != null && next == UiPlacement.header) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && previewScroll.hasClients) {
-          previewScroll.jumpTo(previewScroll.position.maxScrollExtent);
-        }
-      });
-    }
+    setState(() {
+      zone = next;
+      insertion = null;
+    });
   }
 
-  String entryName(UiEntryRegistration entry) {
-    if (widget.registry.entries.any(
-      (other) => other.pageId != entry.pageId && other.label == entry.label,
-    )) {
-      return widget.registry.page(entry.pageId)?.title ?? entry.label;
-    }
-    return entry.label;
+  void drag(String? id) {
+    if (!mounted || dragging == id) return;
+    setState(() {
+      dragging = id;
+      insertion = null;
+    });
   }
 
   Widget palette({required bool prioritizeMain}) {
@@ -147,7 +142,7 @@ class _LayoutArrangerState extends State<LayoutArranger> {
                             for (final e in choices)
                               UiLayoutChoice(
                                 value: e.id,
-                                label: entryName(e),
+                                label: widget.registry.entryLabel(e),
                                 icon: e.icon,
                                 detail:
                                     '当前在${switch (widget.profile.mountFor(e).placement) {
@@ -212,7 +207,7 @@ class _LayoutArrangerState extends State<LayoutArranger> {
                                 SettingsGlyph(e.icon),
                                 const SizedBox(height: 7),
                                 Text(
-                                  entryName(e),
+                                  widget.registry.entryLabel(e),
                                   textAlign: TextAlign.center,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
@@ -253,11 +248,8 @@ class _LayoutArrangerState extends State<LayoutArranger> {
                                 );
                               }
                             },
-                            onDragStarted: () =>
-                                setState(() => dragging = e.id),
-                            onDragEnd: (_) {
-                              if (mounted) setState(() => dragging = null);
-                            },
+                            onDragStarted: () => drag(e.id),
+                            onDragEnd: (_) => drag(null),
                             feedback: Material(
                               elevation: 4,
                               borderRadius: BorderRadius.circular(14),
@@ -268,7 +260,7 @@ class _LayoutArrangerState extends State<LayoutArranger> {
                                   children: [
                                     UiIcon(e.icon, size: 18),
                                     const SizedBox(width: 6),
-                                    Text(entryName(e)),
+                                    Text(widget.registry.entryLabel(e)),
                                   ],
                                 ),
                               ),
@@ -289,86 +281,26 @@ class _LayoutArrangerState extends State<LayoutArranger> {
     );
   }
 
-  Widget rail() {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Material(
-      color: colors.surfaceContainer,
-      shape: AppDesign.smoothShape(
-        radius: 14,
-        side: BorderSide(color: colors.outlineVariant, width: .8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final p in [
-                UiPlacement.main,
-                UiPlacement.header,
-                UiPlacement.more,
-              ])
-                Expanded(
-                  child: DragTarget<UiEntryRegistration>(
-                    key: ValueKey('zone-${p.name}'),
-                    onMove: (_) => switchTo(p),
-                    // Hover changes the preview. Only a target inside that preview commits a move.
-                    onWillAcceptWithDetails: (_) {
-                      switchTo(p);
-                      return false;
-                    },
-                    builder: (context, _, _) => Semantics(
-                      selected: p == zone,
-                      button: true,
-                      child: Material(
-                        color: p == zone ? colors.surface : Colors.transparent,
-                        shape: AppDesign.smoothShape(
-                          radius: 11,
-                          side: p == zone
-                              ? BorderSide(
-                                  color: colors.outlineVariant,
-                                  width: .8,
-                                )
-                              : BorderSide.none,
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: () => switchTo(p),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(minHeight: 37),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 3,
-                                vertical: 4,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  name(p),
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    color: p == zone
-                                        ? colors.onPrimaryContainer
-                                        : colors.onSurfaceVariant,
-                                    fontWeight: p == zone
-                                        ? FontWeight.w600
-                                        : FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  static const zones = [UiPlacement.main, UiPlacement.header, UiPlacement.more];
+
+  Widget rail() => SlidingSegments<UiPlacement>(
+    segments: [
+      for (final place in zones)
+        ButtonSegment(value: place, label: Text(name(place))),
+    ],
+    selected: zone,
+    onChanged: switchTo,
+    // Hover previews the zone. Only dropping inside the preview commits a move.
+    wrapSegment: (place, child) => DragTarget<UiEntryRegistration>(
+      key: ValueKey('zone-${place.name}'),
+      onMove: (_) => switchTo(place),
+      onWillAcceptWithDetails: (_) {
+        switchTo(place);
+        return false;
+      },
+      builder: (_, _, _) => child,
+    ),
+  );
 
   Widget target(int index, Widget child, {bool vertical = true}) {
     final current = zone;
@@ -387,8 +319,19 @@ class _LayoutArrangerState extends State<LayoutArranger> {
               ) ==
               null,
       onAcceptWithDetails: (v) => widget.onDrop(v.data, current, index),
+      onMove: (_) {
+        if (dragging != null && insertion != index) {
+          setState(() => insertion = index);
+        }
+      },
+      onLeave: (_) {
+        if (mounted && zone == current && insertion == index) {
+          setState(() => insertion = null);
+        }
+      },
       builder: (c, candidates, _) => Stack(
         fit: StackFit.passthrough,
+        clipBehavior: Clip.none,
         children: [
           child,
           if (candidates.isNotEmpty)
@@ -396,8 +339,6 @@ class _LayoutArrangerState extends State<LayoutArranger> {
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Theme.of(c).colorScheme.primary
-                        .withValues(alpha: .12),
                     border: vertical
                         ? Border(
                             top: BorderSide(
@@ -420,6 +361,87 @@ class _LayoutArrangerState extends State<LayoutArranger> {
     );
   }
 
+  Widget editable(
+    UiEntryRegistration entry,
+    int index,
+    Widget child, {
+    bool horizontal = false,
+    bool last = false,
+  }) {
+    final control = LayoutBuilder(
+      builder: (context, box) {
+        final draggable = LongPressDraggable<UiEntryRegistration>(
+          data: entry,
+          maxSimultaneousDrags: widget.saving || !widget.canMove(entry) ? 0 : 1,
+          onDragStarted: () => drag(entry.id),
+          onDragCompleted: () => drag(null),
+          onDraggableCanceled: (_, _) => drag(null),
+          feedback: Material(
+            elevation: 4,
+            color: Theme.of(context).colorScheme.surface,
+            shape: horizontal
+                ? const StadiumBorder()
+                : AppDesign.smoothShape(radius: 15),
+            child: SizedBox(
+              width: box.maxWidth,
+              height: horizontal ? box.maxHeight : null,
+              child: IgnorePointer(
+                child: horizontal ? child : SettingsListTileTheme(child: child),
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0, child: child),
+          child: child,
+        );
+        final origin = dragging == null
+            ? -1
+            : at(zone).indexWhere((e) => e.id == dragging);
+        final destination = insertion ?? origin;
+        final shift = origin < 0
+            ? 0.0
+            : index >= destination && index < origin
+            ? 1.0
+            : index > origin && index < destination
+            ? -1.0
+            : 0.0;
+        return target(
+          index,
+          FractionalTranslation(
+            translation: horizontal ? Offset(shift, 0) : Offset(0, shift),
+            transformHitTests: false,
+            child: draggable,
+          ),
+          vertical: !horizontal,
+        );
+      },
+    );
+    if (!last) return control;
+    return Stack(
+      fit: horizontal ? StackFit.expand : StackFit.passthrough,
+      clipBehavior: Clip.none,
+      children: [
+        control,
+        if (dragging != null)
+          Positioned.fill(
+            child: Align(
+              alignment: horizontal
+                  ? AlignmentDirectional.centerEnd
+                  : Alignment.bottomCenter,
+              child: FractionallySizedBox(
+                widthFactor: horizontal ? .45 : 1,
+                heightFactor: horizontal ? 1 : .45,
+                child: target(
+                  index + 1,
+                  const SizedBox.expand(),
+                  vertical: !horizontal,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget tail(int i) => target(
     i,
     Container(
@@ -433,19 +455,6 @@ class _LayoutArrangerState extends State<LayoutArranger> {
     final visible = main.take(count).toList(), explicit = at(UiPlacement.more);
     final extras = [...explicit, ...main.skip(count)];
     final head = at(UiPlacement.header);
-    final previewPage = widget.registry.pages
-        .where((p) => p.navigationPreview != null)
-        .firstOrNull;
-    final preview = previewPage?.navigationPreview;
-    final assistant =
-        preview?['assistant'] == true &&
-        previewPage != null &&
-        widget.registry
-            .forSlot(UiSlot.workspaceAssistant)
-            .whereType<WorkspaceAssistantRegistration>()
-            .any((a) => a.supports({previewPage.moduleId}));
-    final title =
-        preview?['title'] as String? ?? (visible.firstOrNull?.label ?? '页面');
     Widget fixed(String label, IconData icon, {VoidCallback? onTap}) =>
         ListTile(
           onTap: onTap,
@@ -458,140 +467,61 @@ class _LayoutArrangerState extends State<LayoutArranger> {
         );
     final hasMore = widget.profile.morePageEnabled;
     if (zone == UiPlacement.more) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-            child: Text(
-              name(zone),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-          Expanded(
-            child: MoreWorkspacePage(
-              entries: extras,
-              scrollController: previewScroll,
-              onOpen: (e) => widget.onSelect(e.id),
-              onSettings: () {},
-              wrapEntry: (e, row) {
-                final index = explicit.indexWhere((item) => item.id == e.id);
-                return index < 0 ? row : target(index, row);
-              },
-              afterEntries: dragging == null ? null : tail(explicit.length),
-            ),
-          ),
-        ],
+      return MoreWorkspacePage(
+        entries: extras,
+        scrollController: previewScroll,
+        padding: const EdgeInsets.only(top: 8, bottom: 12),
+        onOpen: (e) => widget.onSelect(e.id),
+        onSettings: () {},
+        wrapEntry: (e, row) {
+          final index = explicit.indexWhere((item) => item.id == e.id);
+          return index < 0
+              ? row
+              : editable(e, index, row, last: index == explicit.length - 1);
+        },
+        afterEntries: dragging != null && explicit.isEmpty ? tail(0) : null,
       );
     }
-    final previewHeader = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        children: [
-          const SizedBox(width: 40),
-          Expanded(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          const Icon(Icons.more_horiz),
-        ],
-      ),
-    );
-    final sample = preview == null
-        ? const SizedBox.expand()
-        : IgnorePointer(
-            child: TimeGrid(
-              columns: [
-                for (final i in preview['columns'] as List? ?? [])
-                  Map<String, Object?>.from(i as Map),
-              ],
-              rows: [
-                for (final i in preview['rows'] as List? ?? [])
-                  Map<String, Object?>.from(i as Map),
-              ],
-              blocks: [
-                for (final i in preview['blocks'] as List? ?? [])
-                  Map<String, Object?>.from(i as Map),
-              ],
-              options: const {
-                'labelWidth': 36,
-                'rowHeight': 48,
-                'headerHeight': 44,
-                'fitColumns': true,
-                'fillWidth': true,
-              },
-              onEvent: (_) {},
-            ),
-          );
-    final background = Column(
-      children: [
-        previewHeader,
-        Expanded(child: sample),
-      ],
-    );
     if (zone == UiPlacement.header) {
-      return Stack(
-        children: [
-          Positioned.fill(child: background),
-          Positioned.fill(
-            child: ColoredBox(color: Colors.black.withValues(alpha: .12)),
-          ),
-          Positioned(
-            top: 36,
-            right: 8,
-            bottom: 4,
-            child: Align(
-              alignment: Alignment.topRight,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 202),
-                child: WorkspaceMenuSurface(
-                  child: SingleChildScrollView(
-                    controller: previewScroll,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final action
-                            in (preview?['menu'] as List? ?? [])
-                                .whereType<String>())
-                          ListTile(
-                            dense: true,
-                            title: Text(action),
-                            minTileHeight: 44,
-                          ),
-                        for (final (i, e) in head.indexed)
-                          target(
-                            i,
-                            ListTile(
-                              key: ValueKey('layout-row-${e.id}'),
-                              minTileHeight: 44,
-                              dense: true,
-                              leading: UiIcon(e.icon, size: 18),
-                              title: Text(e.label),
-                              onTap: () => widget.onSelect(e.id),
-                            ),
-                          ),
-                        if (dragging != null) tail(head.length),
-                        if (head.isNotEmpty || preview != null)
-                          const Divider(height: 8),
-                        if (!hasMore)
-                          fixed(
-                            '全部入口',
-                            Icons.grid_view_outlined,
-                            onTap: () => switchTo(UiPlacement.more),
-                          ),
-                        fixed('设置', Icons.settings_outlined),
-                      ],
+      return Align(
+        alignment: AlignmentDirectional.topEnd,
+        child: SizedBox(
+          width: 202,
+          child: WorkspaceMenuSurface(
+            child: SingleChildScrollView(
+              controller: previewScroll,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (index, entry) in head.indexed)
+                    editable(
+                      entry,
+                      index,
+                      ListTile(
+                        key: ValueKey('layout-row-${entry.id}'),
+                        dense: true,
+                        minTileHeight: 44,
+                        leading: UiIcon(entry.icon, size: 18),
+                        title: Text(widget.registry.entryLabel(entry)),
+                        onTap: () => widget.onSelect(entry.id),
+                      ),
+                      last: index == head.length - 1,
                     ),
-                  ),
-                ),
+                  if (dragging != null && head.isEmpty) tail(0),
+                  if (head.isNotEmpty) const Divider(height: 8),
+                  if (!hasMore)
+                    fixed(
+                      '全部入口',
+                      Icons.grid_view_outlined,
+                      onTap: () => switchTo(UiPlacement.more),
+                    ),
+                  fixed('设置', Icons.settings_outlined),
+                ],
               ),
             ),
           ),
-        ],
+        ),
       );
     }
     if (widget.desktop) {
@@ -611,7 +541,8 @@ class _LayoutArrangerState extends State<LayoutArranger> {
                     onTap: () => switchTo(UiPlacement.more),
                   ),
                 for (final (i, e) in visible.indexed)
-                  target(
+                  editable(
+                    e,
                     i,
                     WorkspaceSidebarItem(
                       icon: e.icon,
@@ -619,13 +550,14 @@ class _LayoutArrangerState extends State<LayoutArranger> {
                       selected: i == visible.length - 1,
                       onTap: () => widget.onSelect(e.id),
                     ),
+                    last: i == visible.length - 1,
                   ),
-                if (dragging != null) tail(visible.length),
+                if (dragging != null && visible.isEmpty) tail(0),
                 fixed('设置', Icons.settings_outlined),
               ],
             ),
           ),
-          Expanded(flex: 2, child: background),
+          const Spacer(flex: 2),
         ],
       );
     }
@@ -653,7 +585,18 @@ class _LayoutArrangerState extends State<LayoutArranger> {
       visibleCount: destinations.length,
       hasMore: false,
       showNavigation: destinations.isNotEmpty,
-      onAssistant: assistant ? () {} : null,
+      wrapDestination: (id, child) {
+        final index = visible.indexWhere((entry) => entry.id == id);
+        return index < 0
+            ? child
+            : editable(
+                visible[index],
+                index,
+                child,
+                horizontal: true,
+                last: index == visible.length - 1,
+              );
+      },
       onSelected: (i) {
         final id = destinations[i].id;
         if (id == 'app.shell.more') {
@@ -663,40 +606,11 @@ class _LayoutArrangerState extends State<LayoutArranger> {
         }
       },
     );
-    return Stack(
-      children: [
-        Positioned.fill(child: background),
-        Positioned(
-          left: 8,
-          right: 8,
-          bottom: 8,
-          child: Stack(
-            alignment: Alignment.bottomCenter,
-            children: [
-              dock,
-              if (dragging != null)
-                Positioned.fill(
-                  child: Row(
-                    children: [
-                      if (hasMore) const Spacer(),
-                      for (var i = 0; i <= visible.length; i++)
-                        Expanded(
-                          child: target(
-                            i,
-                            const SizedBox.expand(),
-                            vertical: false,
-                          ),
-                        ),
-                      if (assistant) const Spacer(),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (dragging != null && destinations.isEmpty)
-          Align(alignment: Alignment.bottomCenter, child: tail(0)),
-      ],
+    return Align(
+      alignment: Alignment.topCenter,
+      child: visible.isEmpty && dragging != null
+          ? Column(mainAxisSize: MainAxisSize.min, children: [dock, tail(0)])
+          : dock,
     );
   }
 
@@ -704,22 +618,9 @@ class _LayoutArrangerState extends State<LayoutArranger> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final headingStyle = theme.textTheme.labelLarge?.copyWith(
-      color: colors.onSurfaceVariant,
-      fontSize: 13.3,
-      fontWeight: FontWeight.w600,
-    );
     return DetailPage(
       title: '编排入口',
       settingsStyle: true,
-      actions: [
-        Center(
-          child: Padding(
-            padding: const EdgeInsetsDirectional.only(end: 20),
-            child: Text(widget.desktop ? '电脑配置' : '手机配置', style: headingStyle),
-          ),
-        ),
-      ],
       child: Column(
         children: [
           Expanded(
@@ -735,78 +636,40 @@ class _LayoutArrangerState extends State<LayoutArranger> {
                       bounds.maxHeight < 440 + (textScale - 1) * 100;
                   final narrow = bounds.maxWidth < 680;
                   final phone = narrow && !widget.desktop;
-                  // The drag and unsaved placement views keep their drop rail
-                  // between the palette and the preview.
-                  final railAbovePalette =
-                      phone && !compact && dragging == null && !widget.dirty;
-                  final zoneRail = KeyedSubtree(
-                    key: const ValueKey('layout-arranger-rail'),
-                    child: rail(),
-                  );
                   final pane = Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (railAbovePalette) ...[
-                        zoneRail,
-                        const SizedBox(height: 8),
-                      ],
                       SizedBox(
                         key: const ValueKey('layout-arranger-palette'),
                         height:
-                            (compact ? 140 : (narrow ? 194 : 122)) +
+                            (compact ? 140 : (narrow ? 198 : 142)) +
                             (textScale - 1) * 60,
                         child: palette(prioritizeMain: phone),
                       ),
-                      if (!railAbovePalette) ...[
-                        const SettingsNote('拖动图标经过下方分区切页，再放入预览。'),
-                        zoneRail,
-                      ],
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Expanded(child: SettingsHeading('${name(zone)}预览')),
-                          if (zone == UiPlacement.main)
+                      SettingsNote(
+                        zone == UiPlacement.main && !widget.desktop
+                            ? '拖动图标经过标签可切页，长按导航图标可左右排序。'
+                            : '拖动图标经过标签可切页，长按条目可上下排序。',
+                      ),
+                      KeyedSubtree(
+                        key: const ValueKey('layout-arranger-rail'),
+                        child: rail(),
+                      ),
+                      const SizedBox(height: 18),
+                      if (zone == UiPlacement.main)
+                        Row(
+                          children: [
+                            Expanded(child: SettingsHeading(name(zone))),
                             TextButton(
                               onPressed: widget.onOptions,
-                              style: TextButton.styleFrom(
-                                foregroundColor: colors.onPrimaryContainer,
-                                padding: const EdgeInsetsDirectional.only(
-                                  start: 8,
-                                ),
-                              ),
                               child: const Text('显示选项'),
-                            )
-                          else
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Text(widget.dirty ? '有未保存更改' : ''),
                             ),
-                        ],
-                      ),
+                          ],
+                        ),
                       Expanded(
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxHeight: phone
-                                  ? bounds.maxWidth * 1.03
-                                  : double.infinity,
-                            ),
-                            child: SizedBox.expand(
-                              child: Material(
-                                clipBehavior: Clip.antiAlias,
-                                color: colors.surface,
-                                shape: AppDesign.smoothShape(
-                                  radius: 17,
-                                  side: BorderSide(
-                                    color: colors.outlineVariant,
-                                    width: .8,
-                                  ),
-                                ),
-                                child: scene(),
-                              ),
-                            ),
-                          ),
+                        child: TabContentTransition(
+                          index: zones.indexOf(zone),
+                          child: scene(),
                         ),
                       ),
                       if (widget.error != null)

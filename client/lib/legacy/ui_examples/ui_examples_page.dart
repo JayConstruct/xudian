@@ -1,3 +1,6 @@
+import '../../core/ui/sliding_segments.dart';
+import '../../core/ui/tab_content_transition.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_toast.dart';
@@ -120,30 +123,32 @@ class _UiExamplesPageState extends State<UiExamplesPage> {
           icon: const Icon(Icons.account_tree_outlined),
           label: const Text('页面槽位与跨模块嵌套示例'),
         ),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
+      SlidingSegments<_ExampleSection>(
+        segments: [
           for (final section in _ExampleSection.values)
-            ChoiceChip(
+            ButtonSegment(
+              value: section,
               label: Text(switch (section) {
                 _ExampleSection.tasks => '任务卡片',
                 _ExampleSection.inputs => '输入控件',
                 _ExampleSection.feedback => '状态反馈',
                 _ExampleSection.dialogs => '弹窗操作',
               }),
-              selected: section == _section,
-              onSelected: (_) => setState(() => _section = section),
             ),
         ],
+        selected: _section,
+        onChanged: (section) => setState(() => _section = section),
       ),
       const SizedBox(height: 16),
-      switch (_section) {
-        _ExampleSection.tasks => _taskExamples(),
-        _ExampleSection.inputs => _inputExamples(),
-        _ExampleSection.feedback => _feedbackExamples(),
-        _ExampleSection.dialogs => _dialogExamples(),
-      },
+      TabContentTransition(
+        index: _section.index,
+        child: switch (_section) {
+          _ExampleSection.tasks => _taskExamples(),
+          _ExampleSection.inputs => _inputExamples(),
+          _ExampleSection.feedback => _feedbackExamples(),
+          _ExampleSection.dialogs => _dialogExamples(),
+        },
+      ),
     ],
   );
 
@@ -351,57 +356,57 @@ class _UiExamplesPageState extends State<UiExamplesPage> {
     Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 8,
-          children: [
-            for (final entry in ['空状态', '加载中', '错误', '成功'].asMap().entries)
-              ChoiceChip(
-                label: Text(entry.value),
-                selected: _feedback == entry.key,
-                onSelected: (_) => setState(() => _feedback = entry.key),
-              ),
+        SlidingSegments<int>(
+          segments: [
+            for (final (i, name) in ['空状态', '加载中', '错误', '成功'].indexed)
+              ButtonSegment(value: i, label: Text(name)),
           ],
+          selected: _feedback,
+          onChanged: (index) => setState(() => _feedback = index),
         ),
         const SizedBox(height: 16),
         SizedBox(
           height: 280,
-          child: WorkspaceContentInsets(
-            bottom: 0,
-            child: switch (_feedback) {
-              0 => const WorkspaceEmptyState(
-                title: '暂无示例内容',
-                subtitle: '空状态应告诉用户当前情况和下一步操作。',
-              ),
-              1 => const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('加载动画演示，不执行网络请求'),
-                  ],
+          child: TabContentTransition(
+            index: _feedback,
+            child: WorkspaceContentInsets(
+              bottom: 0,
+              child: switch (_feedback) {
+                0 => const WorkspaceEmptyState(
+                  title: '暂无示例内容',
+                  subtitle: '空状态应告诉用户当前情况和下一步操作。',
                 ),
-              ),
-              2 => Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, size: 36),
-                    const SizedBox(height: 12),
-                    const Text('示例加载失败'),
-                    TextButton(
-                      onPressed: () => setState(() => _feedback = 3),
-                      child: const Text('重试示例'),
-                    ),
-                  ],
+                1 => const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('加载动画演示，不执行网络请求'),
+                    ],
+                  ),
                 ),
-              ),
-              _ => const WorkspaceEmptyState(
-                icon: Icons.check_circle_outline_rounded,
-                title: '示例操作成功',
-                subtitle: '这是成功反馈，不代表真实任务已保存。',
-              ),
-            },
+                2 => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 36),
+                      const SizedBox(height: 12),
+                      const Text('示例加载失败'),
+                      TextButton(
+                        onPressed: () => setState(() => _feedback = 3),
+                        child: const Text('重试示例'),
+                      ),
+                    ],
+                  ),
+                ),
+                _ => const WorkspaceEmptyState(
+                  icon: Icons.check_circle_outline_rounded,
+                  title: '示例操作成功',
+                  subtitle: '这是成功反馈，不代表真实任务已保存。',
+                ),
+              },
+            ),
           ),
         ),
       ],

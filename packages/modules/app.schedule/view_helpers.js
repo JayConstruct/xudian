@@ -73,8 +73,8 @@ export function appendPeriods(existing) {
 }
 export const listTile=(title,subtitle,icon,event,trailing)=>({type:'listTile',title,...(icon?{icon}:{}),...(subtitle?{subtitle}:{}),...(event?{event}:{}),...(trailing!==undefined?{trailing}: {})});
 export const group=(title,children)=>({type:'column',children:[{type:'sectionHeader',title},...children]});
-const importFieldLabels={name:'名称',code:'课程代码',color:'颜色',notes:'备注',credit:'学分',firstMonday:'第一周周一',totalWeeks:'学期周数',timezone:'时区',displayWeekStart:'每周起始日',periods:'作息',weekday:'星期',startPeriod:'开始节次',endPeriod:'结束节次',weeks:'教学周',teacher:'教师',location:'地点',kind:'调整类型',originalDate:'原上课日期',date:'日期',startTime:'开始时间',endTime:'结束时间'};
-const importValue=(field,value)=>value===undefined||value===null||value===''?'未设置':field==='weekday'?'周'+['','一','二','三','四','五','六','日'][value]:field==='periods'?(value||[]).map(p=>`${p.number}: ${p.start}–${p.end}`).join('；'):Array.isArray(value)?value.join('、'):typeof value==='object'?JSON.stringify(value):String(value);
+export const importFieldLabels={name:'名称',code:'课程代码',color:'颜色',notes:'备注',credit:'学分',firstMonday:'第一周周一',totalWeeks:'学期周数',timezone:'时区',displayWeekStart:'每周起始日',periods:'作息',weekday:'星期',startPeriod:'开始节次',endPeriod:'结束节次',weeks:'教学周',teacher:'教师',location:'地点',kind:'调整类型',originalDate:'原上课日期',date:'日期',startTime:'开始时间',endTime:'结束时间'};
+export const importValue=(field,value)=>value===undefined||value===null||value===''?'未设置':field==='weekday'?'周'+['','一','二','三','四','五','六','日'][value]:field==='periods'?(value||[]).map(p=>`${p.number}: ${p.start}–${p.end}`).join('；'):Array.isArray(value)?value.join('、'):typeof value==='object'?JSON.stringify(value):String(value);
 export async function importSummary(plan,draft) {
   const summary={courses:draft?.courses?.length||0,meetings:draft?.meetings?.length||0,changes:draft?.occurrenceChanges?.length||0,added:0,updated:0,deleted:0,details:[],conflicts:plan?.result?.conflicts||[],warnings:plan?.result?.warnings||draft?.warnings||[]};
   const courseNames=new Map();

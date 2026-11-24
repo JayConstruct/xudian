@@ -144,7 +144,7 @@ void main() {
     'native task creation and completion save once and expose completion review',
     (tester) async {
       await setup(tester, tasks: true);
-      expect(find.text('暂无今天待办或逾期任务'), findsOneWidget);
+      expect(find.text('这一天还没有安排'), findsOneWidget);
       await tester.tap(find.byTooltip('添加任务'));
       await settleNative(tester);
       await tester.enterText(find.byType(TextField), '买牛奶');
@@ -169,9 +169,9 @@ void main() {
       expect(object(completed.single)['actualCompletedOn'], isNotNull);
       await tester.tap(find.text('完成记录与复盘'));
       await settleNative(tester);
-      expect(find.text('买牛奶'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, '买牛奶'), findsOneWidget);
       expect(find.textContaining('完成'), findsWidgets);
-      await tester.tap(find.byType(Checkbox));
+      await tester.tap(find.byTooltip('重新打开买牛奶'));
       await settleNative(tester);
       expect(find.text('确认实际数据变更'), findsNothing);
       final reopened = await tester.runAsync(

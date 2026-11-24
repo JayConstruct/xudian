@@ -38,6 +38,7 @@ class UiLayoutPreview extends StatelessWidget {
     final main = at(UiPlacement.main);
     final visible = navigationVisibleCount(
       total: main.length,
+      fixedMore: profile.morePageEnabled,
       limit: profile.mainLimit,
       width: width - 24 - (profile.morePageEnabled && !desktop ? 72 : 0),
       textScale: textScale,

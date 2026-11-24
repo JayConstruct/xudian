@@ -11,11 +11,18 @@ import 'ui_motion.dart';
 import 'workspace_popup_menu.dart';
 
 class ScriptSwipeAction {
-  const ScriptSwipeAction(this.label, this.event, this.icon, this.disabled);
+  const ScriptSwipeAction(
+    this.label,
+    this.event,
+    this.icon,
+    this.disabled, {
+    this.dividerBefore = false,
+    this.danger = false,
+  });
   final String label;
   final Map<String, Object?> event;
   final IconData? icon;
-  final bool disabled;
+  final bool disabled, dividerBefore, danger;
 }
 
 class ScriptSwipeConfig {
@@ -23,13 +30,14 @@ class ScriptSwipeConfig {
     required this.enabled,
     required this.end,
     this.longPressMenu = false,
+    this.anchorStart = false,
     required this.extent,
     required this.threshold,
     required this.timing,
     required this.actions,
     required this.identity,
   });
-  final bool enabled, end, longPressMenu;
+  final bool enabled, end, longPressMenu, anchorStart;
   final double extent, threshold;
   final ScriptTiming timing;
   final List<ScriptSwipeAction> actions;
@@ -44,6 +52,7 @@ class ScriptSwipeConfig {
       'enabled',
       'side',
       'menuTrigger',
+      'menuAlign',
       'extent',
       'openThreshold',
       'settle',
@@ -57,7 +66,9 @@ class ScriptSwipeConfig {
     final trigger = spec.containsKey('menuTrigger')
         ? spec['menuTrigger']
         : 'button';
-    if (enabled is! bool ||
+    if (spec.containsKey('menuAlign') &&
+            !['start', 'end'].contains(spec['menuAlign']) ||
+        enabled is! bool ||
         !['button', 'longPress'].contains(trigger) ||
         !['start', 'end'].contains(side) ||
         spec.containsKey('revision') &&
@@ -66,8 +77,9 @@ class ScriptSwipeConfig {
       throw const FormatException('Invalid swipeActions configuration');
     }
     final raw = spec['actions'];
-    if (raw is! List || raw.isEmpty || raw.length > 3) {
-      throw const FormatException('swipeActions requires 1–3 actions');
+    final maximum = trigger == 'longPress' ? 5 : 3;
+    if (raw is! List || raw.isEmpty || raw.length > maximum) {
+      throw FormatException('swipeActions requires 1–$maximum actions');
     }
     final actions = <ScriptSwipeAction>[];
     for (final item in raw) {
@@ -76,6 +88,8 @@ class ScriptSwipeConfig {
         'icon',
         'event',
         'disabled',
+        'dividerBefore',
+        'tone',
       }, 'swipe action');
       final label = action['label'], event = action['event'];
       final disabled = action.containsKey('disabled')
@@ -86,6 +100,9 @@ class ScriptSwipeConfig {
           label.trim().isEmpty ||
           event is! Map ||
           disabled is! bool ||
+          action.containsKey('dividerBefore') &&
+              action['dividerBefore'] is! bool ||
+          action.containsKey('tone') && action['tone'] != 'danger' ||
           action.containsKey('icon') &&
               (action['icon'] is! String || glyph == null)) {
         throw const FormatException('Invalid swipe action');
@@ -96,6 +113,8 @@ class ScriptSwipeConfig {
           event.cast<String, Object?>(),
           glyph,
           disabled,
+          dividerBefore: action['dividerBefore'] == true,
+          danger: action['tone'] == 'danger',
         ),
       );
     }
@@ -109,6 +128,7 @@ class ScriptSwipeConfig {
       enabled: enabled,
       end: side == 'end',
       longPressMenu: trigger == 'longPress',
+      anchorStart: spec['menuAlign'] == 'start',
       extent: extent,
       threshold: spec.containsKey('openThreshold')
           ? uiNumber(spec['openThreshold'], .2, .8, 'openThreshold')
@@ -348,24 +368,46 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
             content = WorkspacePopupMenu(
               key: ValueKey(identity),
               longPressChild: widget.child,
+              anchorStart: widget.config.anchorStart,
               enabled: enabled,
               haptics: PopupMenuTheme.of(context).enableFeedback ?? true,
               items: [
-                for (final (index, action) in actions.indexed)
+                for (final (index, action) in actions.indexed) ...[
+                  if (action.dividerBefore) const PopupMenuDivider(height: 5),
                   PopupMenuItem<int>(
                     value: index,
+                    height: 43,
                     enabled: !action.disabled,
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     child: Row(
                       children: [
                         if (action.icon != null) ...[
-                          UiIcon(action.icon, size: 20),
+                          UiIcon(
+                            action.icon,
+                            size: 19,
+                            color: action.danger
+                                ? Theme.of(context).colorScheme.error
+                                : Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                          ),
                           const SizedBox(width: 10),
                         ],
-                        Flexible(child: Text(action.label)),
+                        Flexible(
+                          child: Text(
+                            action.label,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: action.danger
+                                  ? Theme.of(context).colorScheme.error
+                                  : null,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
+                ],
               ],
               onSelected: (index) =>
                   unawaited(_dispatch(actions[index], identity)),

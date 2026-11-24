@@ -1,29 +1,42 @@
 import {data,ui,clock} from '@xudian/sdk';
 import {addDays,weekday} from './calendar.js';
-import {courseValues,orphanPolicies,saveCourseValues} from './course_management.js';
-import {snapshot,currentOccurrence} from './schedule_queries.js';
+import {courseValues,orphanPolicies,saveCourseValues,weekRanges} from './course_management.js';
+import {snapshot,currentOccurrence,occurrenceReference} from './schedule_queries.js';
 import {command} from './schedule_commands.js';
-import {field,text} from './page_controls.js';
-import {defaultPeriods,listTile,group} from './view_helpers.js';
+import {undoChange} from './occurrence_editor.js';
+import {field} from './page_controls.js';
+import {defaultPeriods} from './view_helpers.js';
+import {action,courseRow,fact,fixedActions,lessonDate,pageResult,periodLabel,section,shortDate,summary,weekdayNames} from './course_layout.js';
 
-function periodsText(periods) { return periods.map(p=>`${p.start}-${p.end}`).join('\n'); }
-function parsePeriods(text) { return text.split(/\n|,/).filter(x=>x.trim()).map((line,i)=>{ const [start,end]=line.trim().split('-'); return {number:i+1,start,end}; }); }
+const labeled=(key,label,value,type,options,layout={})=>({...field(key,label,value,type,options),presentation:'labeled',...layout});
+const slot=item=>periodLabel(item.startPeriod,item.endPeriod);
+const changedOn=change=>change.kind==='cancel'?change.originalDate:change.date;
+
+async function editTimetable(t,state,selectTimetable) {
+  const zone=t?{zone:t.timezone,source:'existing'}:await clock.systemTimezone();
+  const today=await clock.today(zone.zone);
+  const values=await ui.dialog({title:t?'课表与作息':'新建课表',presentation:'page',fullWidthActions:true,fields:[
+    labeled('name','课表名称',t?.name||'大学课表','text',null,{section:'学期信息',required:true,maxLength:120}),
+    labeled('firstMonday','第一周周一',t?.firstMonday||addDays(today,1-weekday(today)),'date',null,{required:true,clearable:false}),
+    labeled('totalWeeks','总教学周数',String(t?.totalWeeks||20),'number',null,{integer:true,min:1,max:100,row:'weeks'}),
+    labeled('displayWeekStart','显示起始',String(t?.displayWeekStart||1),'select',[{value:'1',label:'周一'},{value:'7',label:'周日'}],{row:'weeks'}),
+    labeled('periods','每行一个节次',(t?.periods||defaultPeriods).map(p=>p.start+'-'+p.end).join('\n'),'multiline',null,
+      {section:'作息',minLines:7,maxLines:7,helperText:'按顺序填写，使用 HH:mm-HH:mm。例如 08:00-08:45。',required:true})
+  ]});
+  if(!values)return;
+  const periods=values.periods.split(/\n|,/).filter(line=>line.trim()).map((line,i)=>{
+    const [start,end]=line.trim().split('-');
+    return {number:i+1,start,end};
+  });
+  const saved=await command('schedule.timetable.save',{timetable:{...t,...values,timezone:zone.zone,totalWeeks:Number(values.totalWeeks),displayWeekStart:Number(values.displayWeekStart),periods},...(t?{expectedTimetable:t}:{})});
+  if(saved) {
+    state.timetableId=saved.result.id;selectTimetable(saved.result.id);
+    if(zone.source==='fallback')state.notice='请在学期设置的高级设置中核对时间设置。';
+  }
+}
 
 export async function handleEditing({t,state,event,selectTimetable}) {
-  if(event?.type==='newTimetable'||event?.type==='settings') {
-    const original=event.type==='settings'?t:null;
-    const zone=original?{zone:original.timezone,source:'existing'}:await clock.systemTimezone();
-    const today=await clock.today(zone.zone);
-    const values=await ui.dialog({title:original?'课表与作息':'新建课表',fields:[
-      field('name','课表名称',original?.name||'大学课表'),field('firstMonday','第一周周一',original?.firstMonday||addDays(today,1-weekday(today))),
-      field('totalWeeks','总教学周数',String(original?.totalWeeks||20),'number'),
-      field('displayWeekStart','显示起始',String(original?.displayWeekStart||1),'select',[{value:'1',label:'周一'},{value:'7',label:'周日'}]),
-      field('periods','每行一个节次 HH:mm-HH:mm',periodsText(original?.periods||defaultPeriods),'multiline')]});
-    if(values) {
-      const saved=await command('schedule.timetable.save',{timetable:{...original,...values,timezone:zone.zone,totalWeeks:Number(values.totalWeeks),displayWeekStart:Number(values.displayWeekStart),periods:parsePeriods(values.periods)},...(original?{expectedTimetable:original}:{})});
-      if(saved) { state.timetableId=saved.result.id; selectTimetable(saved.result.id); if(zone.source==='fallback')state.notice='请在学期设置的高级设置中核对时间设置。'; }
-    }
-  }
+  if(event?.type==='newTimetable'||event?.type==='settings')await editTimetable(event.type==='settings'?t:null,state,selectTimetable);
   if(event?.type==='course') {
     if(!t) throw new Error('先创建课表');
     const current=event.course?.id?await data.get('courses',event.course.id):event.course,meeting=event.meeting?.id?await data.get('meetings',event.meeting.id):event.meeting;
@@ -35,48 +48,50 @@ export async function handleEditing({t,state,event,selectTimetable}) {
       field('orphanPolicy','失效调课处理',initial.orphanPolicy,'select',orphanPolicies)]});
     if(values) await saveCourseValues(t,current,meeting,values);
   }
-  if(event?.type==='editOccurrence'||event?.type==='extra') {
-    const item=event.item;
-    const courses=await data.query('courses',{filter:{field:'timetableId',op:'eq',value:t.id}});
-    const values=await ui.dialog({title:item?'单次调课':'临时加课',fields:[
-      field('kind','操作',item?'replace':'extra','select',item?[{value:'replace',label:'移动或换地点'},{value:'cancel',label:'取消本次'}]:[{value:'extra',label:'临时加课'}]),
-      field('courseId','课程',item?.courseId||courses[0]?.id,'select',courses.map(c=>({value:c.id,label:c.name}))),
-      field('date','日期',item?.date||await clock.today(t.timezone)),field('startPeriod','开始节次',String(item?.startPeriod||1),'number'),field('endPeriod','结束节次',String(item?.endPeriod||2),'number'),field('location','地点',item?.location),field('teacher','教师',item?.teacher)]});
-    if(values) await command('schedule.change.save',{change:{...values,id:event.change?.id,timetableId:t.id,originalDate:item?.originalDate||values.date,meetingId:item?.meetingId||null,startPeriod:Number(values.startPeriod),endPeriod:Number(values.endPeriod)}});
-  }
-  if(event?.type==='delete') await command('schedule.entity.delete',{collection:event.collection,id:event.id});
+  if(event?.type==='editOccurrence'||event?.type==='extra')await ui.navigate('app.schedule.occurrenceEditor',{
+    timetableId:t.id,...(event.item?occurrenceReference(event.item):{mode:'extra'})
+  });
+  if(event?.type==='undoChange')await undoChange(t,event.id);
+  if(event?.type==='delete')await command('schedule.entity.delete',{collection:event.collection,id:event.id});
 }
 
 export async function renderOccurrence({t,state,context,children}) {
-  const current=await currentOccurrence(t,context);
-  if(!current)children.push(text('这次课程已不存在。请返回课表刷新后查看。'));
-  else {
-    const {item,course,meeting,change}=current;
-    children.push(group(course?.name||item?.title||'课程详情',[
-      listTile('调课状态',current.cancelled?'已取消':change?.kind==='extra'?'临时加课':change?'已调整':'原计划','history',null,''),
-      listTile('日期',current.cancelled?`${context.originalDate} · 已取消`:`${item.date} · 星期${['','一','二','三','四','五','六','日'][weekday(item.date)]}`,'calendar',null,''),
-      ...(item?[listTile('上课时间',`第 ${item.startPeriod}–${item.endPeriod} 节 · ${t.periods[item.startPeriod-1]?.start||''}–${t.periods[item.endPeriod-1]?.end||''}`,'schedule',null,''),listTile('地点',item.location||'未填写','school',null,''),listTile('教师',item.teacher||'未填写','school',null,'')]:[]),
-      ...(course?.code?[listTile('课程代码',course.code,'school',null,'')]:[]),
-      ...(course?.notes?[listTile('备注',course.notes,'list',null,'')]:[]),
-      ...(meeting?[listTile('周期安排',`星期${meeting.weekday} · 第 ${meeting.startPeriod}–${meeting.endPeriod} 节 · ${meeting.weeks.join(',')} 周`,'schedule',null,'')]:[]),
-      ...(item&&item.date!==item.originalDate?[listTile('原上课日期',item.originalDate,'history',null,'')]:[])
-    ]));
-    children.push(group('操作',[
-      ...(item?[listTile('单次调课','只调整本次课程的时间、地点或取消本次','history',{type:'singleChange'})]:[]),
-      ...(meeting?[listTile('编辑周期安排','修改此安排的上课周次、节次和课程信息','school',{type:'editRecurrence'})]:[]),
-      ...(change?[listTile('撤销本次变更','恢复周期安排中的原课程','history',{type:'delete',collection:'occurrenceChanges',id:change.id})]:[])
-    ]));
+  const current=t&&await currentOccurrence(t,context);
+  if(!current) {
+    children.push({type:'emptyState',icon:'calendar',iconSurface:true,iconTone:'muted',title:'这次课程已不存在',text:'返回课表刷新后，可查看最新安排。',padding:36});
+    return pageResult(state,'课程详情',children,fixedActions(action('返回课表',{type:'navigate',page:'home'})));
   }
-  return {state,tree:{type:'column',children}};
+  const {item,course,meeting,change,cancelled}=current;
+  const extra=change?.kind==='extra',date=cancelled?change.originalDate:item.date;
+  const status=cancelled?'已取消':extra?'临时加课':change?'已调整':'原计划';
+  children.push(summary(course.name,[course.code,t.name].filter(Boolean).join(' · '),'school',status,cancelled),
+    section('本次上课',[fact('日期',lessonDate(date)),
+      ...(item?[fact('上课时间',`${slot(item)} · ${t.periods[item.startPeriod-1].start}–${t.periods[item.endPeriod-1].end}`),fact('地点',item.location||'未填写'),fact('教师',item.teacher||'未填写')]:[]),
+      ...(change?.kind==='replace'&&item.date!==item.originalDate?[fact('原上课日期',lessonDate(item.originalDate))]:[])]),
+    section('课程信息',[...(meeting?[fact('周期安排',`第 ${weekRanges(meeting.weeks)} 周 · ${weekdayNames[meeting.weekday-1]} · ${slot(meeting)}`)]:[]),fact('备注',course.notes||'未填写')]),
+    section('操作',[...(item?[courseRow('单次调课','调整本次时间、地点或取消本次','calendar',{type:'singleChange'})]:[]),
+      ...(meeting?[courseRow('编辑周期安排','修改上课周次、节次和课程信息','edit',{type:'editRecurrence'})]:[]),
+      ...(change?[courseRow('撤销本次变更',extra?'移除这一次临时加课':'恢复原周期安排','history',{type:'undoChange',id:change.id})]:[])])
+  );
+  return pageResult(state,'课程详情',children);
 }
 
 export async function renderChanges({t,state,children}) {
   const {courses,meetings,changes}=await snapshot(t.id);
-  children.push({type:'sectionHeader',title:'单次课程变更',count:changes.length,action:{label:'临时加课',icon:'add',event:{type:'extra'}}});
-  if(!changes.length)children.push(text('暂无单次调课记录。点击周视图中的课程可查看与调整本次上课。'));
-  for(const change of changes) {
-    const course=courses.find(c=>c.id===(change.courseId||meetings.find(m=>m.id===change.meetingId)?.courseId));
-    children.push(group(course?.name||'单次课程变更',[text(`${change.originalDate} → ${change.kind==='cancel'?'取消':change.date}${change.kind==='extra'?' · 临时课':''}`),listTile('撤销变更',null,'history',{type:'delete',collection:'occurrenceChanges',id:change.id})]));
-  }
-  return {state,tree:{type:'column',children}};
+  const ordered=[...changes].sort((left,right)=>left.originalDate.localeCompare(right.originalDate)||
+    (left.startPeriod||0)-(right.startPeriod||0)||left.id.localeCompare(right.id));
+  const rows=ordered.map(change=>{
+    const meeting=meetings.find(m=>m.id===change.meetingId);
+    const course=courses.find(c=>c.id===(change.courseId||meeting?.courseId));
+    const label=change.kind==='extra'?'临时加课':change.kind==='cancel'?'已取消':'移动上课';
+    const date=change.kind==='replace'?`${shortDate(change.originalDate)} → ${shortDate(change.date)}`:shortDate(changedOn(change));
+    const item={occurrenceId:change.kind==='extra'?change.id:change.meetingId+':'+change.originalDate,meetingId:change.meetingId,originalDate:change.originalDate,date:changedOn(change)};
+    return {type:'row',layout:'flex',spacing:0,children:[
+      {...courseRow(course?.name||'课程',date+' · '+label,'calendar',{type:'occurrence',item},false),flex:1},
+      {type:'button',variant:'text',text:'撤销',event:{type:'undoChange',id:change.id}}
+    ]};
+  });
+  if(!rows.length)rows.push({type:'emptyState',icon:'calendar',iconSurface:true,iconTone:'muted',title:'暂无单次调课记录',text:'可从课表中的课程发起单次调课，也可临时加课。',padding:31});
+  children.push(section('单次课程变更',rows,changes.length+' 条'));
+  return pageResult(state,'调课记录',children,fixedActions(action('临时加课',{type:'extra'})));
 }

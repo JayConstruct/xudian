@@ -14,6 +14,7 @@ class ScriptTransition extends StatefulWidget {
     this.fillViewport = false,
     Duration? duration,
     this.collapse = false,
+    this.onShown,
   }) : assert(navigationDirection == null || visible && !collapse),
        duration =
            duration ??
@@ -31,6 +32,7 @@ class ScriptTransition extends StatefulWidget {
   final bool fillViewport;
   final Duration duration;
   final bool collapse;
+  final VoidCallback? onShown;
 
   @override
   State<ScriptTransition> createState() => _ScriptTransitionState();
@@ -80,6 +82,11 @@ class _ScriptTransitionState extends State<ScriptTransition>
   void didUpdateWidget(ScriptTransition oldWidget) {
     super.didUpdateWidget(oldWidget);
     controller.duration = widget.duration;
+    if (!oldWidget.visible && widget.visible && widget.onShown != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.visible) widget.onShown?.call();
+      });
+    }
     if (oldWidget.visible != widget.visible ||
         oldWidget.replayKey != widget.replayKey ||
         oldWidget.effect != widget.effect) {

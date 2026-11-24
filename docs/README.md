@@ -11,14 +11,15 @@
 | [课表](features/SCHEDULE.md) | 切换教学周、编辑课程、调整节次、设置时区、导入与备份 |
 | [拾光导入](features/SHIGUANG_IMPORT.md) | 选择学校、采集课表、核对来源及变更 |
 | [AI 助手](features/AI_ASSISTANT.md) | 配置模型、调用工具、审核写入和管理对话 |
-| [设置](features/SETTINGS_HIERARCHY.md) | 外观、导航、减少动画和[显示诊断](features/SETTINGS_HIERARCHY.md#显示与布局诊断) |
+| [设置](features/SETTINGS_HIERARCHY.md) | 外观、导航和[显示诊断](features/SETTINGS_HIERARCHY.md#显示与布局诊断) |
 | [安装与更新](INSTALLATION.md) | 首次安装 App、从商店安装模块、检查更新和切换通道 |
 
 ## UI 与动画
 
 | 要做什么 | 入口 |
 | --- | --- |
-| 调整图标、间距、文字、布局或无障碍 | [界面设计系统](ui/DESIGN_SYSTEM.md) · [当前选稿](../design/README.md) |
+| 调整图标、间距、文字、布局或无障碍 | [界面设计系统](ui/DESIGN_SYSTEM.md) |
+| 按页面查看现行图稿和审核状态 | [页面与设计稿映射表](../design/PAGES.md) · [本机看图页](../design/看图目录/00-看图目录.html) |
 | 替换公共控件、模板和界面风格 | [公共 UI 与界面包](ui/UI_PACKS.md) |
 | 组合页面入口、槽位与上下文 | [入口与页面组合](ui/PAGE_COMPOSITION.md) |
 | 实现显示与折叠、页面切换、按压反馈或滑动操作 | [动画与手势](ui/MOTION.md) |

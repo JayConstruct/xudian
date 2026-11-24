@@ -80,6 +80,15 @@ void registerHostControlServices(
 
   Map<String, Object?> values(Object? value) => object(value);
   const stringSchema = {'type': 'string'};
+  Future<Map<String, Object?>> readPreferences(SnapshotSession session) async {
+    final stored = await read(
+      AppPreferencesController.storageKey,
+      const {},
+      session,
+    );
+    return AppPreferences.fromJson(stored).toJson();
+  }
+
   final preferencesSchema = {
     'type': 'object',
     'properties': {
@@ -87,21 +96,13 @@ void registerHostControlServices(
         'type': 'string',
         'enum': ['system', 'light', 'dark'],
       },
-      'reduceMotion': {'type': 'boolean'},
       'haptics': {'type': 'boolean'},
     },
     'additionalProperties': false,
   };
-  service(
-    'settings.get',
-    'query',
-    {'type': 'object'},
-    (_, input, session) async => read(
-      AppPreferencesController.storageKey,
-      const AppPreferences().toJson(),
-      session,
-    ),
-  );
+  service('settings.get', 'query', {
+    'type': 'object',
+  }, (_, input, session) => readPreferences(session));
   service(
     'settings.patch',
     'command',
@@ -115,12 +116,7 @@ void registerHostControlServices(
       'additionalProperties': false,
     },
     (_, input, session) async {
-      final args = values(input),
-          before = await read(
-            AppPreferencesController.storageKey,
-            const AppPreferences().toJson(),
-            session,
-          );
+      final args = values(input), before = await readPreferences(session);
       if (args.containsKey('expected') &&
           canonicalJson(args['expected']) != canonicalJson(before)) {
         throw StateError('外观设置已变化，不能应用旧方案');

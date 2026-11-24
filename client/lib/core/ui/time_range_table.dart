@@ -1,3 +1,6 @@
+import 'tab_content_transition.dart';
+import 'sliding_segments.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -234,63 +237,61 @@ class _TimeRangeTableState extends State<TimeRangeTable> {
         ),
         const SizedBox(height: 12),
         if (groups.length > 1)
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
+          SlidingSegments<String>(
+            segments: [
               for (final label in groups.keys)
-                ChoiceChip(
-                  label: Text(label),
-                  selected: label == current,
-                  showCheckmark: false,
-                  onSelected: (_) => setState(() => selectedGroup = label),
-                ),
+                ButtonSegment(value: label, label: Text(label)),
             ],
+            selected: current!,
+            onChanged: (label) => setState(() => selectedGroup = label),
           ),
-        Material(
-          color: Colors.transparent,
-          child: Table(
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            columnWidths: const {
-              0: FlexColumnWidth(.85),
-              1: FlexColumnWidth(),
-              2: FlexColumnWidth(),
-            },
-            border: TableBorder(
-              horizontalInside: BorderSide(color: scheme.outlineVariant),
-            ),
-            children: [
-              TableRow(
-                decoration: BoxDecoration(color: scheme.surfaceContainerLow),
-                children: [
-                  for (final label in ['节次', '开始', '结束'])
-                    TableCell(child: heading(label)),
-                ],
+        TabContentTransition(
+          index: groups.keys.toList().indexOf(current ?? ''),
+          child: Material(
+            color: Colors.transparent,
+            child: Table(
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+              columnWidths: const {
+                0: FlexColumnWidth(.85),
+                1: FlexColumnWidth(),
+                2: FlexColumnWidth(),
+              },
+              border: TableBorder(
+                horizontalInside: BorderSide(color: scheme.outlineVariant),
               ),
-              for (final row in rows.where(
-                (row) =>
-                    current == null ||
-                    groups[current]!.contains(row['id'].toString()),
-              ))
+              children: [
                 TableRow(
-                  key: ValueKey(row['id']),
+                  decoration: BoxDecoration(color: scheme.surfaceContainerLow),
                   children: [
-                    TableCell(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(
-                          '${row['label']}',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                    // Explicit cells preserve the semantic coordinate space
-                    // when the first column has a different width.
-                    TableCell(child: _cell(row, 'start')),
-                    TableCell(child: _cell(row, 'end')),
+                    for (final label in ['节次', '开始', '结束'])
+                      TableCell(child: heading(label)),
                   ],
                 ),
-            ],
+                for (final row in rows.where(
+                  (row) =>
+                      current == null ||
+                      groups[current]!.contains(row['id'].toString()),
+                ))
+                  TableRow(
+                    key: ValueKey(row['id']),
+                    children: [
+                      TableCell(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            '${row['label']}',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                      // Explicit cells preserve the semantic coordinate space
+                      // when the first column has a different width.
+                      TableCell(child: _cell(row, 'start')),
+                      TableCell(child: _cell(row, 'end')),
+                    ],
+                  ),
+              ],
+            ),
           ),
         ),
         if (error != null && durationMinutes != null) ...[

@@ -33,9 +33,21 @@ void main() {
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
+      await db
+          .into(db.appSettings)
+          .insert(
+            AppSettingsCompanion.insert(
+              key: AppPreferencesController.storageKey,
+              value: '{"reduceMotion":true,"haptics":true,"theme":"system"}',
+            ),
+          );
       final secrets = MemorySecrets();
       await tester.pumpWidget(app(db, secrets));
       await tester.pumpAndSettle();
+      expect(
+        MediaQuery.disableAnimationsOf(tester.element(find.byTooltip('打开设置'))),
+        isFalse,
+      );
       await tester.tap(find.byTooltip('打开设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('外观主题'));
@@ -46,19 +58,14 @@ void main() {
         tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
         ThemeMode.dark,
       );
-      await tester.tap(find.widgetWithText(SwitchListTile, '减少动画'));
-      await tester.pumpAndSettle();
+      expect(find.text('减少动画'), findsNothing);
       await tester.ensureVisible(find.widgetWithText(SwitchListTile, '触感反馈'));
       await tester.tap(find.widgetWithText(SwitchListTile, '触感反馈'));
       await tester.pumpAndSettle();
       final row = (await db.select(db.appSettings).get()).singleWhere(
         (row) => row.key == AppPreferencesController.storageKey,
       );
-      expect(jsonDecode(row.value), {
-        'theme': 'dark',
-        'reduceMotion': true,
-        'haptics': false,
-      });
+      expect(jsonDecode(row.value), {'theme': 'dark', 'haptics': false});
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -70,6 +77,13 @@ void main() {
         ThemeMode.dark,
       );
       final context = tester.element(find.byTooltip('打开设置'));
+      expect(MediaQuery.disableAnimationsOf(context), isFalse);
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await tester.pumpAndSettle();
       expect(MediaQuery.disableAnimationsOf(context), isTrue);
       final prefs = await ProviderScope.containerOf(context)
           .read(appPreferencesProvider.future);
@@ -166,7 +180,6 @@ void main() {
       addTearDown(container.dispose);
       final prefs = await container.read(appPreferencesProvider.future);
       expect(prefs.themeMode, ThemeMode.system);
-      expect(prefs.reduceMotion, isFalse);
       await container
           .read(appPreferencesProvider.notifier)
           .save(prefs.copyWith(themeMode: ThemeMode.light));

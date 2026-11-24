@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/settings/settings_widgets.dart';
+import '../ui/ui_component.dart';
 import '../ui/script_content_widgets.dart';
 import '../ui/ui_design.dart';
 
@@ -10,32 +11,73 @@ class ReviewSubject extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
+    this.quote = false,
   });
   final String title, subtitle;
   final IconData icon;
+  final bool quote;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: SettingsGroupSurface(
-      children: [
-        ListTile(
-          minTileHeight: 78,
-          leading: ScriptGlyph(
-            icon: icon,
-            surface: true,
-            surfaceSize: 44,
-            size: 22,
-          ),
-          title: Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold, fontSize: 20),
-          ),
-          subtitle: Text(subtitle),
+  Widget build(BuildContext context) {
+    if (quote) {
+      final theme = Theme.of(context);
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(14),
         ),
-      ],
-    ),
-  );
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 15, color: theme.colorScheme.primary),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontSize: 15,
+                height: 1.65,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: SettingsGroupSurface(
+        children: [
+          ListTile(
+            minTileHeight: 78,
+            leading: ScriptGlyph(
+              icon: icon,
+              surface: true,
+              surfaceSize: 44,
+              size: 22,
+            ),
+            title: Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold, fontSize: 20),
+            ),
+            subtitle: Text(subtitle),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class ReviewFacts extends StatelessWidget {
@@ -115,10 +157,12 @@ class ReviewDialog extends StatelessWidget {
     required this.confirmLabel,
     required this.onConfirm,
     this.cancelLabel = '取消',
+    this.destructive = false,
   });
   final String title, confirmLabel, cancelLabel;
   final List<Widget> children;
   final VoidCallback? onConfirm;
+  final bool destructive;
   @override
   Widget build(BuildContext context) => Dialog(
     insetPadding: AppDesign.dialogInsets,
@@ -160,6 +204,16 @@ class ReviewDialog extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
+                    style: destructive
+                        ? FilledButton.styleFrom(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .error,
+                            foregroundColor: Theme.of(context)
+                                .colorScheme
+                                .onError,
+                          )
+                        : null,
                     onPressed: onConfirm,
                     child: Text(confirmLabel),
                   ),
@@ -172,3 +226,26 @@ class ReviewDialog extends StatelessWidget {
     ),
   );
 }
+
+Future<bool> showReviewConfirmation(
+  BuildContext context, {
+  required String title,
+  required List<Widget> children,
+  required String confirmLabel,
+  String cancelLabel = '取消',
+}) async =>
+    await showDialog<bool>(
+      context: context,
+      barrierColor: AppDesign.modalBarrier(Theme.of(context)),
+      builder: (sheet) => UiPackScope(
+        defaultOnly: true,
+        child: ReviewDialog(
+          title: title,
+          confirmLabel: confirmLabel,
+          cancelLabel: cancelLabel,
+          onConfirm: () => Navigator.pop(sheet, true),
+          children: children,
+        ),
+      ),
+    ) ??
+    false;

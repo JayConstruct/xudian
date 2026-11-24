@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.views.today",
     "name": "日程",
-    "version": "1.10.4",
-    "hostApi": "^1.44.0",
+    "version": "1.11.3",
+    "hostApi": "^1.56.0",
     "dataVersion": 1,
     "permissions": [
       "ui",
@@ -96,6 +96,7 @@
     {
       "id": "app.views.today.review",
       "title": "完成复盘",
+      "headerMode": "contributed",
       "icon": "history",
       "handler": "render"
     }

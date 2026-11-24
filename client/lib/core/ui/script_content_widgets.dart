@@ -105,114 +105,6 @@ class ScriptGlyph extends StatelessWidget {
   }
 }
 
-/// Compact content filters and underlined section tabs. Choice labels and
-/// events are module data; the host owns scrolling, focus and hit targets.
-class ScriptTabChoices extends StatelessWidget {
-  const ScriptTabChoices({
-    super.key,
-    required this.labels,
-    required this.selectedIndex,
-    required this.onSelected,
-    this.underlined = false,
-    this.scrollable = false,
-  });
-
-  final List<String> labels;
-  final int selectedIndex;
-  final ValueChanged<int>? onSelected;
-  final bool underlined, scrollable;
-
-  Widget _choice(BuildContext context, int index) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final selected = selectedIndex == index;
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onSelected == null ? null : () => onSelected!(index),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: !underlined && selected
-                      ? ShapeDecoration(
-                          color: scheme.primaryContainer,
-                          shape: AppDesign.smoothShape(radius: 12),
-                        )
-                      : null,
-                  child: Text(
-                    labels[index],
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: selected
-                          ? scheme.primary
-                          : scheme.onSurfaceVariant,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                  ),
-                ),
-                if (underlined && selected)
-                  Positioned(
-                    bottom: 0,
-                    left: 12,
-                    right: 12,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: scheme.primary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                      child: const SizedBox(height: 2),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-        final needsScroll =
-            scrollable || scale > 1.3 || constraints.maxWidth < 280;
-        if (needsScroll) {
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (var index = 0; index < labels.length; index++)
-                  _choice(context, index),
-              ],
-            ),
-          );
-        }
-        return Row(
-          children: [
-            for (var index = 0; index < labels.length; index++)
-              Expanded(child: _choice(context, index)),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Adjacent lazy list entries share one outline without mounting the whole group.
 class ScriptGroupedRow extends StatelessWidget {
   const ScriptGroupedRow({
     super.key,
@@ -275,6 +167,180 @@ class ScriptGroupedRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A compact, top-aligned time rail for variable-height entries.
+class ScriptTimelineEntry extends StatelessWidget {
+  const ScriptTimelineEntry({
+    super.key,
+    required this.time,
+    required this.child,
+    required this.first,
+    required this.last,
+    required this.filled,
+    required this.divider,
+    this.detailIcon,
+  });
+
+  final String time;
+  final Widget child;
+  final bool first, last, filled, divider;
+  final IconData? detailIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final timeWidth = MediaQuery.textScalerOf(context).scale(40);
+    final center = first ? 20.0 : 25.0;
+    final top = filled
+        ? 0.0
+        : first
+        ? 6.0
+        : 11.0;
+    return Stack(
+      children: [
+        if (!first || !last)
+          PositionedDirectional(
+            start: timeWidth + 12,
+            width: 1,
+            top: first ? center : 0,
+            bottom: 0,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Container(
+                height: last ? center : double.infinity,
+                color: scheme.outlineVariant,
+              ),
+            ),
+          ),
+        PositionedDirectional(
+          start: timeWidth + 9,
+          top: center - 3.5,
+          child: Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: filled ? scheme.primary : theme.scaffoldBackgroundColor,
+              border: Border.all(
+                color: filled ? scheme.primary : scheme.outline,
+                width: 1.3,
+              ),
+            ),
+          ),
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: timeWidth,
+              child: Padding(
+                padding: EdgeInsets.only(top: center - 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      time,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (detailIcon != null)
+                      UiIcon(detailIcon, size: 13, color: scheme.primary),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 26),
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: divider
+                      ? Border(
+                          top: BorderSide(
+                            color: scheme.outlineVariant.withValues(alpha: .65),
+                          ),
+                        )
+                      : null,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    top: top,
+                    bottom: filled
+                        ? 9
+                        : last
+                        ? 6
+                        : 16,
+                  ),
+                  child: child,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class ScriptSectionLabel extends StatelessWidget {
+  const ScriptSectionLabel({
+    super.key,
+    required this.title,
+    required this.caption,
+    this.onTap,
+    this.chevron = false,
+  });
+  final String title, caption;
+  final VoidCallback? onTap;
+  final bool chevron;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final child = Wrap(
+      spacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          caption,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        if (chevron)
+          UiIcon(
+            Icons.chevron_right,
+            size: 14,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+      ],
+    );
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: onTap == null
+          ? child
+          : Semantics(
+              button: true,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: child,
+                ),
+              ),
+            ),
     );
   }
 }

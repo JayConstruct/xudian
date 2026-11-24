@@ -154,7 +154,7 @@ void main() {
         expect(row['startTime'], start['time']);
         expect(row['endTime'], end['time']);
       }
-      expect(rows.last['subtitle'], '计划 当天');
+      expect(rows.last['subtitle'], isEmpty);
       expect(singleCalls, 0);
       expect(batchCalls, (count / 128).ceil());
       expect(sizes, count == 0 ? [] : count == 50 ? [100] : [256, 2]);

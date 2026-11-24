@@ -14,10 +14,52 @@ import '../ui/input_validation.dart';
 import '../ui/json_review.dart';
 import '../../app/design_system.dart';
 import '../../features/settings/settings_widgets.dart'
-    show SettingsGroupSurface, SettingsSheet;
+    show SettingsGroupSurface, SettingsGroup, SettingsEntry, SettingsSheet;
 import 'data_change_review.dart';
 import 'review_widgets.dart';
 import 'plan_confirmation.dart';
+
+Future<bool> showServiceGrantReview(
+  BuildContext context, {
+  required String moduleId,
+  required String moduleName,
+  required List<String> scopes,
+  required Map<String, String> names,
+  required int minutes,
+  required int limit,
+}) => showReviewConfirmation(
+  context,
+  title: '授权模块调用',
+  confirmLabel: '授权',
+  cancelLabel: '拒绝',
+  children: [
+    ReviewSubject(
+      title: moduleName,
+      subtitle: moduleId,
+      icon: Icons.auto_awesome_outlined,
+    ),
+    ReviewFacts(
+      title: '本次授权',
+      items: [
+        (title: '有效期', subtitle: '$minutes 分钟'),
+        (title: '写入上限', subtitle: '$limit 次'),
+      ],
+    ),
+    SettingsGroup(
+      title: '申请的服务',
+      bottomSpacing: 0,
+      children: [
+        for (final scope in scopes)
+          SettingsEntry(
+            title: names[scope] ?? scope,
+            subtitle: scope,
+            protected: true,
+            icon: Icons.list_alt_outlined,
+          ),
+      ],
+    ),
+  ],
+);
 
 Future<bool> reviewDialog(
   BuildContext context,
@@ -30,8 +72,11 @@ Future<bool> reviewDialog(
   // Keep the frozen plan and its field comparisons for this dialog's lifetime.
   final summary = DataChangeSummary.tryParse(details);
   if (!packageReview &&
-      (summary != null || confirmation != null ||
-          details is Map && (details.containsKey('writes') || details.containsKey('planId')))) {
+      (summary != null ||
+          confirmation != null ||
+          details is Map &&
+              (details.containsKey('writes') ||
+                  details.containsKey('planId')))) {
     var ready = false;
     return await showDialog<bool>(
           context: context,
@@ -180,6 +225,7 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
     final deletions = widget.summary.count(DataChangeKind.delete);
     final dialog = ReviewDialog(
       title: options.title,
+      destructive: deletions > 0,
       confirmLabel: options.confirmLabel,
       onConfirm: options.acknowledgement != null && !acknowledged
           ? null
@@ -188,6 +234,7 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
         if (options.subject != null)
           ReviewSubject(
             title: options.subject!,
+            quote: options.quote,
             subtitle: options.message,
             icon: appIconData(options.icon) ?? Icons.event_note_outlined,
           )
@@ -200,9 +247,20 @@ class _CompactPlanReviewState extends State<_CompactPlanReview> {
           ),
         if (options.section != null && options.items.isEmpty)
           ReviewNotice(options.section!),
-        if (options.notice != null)
-          ReviewNotice(options.notice!, icon: Icons.info_outline),
-        if (deletions > 0)
+        if (options.quote && deletions == 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Text('删除后无法恢复这条记录。${options.notice ?? ''}'),
+          )
+        else if (options.notice != null)
+          if (options.quote)
+            Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Text(options.notice!),
+            )
+          else
+            ReviewNotice(options.notice!, icon: Icons.info_outline),
+        if (deletions > 0 && !(options.quote && deletions == 1))
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(
@@ -443,6 +501,13 @@ class _HostFormDialogState extends State<HostFormDialog> {
                 : InputDecoration(labelText: label))
             .copyWith(
               errorText: errors[key],
+              hintText: field['hintText'] as String?,
+              contentPadding:
+                  widget.presentation == 'compact' &&
+                      widget.fullWidthActions &&
+                      labeled
+                  ? const EdgeInsets.symmetric(horizontal: 14, vertical: 14)
+                  : null,
               helperText: field['helperText'] as String?,
               helperMaxLines: 3,
             );
@@ -633,6 +698,9 @@ class _HostFormDialogState extends State<HostFormDialog> {
         : 1;
     final input = TextField(
       controller: controllers[key],
+      style: widget.presentation == 'compact' && widget.fullWidthActions
+          ? Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.55)
+          : null,
       readOnly: field['editable'] == false,
       obscureText: field['type'] == 'secret',
       enableSuggestions: field['type'] != 'secret',
@@ -657,16 +725,42 @@ class _HostFormDialogState extends State<HostFormDialog> {
     final fields = widget.fields;
     for (var i = 0; i < fields.length; i++) {
       final field = fields[i];
+      for (final item
+          in (field['metadata'] as List? ?? const []).whereType<Map>()) {
+        yield Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            children: [
+              Icon(
+                appIconData(item['icon']),
+                size: 16,
+                color: AppDesign.muted(context),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '${item['text'] ?? ''}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      if (field['metadata'] != null) yield const SizedBox(height: 10);
       if (field['summary'] case {
         'title': final String title,
         'subtitle': final String subtitle,
         'icon': final String icon,
       }) {
+        final quote = object(field['summary'])['presentation'] == 'quote';
         yield ReviewSubject(
           title: title,
+          quote: quote,
           subtitle: subtitle,
           icon: appIconData(icon) ?? Icons.info_outline,
         );
+        if (quote) yield const SizedBox(height: 16);
       }
       if (field['section'] case final String section) {
         yield Padding(
@@ -714,15 +808,61 @@ class _HostFormDialogState extends State<HostFormDialog> {
         padding: EdgeInsets.only(bottom: spacing),
         child: control,
       );
+      if (field['destination'] case {
+        'label': final String label,
+        'title': final String title,
+        'icon': final String icon,
+      }) {
+        final theme = Theme.of(context);
+        final hint = object(field['destination'])['hint'];
+        yield Row(
+          children: [
+            Icon(
+              appIconData(icon),
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: theme.textTheme.bodySmall),
+                  Text(title, style: theme.textTheme.titleSmall),
+                  if (hint is String && hint.isNotEmpty)
+                    Text(hint, style: theme.textTheme.bodySmall),
+                ],
+              ),
+            ),
+          ],
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final compactForm =
+        widget.presentation == 'compact' && widget.fullWidthActions;
     final native = AlertDialog(
+      insetPadding: compactForm
+          ? const EdgeInsets.symmetric(horizontal: 20, vertical: 24)
+          : null,
+      constraints: compactForm
+          ? const BoxConstraints(maxWidth: 430, minWidth: 280)
+          : null,
+      backgroundColor: compactForm
+          ? AppDesign.modalSurface(Theme.of(context))
+          : null,
+      titleTextStyle: compactForm
+          ? Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.bold)
+          : null,
       titlePadding: AppDesign.dialogTitlePadding,
       contentPadding: AppDesign.dialogContentPadding,
-      actionsPadding: AppDesign.dialogActionsPadding,
+      actionsPadding: compactForm
+          ? const EdgeInsets.fromLTRB(20, 0, 20, 20)
+          : AppDesign.dialogActionsPadding,
       title: Text(widget.title),
       content: SizedBox(
         width: 540,
@@ -733,7 +873,14 @@ class _HostFormDialogState extends State<HostFormDialog> {
               if (widget.description != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20),
-                  child: Text(widget.description!),
+                  child:
+                      widget.presentation == 'compact' &&
+                          widget.fullWidthActions
+                      ? Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(widget.description!),
+                        )
+                      : Text(widget.description!),
                 ),
               ..._fieldRows(spacing: 14),
             ],
@@ -741,19 +888,48 @@ class _HostFormDialogState extends State<HostFormDialog> {
         ),
       ),
       actions: [
-        NativeUi(
-          child: TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-        ),
-        if (!instantSelection)
+        if (widget.presentation == 'compact' && widget.fullWidthActions)
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: AppDesign.modalSecondary(context),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed:
+                      widget.fields.any(
+                        (f) =>
+                            f['required'] == true &&
+                            controllers.containsKey(f['key']) &&
+                            controllers[f['key']]!.text.trim().isEmpty,
+                      )
+                      ? null
+                      : submit,
+                  child: Text(widget.submitLabel),
+                ),
+              ),
+            ],
+          )
+        else ...[
           NativeUi(
-            child: FilledButton(
-              onPressed: submit,
-              child: Text(widget.submitLabel),
+            child: TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
             ),
           ),
+          if (!instantSelection)
+            NativeUi(
+              child: FilledButton(
+                onPressed: submit,
+                child: Text(widget.submitLabel),
+              ),
+            ),
+        ],
       ],
     );
     final cancel = NativeUi(

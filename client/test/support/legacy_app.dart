@@ -97,17 +97,10 @@ class XudianApp extends ConsumerWidget {
       darkTheme: _theme(Brightness.dark),
       themeMode: preferences.themeMode,
       builder: (context, child) {
-        final media = MediaQuery.of(context);
-        return MediaQuery(
-          data: media.copyWith(
-            disableAnimations:
-                media.disableAnimations || preferences.reduceMotion,
-          ),
-          child: AnnotatedRegion<SystemUiOverlayStyle>(
-            value: AppDesign.overlayStyle(Theme.of(context).brightness),
-            child: AnnotationControls(
-              child: GlobalOverlayHost(registry: registry, child: child!),
-            ),
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: AppDesign.overlayStyle(Theme.of(context).brightness),
+          child: AnnotationControls(
+            child: GlobalOverlayHost(registry: registry, child: child!),
           ),
         );
       },

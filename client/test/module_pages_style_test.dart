@@ -163,7 +163,27 @@ void main() {
       final result = await render('app.schedule', page: page);
       final nodes = _nodes(result['tree']).toList();
       const groupsPerPage = {'settings': 3, 'periods': 2, 'timetables': 1};
-      if (page != 'courses') {
+      if (page == 'changes') {
+        final card = nodes.singleWhere((n) => n['type'] == 'card');
+        expect(
+          _nodes(card).where((n) => n['type'] == 'emptyState').single['title'],
+          '暂无单次调课记录',
+        );
+        expect(
+          _nodes(object(result['tree'])['footer'])
+              .any((n) => n['text'] == '临时加课'),
+          isTrue,
+        );
+      } else if (page == 'imports' || page == 'today') {
+        expect(
+          nodes.where((n) => n['type'] == 'card').length,
+          greaterThanOrEqualTo(2),
+        );
+        expect(
+          nodes.any((n) => n['title'] == (page == 'imports' ? '备份文件' : '今日课程')),
+          isTrue,
+        );
+      } else if (page != 'courses') {
         _expectSettingsGroups(nodes, groupsPerPage[page] ?? 0);
       }
       expect(
@@ -227,8 +247,11 @@ void main() {
         .singleWhere((node) => node['type'] == 'timeGrid');
     expect(grid['blocks'], isNotEmpty);
     final today = _nodes((await render('app.schedule', page: 'today'))['tree']);
-    final agenda = today.firstWhere((node) => node['type'] == 'agendaItem');
-    expect(agenda['startTime'], '08:00');
+    final agenda = today.firstWhere(
+      (node) => object(node['event'] ?? {})['type'] == 'occurrence',
+    );
+    expect(agenda['type'], 'listTile');
+    expect(agenda['trailing'], startsWith('08:00\n'));
     await render('app.schedule', page: 'today', event: agenda['event']);
     expect(calls.last['method'], 'ui.panel');
     expect(calls.last['page'], 'app.schedule.occurrence');
@@ -265,7 +288,10 @@ void main() {
     final first = _nodes(page['tree'])
         .firstWhere((node) => node['type'] == 'sectionHeader');
     expect(first['title'], '搜索结果');
-    expect(int.parse((first['count'] as String).split(' ').first), greaterThan(30));
+    expect(
+      int.parse((first['count'] as String).split(' ').first),
+      greaterThan(30),
+    );
     expect(first['countPosition'], 'end');
     page = await render(
       'app.import.shiguang',
@@ -299,14 +325,24 @@ void main() {
     );
     final details = _nodes(page['tree']).toList();
     expect(details.any((node) => node['title'] == '脚本来源'), true);
-    expect(details.singleWhere((node) => node['type'] == 'segmented')['items'], hasLength(2));
+    expect(
+      details.singleWhere((node) => node['type'] == 'segmented')['items'],
+      hasLength(2),
+    );
     expect(object(object(page['tree'])['footer'])['text'], '打开教务浏览器');
     final source = await render(
       'app.import.shiguang',
       state: page['state'],
       event: details.singleWhere((node) => node['title'] == '原始源码')['event'],
     );
-    expect(_nodes(source['tree']).any((node) => node['type'] == 'richText' && '${node['text']}'.contains('github.com/')), isTrue);
+    expect(
+      _nodes(source['tree']).any(
+        (node) =>
+            node['type'] == 'richText' &&
+            '${node['text']}'.contains('github.com/'),
+      ),
+      isTrue,
+    );
     page = await render(
       'app.import.shiguang',
       state: page['state'],

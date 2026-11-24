@@ -71,64 +71,92 @@ class ConversationComposer extends StatelessWidget {
     required this.onSend,
     required this.onCancel,
     this.enabled = true,
+    this.outlined = false,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final String hint;
-  final bool busy, enabled;
+  final bool busy, enabled, outlined;
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
   final VoidCallback? onCancel;
 
   @override
-  Widget build(BuildContext context) => FloatingSurface(
-    padding: const EdgeInsets.all(6),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: NativeUi(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              enabled: enabled,
-              minLines: 1,
-              maxLines: 5,
-              keyboardType: TextInputType.multiline,
-              style: Theme.of(context).textTheme.bodyMedium,
-              decoration: InputDecoration(
-                hintText: hint,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
+  Widget build(BuildContext context) {
+    void submit() {
+      if (outlined) focusNode.unfocus();
+      onSend();
+    }
+
+    final send = ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        final action = busy
+            ? onCancel
+            : enabled && value.text.trim().isNotEmpty
+            ? submit
+            : null;
+        final icon = UiIcon(
+          busy
+              ? Icons.stop_rounded
+              : outlined
+              ? Icons.send_outlined
+              : Icons.arrow_upward_rounded,
+          size: 22,
+        );
+        final label = busy ? '取消当前操作' : '发送';
+        return NativeUi(
+          child: outlined
+              ? IconButton(tooltip: label, onPressed: action, icon: icon)
+              : IconButton.filled(
+                  tooltip: label,
+                  onPressed: action,
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                  icon: icon,
                 ),
-              ),
-              onChanged: onChanged,
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        ValueListenableBuilder<TextEditingValue>(
-          valueListenable: controller,
-          builder: (context, value, _) => NativeUi(
-            child: IconButton.filled(
-              tooltip: busy ? '取消当前操作' : '发送',
-              onPressed: busy
-                  ? onCancel
-                  : enabled && value.text.trim().isNotEmpty
-                  ? onSend
-                  : null,
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              icon: UiIcon(
-                busy ? Icons.stop_rounded : Icons.arrow_upward_rounded,
-                size: 22,
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
+        );
+      },
+    );
+    final field = NativeUi(
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        enabled: enabled,
+        minLines: 1,
+        maxLines: 5,
+        keyboardType: TextInputType.multiline,
+        style: Theme.of(context).textTheme.bodyMedium,
+        decoration:
+            (outlined
+                    ? AppDesign.outlinedField(context)
+                    : const InputDecoration())
+                .copyWith(
+                  hintText: hint,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  suffixIcon: outlined ? send : null,
+                ),
+        onChanged: onChanged,
+      ),
+    );
+    if (outlined) return field;
+    return FloatingSurface(
+      padding: const EdgeInsets.all(6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(child: field),
+          const SizedBox(width: 6),
+          send,
+        ],
+      ),
+    );
+  }
 }

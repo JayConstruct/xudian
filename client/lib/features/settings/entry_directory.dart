@@ -1,3 +1,4 @@
+import '../../core/ui/tab_content_transition.dart';
 import '../../core/module_host/host_providers.dart';
 import '../../core/module_host/module_installation_snapshot.dart';
 import '../../data/providers.dart';
@@ -383,6 +384,7 @@ class _EntryDirectoryPageState extends ConsumerState<EntryDirectoryPage> {
                 .toList();
             final count = navigationVisibleCount(
               total: main.length,
+              fixedMore: profile.morePageEnabled,
               limit: profile.mainLimit,
               width:
                   media.size.width -
@@ -530,7 +532,7 @@ class _EntryDirectoryPageState extends ConsumerState<EntryDirectoryPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SettingsSegments<bool>(
+                  SlidingSegments<bool>(
                     segments: const [
                       ButtonSegment(value: false, label: Text('打开入口')),
                       ButtonSegment(value: true, label: Text('查找位置')),
@@ -545,118 +547,146 @@ class _EntryDirectoryPageState extends ConsumerState<EntryDirectoryPage> {
                     onChanged: () => setState(() {}),
                   ),
                   const SizedBox(height: 18),
-                  SettingsHeading(locate ? '当前设备 · 已生效布局' : '所有入口'),
-                  const SizedBox(height: 10),
                   Expanded(
-                    child: ListView(
-                      controller: scroll,
-                      children: [
-                        if (matches.isEmpty &&
-                            !settingsMatch &&
-                            inactive.isEmpty)
-                          const SettingsNote('没有匹配的入口'),
-                        SettingsGroup(
-                          children: [
-                            for (final group in matches)
-                              Builder(
-                                builder: (c) {
-                                  final e = group.first;
-                                  final paths = locate
-                                      ? origins(group)
-                                      : const <_Origin>[];
-                                  return ListTile(
-                                    leading: SettingsGlyph(
-                                      e.icon,
-                                      surface: false,
-                                    ),
-                                    title: Text(title(e)),
-                                    trailing: locate
-                                        ? Text(
-                                            paths.length > 1
-                                                ? '${paths.length} 个位置'
-                                                : paths.isEmpty
-                                                ? '已隐藏'
-                                                : paths.first.pageId != null &&
-                                                      paths.first.placement ==
-                                                          UiPlacement.main
-                                                ? '助手按钮'
-                                                : position(e),
-                                            style: Theme.of(c)
-                                                .textTheme
-                                                .bodySmall,
-                                          )
-                                        : const Icon(
-                                            Icons.north_east,
-                                            size: 18,
-                                          ),
-                                    onTap: () => locate
-                                        ? details(group, profile, paths)
-                                        : open(e, profile),
-                                  );
-                                },
-                              ),
-                            for (final item in inactive)
-                              ListTile(
-                                enabled: false,
-                                leading: const SettingsGlyph(
-                                  Icons.extension_off_outlined,
-                                ),
-                                title: Text(item.title),
-                                subtitle: Text(
-                                  '${item.module}未启用，可在模块管理中查看状态。',
-                                ),
-                              ),
-                            if (settingsMatch)
-                              ListTile(
-                                leading: const SettingsGlyph(
-                                  Icons.settings_outlined,
-                                  surface: false,
-                                ),
-                                title: const Text('设置'),
-                                trailing: locate
-                                    ? const Text('固定入口')
-                                    : const Icon(Icons.north_east, size: 18),
-                                onTap: () => locate
-                                    ? showModalBottomSheet<void>(
-                                        context: context,
-                                        showDragHandle: true,
-                                        builder: (c) => SafeArea(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              for (final place in [
-                                                if (wide)
-                                                  (UiPlacement.main, '侧栏导航'),
-                                                (UiPlacement.header, '右上角菜单'),
-                                                (UiPlacement.more, more),
-                                              ])
-                                                ListTile(
-                                                  title: Text(
-                                                    '${place.$2} › 设置',
+                    child: TabContentTransition(
+                      index: locate ? 1 : 0,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SettingsHeading(locate ? '当前设备 · 已生效布局' : '所有入口'),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: ListView(
+                              controller: scroll,
+                              children: [
+                                if (matches.isEmpty &&
+                                    !settingsMatch &&
+                                    inactive.isEmpty)
+                                  const SettingsNote('没有匹配的入口'),
+                                SettingsGroup(
+                                  children: [
+                                    for (final group in matches)
+                                      Builder(
+                                        builder: (c) {
+                                          final e = group.first;
+                                          final paths = locate
+                                              ? origins(group)
+                                              : const <_Origin>[];
+                                          return ListTile(
+                                            leading: SettingsGlyph(
+                                              e.icon,
+                                              surface: false,
+                                            ),
+                                            title: Text(title(e)),
+                                            trailing: locate
+                                                ? Text(
+                                                    paths.length > 1
+                                                        ? '${paths.length} 个位置'
+                                                        : paths.isEmpty
+                                                        ? '已隐藏'
+                                                        : paths.first.pageId !=
+                                                                  null &&
+                                                              paths
+                                                                      .first
+                                                                      .placement ==
+                                                                  UiPlacement
+                                                                      .main
+                                                        ? '助手按钮'
+                                                        : position(e),
+                                                    style: Theme.of(c)
+                                                        .textTheme
+                                                        .bodySmall,
+                                                  )
+                                                : const Icon(
+                                                    Icons.north_east,
+                                                    size: 18,
                                                   ),
-                                                  onTap: () {
-                                                    Navigator.pop(c);
-                                                    if (widget
-                                                            .locateShellEntry !=
-                                                        null) {
-                                                      widget.locateShellEntry!(
-                                                        'app.shell.settings',
-                                                        place.$1,
-                                                      );
-                                                    } else {
-                                                      showSettings();
-                                                    }
-                                                  },
-                                                ),
-                                            ],
-                                          ),
+                                            onTap: () => locate
+                                                ? details(group, profile, paths)
+                                                : open(e, profile),
+                                          );
+                                        },
+                                      ),
+                                    for (final item in inactive)
+                                      ListTile(
+                                        enabled: false,
+                                        leading: const SettingsGlyph(
+                                          Icons.extension_off_outlined,
                                         ),
-                                      )
-                                    : showSettings(),
-                              ),
-                          ],
-                        ),
-                      ],
+                                        title: Text(item.title),
+                                        subtitle: Text(
+                                          '${item.module}未启用，可在模块管理中查看状态。',
+                                        ),
+                                      ),
+                                    if (settingsMatch)
+                                      ListTile(
+                                        leading: const SettingsGlyph(
+                                          Icons.settings_outlined,
+                                          surface: false,
+                                        ),
+                                        title: const Text('设置'),
+                                        trailing: locate
+                                            ? const Text('固定入口')
+                                            : const Icon(
+                                                Icons.north_east,
+                                                size: 18,
+                                              ),
+                                        onTap: () => locate
+                                            ? showModalBottomSheet<void>(
+                                                context: context,
+                                                showDragHandle: true,
+                                                builder: (c) => SafeArea(
+                                                  child: Column(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      for (final place in [
+                                                        if (wide)
+                                                          (
+                                                            UiPlacement.main,
+                                                            '侧栏导航',
+                                                          ),
+                                                        (
+                                                          UiPlacement.header,
+                                                          '右上角菜单',
+                                                        ),
+                                                        (
+                                                          UiPlacement.more,
+                                                          more,
+                                                        ),
+                                                      ])
+                                                        ListTile(
+                                                          title: Text(
+                                                            '${place.$2} › 设置',
+                                                          ),
+                                                          onTap: () {
+                                                            Navigator.pop(c);
+                                                            if (widget
+                                                                    .locateShellEntry !=
+                                                                null) {
+                                                              widget
+                                                                  .locateShellEntry!(
+                                                                'app.shell.settings',
+                                                                place.$1,
+                                                              );
+                                                            } else {
+                                                              showSettings();
+                                                            }
+                                                          },
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              )
+                                            : showSettings(),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

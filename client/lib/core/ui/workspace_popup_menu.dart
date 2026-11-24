@@ -25,8 +25,10 @@ class WorkspacePopupMenu extends StatefulWidget {
     this.headerLease,
     this.inlineActionLabels = const {},
     this.longPressChild,
+    this.anchorStart = false,
     this.enabled = true,
     this.openSignal,
+    this.rounded = false,
   });
 
   final List<PopupMenuEntry<int>> items;
@@ -40,8 +42,10 @@ class WorkspacePopupMenu extends StatefulWidget {
 
   /// A row can open the same popup from its bounds on long press.
   final Widget? longPressChild;
+  final bool anchorStart;
   final bool enabled;
   final Listenable? openSignal;
+  final bool rounded;
 
   @override
   State<WorkspacePopupMenu> createState() => _WorkspacePopupMenuState();
@@ -76,6 +80,7 @@ class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
         button.localToGlobal(Offset.zero, ancestor: overlay) & button.size;
     final route = _WorkspaceMenuRoute(
       items: widget.items,
+      rowMenu: widget.anchorStart,
       headerController: widget.headerController,
       headerOwner: widget.headerOwner,
       headerLease: widget.headerLease,
@@ -122,18 +127,45 @@ class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
   Widget build(BuildContext context) {
     final child = widget.longPressChild;
     if (child != null) {
+      final trigger = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPress: widget.enabled ? _showMenu : null,
+        child: !widget.anchorStart
+            ? child
+            : Stack(
+                children: [
+                  child,
+                  if (_route != null)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary
+                                .withValues(alpha: .06),
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.primary
+                                  .withValues(alpha: .65),
+                            ),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+      );
       return CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.contextMenu): _showMenu,
           const SingleActivator(LogicalKeyboardKey.f10, shift: true): _showMenu,
         },
-        child: MergeSemantics(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onLongPress: widget.enabled ? _showMenu : null,
-            child: child,
-          ),
-        ),
+        child: widget.anchorStart
+            ? Semantics(
+                container: true,
+                explicitChildNodes: true,
+                child: trigger,
+              )
+            : MergeSemantics(child: trigger),
       );
     }
     return Semantics(
@@ -145,7 +177,9 @@ class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
             minimumSize: const Size.square(kMinInteractiveDimension),
             fixedSize: const Size.square(kMinInteractiveDimension),
             padding: EdgeInsets.zero,
-            shape: const CircleBorder(),
+            shape: widget.rounded
+                ? AppDesign.smoothShape(radius: 15)
+                : const CircleBorder(),
             foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
             backgroundColor: Theme.of(context).colorScheme.surface
                 .withValues(alpha: MediaQuery.highContrastOf(context) ? 1 : .8),
@@ -169,6 +203,7 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
   _WorkspaceMenuRoute({
     required this.items,
     required this.themes,
+    required this.rowMenu,
     required this.menuLabel,
     required this.dismissLabel,
     required this.reduceMotion,
@@ -181,6 +216,7 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
 
   final List<PopupMenuEntry<int>> items;
   final CapturedThemes themes;
+  final bool rowMenu;
   final String menuLabel;
   final String dismissLabel;
   final bool reduceMotion;
@@ -202,7 +238,8 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
   bool get barrierDismissible => true;
 
   @override
-  Color get barrierColor => const Color(0x1F000000);
+  Color get barrierColor =>
+      rowMenu ? Colors.transparent : const Color(0x1F000000);
 
   @override
   String get barrierLabel => dismissLabel;
@@ -251,6 +288,7 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
         anchor(),
         media.padding + media.viewInsets,
         direction,
+        rowMenu,
       ),
       child: FadeTransition(
         opacity: curved,
@@ -295,7 +333,8 @@ class _WorkspaceMenuRoute extends PopupRoute<int> {
 }
 
 class _WorkspaceMenuLayout extends SingleChildLayoutDelegate {
-  _WorkspaceMenuLayout(this.anchor, this.padding, this.direction);
+  _WorkspaceMenuLayout(this.anchor, this.padding, this.direction, this.rowMenu);
+  final bool rowMenu;
 
   final Rect anchor;
   final EdgeInsets padding;
@@ -305,7 +344,7 @@ class _WorkspaceMenuLayout extends SingleChildLayoutDelegate {
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
     final width = math.max(0.0, constraints.maxWidth - padding.horizontal - 16);
     return BoxConstraints(
-      minWidth: math.min(196, width),
+      minWidth: math.min(rowMenu ? 205 : 196, width),
       maxWidth: math.min(280, width),
       maxHeight: math.max(0, constraints.maxHeight - padding.vertical - 16),
     );
@@ -313,7 +352,11 @@ class _WorkspaceMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final x = direction == TextDirection.ltr
+    final x = rowMenu
+        ? (direction == TextDirection.ltr
+              ? anchor.left
+              : anchor.right - childSize.width)
+        : direction == TextDirection.ltr
         ? anchor.right - childSize.width
         : anchor.left;
     final below = anchor.bottom + 4;
@@ -333,6 +376,7 @@ class _WorkspaceMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_WorkspaceMenuLayout oldDelegate) =>
+      rowMenu != oldDelegate.rowMenu ||
       anchor != oldDelegate.anchor ||
       padding != oldDelegate.padding ||
       direction != oldDelegate.direction;

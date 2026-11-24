@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/ui/animated_date_label.dart';
 import '../core/ui/temporal_input.dart';
 import '../core/ui/ui_icon.dart';
+import '../core/ui/ui_design.dart';
 import '../core/ui/native_ui.dart';
 import '../core/ui/workspace_typography.dart';
 
@@ -50,83 +51,95 @@ class _WorkspaceDateTitleState extends State<WorkspaceDateTitle> {
     final titleStyle =
         widget.style ??
         WorkspaceTypography.titleStyle(Theme.of(context).textTheme);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final textWidth = (constraints.maxWidth - (enabled ? 96 : 0) - 12)
-            .clamp(1.0, double.infinity);
-        final painter = TextPainter(
-          text: TextSpan(text: widget.title, style: titleStyle),
-          maxLines: WorkspaceTypography.titleMaxLines,
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout(maxWidth: textWidth);
-        final height = (painter.height + 16).clamp(48.0, double.infinity);
-        painter.dispose();
-        return SizedBox(
-          height: height,
-          child: NativeUi(
-            child: Row(
-              children: [
-                if (enabled)
-                  IconButton(
-                    key: previousKey,
-                    tooltip: '前一天',
-                    onPressed: widget.date == '0001-01-01'
-                        ? null
-                        : () => event('date.previous', previousKey),
-                    icon: const UiIcon(Icons.chevron_left_rounded),
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
+    Widget step(
+      String tooltip,
+      String eventName,
+      GlobalKey key,
+      IconData icon,
+      bool available,
+    ) => IconButton(
+      key: key,
+      tooltip: tooltip,
+      onPressed: available ? () => event(eventName, key) : null,
+      icon: UiIcon(icon, size: 20),
+      constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+    );
+    final scheme = Theme.of(context).colorScheme;
+    return NativeUi(
+      child: Row(
+        children: [
+          Expanded(
+            child: KeyedSubtree(
+              key: titleKey,
+              child: TextButton(
+                key: const ValueKey('workspace-date-picker'),
+                onPressed: enabled
+                    ? () => event('date.choose', titleKey)
+                    : null,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsetsDirectional.only(
+                    top: 8,
+                    bottom: 8,
+                    end: 4,
                   ),
-                Expanded(
-                  child: KeyedSubtree(
-                    key: titleKey,
-                    child: TextButton(
-                      key: const ValueKey('workspace-date-picker'),
-                      onPressed: enabled
-                          ? () => event('date.choose', titleKey)
-                          : null,
-                      style: TextButton.styleFrom(
-                        padding: WorkspaceTypography.titlePadding,
-                        minimumSize: const Size(48, 48),
-                        alignment: Alignment.centerLeft,
-                      ),
-                      child: Tooltip(
-                        message: '选择日期',
-                        child: Semantics(
-                          label: widget.title,
-                          excludeSemantics: true,
-                          child: AnimatedDateLabel(
-                            title: widget.title,
-                            date: widget.date,
-                            maxLines: WorkspaceTypography.titleMaxLines,
-                            style: titleStyle,
-                          ),
-                        ),
-                      ),
+                  minimumSize: const Size(48, 48),
+                  alignment: Alignment.centerLeft,
+                  foregroundColor: scheme.onSurface,
+                ),
+                child: Tooltip(
+                  message: '选择日期',
+                  child: Semantics(
+                    label: widget.title,
+                    excludeSemantics: true,
+                    child: AnimatedDateLabel(
+                      title: widget.title,
+                      date: widget.date,
+                      maxLines: WorkspaceTypography.titleMaxLines,
+                      style: titleStyle,
+                      compactWeekday: enabled,
                     ),
                   ),
                 ),
-                if (enabled)
-                  IconButton(
-                    key: nextKey,
-                    tooltip: '后一天',
-                    onPressed: widget.date == '9999-12-31'
-                        ? null
-                        : () => event('date.next', nextKey),
-                    icon: const UiIcon(Icons.chevron_right_rounded),
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
-        );
-      },
+          if (enabled)
+            Material(
+              color: scheme.surface,
+              shape: AppDesign.smoothShape(
+                radius: 15,
+                side: BorderSide(color: scheme.outlineVariant, width: .8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  step(
+                    '前一天',
+                    'date.previous',
+                    previousKey,
+                    Icons.chevron_left_rounded,
+                    widget.date != '0001-01-01',
+                  ),
+                  SizedBox(
+                    height: 18,
+                    child: VerticalDivider(
+                      width: 1,
+                      thickness: .8,
+                      color: scheme.outlineVariant,
+                    ),
+                  ),
+                  step(
+                    '后一天',
+                    'date.next',
+                    nextKey,
+                    Icons.chevron_right_rounded,
+                    widget.date != '9999-12-31',
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -1,67 +1,17 @@
 import 'ui_icon.dart';
+import '../../features/settings/settings_widgets.dart'
+    show SettingsSheet, showSettingsModal;
 import 'script_form_controls.dart';
 
+import 'package:clock/clock.dart' show clock;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'ui_design.dart';
 
-enum TemporalInputKind { date, time, dateTime, dateRange }
+part 'date_selection_sheet.dart';
 
-Widget _datePickerSurface(BuildContext context, Widget? child) {
-  final theme = Theme.of(context);
-  final scheme = theme.colorScheme;
-  return DatePickerTheme(
-    data: DatePickerTheme.of(context).copyWith(
-      backgroundColor: scheme.surface,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      shape: AppDesign.smoothShape(radius: AppDesign.floatingRadius),
-      headerBackgroundColor: scheme.surfaceContainerLow,
-      headerForegroundColor: scheme.onSurface,
-      headerHelpStyle: theme.textTheme.labelLarge?.copyWith(
-        color: scheme.onSurfaceVariant,
-      ),
-      headerHeadlineStyle: theme.textTheme.headlineSmall?.copyWith(
-        fontWeight: FontWeight.w600,
-      ),
-      weekdayStyle: theme.textTheme.labelMedium?.copyWith(
-        color: scheme.onSurfaceVariant,
-      ),
-      dayShape: WidgetStatePropertyAll(
-        AppDesign.smoothShape(radius: AppDesign.controlRadius),
-      ),
-      dayForegroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.disabled)) {
-          return scheme.onSurface.withValues(alpha: .38);
-        }
-        return states.contains(WidgetState.selected)
-            ? scheme.onPrimaryContainer
-            : scheme.onSurface;
-      }),
-      dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected)
-            ? scheme.primaryContainer
-            : Colors.transparent;
-      }),
-      todayForegroundColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.disabled)) {
-          return scheme.onSurface.withValues(alpha: .38);
-        }
-        return states.contains(WidgetState.selected)
-            ? scheme.onPrimaryContainer
-            : scheme.primary;
-      }),
-      todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected)
-            ? scheme.primaryContainer
-            : Colors.transparent;
-      }),
-      todayBorder: BorderSide(color: scheme.primary.withValues(alpha: .6)),
-    ),
-    child: child!,
-  );
-}
+enum TemporalInputKind { date, time, dateTime, dateRange }
 
 String formatInputDate(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-'
@@ -137,9 +87,10 @@ Future<Object?> pickTemporalValue(
   String? maxDate,
   bool Function()? isCurrent,
   String? helpText,
+  String? rangeHint,
 }) async {
   bool current() => context.mounted && (isCurrent?.call() ?? true);
-  final now = DateTime.now();
+  final now = clock.now();
   final first = parseInputDate(minDate) ?? DateTime(1900);
   final last = parseInputDate(maxDate) ?? DateTime(2100, 12, 31);
   if (last.isBefore(first) || !current()) return null;
@@ -155,23 +106,24 @@ Future<Object?> pickTemporalValue(
 
   if (kind == TemporalInputKind.dateRange) {
     final range = value is Map ? value : const {};
-    final start = initial(range['start']), end = initial(range['end']);
-    final selectedStart = await showDatePicker(
+    final start = initial(range['start']);
+    final selectedStart = await showAppDateSheet(
       context: context,
       helpText: '选择开始日期',
       initialDate: start,
       firstDate: first,
       lastDate: last,
-      builder: _datePickerSurface,
+      confirmLabel: '下一步',
     );
     if (!context.mounted || !current() || selectedStart == null) return null;
-    final selectedEnd = await showDatePicker(
+    final end = range['end'] == null ? selectedStart : initial(range['end']);
+    final selectedEnd = await showAppDateSheet(
       context: context,
       helpText: '选择结束日期',
       initialDate: end.isBefore(selectedStart) ? selectedStart : end,
       firstDate: selectedStart,
       lastDate: last,
-      builder: _datePickerSurface,
+      rangeHint: '开始日期为 ${selectedStart.month} 月 ${selectedStart.day} 日',
     );
     return !current() || selectedEnd == null
         ? null
@@ -182,13 +134,13 @@ Future<Object?> pickTemporalValue(
   }
   DateTime? date;
   if (kind != TemporalInputKind.time) {
-    date = await showDatePicker(
+    date = await showAppDateSheet(
       context: context,
       helpText: helpText ?? '选择日期',
       initialDate: initial(value),
       firstDate: first,
       lastDate: last,
-      builder: _datePickerSurface,
+      rangeHint: rangeHint,
     );
     if (!current() || date == null) return null;
     if (kind == TemporalInputKind.date) return formatInputDate(date);
@@ -196,10 +148,9 @@ Future<Object?> pickTemporalValue(
   if (!context.mounted || !current()) return null;
   final match = RegExp(r'^(\d{2}):(\d{2})')
       .firstMatch('$value'.split('T').last);
-  final selected = await showModalBottomSheet<TimeOfDay>(
+  final selected = await showSettingsModal<TimeOfDay>(
+    compactFrame: true,
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
     builder: (_) => _TimeWheelPicker(
       initial: TimeOfDay(
         hour: (int.tryParse(match?[1] ?? '') ?? now.hour).clamp(0, 23),
@@ -234,6 +185,8 @@ class TemporalInput extends StatelessWidget {
     this.isCurrent,
     this.legacyDateTime = false,
     this.externalLabel = false,
+    this.buttonLabel,
+    this.buttonCaption,
   });
   final TemporalInputKind kind;
   final String label;
@@ -242,7 +195,12 @@ class TemporalInput extends StatelessWidget {
   final FocusNode? focusNode;
   final ValueChanged<Object?> onChanged;
   final bool enabled, clearable, editable, legacyDateTime, externalLabel;
-  final String? errorText, helperText, minDate, maxDate;
+  final String? errorText,
+      helperText,
+      minDate,
+      maxDate,
+      buttonLabel,
+      buttonCaption;
   final bool Function()? isCurrent;
 
   @override
@@ -282,6 +240,56 @@ class TemporalInput extends StatelessWidget {
       }
     }
 
+    if (buttonLabel != null && kind == TemporalInputKind.date) {
+      if (buttonCaption != null) {
+        final theme = Theme.of(context);
+        return Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton(
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              alignment: AlignmentDirectional.centerStart,
+            ),
+            onPressed: enabled ? choose : null,
+            child: Wrap(
+              spacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  buttonLabel!,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                UiIcon(
+                  Icons.expand_more_rounded,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                Text(
+                  buttonCaption!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      return Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          onPressed: enabled ? choose : null,
+          iconAlignment: IconAlignment.end,
+          icon: const UiIcon(Icons.keyboard_arrow_down_rounded, size: 16),
+          label: Text(
+            buttonLabel!,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+      );
+    }
     final hasValue = currentValue != null && currentValue != '';
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
@@ -415,17 +423,7 @@ class _TimeWheelPickerState extends State<_TimeWheelPicker> {
           key: ValueKey('time-wheel-$label'),
           scrollController: controller,
           itemExtent: itemExtent,
-          selectionOverlay: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: DecoratedBox(
-              decoration: ShapeDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(
-                  alpha: .25,
-                ),
-                shape: AppDesign.smoothShape(radius: AppDesign.controlRadius),
-              ),
-            ),
-          ),
+          selectionOverlay: null,
           onSelectedItemChanged: changed,
           children: [
             for (var i = 0; i < count; i++)
@@ -443,63 +441,55 @@ class _TimeWheelPickerState extends State<_TimeWheelPicker> {
         ),
       ),
     );
-    return SafeArea(
-      top: false,
-      child: Center(
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 480,
-            maxHeight: MediaQuery.sizeOf(context).height * .85,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+    return SettingsSheet(
+      title: const Text('选择时间'),
+      showClose: true,
+      expandedActions: true,
+      actions: [
+        OutlinedButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, TimeOfDay(hour: hour, minute: minute)),
+          child: const Text('确定'),
+        ),
+      ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Row(
               children: [
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('取消'),
-                    ),
-                    Expanded(
-                      child: Text(
-                        '选择时间',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(
-                        context,
-                        TimeOfDay(hour: hour, minute: minute),
-                      ),
-                      child: const Text('确定'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Row(
-                  children: [
-                    Expanded(child: Text('小时', textAlign: TextAlign.center)),
-                    Expanded(child: Text('分钟', textAlign: TextAlign.center)),
-                  ],
-                ),
-                Flexible(
-                  child: SizedBox(
-                    height: (itemExtent * 5).clamp(160.0, 320.0),
-                    child: Row(
-                      children: [
-                        wheel('小时', 24, hours, (value) => hour = value),
-                        wheel('分钟', 60, minutes, (value) => minute = value),
-                      ],
-                    ),
-                  ),
-                ),
+                Expanded(child: Text('小时', textAlign: TextAlign.center)),
+                Expanded(child: Text('分钟', textAlign: TextAlign.center)),
               ],
             ),
-          ),
+            SizedBox(
+              height: itemExtent * 5,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    height: itemExtent,
+                    decoration: ShapeDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      shape: AppDesign.smoothShape(
+                        radius: AppDesign.controlRadius,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      wheel('小时', 24, hours, (value) => hour = value),
+                      wheel('分钟', 60, minutes, (value) => minute = value),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -524,26 +514,23 @@ class _DateRangeInputState extends State<_DateRangeInput> {
   Future<void> choose(bool beginning) async {
     final previous = input.value;
     final start = parseInputDate(endpoint('start'));
-    final end = parseInputDate(endpoint('end'));
     final minimum = parseInputDate(input.minDate);
-    final maximum = parseInputDate(input.maxDate);
     final lower =
         !beginning &&
             start != null &&
             (minimum == null || start.isAfter(minimum))
         ? start
         : minimum;
-    final upper =
-        beginning && end != null && (maximum == null || end.isBefore(maximum))
-        ? end
-        : maximum;
     final selected = await pickTemporalValue(
       context,
-      kind: TemporalInputKind.date,
+      kind: beginning ? TemporalInputKind.dateRange : TemporalInputKind.date,
+      rangeHint: !beginning && start != null
+          ? '开始日期为 ${start.month} 月 ${start.day} 日'
+          : null,
       helpText: beginning ? '选择开始日期' : '选择结束日期',
-      value: endpoint(beginning ? 'start' : 'end'),
+      value: beginning ? previous : endpoint('end'),
       minDate: lower == null ? null : formatInputDate(lower),
-      maxDate: upper == null ? null : formatInputDate(upper),
+      maxDate: input.maxDate,
       isCurrent: () =>
           identical(previous, input.value) && (input.isCurrent?.call() ?? true),
     );
@@ -553,12 +540,11 @@ class _DateRangeInputState extends State<_DateRangeInput> {
         !(input.isCurrent?.call() ?? true)) {
       return;
     }
-    // An empty range starts as one day. Both selectors always emit the same
-    // complete {start, end} contract and remain controlled by the host value.
-    input.onChanged({
-      'start': beginning ? selected : endpoint('start') ?? selected,
-      'end': beginning ? endpoint('end') ?? selected : selected,
-    });
+    input.onChanged(
+      beginning
+          ? selected
+          : {'start': endpoint('start') ?? selected, 'end': selected},
+    );
   }
 
   @override
@@ -574,34 +560,40 @@ class _DateRangeInputState extends State<_DateRangeInput> {
           maxDate: input.maxDate,
         );
     Widget dateField(String label, String? value, bool beginning) =>
-        InputDecorator(
-          decoration: InputDecoration(
-            labelText: label,
-            enabled: input.enabled,
-            suffixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (input.clearable && value != null)
-                  IconButton(
-                    tooltip: '清除$label',
-                    onPressed: input.enabled
-                        ? () => input.onChanged(null)
-                        : null,
-                    icon: const UiIcon(Icons.close_rounded),
-                  ),
-                IconButton(
-                  tooltip: '选择$label',
-                  onPressed: input.enabled ? () => choose(beginning) : null,
-                  icon: const UiIcon(Icons.calendar_today_outlined),
-                ),
-              ],
-            ),
-          ),
-          isEmpty: value == null,
+        ScriptFieldLabel(
+          label: label,
           child: InkWell(
             onTap: input.enabled ? () => choose(beginning) : null,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+            child: InputDecorator(
+              decoration: AppDesign.outlinedField(context).copyWith(
+                enabled: input.enabled,
+                contentPadding: const EdgeInsets.fromLTRB(10, 6, 0, 6),
+                suffixIconConstraints: const BoxConstraints(minWidth: 36),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (input.clearable && value != null)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: '清除$label',
+                        onPressed: input.enabled
+                            ? () => input.onChanged(null)
+                            : null,
+                        icon: const UiIcon(Icons.close_rounded, size: 16),
+                      ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: '选择$label',
+                      onPressed: input.enabled ? () => choose(beginning) : null,
+                      icon: const UiIcon(
+                        Icons.calendar_today_outlined,
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              isEmpty: value == null,
               child: Text(value ?? '点击选择'),
             ),
           ),
@@ -612,9 +604,24 @@ class _DateRangeInputState extends State<_DateRangeInput> {
       children: [
         Text(input.label, style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
-        dateField('开始日期', start, true),
-        const SizedBox(height: 12),
-        dateField('结束日期', end, false),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final fields = [
+              dateField('开始日期', start, true),
+              dateField('结束日期', end, false),
+            ];
+            final minimum =
+                (input.clearable ? 380 : 310) *
+                MediaQuery.textScalerOf(context).scale(1);
+            if (constraints.maxWidth < minimum) {
+              return Column(spacing: 12, children: fields);
+            }
+            return Row(
+              spacing: 10,
+              children: [for (final field in fields) Expanded(child: field)],
+            );
+          },
+        ),
         if (error != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),

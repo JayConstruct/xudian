@@ -7,6 +7,7 @@ class PlanConfirmation {
     required this.confirmLabel,
     this.acknowledgement,
     this.subject,
+    this.quote = false,
     this.section,
     this.notice,
     this.icon,
@@ -16,7 +17,7 @@ class PlanConfirmation {
 
   final String title, message, confirmLabel;
   final String? acknowledgement, subject, section, icon, notice;
-  final bool summaryOnly;
+  final bool summaryOnly, quote;
   final List<({String title, String subtitle})> items;
   static const limits = {
     'title': 120,
@@ -34,6 +35,7 @@ class PlanConfirmation {
         value.keys.any(
           (key) =>
               key != 'summaryOnly' &&
+              key != 'presentation' &&
               key != 'items' &&
               !limits.containsKey(key),
         )) {
@@ -74,7 +76,12 @@ class PlanConfirmation {
         }
       }
     }
+    if (value.containsKey('presentation') &&
+        (value['presentation'] != 'quote' || value['subject'] == null)) {
+      throw const FormatException('Invalid plan confirmation presentation');
+    }
     return PlanConfirmation._(
+      quote: value['presentation'] == 'quote',
       items: List.unmodifiable(items),
       subject: value.containsKey('subject') ? read('subject') : null,
       notice: value.containsKey('notice') ? read('notice') : null,
@@ -93,6 +100,7 @@ class PlanConfirmation {
   Map<String, Object?> toJson() => Map.unmodifiable({
     if (summaryOnly) 'summaryOnly': true,
     if (subject != null) 'subject': subject,
+    if (quote) 'presentation': 'quote',
     if (section != null) 'section': section,
     if (notice != null) 'notice': notice,
     if (icon != null) 'icon': icon,

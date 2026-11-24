@@ -3,10 +3,15 @@
 import argparse
 from datetime import datetime
 import hashlib
+from html import escape
 import json
+import os
 from pathlib import Path
 import re
+from string import Template
 import sys
+from tempfile import NamedTemporaryFile
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -262,9 +267,11 @@ def read_page_catalog(file):
             continue
         cells = [cell.strip() for cell in line.strip('|').split('|')]
         location = f'{file.name}:{number}'
-        if len(cells) != 6 or not all(cells):
-            raise ValueError(f'{location} 每行须填写六列，别名、设计稿和待完善项为空时用 —')
-        category, page_id, name, aliases, links, pending = cells
+        if len(cells) == 6:  # Page tables created before module ownership was recorded.
+            cells.insert(1, '未登记')
+        if len(cells) != 7 or not all(cells):
+            raise ValueError(f'{location} 每行须填写七列，别名、设计稿和待完善项为空时用 —')
+        category, owner, page_id, name, aliases, links, pending = cells
         if category not in PAGE_CATEGORIES:
             raise ValueError(f'{location} 未知功能分类：{category}。可用分类：{"、".join(PAGE_CATEGORIES)}')
         if not re.fullmatch(r'[a-z][a-z0-9]*(?:-[a-z0-9]+)*', page_id):
@@ -278,10 +285,10 @@ def read_page_catalog(file):
         labels = set()
         if links != '—':
             for link in links.split('<br>'):
-                match = re.fullmatch(r'\[([^\[\]]+)\]\(([^\s()]+)\)', link.strip())
+                match = re.fullmatch(r'\[([^\[\]]+)\]\(([^\s()"]+)(?: "([^"]+)")?\)', link.strip())
                 if not match:
                     raise ValueError(f'{location} 设计稿须使用 [状态](相对图片路径)')
-                label, target = match.groups()
+                label, target, image_owner = match.groups()
                 path = (file.parent / target).resolve()
                 if (Path(target).is_absolute() or path.suffix.lower() not in IMAGES
                         or not any(path.is_relative_to(base) for base in image_roots)):
@@ -289,15 +296,187 @@ def read_page_catalog(file):
                 if label in labels:
                     raise ValueError(f'{location} 同一页面有重复的状态名称：{label}')
                 labels.add(label)
-                images.append({'state': label, 'path': path.relative_to(root).as_posix(),
+                images.append({'state': label, 'module': image_owner or owner, 'path': path.relative_to(root).as_posix(),
                                'available': path.is_file()})
         if not images and pending == '—':
             raise ValueError(f'{location} 未关联图片的页面须记录待完善项')
-        pages.append({'id': page_id, 'name': name, 'category': category, 'aliases': aliases, 'images': images,
+        pages.append({'id': page_id, 'name': name, 'category': category, 'module': owner, 'aliases': aliases, 'images': images,
                       'pending': None if pending == '—' else pending})
     if not pages:
         raise ValueError('页面映射表为空')
     return pages
+
+
+def gallery_name(value):
+    # Full-width punctuation also works when the gallery is browsed from Windows.
+    name = value.translate(str.maketrans('/\\:*?"<>|', '／＼：＊？＂＜＞｜')).strip().rstrip('. ')
+    if not name or any(ord(char) < 32 for char in name):
+        raise ValueError(f'无效的看图目录名称：{value!r}')
+    return name
+
+
+def sync_gallery_links(directory, links):
+    """Only the relative image links in category/module/page directories are generated."""
+    plain_path(directory).mkdir(parents=True, exist_ok=True)
+    image_roots = (ROOT / 'design', ROOT / 'docs/design', ROOT / 'dist/design')
+    existing = {}
+    folders = []
+    for category in PAGE_CATEGORIES:
+        base = plain_path(directory / category)
+        for current, _, files in os.walk(base):
+            folder = Path(current)
+            if len(folder.relative_to(directory).parts) != 3:
+                continue
+            folders.extend((folder, folder.parent, base))
+            for name in files:
+                link = folder / name
+                if link.suffix.lower() not in IMAGES or not link.is_symlink():
+                    continue
+                target = link.readlink()
+                if not target.is_absolute() and any(link.resolve().is_relative_to(root) for root in image_roots):
+                    existing[link] = target
+
+    for link in links:
+        plain_path(link.parent)
+        if link not in existing and (link.exists() or link.is_symlink()):
+            raise ValueError(f'看图链接与已有文件冲突：{link}')
+    for link, source in links.items():
+        target = Path(os.path.relpath(source, link.parent))
+        if existing.get(link) != target:
+            link.parent.mkdir(parents=True, exist_ok=True)
+            if link in existing:
+                link.unlink()
+            link.symlink_to(target)
+    for obsolete in existing.keys() - links.keys():
+        obsolete.unlink()
+    for folder in sorted(set(folders), key=lambda p: len(p.parts), reverse=True):
+        if not any(folder.iterdir()):
+            folder.rmdir()
+
+
+def current_review(pages):
+    source = ROOT / 'design/current-review.json'
+    if not source.is_file():
+        return None
+    config = json.loads(source.read_text())
+    if config == {}:
+        return None
+    if not isinstance(config, dict) or not isinstance(config.get('title'), str) or not config['title'].strip():
+        raise ValueError('current-review.json 需要本轮审核标题')
+    paths = config.get('images')
+    if not isinstance(paths, list) or not paths or not all(isinstance(path, str) for path in paths):
+        raise ValueError('本轮审核需要按顺序列出原图的仓库相对路径')
+    if len(set(paths)) != len(paths):
+        raise ValueError('本轮审核有重复的原图路径')
+    catalog_paths = {image['path'] for page in pages for image in page['images']}
+    images = []
+    for path in paths:
+        if path not in catalog_paths:
+            raise ValueError(f'本轮审核的原图未登记在 PAGES.md：{path}')
+        digest = hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+        images.append({'path': path, 'digest': digest})
+    return {'title': config['title'].strip(), 'images': images}
+
+
+def replaced_revisions(output, review, pages):
+    if not output.is_file():
+        return set()
+    previous = output.read_text()
+    def embedded(name, fallback):
+        match = re.search(fr'<script id="{name}" type="application/json">([^<]*)</script>', previous)
+        return json.loads(match[1]) if match else fallback
+    retired = set(embedded('replaced-revisions', []))
+    catalog_paths = {image['path'] for page in pages for image in page['images']}
+    active = {item['path']: item['digest'] for item in (review or {}).get('images', [])}
+    for image in (embedded('current-round', {}) or {}).get('images', []):
+        path, digest = image['path'], image['digest']
+        if path not in catalog_paths or (path in active and active[path] != digest):
+            retired.add(path + ':' + digest)
+    return retired - {path + ':' + digest for path, digest in active.items()}
+
+
+def write_atomic(path, contents):
+    with NamedTemporaryFile('w', dir=path.parent, delete=False, encoding='utf-8') as f:
+        f.write(contents)
+    try:
+        os.chmod(f.name, path.stat().st_mode if path.exists() else 0o644)
+        os.replace(f.name, path)
+    finally:
+        Path(f.name).unlink(missing_ok=True)
+
+
+def remove_replaced_comments(report, retired):
+    if not retired or not report.is_file():
+        return
+    original = report.read_text()
+    data = json.loads(original)
+    if not isinstance(data, dict) or data.get('format') != 'design-gallery-comments-v1':
+        return
+    kept = [item for item in data['images'] if item['path'] + ':' + item['digest'] not in retired]
+    if len(kept) != len(data['images']) and report.read_text() == original:
+        data['images'] = kept
+        write_atomic(report, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+
+
+def write_gallery(pages, output):
+    module_names = {'宿主': '应用宿主', '仅规划': '仅规划', '未登记': '未登记'}
+    for source in sorted((ROOT / 'packages/modules').glob('*/module.json')):
+        item = json.loads(source.read_text())['manifest']
+        module_names[item['id']] = item['name']
+    category_anchors = dict(zip(PAGE_CATEGORIES, ('tasks', 'course', 'projects', 'modules', 'ai', 'settings', 'common')))
+    groups = {}
+    links = {}
+    for page in pages:
+        if not page['images']:
+            continue
+        modules = groups.setdefault(page['category'], {})
+        owner_cards = {}
+        for item in page['images']:
+            owner = item['module']
+            if owner not in module_names:
+                raise ValueError(f'{page["name"]} 的所属模块未登记：{owner}')
+            if not item['available']:
+                raise ValueError(f'生成看图目录需要本机原图：{item["path"]}')
+            source = ROOT / item['path']
+            folder = output.parent / page['category'] / gallery_name(module_names[owner]) / gallery_name(page['name'])
+            link = folder / (gallery_name(item['state']) + source.suffix)
+            if link in links:
+                raise ValueError(f'重复的看图路径：{link}')
+            links[link] = source
+            url = quote(os.path.relpath(source, output.parent))
+            owner_cards.setdefault(owner, []).append(
+                f'<a class="card" data-module="{escape(owner)}" data-path="{escape(item["path"])}" href="{url}">'
+                f'<noscript><img src="{url}" alt="" loading="lazy"></noscript><span>{escape(item["state"])}</span></a>')
+        primary = page['module'] if page['module'] in owner_cards else next(iter(owner_cards))
+        for owner, cards in owner_cards.items():
+            page_id = page['id']
+            anchor = f'page-{page_id}' if owner == primary else f'page-{page_id}-{owner}'
+            modules.setdefault(owner, []).append(
+                f'<article id="{escape(anchor)}" data-page="{page_id}"><h4>{escape(page["name"])}</h4>'
+                f'<div class="grid">\n' + '\n'.join(cards) + '\n</div></article>')
+
+    sections = []
+    for category, modules in groups.items():
+        blocks = []
+        for owner, articles in modules.items():
+            blocks.append(f'<div class="module-group" data-owner="{escape(owner)}">'
+                          f'<h3>{escape(module_names[owner])}</h3>\n' + '\n'.join(articles) + '\n</div>')
+        sections.append(f'<section id="{category_anchors[category]}" data-category="{escape(category)}">'
+                        f'<h2>{escape(category)}</h2>\n' + '\n'.join(blocks) + '\n</section>')
+    used_modules = {owner for modules in groups.values() for owner in modules}
+    module_options = ''.join(f'<option value="{escape(key)}">{escape(module_names[key])}</option>'
+                             for key in module_names if key in used_modules)
+    template = Path(__file__).with_name('templates') / 'design_gallery.html'
+    review = current_review(pages)
+    retired = replaced_revisions(output, review, pages)
+    rendered = Template(template.read_text()).substitute(
+        modules=module_options, sections='\n'.join(sections),
+        current_review=json.dumps(review, ensure_ascii=False).replace('<', r'\u003c'),
+        replaced_revisions=json.dumps(sorted(retired), ensure_ascii=False).replace('<', r'\u003c'),
+        viewer_script=template.with_suffix('.js').read_text())
+    sync_gallery_links(output.parent, links)
+    write_atomic(output, rendered)
+    remove_replaced_comments(output.parent / '本轮评论.json', retired)
 
 
 def query_pages(pages, terms, pending, *, category=None):
@@ -349,11 +528,17 @@ def main():
     query.add_argument('--category', choices=PAGE_CATEGORIES, help='在指定功能分类中查询')
     query.add_argument('--pending', action='store_true', help='只列出已登记待完善项的页面')
     query.add_argument('--json', action='store_true', help='输出 JSON 数组')
+    commands.add_parser('gallery', help='从页面映射表生成分类文件夹和离线看图页')
     for command in ('index', 'check'):
         sub = commands.add_parser(command, help='更新摘要清单' if command == 'index' else '只读校验批次和摘要')
         sub.add_argument('batch', type=Path)
     args = parser.parse_args()
     try:
+        if args.command == 'gallery':
+            output = UI_DESIGNS / '看图目录' / '00-看图目录.html'
+            write_gallery(read_page_catalog(UI_DESIGNS / 'PAGES.md'), output)
+            print('file://wsl.localhost/quant_dev' + quote(output.as_posix()))
+            return
         if args.command == 'query':
             pages = read_page_catalog(UI_DESIGNS / 'PAGES.md')
             results, missing = query_pages(pages, args.names, args.pending, category=args.category)

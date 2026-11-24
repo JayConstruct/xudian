@@ -668,6 +668,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         purpose: '打开页面操作、模块入口及设置',
         child: WorkspacePopupMenu(
           key: const ValueKey('workspace-menu'),
+          rounded: dateTitle || selectedDestinationId == _moreEntry.id,
           openSignal: menuOpen,
           headerController: workspaceHeader,
           headerOwner: contribution?.owner,
@@ -676,7 +677,6 @@ class _AppShellState extends ConsumerState<AppShell> {
               .map((action) => '${action['label']}')
               .toSet(),
           haptics: menuPreferences?.haptics ?? true,
-          reduceMotion: menuPreferences?.reduceMotion ?? false,
           onSelected: (index) {
             if (index == -1) {
               _openSettings();
@@ -712,11 +712,14 @@ class _AppShellState extends ConsumerState<AppShell> {
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: UiAnnotation(
                   id: entries[i].id,
-                  name: entries[i].label,
+                  name: widget.registry.ui.entryLabel(entries[i]),
                   moduleId: entries[i].moduleId,
                   slot: 'header',
                   purpose: '打开功能入口',
-                  child: menuLabel(entries[i].label, entries[i].icon),
+                  child: menuLabel(
+                    widget.registry.ui.entryLabel(entries[i]),
+                    entries[i].icon,
+                  ),
                 ),
               ),
             if (returnToToday || entries.isNotEmpty)
@@ -765,11 +768,12 @@ class _AppShellState extends ConsumerState<AppShell> {
           plannerTimeline ? 120.0 : 220.0,
         );
         painter.dispose();
+        final gutter = dateTitle && constraints.maxWidth <= 360 ? 12.0 : 20.0;
         final inline = fittingHeaderActions(
           context,
           actions,
           constraints.maxWidth -
-              40 -
+              2 * gutter -
               (plannerTimeline ? 48 : controlHeight) -
               reservedTitle -
               (spec?['backEvent'] == null ? 0 : 48) -
@@ -778,7 +782,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         );
         return Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: 20,
+            horizontal: gutter,
             vertical: plannerTimeline
                 ? 0
                 : spec?['compact'] == true
@@ -957,6 +961,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final nav = Navigator.of(context);
     final route = _SettingsRoute(
       hidden: showingLocation,
+      reduceMotion: AppMotion.reduced(context),
       pageBuilder: (context, _, _) => ValueListenableBuilder<bool>(
         valueListenable: showingLocation,
         builder: (c, locating, child) => PopScope<void>(
@@ -1015,6 +1020,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       MaterialPageRoute(
         builder: (routeContext) => DetailPage(
           title: '全部入口',
+          settingsStyle: true,
           child: MoreWorkspacePage(
             entries: entries,
             onOpen: (entry) {
@@ -1283,6 +1289,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final mainCount = navigationVisibleCount(
       total: main.length,
+      fixedMore: profile.morePageEnabled,
       limit: profile.mainLimit,
       width: width - 24 - (profile.morePageEnabled && !desktop ? 72 : 0),
       textScale: MediaQuery.textScalerOf(context).scale(12) / 12,
@@ -1755,9 +1762,41 @@ class _AppShellState extends ConsumerState<AppShell> {
 /// Keep the settings navigation stack and its draft alive while the user visits
 /// a workspace. The transparent route lets the real workspace receive input.
 class _SettingsRoute extends PageRouteBuilder<void> {
-  _SettingsRoute({required this.hidden, required super.pageBuilder})
-    : super(opaque: false);
+  _SettingsRoute({
+    required this.hidden,
+    required super.pageBuilder,
+    required bool reduceMotion,
+  }) : super(
+         opaque: false,
+         transitionDuration: reduceMotion
+             ? Duration.zero
+             : AppMotion.pageTransition,
+         reverseTransitionDuration: reduceMotion
+             ? Duration.zero
+             : AppMotion.pageTransition,
+         transitionsBuilder: _transition,
+       );
   final ValueNotifier<bool> hidden;
+
+  static Widget _transition(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (AppMotion.reduced(context)) return child;
+    final incoming = animation.drive(CurveTween(curve: AppMotion.enter));
+    return FadeTransition(
+      opacity: incoming,
+      child: SlideTransition(
+        position: incoming.drive(
+          Tween(begin: AppMotion.pageOffset, end: Offset.zero),
+        ),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget buildModalBarrier() => ValueListenableBuilder<bool>(
     valueListenable: hidden,

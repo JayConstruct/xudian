@@ -9,6 +9,8 @@ import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/data/app_database.dart';
 
+import 'support/module_fixtures.dart' show archivedCompactPack;
+
 Future<ScriptPackage> source(String id) async {
   final folder = Directory('../packages/modules/$id');
   final files = <String, String>{};
@@ -378,7 +380,7 @@ void main() {
       event: {'type': 'mode', 'id': 'date', 'mode': '已选'},
     );
     expect(object(date['replaceForms'])['demo.date'], '2026-10-10');
-    await host.install(await source('example.ui.compact'));
+    await host.install(await archivedCompactPack());
     var home = await render('page');
     final link = descendants(home['tree'])
         .singleWhere((node) => node['title'] == '主要操作按钮');

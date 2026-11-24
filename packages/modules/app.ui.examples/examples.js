@@ -71,7 +71,7 @@ export function control(item,state,forms) {
     ]),
     group('真实入场与退场动画',[
       text('入场 180ms：向下轻移并淡入；退场 140ms：向上轻移并淡出。','muted'),
-      text('默认展示真实动画。在“设置 → 外观与交互”开启“减少动画”，或开启系统减少动画后，再点击上述按钮检查即时显示与关闭。','muted'),
+      text('默认展示真实动画。开启系统减少动画后，再点击上述按钮检查即时显示与关闭。','muted'),
     ]),
   ]);
   if(id==='panel')return button('打开操作面板',{type:'panel'},false,'outlined');
@@ -124,7 +124,7 @@ export function callCode(item,state,forms) {
   if(item.id==='confirm')return {call:"const result = await ui.dialog({\n  title: '确认演示操作',\n  fields: [{key: 'name', label: '演示名称', value: '本地示例', required: true}]\n});",handler:"if (result) state.result = '已确认 ' + result.name;"};
   if(item.id==='notification')return {
     call:"await ui.notify({message: '演示操作已完成', kind: 'success', duration: 3000});\n\n// 弹层内也使用同一个全局 Toast\nawait ui.panel('app.ui.examples.local', {notification: true}, {adaptive: true});",
-    handler:"// kind 支持 info、success、error；duration 为 1000–10000ms 整数，默认 3000ms。\n// message 为 1–200 字符。长文本自动换行，关闭按钮可提前结束提示。\n// 连续调用时保留最新一条；相同内容与状态去重，不延长计时。\nfor (const kind of ['info', 'success', 'error']) {\n  await ui.notify({message: '连续替换：' + kind, kind});\n}\n// 入场 180ms，退场 140ms；减少动画遵循应用及系统设置。",
+    handler:"// kind 支持 info、success、error；duration 为 1000–10000ms 整数，默认 3000ms。\n// message 为 1–200 字符。长文本自动换行，关闭按钮可提前结束提示。\n// 连续调用时保留最新一条；相同内容与状态去重，不延长计时。\nfor (const kind of ['info', 'success', 'error']) {\n  await ui.notify({message: '连续替换：' + kind, kind});\n}\n// 入场 180ms，退场 140ms；减少动画遵循系统设置。",
   };
   if(item.id==='content')return {
     call:`ui.component('ui.icon@1', {\n  key: 'demo.icon:today',\n  props: {name: 'today', size: 28, semanticLabel: '今天'}\n})\n\n// 完整内容组件树\n${JSON.stringify(control(item,state,forms),null,2)}`,

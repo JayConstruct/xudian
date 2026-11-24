@@ -258,7 +258,9 @@ void main() {
       }),
     );
     expect(
-      nodes(detail['tree']).any((node) => node['subtitle'] == '调课教室'),
+      nodes(detail['tree']).any(
+        (node) => node['type'] == 'text' && node['text'] == '调课教室',
+      ),
       true,
     );
   });
@@ -735,7 +737,9 @@ void main() {
         .singleWhere((node) => node['type'] == 'taskItem');
     expect(checkbox['title'], '今天的新任务');
     expect(object(checkbox['openEvent'])['type'], 'edit');
-    expect(checkbox['subtitle'], contains('计划 当天'));
+    expect(checkbox['subtitle'], isEmpty);
+    final created = object(object(checkbox['openEvent'])['task']);
+    expect(created['plannedDate'], '2026-10-10');
     var collapsed = object(
       await host.invokePage('app.views.today', 'render', {
         'context': {'pageId': 'app.views.today.tasks'},

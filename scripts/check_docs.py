@@ -158,6 +158,7 @@ def local_artifact(name, published):
         return False
     parts = Path(name).parts
     return (bool(parts) and parts[0] in {'.cache', '.tools', 'dist', 'tmp', 'output'}
+            or name == 'design/看图目录'
             or bool({'build', '.dart_tool', '.gradle'}.intersection(parts))
             or (len(parts) >= 3 and parts[0] == 'design'
                 and name not in {'design/styles/README.md', 'design/screens/README.md'}))

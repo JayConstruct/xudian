@@ -97,6 +97,7 @@ void main() {
   for (final config in [
     (width: 390.0, scale: 1.0, brightness: Brightness.light),
     (width: 320.0, scale: 2.0, brightness: Brightness.dark),
+    (width: 1100.0, scale: 1.0, brightness: Brightness.light),
   ]) {
     testWidgets(
       'composed Today is real, extensible and interactive at ${config.width}/${config.scale}',
@@ -136,11 +137,23 @@ void main() {
         );
         await settle(tester);
         expect(find.byType(DayOverview), findsOneWidget);
-        expect(find.byType(AgendaItem), findsNWidgets(4));
+        expect(find.byType(AgendaItem), findsNWidgets(3));
         expect(find.byType(DailyTaskItem), findsOneWidget);
         expect(find.textContaining('1 项待办 · 3 节课程'), findsOneWidget);
-        expect(find.text('程序设计'), findsNWidgets(2));
+        expect(find.text('程序设计'), findsOneWidget);
         expect(find.text('高等数学'), findsOneWidget);
+        if (config.width == 1100) {
+          final schedule = tester.getTopLeft(
+            find.widgetWithText(TextButton, '查看课表'),
+          );
+          final review = tester.getTopLeft(
+            find.widgetWithText(TextButton, '完成记录与复盘'),
+          );
+          final pending = tester.getTopLeft(find.text('待安排'));
+          expect(review.dy, greaterThan(schedule.dy));
+          expect(review.dx, closeTo(pending.dx, 1));
+          expect(schedule.dx, closeTo(review.dx, 1));
+        }
         if (config.scale == 1) {
           expect(find.text('高等数学').hitTestable(), findsOneWidget);
         }

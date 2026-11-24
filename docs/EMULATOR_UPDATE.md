@@ -8,6 +8,8 @@ scripts/start-emulator.sh
 
 默认使用本机 `Medium_Phone_API_37.0`，设备为 `emulator-5554`；已运行时直接复用，保留应用和数据。脚本用 PowerShell 启动 Windows 模拟器进程，设备查询和启动完成检查均使用项目 Linux ADB。无需先打开 Android Studio。Windows SDK 与 AVD 需提前安装、创建；脚本不下载 SDK 或创建 AVD。
 
+新启动时，脚本探测 Windows IPv6 回环连接。如果 Windows 允许监听 `::1` 却拒绝连接（错误 10013），脚本会为这次启动选择本机端口，让模拟器的蜂窝 modem 使用 `127.0.0.1`。见到 `Modem listening on IPv4 loopback` 后，可用 `adb -s emulator-5554 shell getprop gsm.sim.state` 核对 SIM 是否为 `LOADED`，并通过 `dumpsys telephony.registry` 核对语音和数据注册。该回退只影响项目脚本新启动的进程。
+
 其他机器可覆盖 Windows 可执行文件路径、AVD、端口和启动等待时间：
 
 ```bash

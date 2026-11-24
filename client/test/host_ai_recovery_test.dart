@@ -562,7 +562,7 @@ void main() {
       approveGrant = false;
       final page = await render('send');
       expect((await task())['title'], 'before AI');
-      expect(jsonEncode(page['tree']), contains('本轮未提交业务写入'));
+      expect(jsonEncode(page['tree']), contains('未获得工具授权，本次操作未执行。'));
       expect(jsonEncode(page['tree']), contains('重新申请工具授权'));
       expect(taskReviews, 0);
       expect(grantRequests, 1);

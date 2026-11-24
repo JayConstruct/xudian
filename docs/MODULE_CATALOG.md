@@ -81,7 +81,7 @@ python3 scripts/module_catalog/release.py --repository JayConstruct/xudian \
 
 模块依赖在 `manifest.dependencies` 声明 `{moduleId, version}`，服务依赖在 `manifest.serviceDependencies` 声明 `{moduleId, serviceId, majorVersion}`；现有 `services.query:<moduleId>/<serviceId>@<major>` 与 `services.command:...` 权限声明也参与服务依赖检查。客户端复用满足条件的已安装版本，补齐需要安装、升级或启用的模块，并在完整下载验证后一次确认。优先最高稳定版本，不自动降级，不自动选预发布版本。失败时显示具体版本、服务或循环冲突。
 
-当前分发已移除收件箱和项目视图，任务与项目底层服务保留；客户端按随 APK 的退役清单过滤在线和离线旧目录条目，历史 Release 原包不改写。
+当前分发已移除收件箱、项目视图和紧凑界面示例，任务与项目底层服务保留；客户端按随 APK 的退役清单过滤在线和离线旧目录条目，历史 Release 原包不改写。
 
 离线可以查看缓存目录与已安装模块；缺失包没有下载齐全时不会开始安装。SHA-256 和包身份校验后仍执行宿主已有包格式及运行时验证。批量计划绑定包摘要和安装状态，状态变化需要重新解析；事务失败恢复数据、旧版本与启用状态。安装或更新始终由用户发起，第一版没有后台自动更新、逐权限开关或固定模块分层限制。
 

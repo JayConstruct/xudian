@@ -1,3 +1,5 @@
+import 'package:task_app/core/ui/sliding_segments.dart';
+
 import 'dart:convert';
 
 import 'package:drift/native.dart';
@@ -184,14 +186,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tap(tester, '减少动画');
+      await tap(tester, '触感反馈');
       expect(find.text('设置保存失败，请重试'), findsOneWidget);
       final control = tester.widget<SwitchListTile>(
-        find.widgetWithText(SwitchListTile, '减少动画'),
+        find.widgetWithText(SwitchListTile, '触感反馈'),
       );
-      expect(control.value, isFalse);
+      expect(control.value, isTrue);
       expect(control.onChanged, isNotNull);
-      await tap(tester, '减少动画');
+      await tap(tester, '触感反馈');
       expect(tester.takeException(), isNull);
     },
   );
@@ -250,7 +252,7 @@ void main() {
         await tap(tester, '外观与交互');
         await tap(tester, '外观主题');
         await tap(tester, '深色');
-        await tap(tester, '减少动画');
+        await tap(tester, '触感反馈');
         final row =
             await (database.select(database.appSettings)..where(
                   (row) => row.key.equals(AppPreferencesController.storageKey),
@@ -258,8 +260,7 @@ void main() {
                 .getSingle();
         expect(jsonDecode(row.value), {
           'theme': 'dark',
-          'reduceMotion': true,
-          'haptics': true,
+          'haptics': false,
         });
         await tester.pageBack();
         await tester.pumpAndSettle();
@@ -285,9 +286,9 @@ void main() {
         await tap(tester, '布局与导航');
         expect(
           tester
-              .widget<SegmentedButton<bool>>(find.byType(SegmentedButton<bool>))
+              .widget<SlidingSegments<bool>>(find.byType(SlidingSegments<bool>))
               .selected,
-          {wide},
+          wide,
         );
         expect(find.byType(UiLayoutPage), findsOneWidget);
         expect(tester.takeException(), isNull);

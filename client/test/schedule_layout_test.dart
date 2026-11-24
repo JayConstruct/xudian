@@ -420,22 +420,13 @@ void main() {
           await _settleNative(tester);
           expect(add, findsOneWidget);
         } else if (destination.key == '调课记录') {
-          final action = find.byTooltip(destination.value);
+          final action = find.widgetWithText(FilledButton, destination.value);
           expect(action, findsOneWidget);
-          await tester.ensureVisible(action);
           await tester.tap(action);
           await _settleNative(tester);
-          final dialog = find.byType(AlertDialog);
-          expect(dialog, findsOneWidget);
-          expect(
-            (tester.widget<AlertDialog>(dialog).title! as Text).data,
-            destination.value,
-          );
-          await tester.tap(
-            find.descendant(of: dialog, matching: find.text('取消')),
-          );
+          expect(find.text('本次安排'), findsOneWidget);
+          await tester.tap(find.widgetWithText(OutlinedButton, '取消'));
           await _settleNative(tester);
-          expect(dialog, findsNothing);
           expect(action, findsOneWidget);
         } else {
           expect(find.text(destination.value), findsOneWidget);

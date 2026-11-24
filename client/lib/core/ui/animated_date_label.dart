@@ -12,12 +12,14 @@ class AnimatedDateLabel extends StatefulWidget {
     required this.date,
     required this.style,
     required this.maxLines,
+    this.compactWeekday = false,
   });
 
   final String title;
   final String? date;
   final TextStyle style;
   final int maxLines;
+  final bool compactWeekday;
 
   @override
   State<AnimatedDateLabel> createState() => _AnimatedDateLabelState();
@@ -84,14 +86,22 @@ class _AnimatedDateLabelState extends State<AnimatedDateLabel>
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
-    child: Text(
-      widget.title,
-      maxLines: widget.maxLines,
-      overflow: TextOverflow.ellipsis,
-      style: widget.style,
-    ),
+    child: widget.compactWeekday && _parts(widget.title) != null
+        ? Text.rich(
+            _dateSpan(widget.title, widget.style, true),
+            style: widget.style,
+            maxLines: widget.maxLines,
+            overflow: TextOverflow.ellipsis,
+          )
+        : Text(
+            widget.title,
+            maxLines: widget.maxLines,
+            overflow: TextOverflow.ellipsis,
+            style: widget.style,
+          ),
     builder: (context, child) => DateLabelPaint(
       previous: previous,
+      compactWeekday: widget.compactWeekday,
       current: widget.title,
       progress: immediate ? 1 : progress,
       direction: direction,
@@ -106,12 +116,14 @@ class DateLabelPaint extends SingleChildRenderObjectWidget {
   const DateLabelPaint({
     super.key,
     required this.previous,
+    this.compactWeekday = false,
     required this.current,
     required this.progress,
     required this.direction,
     required super.child,
   });
   final String? previous;
+  final bool compactWeekday;
   final String current;
   final double progress, direction;
 
@@ -143,7 +155,7 @@ class _Part {
 
 List<_Part>? _parts(String? title) {
   if (title == null) return null;
-  final match = RegExp(r'^(\d+年)?(\d+月)(\d+日)(\s+)(周[一二三四五六日天])$')
+  final match = RegExp(r'^(\d+年)?(\d+月)(\d+日)(\s+(?:⌄\s+)?)(周[一二三四五六日天])$')
       .firstMatch(title);
   if (match == null) return null;
   var start = 0;
@@ -156,6 +168,26 @@ List<_Part>? _parts(String? title) {
         return part;
       }(),
   ];
+}
+
+TextSpan _dateSpan(String title, TextStyle? style, bool compactWeekday) {
+  final parts = _parts(title);
+  if (!compactWeekday || parts == null) {
+    return TextSpan(text: title, style: style);
+  }
+  final secondary = style?.copyWith(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+  );
+  return TextSpan(
+    style: style,
+    children: [
+      TextSpan(text: parts.take(3).map((part) => part.text).join()),
+      TextSpan(text: ' ⌄ ', semanticsLabel: parts[3].text, style: secondary),
+      TextSpan(text: parts.last.text, style: secondary),
+    ],
+  );
 }
 
 class _DateLabelRender extends RenderProxyBox {
@@ -176,7 +208,11 @@ class _DateLabelRender extends RenderProxyBox {
       return;
     }
     final old = TextPainter(
-      text: TextSpan(text: _config.previous, style: paragraph.text.style),
+      text: _dateSpan(
+        _config.previous!,
+        paragraph.text.style,
+        _config.compactWeekday,
+      ),
       textDirection: paragraph.textDirection,
       textAlign: paragraph.textAlign,
       textScaler: paragraph.textScaler,
@@ -200,7 +236,11 @@ class _DateLabelRender extends RenderProxyBox {
       textHeightBehavior: paragraph.textHeightBehavior,
     )..layout(maxWidth: constraints.maxWidth);
     try {
-      final before = _parts(_config.previous), after = _parts(_config.current);
+      final decorated = _config.compactWeekday;
+      String offsets(String s) =>
+          decorated ? s.replaceFirst(RegExp(r'\s+(?=周)'), ' ⌄ ') : s;
+      final before = _parts(offsets(_config.previous!)),
+          after = _parts(offsets(_config.current));
       if (before == null ||
           after == null ||
           before.first.text.isEmpty != after.first.text.isEmpty) {

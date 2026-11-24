@@ -10,7 +10,6 @@ import 'package:task_app/core/module_host/collection_store.dart';
 import 'package:task_app/core/module_host/module_host.dart';
 import 'package:task_app/core/module_host/host_manager_page.dart';
 import 'package:task_app/core/module_host/host_settings_page.dart';
-import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/modules/module_registry.dart';
 import 'package:task_app/core/security/capability_registry.dart';
 import 'package:task_app/core/ui/ui_pack.dart';
@@ -19,6 +18,8 @@ import 'package:task_app/core/ui/ui_pack_providers.dart';
 import 'package:task_app/core/ui/ui_pack_settings_page.dart';
 import 'package:task_app/data/app_database.dart';
 import 'package:task_app/data/providers.dart';
+
+import 'support/module_fixtures.dart' show archivedCompactPack;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -216,10 +217,7 @@ void main() {
   test(
     'sample is a verified UI-only package with all five templates',
     () async {
-      final package = await ScriptPackage.verify(
-        File('../dist/modules/example.ui.compact.xmodule').readAsBytesSync(),
-        allowUnsignedLocal: true,
-      );
+      final package = await archivedCompactPack();
       expect(package.isUiPack, isTrue);
       expect(package.definition.containsKey('entryPoint'), isFalse);
       expect(package.permissions, isEmpty);
@@ -233,10 +231,7 @@ void main() {
   testWidgets(
     'preview works without host or database access and exercises every template',
     (tester) async {
-      final package = await ScriptPackage.verify(
-        File('../dist/modules/example.ui.compact.xmodule').readAsBytesSync(),
-        allowUnsignedLocal: true,
-      );
+      final package = await archivedCompactPack();
       var databaseReads = 0, hostReads = 0;
       await tester.pumpWidget(
         ProviderScope(
@@ -388,13 +383,7 @@ void main() {
         );
         host = ModuleHost(store: store, directory: directory);
         await host.initialize();
-        await host.install(
-          await ScriptPackage.verify(
-            await File('../dist/modules/example.ui.compact.xmodule')
-                .readAsBytes(),
-            allowUnsignedLocal: true,
-          ),
-        );
+        await host.install(await archivedCompactPack());
       });
       final registry = ModuleRegistry([
         HostManagerModule(),

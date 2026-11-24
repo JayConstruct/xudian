@@ -3,6 +3,12 @@ import 'dart:io';
 
 import 'package:task_app/core/module_host/module_package.dart';
 
+Future<ScriptPackage> archivedCompactPack() => ScriptPackage.verify(
+  File('../releases/modules/example.ui.compact-1.1.0.xmodule')
+      .readAsBytesSync(),
+  allowUnsignedLocal: true,
+);
+
 Future<ScriptPackage> sourcePackage(String id) async {
   final folder = Directory('../packages/modules/$id');
   final files = <String, String>{};

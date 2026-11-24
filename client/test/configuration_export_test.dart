@@ -105,7 +105,6 @@ void main() {
       expect(result.containsKey('secrets'), false);
       expect((result['appSettings'] as Map)['ui.preferences'], {
         'theme': 'system',
-        'reduceMotion': false,
         'haptics': true,
       });
       expect(secrets.reads, 0);

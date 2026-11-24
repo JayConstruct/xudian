@@ -577,6 +577,16 @@ class ModuleWorkflowTest(unittest.TestCase):
             update.update_modules(['app.schedule'], emulator, self.output)
         self.assertNotIn(('tap', '确认安装'), emulator.calls)
 
+    def test_picker_waits_for_documents_ui_after_tapping_import(self):
+        emulator = FakeEmulator()
+        emulator.state = 'downloads'
+        emulator.module = {'filename': 'app.schedule-1.7.0.xmodule'}
+        ready = emulator.nodes()
+        host = [ET.Element('node', text='模块管理')]
+        with patch.object(emulator, 'nodes', side_effect=[host, host, ready]):
+            update._select_download(emulator, emulator.module['filename'])
+        self.assertEqual(emulator.calls, [('tap', emulator.module['filename'])])
+
     def test_open_picker_drawer_hides_matching_file_until_download_root_is_selected(self):
         class DrawerEmulator(FakeEmulator):
             def __init__(self, *, persistent=False):

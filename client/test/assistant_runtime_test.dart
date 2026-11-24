@@ -1436,7 +1436,7 @@ void main() {
     final harness = _Harness(
       _script([
         _calls([
-          _call('settings_patch', {'reduceMotion': true, 'haptics': false}),
+          _call('settings_patch', {'haptics': false}),
         ]),
         _done(),
       ]),
@@ -1445,7 +1445,6 @@ void main() {
     await harness.controller.send('Adjust preferences');
     expect(await harness.stored(AppPreferencesController.storageKey), {
       'theme': 'system',
-      'reduceMotion': true,
       'haptics': false,
     });
     expect(harness.controller.canUndo, isTrue);
