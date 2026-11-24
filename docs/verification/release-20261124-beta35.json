@@ -1,0 +1,202 @@
+{
+  "tag": "v0.2.0-beta.35",
+  "sourceCommit": "399cab3ba5323135ba1f6e291dbda93063ea5ccb",
+  "apks": [
+    {
+      "name": "xudian-v0.2.0-beta.35-armeabi-v7a-release.apk",
+      "versionName": "0.2.0-beta.35",
+      "versionCode": 1184,
+      "abi": "armeabi-v7a",
+      "sha256": "a98d0acedac2f39259851c4425d13f87f597bcb759050ef31d6c468cf3b2dad9",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 5
+    },
+    {
+      "name": "xudian-v0.2.0-beta.35-arm64-v8a-release.apk",
+      "versionName": "0.2.0-beta.35",
+      "versionCode": 2184,
+      "abi": "arm64-v8a",
+      "sha256": "1892f59b2334128d45a1c84bbaaf2844538241e71ddcd3c3d2be37eee4a9926d",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 5
+    },
+    {
+      "name": "xudian-v0.2.0-beta.35-x86_64-release.apk",
+      "versionName": "0.2.0-beta.35",
+      "versionCode": 4184,
+      "abi": "x86_64",
+      "sha256": "1b6f5efab39d1065b3b8e548eaed38f72192ea67bdbf16ee9e2ce8e01ae3dc77",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 5
+    }
+  ],
+  "modules": [
+    {
+      "id": "app.ai",
+      "version": "1.7.4",
+      "sha256": "c7762b1a18080a07c47c9817e99e9cc72e5a3f7e4705660075beb66aa474ee1f",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261124-workspace/app.ai-1.7.4.xmodule"
+    },
+    {
+      "id": "app.ideas",
+      "version": "1.0.1",
+      "sha256": "048fd157117d3fa1ca0e91269c79b39f9dea7a6c2738008cc43c6f5bf25ed9b3",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-ideas-1.0.1/app.ideas-1.0.1.xmodule"
+    },
+    {
+      "id": "app.ideas",
+      "version": "1.0.2",
+      "sha256": "4446705d1bd73e614c524a3d080a228f4cef03b79cdda090038f5df7e2033791",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-ideas-1.0.2/app.ideas-1.0.2.xmodule"
+    },
+    {
+      "id": "app.ideas",
+      "version": "1.1.1",
+      "sha256": "75e2c9a8d7df7acdcaccc639954e84de8faec928cb2da9a61fea62f9b6736ed9",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-ideas-1.1.1/app.ideas-1.1.1.xmodule"
+    },
+    {
+      "id": "app.schedule",
+      "version": "1.18.1",
+      "sha256": "e79d1fd73350467a188fc1695e878a0775dda35af8b61c586d67207f15cd7dcb",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261124-workspace/app.schedule-1.18.1.xmodule"
+    },
+    {
+      "id": "app.tasks",
+      "version": "1.11.2",
+      "sha256": "b4b6a5caa26bac2a26d1596f039d097273c68e91961f54e90518ff2df58fa209",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261124-workspace/app.tasks-1.11.2.xmodule"
+    },
+    {
+      "id": "app.ui.examples",
+      "version": "1.5.1",
+      "sha256": "e465438645cbf44b6f13b860862d73bff0eb69c3d21f598653f5fb8a679c0804",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261124-workspace/app.ui.examples-1.5.1.xmodule"
+    },
+    {
+      "id": "app.views.today",
+      "version": "1.11.3",
+      "sha256": "bd7b608eaf38f0ff741a2c7260f74fbf5163c4006450123e27d1e6a503895229",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261124-workspace/app.views.today-1.11.3.xmodule"
+    }
+  ],
+  "publicIndexes": {
+    "app.ideas": "c59377ef35a14fb5d556e78d2efd331fc2f2d8e4d25fea5cd47f6e4fd9d024da",
+    "app.ai": "e80091f1b33232fea3b49801bc8e4a2eadcc6afcf8f94fa51380aa43b46b0032",
+    "app.tasks": "0bf0fa2d25a28840d3641b8451106acf341f8a1292794810bf2d3a18712c20e8",
+    "app.schedule": "9e40d1385d6ed860131b30aff4673c99121e365bc559f4d46e08dc38bad07882",
+    "app.ui.examples": "eb7c02aa3f53810dfc83219d65d4ef032ad3e7aa8fef92abb3200fce76c20ed7",
+    "app.views.today": "7438086afbfe41d0aec83a6b5f2db7acd570e4b1cf822c56094888a4fe75b1fc"
+  },
+  "publicDirectory": {
+    "pr": "https://github.com/JayConstruct/xudian-modules/pull/2",
+    "commit": "4396163e0271e81f47058cfbafb531331976a742",
+    "validated": true,
+    "sha256": {
+      "catalog.json": "e186c71dd78aa251c6726303dce86257e84c81c0ec2704dbb7a7190c9e94fd3f",
+      "schemas/module-version-index-v1.schema.json": "5c7be4771eaf58e1c7ed206da87a84dbe15cdd27ae9de739f7dc6e778dd1b5a1"
+    },
+    "onDevice": "dist/verification/releases/release-20261124-beta35/public-store/results.json",
+    "validation": "https://github.com/JayConstruct/xudian-modules/actions/runs/45419106238"
+  },
+  "checks": {
+    "flutterShards": [
+      {
+        "job": "tests (0)",
+        "passed": 659
+      },
+      {
+        "job": "tests (1)",
+        "passed": 648
+      },
+      {
+        "job": "tests (2)",
+        "passed": 659
+      }
+    ],
+    "flutterTotal": 1966,
+    "releaseCandidateFlutterTests": 10,
+    "previousCandidateFlutterTests": 223,
+    "repositoryAndDocumentation": "passed",
+    "staticAnalysis": "passed",
+    "productionArchitecture": "passed",
+    "pythonTools": "passed"
+  },
+  "emulator": {
+    "versionCode": 4294,
+    "apkSha256": "6d083c59bf6fa1970ef64791e5350c704d6bcc7954cf525153820f3c42297522",
+    "previousCandidateModuleCheck": "dist/verification/20261124T143824.793517Z-emulator-update",
+    "installedModules": {
+      "app.ideas": {
+        "version": "1.1.1",
+        "sha256": "75e2c9a8d7df7acdcaccc639954e84de8faec928cb2da9a61fea62f9b6736ed9"
+      },
+      "app.ai": {
+        "version": "1.7.4",
+        "sha256": "c7762b1a18080a07c47c9817e99e9cc72e5a3f7e4705660075beb66aa474ee1f"
+      },
+      "app.tasks": {
+        "version": "1.11.2",
+        "sha256": "b4b6a5caa26bac2a26d1596f039d097273c68e91961f54e90518ff2df58fa209"
+      },
+      "app.ui.examples": {
+        "version": "1.5.1",
+        "sha256": "e465438645cbf44b6f13b860862d73bff0eb69c3d21f598653f5fb8a679c0804"
+      },
+      "app.views.today": {
+        "version": "1.11.3",
+        "sha256": "bd7b608eaf38f0ff741a2c7260f74fbf5163c4006450123e27d1e6a503895229"
+      },
+      "app.schedule": {
+        "version": "1.18.1",
+        "sha256": "e79d1fd73350467a188fc1695e878a0775dda35af8b61c586d67207f15cd7dcb"
+      }
+    },
+    "installation": "dist/verification/20261124T145503.202934Z-emulator-update",
+    "currentModuleCheck": {
+      "app.ideas": "75e2c9a8d7df7acdcaccc639954e84de8faec928cb2da9a61fea62f9b6736ed9"
+    },
+    "catalog": "dist/verification/20261124T145503.202934Z-emulator-update/catalog/results.json",
+    "designComparison": "dist/verification/ideas-design-match/验收.md",
+    "releasePages": "dist/verification/releases/release-20261124-beta35/pages"
+  },
+  "actions": [
+    {
+      "headBranch": "main",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45420381612"
+    },
+    {
+      "headBranch": "v0.2.0-beta.35",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45420381154"
+    },
+    {
+      "headBranch": "modules-ideas-1.0.2",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45418023143"
+    },
+    {
+      "headBranch": "modules-ideas-1.0.1",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45418022374"
+    },
+    {
+      "headBranch": "modules-20261124-workspace",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45418015260"
+    },
+    {
+      "headBranch": "modules-ideas-1.1.1",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45418014819"
+    }
+  ],
+  "previousCandidate": {
+    "tag": "v0.2.0-beta.34",
+    "ci": "https://github.com/JayConstruct/xudian/actions/runs/45418014703",
+    "publishedApk": false,
+    "reason": "课表底部导航的两条回归仍期望单节课显示为「第 12–12 节」。修正为「第 12 节」，保留时段与末节避让检查。"
+  },
+  "moduleSourceCommit": "c0b9efc858f5df7ea5fe208996e071a60823cded"
+}

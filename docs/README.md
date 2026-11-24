@@ -1,11 +1,12 @@
 # 当前版本文档
 
-最新发布为 Android 测试版 **v0.2.0-beta.33**，宿主 API 为 **1.57.0**。同步发布任务规划模块 **1.17.1**。[本版说明](releases/v0.2.0-beta.33.md) · [验证记录](VERIFICATION.md)
+最新发布为 Android 测试版 **v0.2.0-beta.35**，宿主 API 为 **1.59.0**。想法模块 **1.1.1** 可从模块商店安装。[本版说明](releases/v0.2.0-beta.35.md) · [验证记录](VERIFICATION.md)
 
 ## 功能使用
 
 | 功能 | 可以查什么 |
 | --- | --- |
+| [想法](features/IDEAS_PLAN.md) | 连续记录、搜索、收藏，以及从想法创建任务和项目 |
 | [日程](features/DAILY.md) | 按日期查看任务与课程，快速添加、编辑和完成任务 |
 | [任务规划](features/TASK_PLANNING.md) | 在看板上安排、调整和撤销任务。[新建、模板与批量规则](features/TASK_CREATION.md) |
 | [课表](features/SCHEDULE.md) | 切换教学周、编辑课程、调整节次、设置时区、导入与备份 |
