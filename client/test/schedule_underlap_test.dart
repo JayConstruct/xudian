@@ -246,7 +246,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('第 12–12 节 · 19:00–19:45'), findsOneWidget);
+      expect(find.text('第 12 节 · 19:00–19:45'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -281,7 +281,7 @@ void main() {
       await tester.tap(find.text('末节课'));
       await _settle(tester);
       expect(find.byType(BottomSheet), findsOneWidget);
-      expect(find.text('第 12–12 节 · 19:00–19:45'), findsOneWidget);
+      expect(find.text('第 12 节 · 19:00–19:45'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
