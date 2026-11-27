@@ -1,0 +1,138 @@
+{
+  "tag": "v0.2.0-beta.37",
+  "sourceCommit": "18800ebbfea089e77b29d6a8700ff1afd260298e",
+  "apks": [
+    {
+      "name": "xudian-v0.2.0-beta.37-armeabi-v7a-release.apk",
+      "versionName": "0.2.0-beta.37",
+      "versionCode": 1189,
+      "abi": "armeabi-v7a",
+      "sha256": "c46014d428ce0f655ee0169d54f2a8cfc92fdab2dfb1e042ea6a98dcf6c8d861",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 5
+    },
+    {
+      "name": "xudian-v0.2.0-beta.37-arm64-v8a-release.apk",
+      "versionName": "0.2.0-beta.37",
+      "versionCode": 2189,
+      "abi": "arm64-v8a",
+      "sha256": "6f4a403751b7c127db2f8254a6abc1c095e66dafef8b9a61f03f0eace626d29c",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 5
+    },
+    {
+      "name": "xudian-v0.2.0-beta.37-x86_64-release.apk",
+      "versionName": "0.2.0-beta.37",
+      "versionCode": 4189,
+      "abi": "x86_64",
+      "sha256": "7cceb98a7591d58092827c8295200c4b8f9334240ee5c83440fae35eeffbb0da",
+      "certificateSha256": "cdb8ef381555450ad2e6f04dafa4a52635f84fa4fc22fdb92ef776ccb6abc4fd",
+      "bundledModules": 5
+    }
+  ],
+  "moduleTag": "modules-20261127-ideas-planner",
+  "moduleSourceCommit": "50fa176ff9d9278df4fe467a262d624dc8d8191c",
+  "modules": [
+    {
+      "id": "app.ideas",
+      "version": "1.3.0",
+      "sha256": "a6954b5bff55d956b3ff3009dc3c8518f6a2a570decaa3fc741f183453268d12",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261127-ideas-planner/app.ideas-1.3.0.xmodule"
+    },
+    {
+      "id": "app.planner",
+      "version": "1.17.2",
+      "sha256": "c1098760f2a61c2b351ff27adb7e0b19dbfcade3f1deb42102da2c515b324a9d",
+      "url": "https://github.com/JayConstruct/xudian/releases/download/modules-20261127-ideas-planner/app.planner-1.17.2.xmodule"
+    }
+  ],
+  "publicIndexes": {
+    "app.ideas": "a723b5998ea6f2bf83e1246d828b5d5d1fec590b331d5ae7cb852a3720c702c8",
+    "app.planner": "b5ad8ddf00a9366263491d34ad9e111ea09f04c72b1737ddcfef6e19a6c4ee91"
+  },
+  "publicDirectory": {
+    "validated": true,
+    "sha256": {
+      "catalog.json": "e186c71dd78aa251c6726303dce86257e84c81c0ec2704dbb7a7190c9e94fd3f",
+      "schemas/module-version-index-v1.schema.json": "5c7be4771eaf58e1c7ed206da87a84dbe15cdd27ae9de739f7dc6e778dd1b5a1"
+    },
+    "onDevice": [
+      {
+        "module": "app.ideas",
+        "version": "1.3.0",
+        "sha256": "a6954b5bff55d956b3ff3009dc3c8518f6a2a570decaa3fc741f183453268d12"
+      },
+      {
+        "module": "app.planner",
+        "version": "1.17.2",
+        "sha256": "c1098760f2a61c2b351ff27adb7e0b19dbfcade3f1deb42102da2c515b324a9d"
+      }
+    ]
+  },
+  "checks": {
+    "localFeatureTests": 140,
+    "localFinalCandidateTests": 67,
+    "flutterShards": {
+      "tests (0)": 661,
+      "tests (1)": 651,
+      "tests (2)": 661
+    },
+    "flutterTotal": 1973
+  },
+  "emulator": {
+    "versionCode": 4302,
+    "apkSha256": "76da2e3ccede36e6aa7abf49f731806e48260705f8ce0464c48ac9e848f14358",
+    "installedModules": {
+      "app.ideas": "a6954b5bff55d956b3ff3009dc3c8518f6a2a570decaa3fc741f183453268d12",
+      "app.planner": "c1098760f2a61c2b351ff27adb7e0b19dbfcade3f1deb42102da2c515b324a9d"
+    },
+    "installation": "dist/verification/20261127T123358.953822Z-emulator-update",
+    "previousCandidateInstallation": "dist/verification/20261127T120950.523194Z-emulator-update",
+    "catalog": "dist/verification/20261127T120950.523194Z-emulator-update/catalog/results.json",
+    "featureChecks": [
+      "plannerToggle",
+      "plannerHistoryReopen",
+      "plannerColdReopen",
+      "layoutZones",
+      "ideaSeed",
+      "ideaEdit",
+      "ideaFavorites",
+      "ideaSearch",
+      "ideaDate",
+      "ideaColdReopen",
+      "layoutRemoveUndo",
+      "layoutReopen",
+      "ideaCopyComplete",
+      "ideaCleanup"
+    ],
+    "finalPageChecks": [
+      "想法切换收藏、返回与重开",
+      "规划快速调整、历史返回与重开",
+      "入口编排切换分区、返回与重开",
+      "应用冷启动"
+    ]
+  },
+  "actions": [
+    {
+      "headBranch": "main",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/46000408764"
+    },
+    {
+      "headBranch": "v0.2.0-beta.37",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/46000408915"
+    },
+    {
+      "headBranch": "modules-20261127-ideas-planner",
+      "conclusion": "success",
+      "url": "https://github.com/JayConstruct/xudian/actions/runs/45998368840"
+    }
+  ],
+  "previousCandidate": {
+    "tag": "v0.2.0-beta.36",
+    "ci": "https://github.com/JayConstruct/xudian/actions/runs/45998368654",
+    "publishedApk": false,
+    "reason": "两个规划顶栏回归仍断言旧按钮列表或读取已移除的内部字段。修正为验证已发布的顶栏内容、调整动作契约与新建按钮，重新执行完整 CI。"
+  }
+}
