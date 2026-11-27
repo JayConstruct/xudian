@@ -11,6 +11,7 @@ import 'package:task_app/core/module_host/module_package.dart';
 import 'package:task_app/core/module_host/planner_board.dart';
 import 'package:task_app/core/module_host/script_page.dart';
 import 'package:task_app/core/module_host/ui_preferences.dart';
+import 'package:task_app/core/ui/workspace_header.dart';
 import 'package:task_app/data/app_database.dart';
 
 class _ReplyBarrier {
@@ -184,20 +185,32 @@ void main() {
     WidgetTester tester, {
     BoardItem pageContext = const {'pageId': 'timeline'},
     bool active = true,
+    WorkspaceHeaderController? header,
   }) async {
+    Widget page = ScriptPage(
+      key: const ValueKey('script-page'),
+      host: host,
+      moduleId: 'test.timeline',
+      handler: 'render',
+      pageContext: pageContext,
+    );
+    if (header != null) {
+      page = WorkspaceHeaderScope(
+        controller: header,
+        lease: header.activate(
+          identity: 'test.timeline/timeline',
+          moduleId: 'test.timeline',
+          pageId: 'timeline',
+          enabled: true,
+          isActive: () => active,
+        ),
+        child: page,
+      );
+    }
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: TickerMode(
-            enabled: active,
-            child: ScriptPage(
-              key: const ValueKey('script-page'),
-              host: host,
-              moduleId: 'test.timeline',
-              handler: 'render',
-              pageContext: pageContext,
-            ),
-          ),
+          body: TickerMode(enabled: active, child: page),
         ),
       ),
     );
@@ -300,9 +313,12 @@ void main() {
   testWidgets(
     'delayed range permits another slide and never applies page output',
     (tester) async {
-      await mount(tester);
+      final header = WorkspaceHeaderController();
+      addTearDown(header.dispose);
+      await mount(tester, header: header);
       final initialTree = renderer(tester).tree;
-      final initialHeader = renderer(tester).renderedHeader;
+      final initialHeader = header.content;
+      expect(initialHeader?.spec['title'], 'timeline header');
       renderer(tester).formValues['draft'] = 'keep this draft';
       final barrier = host.nextReply = _ReplyBarrier(range: true);
       final pending = board(tester).onLoadRange!('2026-12-01', 21);
@@ -338,7 +354,7 @@ void main() {
       expect(renderer(tester).state['selectedDate'], '2026-10-11');
       expect(renderer(tester).formValues['draft'], 'keep this draft');
       expect(identical(renderer(tester).tree, initialTree), isTrue);
-      expect(identical(renderer(tester).renderedHeader, initialHeader), isTrue);
+      expect(header.content, same(initialHeader));
       expect(renderer(tester).pageContext['selectedDate'], isNull);
       final call = host.calls.last;
       expect(call['moduleId'], 'test.timeline');

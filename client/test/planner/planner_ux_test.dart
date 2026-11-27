@@ -1014,14 +1014,14 @@ void main() {
       final actions = (object(rendered['header'])['actions'] as List)
           .map(object)
           .toList();
-      expect(
-        actions
-            .where((a) => a['presentation'] == 'inline')
-            .map((a) => a['icon']),
-        ['add'],
-      );
-      expect(actions.first['iconOnly'], true);
-      expect(actions.first['overflowOnly'], true);
+      final inline = actions.where((a) => a['presentation'] == 'inline');
+      expect(inline.map((a) => a['icon']), ['tune', 'add']);
+      final adjust = inline.first;
+      expect(adjust['label'], '调整');
+      expect(object(adjust['quickAdjustment'])['contract'], 'time-range/2');
+      final add = inline.last;
+      expect(add['iconOnly'], true);
+      expect(add['overflowOnly'], true);
       expect(
         actions
             .where((a) => a['presentation'] == 'menu')
