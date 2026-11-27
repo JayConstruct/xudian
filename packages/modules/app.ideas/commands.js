@@ -41,6 +41,12 @@ export async function favoriteIdea({id, revision, favorite}) {
   return change(id, {...idea, favorite, revision: revision + 1});
 }
 
+export async function completeIdea({id, revision, completed}) {
+  const idea = await data.get('ideas', id);
+  checkRevision(idea, revision);
+  return change(id, {...idea, completed, revision: revision + 1});
+}
+
 export async function deleteIdea({id, revision}) {
   checkRevision(await data.get('ideas', id), revision);
   return change(id, null);

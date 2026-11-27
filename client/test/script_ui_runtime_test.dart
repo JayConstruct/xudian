@@ -54,7 +54,7 @@ void main() {
                   builder: (_, version, _) => ScriptSwipeActions(
                     config: config(revision: version, longPress: true),
                     canSwipe: false,
-                    onAction: (event) async => events.add(event),
+                    onAction: (action) async => events.add(action.event),
                     child: const Focus(
                       autofocus: true,
                       child: SizedBox(height: 60, child: Text('row')),

@@ -1298,6 +1298,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('layout-row-test.host.entry')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('调整位置与上下文'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('恢复此项默认'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('恢复此项默认'));
@@ -1912,7 +1914,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('编排入口'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('palette-test.host.entry')));
+    await tester.tap(find.byKey(const ValueKey('test.host.entry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('调整位置与上下文'));
     await tester.pumpAndSettle();
     expect(
       tester

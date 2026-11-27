@@ -93,7 +93,8 @@ extension _AppShellHostInteraction on _AppShellState {
             builder: form,
           );
         }
-        return showDialog<Map<String, Object?>>(
+        ModalRoute<dynamic>? formRoute;
+        final values = await showDialog<Map<String, Object?>>(
           context: context,
           useSafeArea: args['presentation'] != 'page',
           barrierColor: args['presentation'] == 'compact'
@@ -105,8 +106,15 @@ extension _AppShellHostInteraction on _AppShellState {
           animationStyle: args['presentation'] == 'compact'
               ? AppMotion.dialogStyle(context)
               : null,
-          builder: form,
+          builder: (dialogContext) {
+            formRoute = ModalRoute.of(dialogContext);
+            return form(dialogContext);
+          },
         );
+        // The page must regain its active route before a submitted form can
+        // authorize its matching command. Popping precedes the exit animation.
+        if (values != null) await formRoute?.completed;
+        return values;
       case 'secrets.configure':
         return platformBridge!.configureSecret(caller, args['endpoint'], (
           endpoint,

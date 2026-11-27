@@ -12,6 +12,8 @@ import 'host_api.dart';
 import 'record_contract.dart';
 
 Map<String, Object?> object(Object? value, [String label = 'value']) {
+  // Preserve the identity of typed JSON nodes when traversing a page snapshot.
+  if (value is Map<String, Object?>) return value;
   if (value is! Map) throw FormatException('$label must be an object');
   return value.cast<String, Object?>();
 }

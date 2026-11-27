@@ -9,7 +9,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
-import '../../app/frosted_toolbar_surface.dart';
 import '../ui/content_colors.dart';
 import '../ui/ui_motion.dart';
 import 'planner_timeline_window.dart';
@@ -17,8 +16,10 @@ import 'planner_status_indicator.dart';
 import 'planner_card_appearance.dart';
 
 import 'planner_day_sheet.dart';
+import 'planner_selection_panel.dart';
 import 'planner_board_types.dart';
 import 'planner_board_layout.dart';
+import 'planner_board_gaps.dart';
 import 'planner_source_hatching.dart';
 export 'planner_board_types.dart';
 
@@ -429,8 +430,7 @@ class _PlannerBoardState extends State<PlannerBoard>
   List<BoardItem>? _outsideSource;
   Object? _outsideSettings;
   List<BoardItem> _outsideItems = const [];
-  final _dailyOccupancy =
-      <(DateTime, DateTime), List<(Object?, DateTime, DateTime)>>{};
+  late final _boardGaps = PlannerBoardGaps(_date);
 
   String? _pinnedSegment;
   Timer? _intentTimer, _previewTimer;
@@ -678,7 +678,6 @@ class _PlannerBoardState extends State<PlannerBoard>
       ..seed(widget.days, widget.blocks, date);
     _daySource = _validatedDays = null;
     _layout.clear();
-    _dailyOccupancy.clear();
   }
 
   void _recenterTimeline(DateTime date) {
@@ -693,10 +692,7 @@ class _PlannerBoardState extends State<PlannerBoard>
     final fraction = (_horizontal.offset / _columnWidth) % 1;
     if (!window.recenter(date, _visibleDayCount)) return;
     _timelineRepositioning = true;
-    setState(() {
-      _layout.clear();
-      _dailyOccupancy.clear();
-    });
+    setState(_layout.clear);
     _horizontal.jumpTo(
       ((date.difference(window.origin).inDays + fraction) * _columnWidth).clamp(
         0,
@@ -779,7 +775,6 @@ class _PlannerBoardState extends State<PlannerBoard>
         window.seed(days, blocks, _leftDate ?? left);
         _rangeFailure = null;
         _layout.clear();
-        _dailyOccupancy.clear();
       });
     } catch (_) {
       if (mounted && generation == _rangeGeneration) {
@@ -1188,7 +1183,6 @@ class _PlannerBoardState extends State<PlannerBoard>
         widget.pendingAdjustment != null &&
             !identical(widget.candidates, oldWidget.candidates)) {
       _layout.clear();
-      _dailyOccupancy.clear();
     }
     final daysChanged =
         !identical(widget.days, oldWidget.days) &&
@@ -2416,11 +2410,7 @@ class _PlannerBoardState extends State<PlannerBoard>
                             _ => '移动',
                           }} · 待校验',
                         ),
-                        for (final gap in _gaps({
-                          ...value.item,
-                          'start': _stamp(value.start),
-                          'end': _stamp(value.end),
-                        }, replacements: _servicePreview()))
+                        for (final gap in _gaps(value.item, preview: value))
                           Text(
                             '空闲${_elapsed(gap.$2.difference(gap.$1))}',
                             style: TextStyle(color: scheme.onSurfaceVariant),
@@ -3287,75 +3277,20 @@ class _PlannerBoardState extends State<PlannerBoard>
     });
   }
 
-  // Merge every actual occupation on the date before deriving neighbouring gaps.
-  // Hidden candidates, courses and fixed blocks all remain part of this input.
-  List<(DateTime, DateTime)> _gaps(
-    BoardItem item, {
-    List<BoardItem>? replacements,
-  }) {
-    final start = _date(item['start']), end = _date(item['end']);
-    if (start == null || end == null) return [];
-    final date = _midnight(start),
-        next = _midnight(end).add(const Duration(days: 1));
-    final changed = {
-      for (final replacement in replacements ?? <BoardItem>[])
-        replacement['id']: replacement,
-    };
-    final spans = <(DateTime, DateTime)>[];
-    // Parse the full data source once for each relevant day and data revision.
-    // Pointer frames only inspect that day's cached occupancy.
-    final daily = _dailyOccupancy.putIfAbsent((date, next), () {
-      final result = <(Object?, DateTime, DateTime)>[];
-      for (final block in _blocks) {
-        if (block['occupiesTime'] == false) continue;
-        final a = _date(block['start']), b = _date(block['end']);
-        if (a != null && b != null && a.isBefore(next) && b.isAfter(date)) {
-          result.add((block['id'], a, b));
-        }
-      }
-      return result;
-    });
-    for (final original in daily) {
-      if (original.$1 == item['id'] || changed.containsKey(original.$1)) {
-        continue;
-      }
-      spans.add((
-        original.$2.isBefore(date) ? date : original.$2,
-        original.$3.isAfter(next) ? next : original.$3,
-      ));
-    }
-    for (final block in changed.values) {
-      if (block['id'] == item['id']) continue;
-      final a = _date(block['start']), b = _date(block['end']);
-      if (a == null || b == null || !a.isBefore(next) || !b.isAfter(date)) {
-        continue;
-      }
-      spans.add((a.isBefore(date) ? date : a, b.isAfter(next) ? next : b));
-    }
-    spans.sort((a, b) => a.$1.compareTo(b.$1));
-    final merged = <(DateTime, DateTime)>[];
-    for (final span in spans) {
-      if (merged.isEmpty || span.$1.isAfter(merged.last.$2)) {
-        merged.add(span);
-      } else if (span.$2.isAfter(merged.last.$2)) {
-        merged[merged.length - 1] = (merged.last.$1, span.$2);
-      }
-    }
-    if (merged.any((span) => span.$1.isBefore(end) && span.$2.isAfter(start))) {
-      return [];
-    }
-    DateTime? previous, following;
-    for (final span in merged) {
-      if (!span.$2.isAfter(start)) previous = span.$2;
-      if (!span.$1.isBefore(end)) {
-        following = span.$1;
-        break;
-      }
-    }
-    return [
-      if (previous != null && start.isAfter(previous)) (previous, start),
-      if (following != null && following.isAfter(end)) (end, following),
-    ];
+  List<PlannerGap> _gaps(BoardItem item, {_Proposal? preview}) {
+    final start = preview?.start ?? _date(item['start']);
+    final end = preview?.end ?? _date(item['end']);
+    if (start == null || end == null) return const [];
+    final replacements = _validation.value?['previewBlocks'];
+    return _boardGaps.around(
+      _blocks,
+      item['id'],
+      start,
+      end,
+      replacements: preview == null
+          ? null
+          : (replacements is List ? replacements : const []),
+    );
   }
 
   bool _gapHasGridRoom((DateTime, DateTime) gap) {
@@ -3394,11 +3329,10 @@ class _PlannerBoardState extends State<PlannerBoard>
     return x >= 0 && x <= viewport.width && y >= 0 && y <= viewport.height;
   }
 
-  List<Widget> _gapLabels(BoardItem item, {List<BoardItem>? replacements}) {
-    final start = _date(item['start']);
-    if (start == null || item['showSelectionGaps'] == false) return [];
+  List<Widget> _gapLabels(BoardItem item, {_Proposal? preview}) {
+    if (item['showSelectionGaps'] == false) return [];
     return [
-      for (final gap in _gaps(item, replacements: replacements))
+      for (final gap in _gaps(item, preview: preview))
         for (final dayIndex in [
           _days.indexWhere((day) => _date(day['date']) == _midnight(gap.$1)),
         ])
@@ -3431,205 +3365,31 @@ class _PlannerBoardState extends State<PlannerBoard>
     final item = _selectedItem!;
     final start = _date(item['start'])!, end = _date(item['end'])!;
     final edit = item['editTimeEvent'] ?? widget.options['editTimeEvent'];
-    final actions =
-        (item['actions'] is List ? item['actions'] as List : const [])
-            .whereType<Map>()
-            .where(
-              (action) => action['label'] is String && action['event'] is Map,
-            )
-            .take(3)
-            .toList();
-    final scheme = Theme.of(context).colorScheme;
-    final fallbackGaps =
-        (item['showSelectionGaps'] == false
-                ? <(DateTime, DateTime)>[]
-                : _gaps(item))
-            .where((gap) => !_gapVisibleInGrid(gap))
-            .toList();
-    final sourceLabel = item['sourceLabel']?.toString();
-    final showSource =
-        item['showSelectionSource'] != false &&
-        sourceLabel != null &&
-        sourceLabel.isNotEmpty &&
-        (item['readOnly'] == true || sourceLabel != '任务');
-    final appearance = PlannerCardAppearance.of(item);
-    final inlineActions =
-        item['selectionLayout'] == 'inlineActions' && actions.length == 1;
-    Widget actionButton(Map action, {bool inline = false}) {
-      final VoidCallback? onPressed =
-          !widget.enabled || action['disabled'] == true
-          ? null
-          : () {
-              if (widget.onCommandAction != null && action['command'] is Map) {
-                widget.onCommandAction!(action['event'], action['command']);
-              } else {
-                widget.onEvent(action['event']);
-              }
-            };
-      if (inline) {
-        return FilledButton(
-          onPressed: onPressed,
-          child: Text(action['label'] as String),
-        );
-      }
-      return FilledButton.icon(
-        onPressed: onPressed,
-        icon: Icon(switch (action['icon']) {
-          'check' => Icons.check_circle_outline,
-          'undo' => Icons.undo,
-          'history' => Icons.history,
-          _ => Icons.play_arrow_outlined,
-        }, size: 18),
-        label: Text(action['label'] as String),
-      );
-    }
-
+    final deadline = item['deadlineText'] ?? item['deadlineSummary'];
     return _selectionRegion(
-      FrostedToolbarSurface(
-        key: const ValueKey('planner-selection-panel'),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 12, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${item['title'] ?? ''}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  if (appearance.badgeText.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: scheme.onSurfaceVariant.withValues(alpha: .06),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: scheme.outlineVariant),
-                      ),
-                      child: Text(
-                        appearance.badgeText,
-                        style: Theme.of(context).textTheme.labelSmall
-                            ?.copyWith(color: scheme.onSurfaceVariant),
-                      ),
-                    ),
-                  IconButton(
-                    onPressed: () => setState(() => _selectedItem = null),
-                    icon: const Icon(Icons.close),
-                    tooltip: '关闭选中任务',
-                  ),
-                ],
-              ),
-              Text(
-                '${_full(start)} — ${_midnight(start) == _midnight(end) ? _time(end) : _full(end)} · ${_elapsed(_duration(item) ?? end.difference(start))}',
-                style: TextStyle(color: scheme.onSurfaceVariant),
-              ),
-              if ((item['deadlineText'] ?? item['deadlineSummary'])
-                      ?.toString()
-                      .isNotEmpty ==
-                  true)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '${item['deadlineText'] ?? _summary(item)}',
-                    style: TextStyle(
-                      color: item['overdue'] == true
-                          ? scheme.error
-                          : scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              for (final detail
-                  in (item['selectionDetails'] is List
-                          ? item['selectionDetails'] as List
-                          : const [])
-                      .whereType<Map>())
-                if ('${detail['value'] ?? ''}'.trim().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '${detail['label'] ?? ''} ${detail['value']}',
-                      style: TextStyle(color: scheme.onSurfaceVariant),
-                    ),
-                  ),
-              if (showSource && sourceLabel != appearance.badgeText)
-                Text(sourceLabel),
-              if ('${item['selectionNote'] ?? ''}'.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    '${item['selectionNote']}',
-                    style: TextStyle(color: scheme.onSurfaceVariant),
-                  ),
-                ),
-              if (fallbackGaps.isNotEmpty)
-                Wrap(
-                  spacing: 12,
-                  children: [
-                    for (final gap in fallbackGaps)
-                      Text(
-                        '空闲${_elapsed(gap.$2.difference(gap.$1))}',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                  ],
-                ),
-              const SizedBox(height: 8),
-              if (actions.isNotEmpty && !inlineActions)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final action in actions) actionButton(action),
-                    ],
-                  ),
-                ),
-              Row(
-                children: [
-                  if (inlineActions && actions.isNotEmpty) ...[
-                    Expanded(child: actionButton(actions.first, inline: true)),
-                    const SizedBox(width: 8),
-                  ],
-                  if (edit is Map && _movable(item)) ...[
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => widget.onEvent({
-                          ...Map<String, Object?>.from(edit),
-                          'id': item['id'],
-                        }),
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        label: const Text('编辑时间'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: FilledButton.tonal(
-                      onPressed: item['event'] == null
-                          ? null
-                          : () => widget.onEvent(item['event']),
-                      child: const Text('查看详情'),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => _zoom([item]),
-                    icon: const Icon(Icons.zoom_in),
-                    tooltip: '放大该时段',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      PlannerSelectionPanel(
+        item: item,
+        timeLabel:
+            '${_full(start)} — ${_midnight(start) == _midnight(end) ? _time(end) : _full(end)} · ${_elapsed(_duration(item) ?? end.difference(start))}',
+        deadlineLabel: deadline != null && deadline.toString().isNotEmpty
+            ? '${item['deadlineText'] ?? _summary(item)}'
+            : null,
+        gapLabels: [
+          if (item['showSelectionGaps'] != false)
+            for (final gap in _gaps(item))
+              if (!_gapVisibleInGrid(gap)) _elapsed(gap.$2.difference(gap.$1)),
+        ],
+        enabled: widget.enabled,
+        onEvent: widget.onEvent,
+        onCommandAction: widget.onCommandAction,
+        onClose: () => setState(() => _selectedItem = null),
+        onEditTime: edit is Map && _movable(item)
+            ? () => widget.onEvent({
+                ...Map<String, Object?>.from(edit),
+                'id': item['id'],
+              })
+            : null,
+        onZoom: () => _zoom([item]),
       ),
     );
   }
@@ -5276,17 +5036,8 @@ class _PlannerBoardState extends State<PlannerBoard>
                                                 ),
                                               if (_proposal.value != null)
                                                 ..._gapLabels(
-                                                  {
-                                                    ..._proposal.value!.item,
-                                                    'start': _stamp(
-                                                      _proposal.value!.start,
-                                                    ),
-                                                    'end': _stamp(
-                                                      _proposal.value!.end,
-                                                    ),
-                                                  },
-                                                  replacements:
-                                                      _servicePreview(),
+                                                  _proposal.value!.item,
+                                                  preview: _proposal.value!,
                                                 ),
                                               ..._segments(
                                                 _servicePreview(),

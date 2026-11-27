@@ -97,7 +97,8 @@ extension _ScriptPageNodes on _ScriptPageState {
               final action = object(raw);
               return {
                 ...action,
-                'event': _bindValue(action['event']),
+                if (action.containsKey('event')) 'event': _bindValue(action['event']),
+                if (action.containsKey('copyText')) 'copyText': bind(action['copyText']),
                 if (action.containsKey('disabled'))
                   'disabled': bind(action['disabled']),
               };
@@ -111,7 +112,7 @@ extension _ScriptPageNodes on _ScriptPageState {
       config: config,
       canSwipe: _swipeContentSafe(child),
       child: node(child, depth + 1),
-      onAction: (event) async {
+      onAction: (action) async {
         if (busy ||
             staleTree ||
             !routeActive ||
@@ -122,7 +123,17 @@ extension _ScriptPageNodes on _ScriptPageState {
             )) {
           return;
         }
-        await _render(event);
+        final text = action.copyText;
+        if (text == null) {
+          await _renderCommandEvent(action.event, action.command);
+          return;
+        }
+        try {
+          await Clipboard.setData(ClipboardData(text: text));
+          if (mounted) AppToast.show(context, message: '已复制文本', kind: 'success');
+        } catch (_) {
+          if (mounted) AppToast.show(context, message: '复制失败，请重试', kind: 'error');
+        }
       },
     );
   }
@@ -2157,7 +2168,7 @@ extension _ScriptPageNodes on _ScriptPageState {
             },
             enabled: !busy && !staleTree && routeActive && workspaceActive,
             previewIdentity: spec['previewIdentity'],
-            quickAdjust: _quickAdjust,
+            quickAdjust: quickConfig != null && _quickAdjust,
             pendingAdjustment: quickConfig != null
                 ? _pendingPlannerAdjustment
                 : null,

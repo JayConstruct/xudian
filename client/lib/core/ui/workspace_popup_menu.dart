@@ -26,6 +26,7 @@ class WorkspacePopupMenu extends StatefulWidget {
     this.inlineActionLabels = const {},
     this.longPressChild,
     this.anchorStart = false,
+    this.highlightOutset = EdgeInsets.zero,
     this.enabled = true,
     this.openSignal,
     this.rounded = false,
@@ -43,6 +44,7 @@ class WorkspacePopupMenu extends StatefulWidget {
   /// A row can open the same popup from its bounds on long press.
   final Widget? longPressChild;
   final bool anchorStart;
+  final EdgeInsets highlightOutset;
   final bool enabled;
   final Listenable? openSignal;
   final bool rounded;
@@ -96,7 +98,7 @@ class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
               button.localToGlobal(Offset.zero, ancestor: overlay) &
               button.size;
         }
-        return anchor;
+        return widget.highlightOutset.inflateRect(anchor);
       },
     );
     setState(() => _route = route);
@@ -133,18 +135,23 @@ class _WorkspacePopupMenuState extends State<WorkspacePopupMenu> {
         child: !widget.anchorStart
             ? child
             : Stack(
+                clipBehavior: Clip.none,
                 children: [
                   child,
                   if (_route != null)
                     Positioned.fill(
+                      left: -widget.highlightOutset.left,
+                      right: -widget.highlightOutset.right,
+                      top: -widget.highlightOutset.top,
+                      bottom: -widget.highlightOutset.bottom,
                       child: IgnorePointer(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: Theme.of(context).colorScheme.primary
-                                .withValues(alpha: .06),
+                                .withValues(alpha: .035),
                             border: Border.all(
                               color: Theme.of(context).colorScheme.primary
-                                  .withValues(alpha: .65),
+                                  .withValues(alpha: .23),
                             ),
                             borderRadius: BorderRadius.circular(15),
                           ),
@@ -344,7 +351,7 @@ class _WorkspaceMenuLayout extends SingleChildLayoutDelegate {
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
     final width = math.max(0.0, constraints.maxWidth - padding.horizontal - 16);
     return BoxConstraints(
-      minWidth: math.min(rowMenu ? 205 : 196, width),
+      minWidth: math.min(rowMenu ? 220 : 196, width),
       maxWidth: math.min(280, width),
       maxHeight: math.max(0, constraints.maxHeight - padding.vertical - 16),
     );

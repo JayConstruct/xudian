@@ -3,8 +3,8 @@
   "manifest": {
     "id": "app.planner",
     "name": "任务规划",
-    "version": "1.17.1",
-    "hostApi": "^1.57.0",
+    "version": "1.17.2",
+    "hostApi": "^1.60.0",
     "dataVersion": 1,
     "permissions": [
       "ui",

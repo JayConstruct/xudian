@@ -116,3 +116,5 @@ API 1.58 增加通用的 `timelineItem`，使用 `time`、`detail`、`first`、`
 `dateInput.presentation: "button"` 将模块提供的日期标题显示为月历入口。`button.presentation: "icon"` 以图标显示操作，`text` 用作无障碍标签。
 
 宿主 API 1.59 支持紧凑时间线。模块可在 `timelineItem` 选择 `variant: compact`，使用 `detailIcon` 和 `divider` 标记条目。`sectionLabel` 可分别声明标题、说明、点击事件与箭头。`emptyState` 的 `illustrated` 展示可从当前模块包的 `artwork` 路径读取 PNG，缺图时使用声明的图标。根节点的 `header` 和 `footerStyle: composer` 可固定筛选区和记录框，`card.focusKey` 可跟随输入焦点。紧凑表单字段支持图标元信息 `metadata`、引用样式 `summary.presentation: quote` 和目的地说明 `destination`。长按菜单动作支持 `dividerBefore` 与 `tone: danger`。
+
+API 1.62 的根列可用 `scrollFromEnd: true` 从底部打开列表，子项仍按从上到下声明。较早记录从顶部添加时保留当前阅读位置。`scrollRequest` 在这种布局下定位到底部。`contentTabIndex` 指定固定筛选栏对应的内容索引，索引变化时仅正文使用通用标签切换动画。`footerBottomPadding` 和 `footerKeyboardPadding` 分别指定固定底栏的常态与键盘展开时底部留白（0～64dp）。长按菜单设为 `menuAlign: start` 时，`menuHighlightOutset: [水平, 垂直]` 可将选中边框向外扩出 0～24dp。

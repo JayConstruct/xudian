@@ -162,12 +162,34 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
     ),
   );
 
-  void _drop(UiEntryRegistration entry, UiPlacement placement, int index) {
+  UiLayoutProfile? _drop(
+    UiEntryRegistration entry,
+    UiPlacement placement,
+    int index,
+  ) {
     if (saving ||
         widget.registry.ui.entries.where((e) => identical(e, entry)).isEmpty ||
         entry.content ||
         !_editable(entry)) {
-      return;
+      return null;
+    }
+    final source = profile.mountFor(entry);
+    if (placement == UiPlacement.hidden) {
+      if (source.placement == UiPlacement.hidden) return null;
+      final next = profile.withMount(
+        entry.id,
+        UiMount(placement: placement, context: source.context),
+      );
+      _setProfile(next);
+      return next;
+    }
+    if (mountDiagnostic(
+          widget.registry.ui,
+          entry,
+          UiMount(placement: placement, context: source.context),
+        ) !=
+        null) {
+      return null;
     }
     final siblings = orderedEntries(
       widget.registry.ui,
@@ -175,7 +197,9 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
       (e) => profile.mountFor(e).placement == placement,
     );
     final previous = siblings.indexWhere((e) => e.id == entry.id);
-    if (previous >= 0 && (index == previous || index == previous + 1)) return;
+    if (previous >= 0 && (index == previous || index == previous + 1)) {
+      return null;
+    }
     siblings.removeWhere((e) => e.id == entry.id);
     siblings.insert(
       (previous >= 0 && previous < index ? index - 1 : index).clamp(
@@ -194,6 +218,7 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
       );
     }
     _setProfile(value);
+    return value;
   }
 
   void _displayOptions() {
@@ -893,6 +918,9 @@ class _UiLayoutPageState extends ConsumerState<UiLayoutPage> {
         onSelect: (id) => _select(id, false),
         canMove: _editable,
         onDrop: _drop,
+        onUndo: (expected, previous) {
+          if (!saving && identical(expected, profile)) _setProfile(previous);
+        },
         dirty: _changes().isNotEmpty,
         saving: saving,
         error: error,

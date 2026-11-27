@@ -1,6 +1,85 @@
 part of 'script_page.dart';
 
 extension _ScriptPageTimeline on _ScriptPageState {
+  ({BoardItem? spec, BoardItem? adjustment}) _readPlannerHeader(
+    Object? raw,
+    BoardItem nextTree,
+  ) {
+    if (raw is! Map) return (spec: null, adjustment: null);
+    final header = object(raw);
+    if (header['compact'] != true || header['layout'] != 'plannerTimeline') {
+      return (spec: header, adjustment: null);
+    }
+    final actions = List<Object?>.of(header['actions'] as List? ?? const []);
+    bool isAdjustment(Object? action) =>
+        action is Map && action.containsKey('quickAdjustment');
+    final index = actions.indexWhere(isAdjustment);
+    BoardItem? adjustment;
+    if (index >= 0) {
+      if (actions.indexWhere(isAdjustment, index + 1) >= 0) {
+        throw const FormatException(
+          'Only one quick adjustment action is allowed',
+        );
+      }
+      final declaration = object(actions[index]);
+      if (_timeGestures.configuration(
+            widget.host,
+            widget.moduleId,
+            declaration['quickAdjustment'],
+          ) ==
+          null) {
+        actions.removeAt(index);
+      } else {
+        actions[index] = adjustment = {
+          ...declaration,
+          'event': {'type': _ScriptPageState._quickAdjustHeaderEvent},
+        };
+      }
+    } else {
+      if (!_hasLegacyQuickAdjustBoard(nextTree)) {
+        return (spec: header, adjustment: null);
+      }
+      adjustment = const {
+        'label': '调整',
+        'tooltip': '快速调整',
+        'icon': 'tune',
+        'presentation': 'inline',
+        'variant': 'text',
+        'overflowOnly': true,
+        'event': {'type': _ScriptPageState._quickAdjustHeaderEvent},
+      };
+      actions.insert(0, adjustment);
+    }
+    return (spec: {...header, 'actions': actions}, adjustment: adjustment);
+  }
+
+  bool _hasLegacyQuickAdjustBoard(Object? node) {
+    if (node is Map) {
+      if (node['type'] == 'plannerBoard' &&
+          node['quickAdjustment'] is Map &&
+          _quickAdjustmentConfig(object(node)) != null) {
+        return true;
+      }
+      return node.values.any(_hasLegacyQuickAdjustBoard);
+    }
+    return node is List && node.any(_hasLegacyQuickAdjustBoard);
+  }
+
+  Map<String, Object?>? get _hostHeader {
+    final action = _pageHeader.adjustment;
+    if (action == null) return _pageHeader.spec;
+    return {
+      ..._pageHeader.spec!,
+      'actions': [
+        for (final item in _pageHeader.spec!['actions'] as List)
+          if (identical(item, action))
+            {...action, 'selected': _quickAdjust}
+          else
+            item,
+      ],
+    };
+  }
+
   _PlannerTimeline? _timelineConfig(BoardItem spec) {
     final key = spec['key'];
     final timeline = object(spec['options'] ?? {})['timeline'];

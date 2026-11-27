@@ -9,6 +9,7 @@ const inset = (children, padding) => ({type: 'inset', padding, children});
 const card = (children, padding = 12, extra = {}) => ({type: 'card', variant: 'outlined', padding, children, ...extra});
 const glyph = (icon, size) => ({type: 'icon', icon, size});
 const pageSize = 40;
+export const searchLabel = favorite => favorite ? '搜索收藏想法' : '搜索想法';
 export const dateLabel = date => Number(date.slice(5, 7)) + ' 月 ' + Number(date.slice(8)) + ' 日';
 export const when = stamp => dateLabel(stamp.date) + ' ' + stamp.time;
 const weekday = day => '周' + '日一二三四五六'[new Date(day + 'T12:00:00Z').getUTCDay()];
@@ -41,6 +42,7 @@ function historyPanel(history) {
 function timelineRow(idea, state, query, first, last, divider) {
   const linked = idea.history.length > 0;
   const details = [text(idea.body, 'prose', {highlight: query})];
+  if (idea.completed) details.push(row([glyph('check', 14), text('已完成', 'caption')], 4));
   if (linked) {
     const open = state.expanded === idea.id;
     details.push(inset([{type: 'row', alignment: 'start', children: [button('已创建 · ' + counts(idea), {type: 'history', id: idea.id}, {
@@ -52,9 +54,13 @@ function timelineRow(idea, state, query, first, last, divider) {
     ({label, icon, event: {type, id: idea.id, revision: idea.revision, ...extra}, ...style});
   const content = linked ? card(details, 12, {tone: 'selected', radius: 15}) : column(details);
   const menu = {type: 'swipeActions', key: idea.id, menuTrigger: 'longPress', menuAlign: 'start', revision: idea.revision,
-    extent: 240, child: content,
+    extent: 240, child: content, menuHighlightOutset: linked ? [0, 0] : [12, 8],
     actions: [action('创建待安排任务', 'tasks', 'target', {kind: 'task'}), action('创建项目', 'folder', 'target', {kind: 'project'}),
+      action(idea.completed ? '标为未完成' : '直接完成', 'check', 'complete', {}, {
+        command: {ref: ideaRef('idea.complete'), input: {id: idea.id, revision: idea.revision, completed: !idea.completed}},
+      }),
       action(idea.favorite ? '取消收藏' : '收藏', 'star', 'favorite', {}, {dividerBefore: true}),
+      {label: '复制文本', icon: 'copy', copyText: idea.body},
       action('编辑想法', 'edit', 'edit'), action('删除想法', 'delete', 'delete', {}, {dividerBefore: true, tone: 'danger'})]};
   return {type: 'timelineItem', key: idea.id, time: idea.created.time, detailIcon: idea.favorite ? 'starFilled' : null,
     variant: 'compact', filled: linked, first, last, divider, child: menu};
@@ -67,7 +73,7 @@ async function list(state, screen, query) {
   const needle = query.toLowerCase();
   const options = {sort: [{field: 'createdAt', direction: 'desc'}, {field: 'id', direction: 'desc'}]};
   if (screen === 'day') options.filter = {field: 'localDate', op: 'eq', value: state.date};
-  if (screen === 'home' && state.favorite) options.filter = {field: 'favorite', op: 'eq', value: true};
+  if (screen !== 'day' && state.favorite) options.filter = {field: 'favorite', op: 'eq', value: true};
   if (screen !== 'search' || needle) {
     for (let offset = 0; ; offset += 200) {
       const batch = await data.query('ideas', {...options, offset, limit: 200});
@@ -79,7 +85,8 @@ async function list(state, screen, query) {
       if (batch.length < 200) break;
     }
   }
-  return {rows, total};
+  // Fetch the newest window first, then display it from oldest to newest.
+  return {rows: rows.reverse(), total};
 }
 
 function empty(screen, favorite, query) {
@@ -87,7 +94,7 @@ function empty(screen, favorite, query) {
     presentation: 'illustrated', padding: 0, ...extra});
   if (screen === 'search') return query
     ? [blank('search', '没有找到相关想法', '试试其他关键词，或清空「' + query + '」。'), button('清空搜索词', {type: 'clearSearch'})]
-    : [blank('search', '搜索想法', '输入关键词查找想法正文。')];
+    : [blank('search', searchLabel(favorite), favorite ? '输入关键词查找收藏的想法。' : '输入关键词查找想法正文。')];
   if (screen === 'day') return [blank('calendar', '当天没有记录', '可以切换日期查看其他想法。')];
   return favorite ? [blank('star', '还没有收藏的想法', '长按一条想法，选择「收藏」，就能在这里找到它。',
     {artwork: 'artwork/favorites-empty.png'}), button('查看全部想法', {type: 'filter', favorite: false})]
@@ -95,7 +102,7 @@ function empty(screen, favorite, query) {
 }
 
 function toolbar(screen, state, total) {
-  if (screen === 'search') return {type: 'input', key: 'query', text: '搜索想法', presentation: 'search', inputMode: 'search',
+  if (screen === 'search') return {type: 'input', key: 'query', text: searchLabel(state.favorite), presentation: 'search', inputMode: 'search',
     clearable: true, value: state.query || '', onChangeEvent: {type: 'query'}, event: {type: 'query'}};
   if (screen === 'day') {
     const arrow = (label, icon, days) => button(label, {type: 'stepDay', days}, {presentation: 'plainIcon', icon, width: 42});
@@ -104,11 +111,11 @@ function toolbar(screen, state, total) {
       card([row([arrow('上一天', 'left', -1), arrow('下一天', 'right', 1)], 0)], 0, {radius: 14, width: 86})]),
       {type: 'divider'}], 12);
   }
-  const search = !state.favorite && total > 0;
+  const search = total > 0;
   return {...row([{type: 'tabs', variant: 'pills', density: 'compact', selectedIndex: state.favorite ? 1 : 0, items: [
     {label: '全部', event: {type: 'filter', favorite: false}},
     {label: '收藏', icon: 'star', event: {type: 'filter', favorite: true}}]},
-    ...(search ? [button('搜索想法', {type: 'openSearch'}, {icon: 'search', variant: 'outlined', presentation: 'search', flex: 1})] : []),
+    ...(search ? [button(searchLabel(state.favorite), {type: 'openSearch'}, {icon: 'search', variant: 'outlined', presentation: 'search', flex: 1})] : []),
     text(total + (state.favorite ? ' 条收藏' : ' 条想法'), 'caption', {align: 'end', flex: search ? 0 : 1})], 10),
     wrapBelow: 300};
 }
@@ -129,6 +136,7 @@ export async function pageTree(state, screen, today, forms) {
   const {rows, total} = await list(state, screen, query);
   const children = [];
   if (screen === 'search' && total) children.push(text(total + ' 条匹配的想法', 'caption'));
+  if (rows.length < total) children.push(button('查看更早的想法', {type: 'more'}));
   const yesterday = offsetDate(today, -1);
   for (const [index, idea] of rows.entries()) {
     const day = idea.created.date, previous = rows[index - 1], first = day !== previous?.created.date;
@@ -144,10 +152,10 @@ export async function pageTree(state, screen, today, forms) {
       !first && !previous.history.length && !idea.history.length));
   }
   if (!rows.length) children.push(inset([column(empty(screen, state.favorite, query), 8)], [12, 0, 12, 44]));
-  if (rows.length < total) children.push(button('查看更多', {type: 'more'}));
   if (state.error) children.unshift({type: 'notice', tone: 'warning', text: state.error});
-  const tree = {...column(children), key: 'ideas:' + screen, scrollRequest: state.scrollRequest, queueInputActions: true, centerLast: !rows.length,
+  const tree = {...column(children), key: 'ideas:' + screen, scrollFromEnd: true, scrollRequest: state.scrollRequest, queueInputActions: true, centerLast: !rows.length,
     header: inset([toolbar(screen, state, total)], [20, 8, 20, 4])};
-  if (screen === 'home') Object.assign(tree, {footerStyle: 'composer', footer: composer(forms, state)});
+  if (screen === 'home') Object.assign(tree, {contentTabIndex: state.favorite ? 1 : 0,
+    footerStyle: 'composer', footerBottomPadding: 20, footerKeyboardPadding: 12, footer: composer(forms, state)});
   return tree;
 }

@@ -358,7 +358,7 @@ export async function renderPlanner({state = {}, event, context = {}, formValues
     ], ...footer(button(selectedCount ? `预览安排（${selectedCount} 项）` : '预览有截止及规则任务', {type: 'auto'}, 'filled'))};
   } else content = {
     type: 'plannerBoard', key: 'planner:board', candidates, blocks,
-    quickAdjustment: quickAdjustmentContract,
+    quickAdjustment: true,
     previewQuery: {ref: ref('operation.inspect'), input: {timezone: a.timezone, expectedTasks}},
     previewIdentity: JSON.stringify([a.timezone, state.startDate, state.days, state.candidateOffset, state.onlyDeadline, expectedTasks, data.busy]),
     days: Array.from({length: data.range.days}, (_, index) => { const date = add(data.range.startDate, index); return {date, label: date.slice(5).replace('-', '/')}; }),
@@ -397,6 +397,7 @@ function plannerPage(state, content, displayHoursLabel = '') {
     ...(!alternate ? {layout: 'plannerTimeline'} : {}),
     ...(alternate ? {titleStyle: 'large', minHeight: 65,
       ...(state.detailRoute ? {backIcon: 'chevron', ...(state.autoPreview ? {backEvent: {type: 'chooseAuto'}} : {})} : {backEvent: {type: 'board'}})} : {}), actions: alternate ? recordActions : [
+    {label: '调整', tooltip: '快速调整', icon: 'tune', presentation: 'inline', variant: 'text', overflowOnly: true, quickAdjustment: quickAdjustmentContract},
     {label: '新建', icon: 'add', presentation: 'inline', iconOnly: true, overflowOnly: true, event: {type: 'add'}},
     {label: '自动安排', icon: 'schedule', presentation: 'menu', event: {type: 'openSummary', page: 'auto'}},
     batchesAction, historyAction, cancelledAction,

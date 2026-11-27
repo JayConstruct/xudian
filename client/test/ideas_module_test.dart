@@ -129,7 +129,7 @@ void main() {
         (await page('home'))
             .where((n) => n['type'] == 'timelineItem')
             .map((n) => n['time']),
-        ['00:15', '23:55'],
+        ['23:55', '00:15'],
       );
       expect(
         (await page(
@@ -158,6 +158,52 @@ void main() {
       );
     },
   );
+
+  test('older pages prepend to the newest window and search respects the active filter', () async {
+    for (var minute = 0; minute < 42; minute++) {
+      host.clockNow = () => DateTime.utc(2026, 11, 23, 1, minute);
+      final id = (await command('record', {'body': '同词 $minute'}))['id'];
+      if (minute == 1 || minute == 41) {
+        await command('favorite', {'id': id, 'revision': 1, 'favorite': true});
+      }
+    }
+    List<Object?> times(List<Map<String, Object?>> view) => view
+        .where((n) => n['type'] == 'timelineItem')
+        .map((n) => n['time'])
+        .toList();
+    final recent = await page('home');
+    expect(times(recent), hasLength(40));
+    expect(times(recent).first, '09:02');
+    expect(times(recent).last, '09:41');
+    expect(
+      recent.indexWhere((n) => n['text'] == '查看更早的想法'),
+      lessThan(recent.indexWhere((n) => n['type'] == 'timelineItem')),
+    );
+    final expanded = times(await page('home', state: {'limit': 80}));
+    expect(expanded.take(2), ['09:00', '09:01']);
+    expect(expanded.skip(2), times(recent));
+    expect(
+      times(
+        await page(
+          'search',
+          forms: {'query': '同词'},
+          context: {'favorite': true},
+        ),
+      ),
+      ['09:01', '09:41'],
+    );
+    expect(times(await page('search', forms: {'query': '同词 20'})), ['09:20']);
+    expect(
+      times(
+        await page(
+          'search',
+          forms: {'query': '同词 20'},
+          context: {'favorite': true},
+        ),
+      ),
+      isEmpty,
+    );
+  });
 
   test('one composite commit per target, idempotent retry, independent task and project lifetimes', () async {
     final id = (await command('record', {'body': '校园声音地图'}))['id'] as String;
@@ -257,4 +303,55 @@ void main() {
     expect(entered, ['', '  ']);
     expect(objects((await read(id))['history']).single['name'], '有效名称');
   });
+
+  test(
+    'completion preserves the idea and is reversible in every view',
+    () async {
+      const body = '校园声音地图\n公园的晚钟';
+      final id = (await command('record', {'body': body}))['id'] as String;
+      await command('favorite', {'id': id, 'revision': 1, 'favorite': true});
+      await command('createTarget', {
+        'id': id,
+        'revision': 2,
+        'kind': 'project',
+        'name': '晚钟',
+        'requestId': 'bells',
+      });
+      final original = await read(id);
+      expect(original.containsKey('completed'), isFalse);
+      await command('complete', {'id': id, 'revision': 3, 'completed': true});
+      expect(await read(id), {...original, 'completed': true, 'revision': 4});
+      await expectLater(
+        command('complete', {'id': id, 'revision': 3, 'completed': false}),
+        throwsA(anything),
+      );
+      for (final view in [
+        await page('home'),
+        await page('home', state: {'favorite': true}),
+        await page('day', context: {'date': '2026-11-23'}),
+        await page('search', forms: {'query': '校园'}),
+      ]) {
+        expect(view.any((node) => node['text'] == '已完成'), isTrue);
+        final menu = view.singleWhere((node) => node['type'] == 'swipeActions');
+        final actions = objects(menu['actions']);
+        expect(actions, hasLength(7));
+        expect(
+          actions.singleWhere(
+            (action) => action['label'] == '复制文本',
+          )['copyText'],
+          body,
+        );
+        final reopen = actions.singleWhere(
+          (action) => action['label'] == '标为未完成',
+        );
+        expect(object(reopen['command'])['input'], {
+          'id': id,
+          'revision': 4,
+          'completed': false,
+        });
+      }
+      await command('complete', {'id': id, 'revision': 4, 'completed': false});
+      expect(await read(id), {...original, 'completed': false, 'revision': 5});
+    },
+  );
 }

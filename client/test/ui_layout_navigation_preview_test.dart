@@ -119,72 +119,31 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
-  testWidgets(
-    'searching the icon palette opens the matching entry without moving it',
-    (tester) async {
-      phoneViewport(tester);
-      await initialize();
-      await container
-          .read(uiLayoutProvider.notifier)
-          .save(
-            UiLayout(
-              narrow: UiLayoutProfile(
-                mounts: {
-                  'today': const UiMount(placement: UiPlacement.main, order: 2),
-                  'schedule': const UiMount(
-                    placement: UiPlacement.main,
-                    order: 1,
-                  ),
-                },
-              ),
-            ),
-          );
-      await show(tester);
-      await tester.tap(find.text('编排入口'));
-      await tester.pumpAndSettle();
-      final zone = find.byKey(const ValueKey('zone-main'));
-      final today = find.byKey(const ValueKey('palette-today'));
-      final schedule = find.byKey(const ValueKey('palette-schedule'));
-      expect(
-        tester.getTopLeft(zone).dy,
-        greaterThan(tester.getBottomLeft(today).dy),
-      );
-      expect(
-        tester.getTopLeft(schedule).dx,
-        lessThan(tester.getTopLeft(today).dx),
-      );
-      await tester.tap(find.text('搜索入口'));
-      await tester.pumpAndSettle();
-      expect(find.text('搜索可选入口'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.widgetWithText(ListTile, '课表')).dy,
-        lessThan(tester.getTopLeft(find.widgetWithText(ListTile, '今天')).dy),
-      );
-      await tester.tap(find.text('取消'));
-      await tester.pumpAndSettle();
-      expect(find.text('搜索可选入口'), findsNothing);
-      await tester.tap(find.text('搜索入口'));
-      await tester.pumpAndSettle();
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.text('搜索可选入口'), findsNothing);
-      expect(find.text('搜索入口'), findsOneWidget);
-      await tester.tap(find.text('搜索入口'));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('layout-picker-search')),
-        'today',
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ListTile, '今天'));
-      await tester.pumpAndSettle();
-      expect(find.text('编辑 · 今天'), findsOneWidget);
-      expect(
-        container.read(uiLayoutEditorSessionsProvider).hasDirtyEditors,
-        isFalse,
-      );
-    },
-  );
+  testWidgets('候选列表按分区过滤，可搜索添加并撤销', (tester) async {
+    phoneViewport(tester);
+    await show(tester);
+    await tester.tap(find.text('编排入口'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('palette-today')), findsNothing);
+    final field = find.byKey(const ValueKey('arranger-search'));
+    await tester.enterText(field, 'hidden');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('palette-import')), findsNothing);
+    await tester.tap(find.text('添加'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('hidden')), findsOneWidget);
+    expect(
+      container.read(uiLayoutEditorSessionsProvider).hasDirtyEditors,
+      isTrue,
+    );
+    await tester.tap(find.text('撤销'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('palette-hidden')), findsOneWidget);
+    expect(
+      container.read(uiLayoutEditorSessionsProvider).hasDirtyEditors,
+      isFalse,
+    );
+  });
 
   testWidgets(
     'drag hover switches zones and only a drop inside the preview edits the draft',
@@ -193,14 +152,14 @@ void main() {
       await show(tester);
       await tester.tap(find.text('编排入口'));
       await tester.pumpAndSettle();
-      final palette = find.byKey(const ValueKey('palette-today'));
+      final palette = find.byKey(const ValueKey('palette-hidden'));
       Future<TestGesture> hover(String zone) async {
         final gesture = await tester.startGesture(tester.getCenter(palette));
         await tester.pump(const Duration(milliseconds: 600));
         final target = find.byKey(ValueKey('zone-$zone'));
         expect(
-          tester.getBottomLeft(palette).dy,
-          lessThan(tester.getTopLeft(target).dy),
+          tester.getTopLeft(palette).dy,
+          greaterThan(tester.getBottomLeft(target).dy),
         );
         await gesture.moveTo(tester.getCenter(target));
         await tester.pumpAndSettle();
@@ -228,7 +187,7 @@ void main() {
       await tester.pump();
       await move.up();
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('more-entry-today')), findsOneWidget);
+      expect(find.byKey(const ValueKey('more-entry-hidden')), findsOneWidget);
       expect(
         container.read(uiLayoutEditorSessionsProvider).hasDirtyEditors,
         isTrue,
@@ -301,6 +260,128 @@ void main() {
     },
   );
 
+  testWidgets('按落点插入、跨区移动、拖出取消与拖入移除，撤销保留先前草稿', (tester) async {
+    phoneViewport(tester);
+    await show(tester);
+    await tester.tap(find.text('编排入口'));
+    await tester.pumpAndSettle();
+    Finder keyed(String key) => find.byKey(ValueKey(key));
+    Future<TestGesture> pick(String key) async {
+      final gesture = await tester.startGesture(tester.getCenter(keyed(key)));
+      await tester.pump(const Duration(milliseconds: 650));
+      return gesture;
+    }
+
+    Future<void> drop(TestGesture g, Offset target) async {
+      await g.moveTo(target);
+      await tester.pump();
+      await g.up();
+      await tester.pumpAndSettle();
+    }
+
+    List<String> order() => tester
+        .widget<MobileBottomDock>(find.byType(MobileBottomDock))
+        .destinations
+        .map((e) => e.id)
+        .toList();
+    final added = await pick('palette-hidden');
+    await drop(
+      added,
+      tester.getCenter(keyed('drop-main-0')) + const Offset(8, 0),
+    );
+    expect(order(), ['app.shell.more', 'today', 'hidden', 'schedule']);
+    final cancel = await pick('hidden');
+    await drop(cancel, tester.getCenter(find.text('编排入口')));
+    expect(order(), ['app.shell.more', 'today', 'hidden', 'schedule']);
+    final move = await pick('hidden');
+    await move.moveTo(tester.getCenter(keyed('zone-header')));
+    await tester.pumpAndSettle();
+    final menu = keyed('drop-header-0');
+    await drop(move, tester.getCenter(menu) + const Offset(0, 8));
+    expect(
+      tester.getCenter(keyed('layout-row-hidden')).dy,
+      greaterThan(tester.getCenter(keyed('layout-row-import')).dy),
+    );
+    final remove = await pick('layout-row-hidden');
+    await drop(remove, tester.getCenter(keyed('drop-remove')));
+    expect(keyed('layout-row-hidden'), findsNothing);
+    expect(keyed('palette-hidden'), findsOneWidget);
+    await tester.tap(find.text('撤销'));
+    await tester.pumpAndSettle();
+    expect(keyed('layout-row-hidden'), findsOneWidget);
+    expect(
+      container.read(uiLayoutEditorSessionsProvider).hasDirtyEditors,
+      isTrue,
+    );
+    expect(
+      container.read(uiLayoutProvider).requireValue.narrow.mounts,
+      isEmpty,
+    );
+  });
+
+  testWidgets('拖至长列表边缘，按松手时可见的行插入', (tester) async {
+    phoneViewport(tester);
+    await initialize();
+    for (var i = 0; i < 18; i++) {
+      registry.ui.register(
+        UiEntryRegistration(
+          id: 'extra-$i',
+          moduleId: 'test',
+          pageId: 'test.page',
+          label: '入口 $i',
+          icon: Icons.apps,
+          defaultMount: UiMount(placement: UiPlacement.header, order: i + 1),
+        ),
+      );
+    }
+    await show(tester);
+    await tester.tap(find.text('编排入口'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('zone-header')));
+    await tester.pumpAndSettle();
+    final candidate = find.byKey(const ValueKey('palette-hidden'));
+    final drag = await tester.startGesture(tester.getCenter(candidate));
+    await tester.pump(const Duration(milliseconds: 650));
+    final viewport = find
+        .ancestor(
+          of: find.byKey(const ValueKey('drop-header-0')),
+          matching: find.byType(SingleChildScrollView),
+        )
+        .first;
+    final point = Offset(
+      tester.getCenter(find.byKey(const ValueKey('drop-header-0'))).dx,
+      tester.getBottomLeft(viewport).dy - 16,
+    );
+    await drag.moveTo(point);
+    for (var frame = 0; frame < 36; frame++) {
+      await tester.pump(const Duration(milliseconds: 25));
+    }
+    final rows = ['import', for (var i = 0; i < 18; i++) 'extra-$i'];
+    final row = rows.indexWhere(
+      (id) => tester
+          .getRect(find.byKey(ValueKey('layout-row-$id')))
+          .contains(point),
+    );
+    expect(row, greaterThan(4));
+    final anchor = tester.getRect(
+      find.byKey(ValueKey('layout-row-${rows[row]}')),
+    );
+    final expected = row + (point.dy > anchor.center.dy ? 1 : 0);
+    await drag.up();
+    await tester.pumpAndSettle();
+    final inserted = find.descendant(
+      of: find.byKey(ValueKey('drop-header-$expected')),
+      matching: find.byKey(const ValueKey('layout-row-hidden')),
+    );
+    expect(inserted, findsOneWidget);
+    await tester.tap(find.text('撤销'));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(uiLayoutEditorSessionsProvider).hasDirtyEditors,
+      isFalse,
+    );
+  });
+
   testWidgets('visual entries edit drafts without opening business pages', (
     tester,
   ) async {
@@ -317,9 +398,13 @@ void main() {
     expect(find.text('显示技术标识'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('today')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('调整位置与上下文'));
+    await tester.pumpAndSettle();
     expect(find.text('编辑 · 今天'), findsOneWidget);
     await closeInspector(tester);
     await tester.tap(find.byKey(const ValueKey('today')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('调整位置与上下文'));
     await tester.pumpAndSettle();
     expect(find.text('编辑 · 今天'), findsOneWidget);
     await tester.tap(find.text('调整位置'));
@@ -345,6 +430,8 @@ void main() {
     final menuItem = find.byKey(const ValueKey('layout-row-today'));
     await tester.ensureVisible(menuItem);
     await tester.tap(menuItem);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('调整位置与上下文'));
     await tester.pumpAndSettle();
     expect(find.text('编辑 · 今天'), findsOneWidget);
     expect(
@@ -405,7 +492,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('more-entry-modules')), findsOneWidget);
     expect(find.byKey(const ValueKey('more-entry-schedule')), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('more-entry-schedule')),
+    );
     await tester.tap(find.byKey(const ValueKey('more-entry-schedule')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('调整位置与上下文'));
     await tester.pumpAndSettle();
     expect(find.text('编辑 · 课表'), findsOneWidget);
     expect(find.text('更多入口'), findsNothing);
@@ -542,6 +634,8 @@ void main() {
       await tester.tap(find.text('编排入口'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('today')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('调整位置与上下文'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('调整位置'));
       await tester.pumpAndSettle();

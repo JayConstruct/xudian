@@ -2,6 +2,7 @@ import '../../features/settings/settings_widgets.dart';
 import '../../features/settings/settings_focus.dart';
 import '../ui/workspace_interaction.dart';
 import '../ui/ui_icon.dart';
+import '../ui/ui_toast.dart';
 import '../ui/page_runtime_context.dart';
 import '../ui/page_composition_readiness.dart';
 import '../ui/page_first_frame.dart';
@@ -9,6 +10,7 @@ import '../ui/page_loading_placeholder.dart';
 import '../ui/date_reveal.dart';
 import '../ui/daily_widgets.dart' show AgendaTimeLayout;
 import 'date_page_cache.dart';
+import 'script_date_navigation.dart';
 import '../../app/app_icons.dart';
 
 import 'dart:async';
@@ -41,6 +43,7 @@ import '../ui/script_content_widgets.dart';
 
 import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:xquickjs/error_message.dart';
 
 import '../../app/design_system.dart';
@@ -83,7 +86,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   Map<String, Object?>? tree;
   String? treeContextIdentity;
   Object? renderedInstance;
-  Map<String, Object?>? renderedHeader;
+  ({BoardItem? spec, BoardItem? adjustment}) _pageHeader = (
+    spec: null,
+    adjustment: null,
+  );
   final controllers = <String, TextEditingController>{};
   final focusNodes = <String, FocusNode>{};
   final scrollControllers = <String, ScrollController>{};
@@ -294,8 +300,14 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       ),
     ),
   );
-  BoardItem? _quickAdjustmentConfig(BoardItem spec) => _timeGestures
-      .configuration(widget.host, widget.moduleId, spec['quickAdjustment']);
+  BoardItem? _quickAdjustmentConfig(BoardItem spec) =>
+      _timeGestures.configuration(
+        widget.host,
+        widget.moduleId,
+        spec['quickAdjustment'] == true
+            ? (_pageHeader.adjustment?['quickAdjustment'])
+            : spec['quickAdjustment'],
+      );
 
   void _plannerEvent(Object? event, BoardItem? quickConfig) {
     if (busy || staleTree || !routeActive || !workspaceActive) return;
@@ -371,10 +383,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       }());
       return;
     }
-    if (event is! Map || declaration == null) {
-      unawaited(_render(event));
-      return;
-    }
+    unawaited(_renderCommandEvent(event, declaration));
+  }
+
+  Future<void> _renderCommandEvent(Object? event, Object? declaration) {
+    if (event is! Map || declaration == null) return _render(event);
     // Use a fresh event identity. Only this actual native callback may attach
     // authority; a script sending identical JSON cannot recover it.
     final nativeEvent = freezeJson(event) as Map<String, Object?>;
@@ -382,7 +395,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       _bindValue(declaration),
     );
     if (approval != null) _commandApprovals[nativeEvent] = approval;
-    unawaited(_render(nativeEvent));
+    return _render(nativeEvent);
   }
 
   void _showPlannerUndo(PlannerQuickAdjustment adjustment, Object instance) {
@@ -464,7 +477,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     return _plannerLists[value] ??= objects(value);
   }
 
-  bool retainDateNavigation = false;
+  var _dateNavigation = ScriptDateNavigation(null);
   bool get staleTree =>
       tree != null && treeContextIdentity != canonicalJson(pageContext);
   BuildContext get uiContext => nodeContext ?? context;
@@ -575,9 +588,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       state = {};
       formValues = {};
       tree = null;
+      _dateNavigation = ScriptDateNavigation(null);
       treeContextIdentity = null;
       renderedInstance = null;
-      renderedHeader = null;
+      _pageHeader = (spec: null, adjustment: null);
       error = null;
       localRuntimeContext = const {};
       readModules = null;
@@ -630,43 +644,6 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     scope.controller.publish(lease!, this, _hostHeader, _renderHeaderEvent);
   }
 
-  bool get _hasQuickAdjustHeader =>
-      renderedHeader?['compact'] == true &&
-      renderedHeader?['layout'] == 'plannerTimeline' &&
-      _hasQuickAdjustBoard(tree);
-
-  bool _hasQuickAdjustBoard(Object? node) {
-    if (node is Map) {
-      if (node['type'] == 'plannerBoard' &&
-          _quickAdjustmentConfig(object(node)) != null) {
-        return true;
-      }
-      return node.values.any(_hasQuickAdjustBoard);
-    }
-    return node is List && node.any(_hasQuickAdjustBoard);
-  }
-
-  Map<String, Object?> get _quickAdjustHeaderAction => {
-    'label': '调整',
-    'tooltip': '快速调整',
-    'icon': 'tune',
-    'presentation': 'inline',
-    'variant': 'text',
-    'overflowOnly': true,
-    'selected': _quickAdjust,
-    'event': {'type': _quickAdjustHeaderEvent},
-  };
-
-  Map<String, Object?>? get _hostHeader => !_hasQuickAdjustHeader
-      ? renderedHeader
-      : {
-          ...renderedHeader!,
-          'actions': [
-            _quickAdjustHeaderAction,
-            ...?renderedHeader!['actions'] as List?,
-          ],
-        };
-
   void _setQuickAdjust(bool value) {
     if (!mounted || !workspaceActive || staleTree || _quickAdjust == value) {
       return;
@@ -680,7 +657,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
   // through the ordinary latest-intent slot used by date navigation.
   Future<void> _renderHeaderEvent(Object? event) async {
     if (event is Map && event['type'] == _quickAdjustHeaderEvent) {
-      if (_hasQuickAdjustHeader) _setQuickAdjust(!_quickAdjust);
+      if (_pageHeader.adjustment != null) _setQuickAdjust(!_quickAdjust);
       return;
     }
     final instance = widget.host.instances[widget.moduleId];
@@ -1135,16 +1112,15 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         if (state['moveIntent'] == null) _retryPlannerMove = null;
         _pendingPlannerAdjustment = null;
         tree = nextTree;
+        _dateNavigation = ScriptDateNavigation(nextTree);
         _inlinePlanPreview = _readInlinePlanPreview();
         treeContextIdentity = canonicalJson({...requestContext, ...patch});
         renderedInstance = instance;
-        renderedHeader = result['header'] is Map
-            ? object(result['header'])
-            : null;
+        _pageHeader = _readPlannerHeader(result['header'], nextTree);
         error = null;
       });
-      if (_hasDateNavigation(tree)) readiness?.allowContextChanges();
-      final todayDate = _declaredTodayDate(tree);
+      if (_dateNavigation.present) readiness?.allowContextChanges();
+      final todayDate = _dateNavigation.todayDate;
       if (todayDate != null) runtimeScope?.reportTodayDate?.call(todayDate);
       if (patch.isNotEmpty) {
         if (runtimeScope != null) {
@@ -1727,42 +1703,13 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     );
   }
 
-  bool _hasDateNavigation(Object? spec) {
-    if (spec is Map) {
-      if (spec['type'] == 'dayOverview' || spec['ref'] == 'ui.dayOverview@1') {
-        return true;
-      }
-      return spec.values.any(_hasDateNavigation);
-    }
-    return spec is List && spec.any(_hasDateNavigation);
-  }
-
-  String? _declaredTodayDate(Object? spec) {
-    if (spec is Map) {
-      if (spec['type'] == 'dayOverview' || spec['ref'] == 'ui.dayOverview@1') {
-        final raw = spec['type'] == 'dayOverview'
-            ? spec['todayDate']
-            : (spec['props'] as Map?)?['todayDate'];
-        if (raw is String) return raw;
-      }
-      for (final value in spec.values) {
-        final date = _declaredTodayDate(value);
-        if (date != null) return date;
-      }
-    } else if (spec is List) {
-      for (final value in spec) {
-        final date = _declaredTodayDate(value);
-        if (date != null) return date;
-      }
-    }
-    return null;
-  }
-
   Widget node(Map<String, Object?> spec, [int depth = 0, bool replace = true]) {
     final child = _node(spec, depth, replace);
     // Keep the navigation's Elements and animation alive across a date query.
     // Other branches remain mounted, but cannot display or expose old records.
-    if (!retainDateNavigation || _hasDateNavigation(spec)) return child;
+    if (!_dateNavigation.present || _dateNavigation.contains(spec)) {
+      return child;
+    }
     return Offstage(
       key: spec['key'] == null ? null : ValueKey(spec['key']),
       offstage: staleTree,
@@ -1821,6 +1768,13 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
     final composer = tree?['footerStyle'] == 'composer';
     final inset = composer || tree?['footerStyle'] == 'inset';
     final flat = edge || tree?['footerStyle'] == 'flat';
+    final bottomPadding = (tree?['footerBottomPadding'] as num?)?.toDouble() ??
+        (composer ? 5.0 : 12.0);
+    final keyboardPadding = (tree?['footerKeyboardPadding'] as num?)?.toDouble();
+    final footerPadding = keyboardPadding != null &&
+            MediaQuery.viewInsetsOf(Navigator.of(context).context).bottom > 0
+        ? keyboardPadding
+        : bottomPadding;
     final rendered = _pageTransition(
       Container(
         decoration: flat
@@ -1840,7 +1794,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           edge || composer ? AppDesign.pageGutter : 16,
           edge ? 10 : 8,
           edge || composer ? AppDesign.pageGutter : 16,
-          (composer ? 5 : 12) + WorkspaceContentInsets.bottomOf(context),
+          footerPadding.clamp(0.0, 64.0) + WorkspaceContentInsets.bottomOf(context),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2037,7 +1991,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
         });
       }
     }
-    return _pageTransition(
+    final content = _pageTransition(
       LayoutBuilder(
         builder: (context, constraints) {
           final rawPanel = spec['floatingPanel'];
@@ -2084,6 +2038,29 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                               : bottom,
                         ),
                         child: safeNode(spec),
+                      )
+                    : spec['type'] == 'column' &&
+                          spec['scrollFromEnd'] == true &&
+                          spec['centerLast'] != true
+                    ? Align(
+                        alignment: Alignment.topCenter,
+                        child: ListView.builder(
+                          key: PageStorageKey(scrollKey),
+                          reverse: true,
+                          shrinkWrap: true,
+                          controller: controller,
+                          padding: scrollPadding,
+                          itemCount: rootChildren.length,
+                          itemBuilder: (_, index) {
+                            final i = rootChildren.length - 1 - index;
+                            final child = rootChildren[i];
+                            return Padding(
+                              key: child['key'] == null ? null : ValueKey(child['key']),
+                              padding: EdgeInsets.only(bottom: _columnGap(spec, rootChildren, i, 0)),
+                              child: node(child, 1),
+                            );
+                          },
+                        ),
                       )
                     : spec['type'] == 'column' &&
                           spec['centerLast'] == true &&
@@ -2177,6 +2154,8 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
       ),
       fillViewport: true,
     );
+    final tab = spec['contentTabIndex'];
+    return tab is int ? TabContentTransition(index: tab, child: content) : content;
   }
 
   @override
@@ -2190,7 +2169,6 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
           nodeContext = context;
           dateContentBlocked =
               DateRevealScope.of(context)?.isTransitioning == true;
-          retainDateNavigation = _hasDateNavigation(tree);
           // Inline compositions provide one shared progress indicator.
           final loading =
               busy &&
@@ -2207,7 +2185,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
               tree != null &&
               (treeContextIdentity == canonicalJson(pageContext) ||
                   contextController ||
-                  retainDateNavigation);
+                  _dateNavigation.present);
           final headerLease = WorkspaceHeaderScope.read(context)?.lease;
           final hasNativeHeader =
               headerLease?.mode == 'contributed' &&
@@ -2244,7 +2222,7 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                 safeNode(object(tree!['header'])),
               if (!widget.embedded &&
                   currentTree &&
-                  _hasQuickAdjustHeader &&
+                  _pageHeader.adjustment != null &&
                   !hasNativeHeader)
                 ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: 48),
@@ -2256,7 +2234,10 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
                       alignment: AlignmentDirectional.centerEnd,
                       child: WorkspaceHeaderAction(
                         key: const ValueKey('planner-standalone-quick-adjust'),
-                        action: _quickAdjustHeaderAction,
+                        action: {
+                          ..._pageHeader.adjustment!,
+                          'selected': _quickAdjust,
+                        },
                         compact: true,
                         onPressed: () => _setQuickAdjust(!_quickAdjust),
                       ),
@@ -2311,11 +2292,11 @@ class _ScriptPageState extends State<ScriptPage> with WidgetsBindingObserver {
             ],
           );
           return IgnorePointer(
-            ignoring: dateContentBlocked && !retainDateNavigation,
+            ignoring: dateContentBlocked && !_dateNavigation.present,
             child: ExcludeFocus(
-              excluding: dateContentBlocked && !retainDateNavigation,
+              excluding: dateContentBlocked && !_dateNavigation.present,
               child: ExcludeSemantics(
-                excluding: dateContentBlocked && !retainDateNavigation,
+                excluding: dateContentBlocked && !_dateNavigation.present,
                 child: content,
               ),
             ),

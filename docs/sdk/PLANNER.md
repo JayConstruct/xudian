@@ -82,7 +82,19 @@
 
 该模式将日期选择、待安排任务条及单行星期日期头组合为紧凑界面；日期栏的 `rangeEvent` 打开日期选择，今天不在视口时显示 `todayEvent` 的返回入口。待安排默认横向一行，展开为覆盖表格的浮层，不改变网格原点，拖动时隐藏并于手势结束后收起。现有 `moveEvent`、预览、确认、快速调整及撤销协议不变。
 
-页面顶栏可声明 `{compact:true,layout:'plannerTimeline'}` 请求20字号的紧凑标题和44逻辑像素操作区域。存在合法 `quickAdjustment` 节点时，宿主贡献“调整”开关；开关状态只属于当前页面宿主，不经脚本命令设置，也不扩大快速调整的授权写集。没有活动顶栏的独立页面保留原生操作入口；菜单及失活租约保护不变。其他顶栏布局不受影响。
+页面顶栏可声明 `{compact:true,layout:'plannerTimeline'}` 请求20字号的紧凑标题和44逻辑像素操作区域。
+
+### 快速调整入口
+
+从宿主 API `1.60.0` 起，模块可以在紧凑时间轴的 `header.actions` 中声明一个快速调整开关。模块按普通顶栏动作指定顺序、文案、图标与呈现方式，宿主绑定点击事件和选中状态。看板通过 `quickAdjustment:true` 使用该动作的记录契约。
+
+```javascript
+const adjust = {label: '调整', tooltip: '快速调整', icon: 'tune',
+  presentation: 'inline', variant: 'text', overflowOnly: true,
+  quickAdjustment: quickAdjustmentContract}; // 使用上文的 time-range/2 契约
+```
+
+契约有效时，独立页面也使用模块声明的入口。省略动作或契约无效时，使用 `quickAdjustment:true` 的看板按普通审核流程处理。旧模块直接在看板声明契约时，宿主继续提供原有开关。拖动授权、写集核验和撤销仍由宿主执行。
 
 ### API 1.36 动态日期窗口
 

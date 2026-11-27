@@ -1,7 +1,7 @@
 import {clock, data, ids, services, ui} from '@xudian/sdk';
 import {ideaRef} from './commands.js';
-import {counts, offsetDate, pageTree, when} from './timeline.js';
-export {recordIdea, editIdea, favoriteIdea, deleteIdea, createTarget} from './commands.js';
+import {counts, offsetDate, pageTree, searchLabel, when} from './timeline.js';
+export {recordIdea, editIdea, favoriteIdea, completeIdea, deleteIdea, createTarget} from './commands.js';
 
 async function submit(id, input, confirm) {
   const plan = await services.prepare(ideaRef(id), input);
@@ -54,6 +54,7 @@ export async function render({context = {}, state = {}, event, formValues = {}} 
   const result = {};
   const screen = context.pageId === 'app.ideas.search' ? 'search' : context.pageId === 'app.ideas.day' ? 'day' : 'home';
   const today = await clock.today();
+  if (screen === 'search') state.favorite = context.favorite === true;
   if (screen === 'day' && !state.date) state.date = context.date || today;
   const type = event?.type;
   if (type) delete state.error;
@@ -76,7 +77,8 @@ export async function render({context = {}, state = {}, event, formValues = {}} 
       state.query = forms.query; state.limit = 40;
       if (type === 'clearSearch') result.clearForms = ['query'];
     } else if (type === 'openDay' || type === 'openSearch') {
-      await ui.navigate(type === 'openDay' ? 'app.ideas.day' : 'app.ideas.search', type === 'openDay' ? {date: event.date} : {});
+      if (type === 'openDay') await ui.navigate('app.ideas.day', {date: event.date});
+      else await ui.navigate('app.ideas.search', {favorite: !!state.favorite});
     } else if (type === 'stepDay' || type === 'selectDay') {
       state.scrollRequest = (state.scrollRequest || 0) + 1;
       state.date = type === 'stepDay' ? offsetDate(state.date, event.days) : event.value;
@@ -86,13 +88,16 @@ export async function render({context = {}, state = {}, event, formValues = {}} 
       state.expanded = state.expanded === event.id ? null : event.id;
     } else if (type === 'more') {
       state.limit = (state.limit || 40) + 40;
-    } else if (['edit', 'favorite', 'delete', 'target'].includes(type)) {
+    } else if (['edit', 'favorite', 'complete', 'delete', 'target'].includes(type)) {
       const idea = await data.get('ideas', event.id);
       if (!idea || idea.revision !== event.revision) throw Error('这条想法已变化，请重新打开');
       const fixed = {id: idea.id, revision: idea.revision};
       if (type === 'favorite') {
         const label = idea.favorite ? '取消收藏' : '收藏';
         await submit('idea.favorite', {...fixed, favorite: !idea.favorite}, {title: label, message: idea.body.slice(0, 500), confirmLabel: label});
+      } else if (type === 'complete') {
+        const label = idea.completed ? '标为未完成' : '直接完成';
+        await submit('idea.complete', {...fixed, completed: !idea.completed}, {title: label, message: idea.body.slice(0, 500), confirmLabel: label});
       } else if (type === 'delete') {
         await submit('idea.delete', fixed, {title: '删除这条想法？', subject: '想法原文', icon: 'book', presentation: 'quote',
           message: idea.body.slice(0, 4000), ...(idea.history.length ? {notice: '已创建的 ' + counts(idea, ' 和 ') + ' 会保留。'} : {}), confirmLabel: '删除想法'});
@@ -102,8 +107,8 @@ export async function render({context = {}, state = {}, event, formValues = {}} 
     if (type === 'record') state.saveError = failure.message + '，暂未保存';
     else state.error = failure.message;
   }
-  const title = screen === 'home' ? '想法' : screen === 'search' ? '搜索想法' : '按日期查看';
+  const title = screen === 'home' ? '想法' : screen === 'search' ? searchLabel(state.favorite) : '按日期查看';
   return {...result, state, header: {title, compact: true, minHeight: 64, titleStyle: 'large', backIcon: 'arrow',
-    actions: screen === 'home' ? [{label: '搜索想法', icon: 'search', event: {type: 'openSearch'}}] : []},
+    actions: screen === 'home' ? [{label: searchLabel(state.favorite), icon: 'search', event: {type: 'openSearch'}}] : []},
     tree: await pageTree(state, screen, today, forms)};
 }

@@ -1,23 +1,17 @@
 {
-  "title": "想法模块",
+  "title": "想法 · 时间线、长按与编辑保存",
   "images": [
-    "design/ideas/20261124-174952-691858-entry-v01.png",
-    "design/ideas/20261124-174952-691858-timeline-v03.png",
-    "design/ideas/20261124-174952-691858-search-results-v01.png",
-    "design/ideas/20261124-174952-691858-search-empty-v01.png",
-    "design/ideas/20261124-174952-691858-day-v01.png",
-    "design/ideas/20261124-174952-691858-day-picker-v01.png",
-    "design/ideas/20261124-174952-691858-day-changed-v01.png",
-    "design/ideas/20261124-174952-691858-empty-v02.png",
-    "design/ideas/20261124-174952-691858-writing-v02.png",
-    "design/ideas/20261124-174952-691858-save-error-v02.png",
-    "design/ideas/20261124-174952-691858-favorites-v02.png",
-    "design/ideas/20261124-174952-691858-favorites-empty-v02.png",
-    "design/ideas/20261124-174952-691858-menu-v02.png",
-    "design/ideas/20261124-174952-691858-edit-v03.png",
-    "design/ideas/20261124-174952-691858-delete-v02.png",
-    "design/ideas/20261124-174952-691858-create-task-v02.png",
-    "design/ideas/20261124-174952-691858-create-project-v02.png",
-    "design/ideas/20261124-174952-691858-records-v02.png"
+    "design/ideas/20261125-232953-233199-timeline-v01.png",
+    "design/ideas/20261125-232953-233199-writing-v01.png",
+    "design/ideas/20261125-232953-233199-menu-v01.png",
+    "design/ideas/20261125-232953-233199-saved-v01.png",
+    "design/ideas/20261125-232953-233199-favorites-v01.png",
+    "design/ideas/20261125-232953-233199-records-v01.png",
+    "design/ideas/20261125-232953-233199-empty-v01.png",
+    "design/ideas/20261125-232953-233199-favorites-empty-v01.png",
+    "design/ideas/20261125-232953-233199-save-error-v01.png",
+    "design/ideas/20261125-232953-233199-edit-v01.png",
+    "design/ideas/20261125-232953-233199-search-results-v01.png",
+    "design/ideas/20261125-232953-233199-day-v01.png"
   ]
 }

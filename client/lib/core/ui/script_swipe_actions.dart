@@ -18,9 +18,12 @@ class ScriptSwipeAction {
     this.disabled, {
     this.dividerBefore = false,
     this.danger = false,
+    this.copyText,
+    this.command,
   });
   final String label;
-  final Map<String, Object?> event;
+  final Map<String, Object?>? event, command;
+  final String? copyText;
   final IconData? icon;
   final bool disabled, dividerBefore, danger;
 }
@@ -31,6 +34,7 @@ class ScriptSwipeConfig {
     required this.end,
     this.longPressMenu = false,
     this.anchorStart = false,
+    this.highlightOutset = EdgeInsets.zero,
     required this.extent,
     required this.threshold,
     required this.timing,
@@ -38,6 +42,7 @@ class ScriptSwipeConfig {
     required this.identity,
   });
   final bool enabled, end, longPressMenu, anchorStart;
+  final EdgeInsets highlightOutset;
   final double extent, threshold;
   final ScriptTiming timing;
   final List<ScriptSwipeAction> actions;
@@ -53,6 +58,7 @@ class ScriptSwipeConfig {
       'side',
       'menuTrigger',
       'menuAlign',
+      'menuHighlightOutset',
       'extent',
       'openThreshold',
       'settle',
@@ -77,7 +83,15 @@ class ScriptSwipeConfig {
       throw const FormatException('Invalid swipeActions configuration');
     }
     final raw = spec['actions'];
-    final maximum = trigger == 'longPress' ? 5 : 3;
+    final outset = spec['menuHighlightOutset'];
+    if (outset != null &&
+        (trigger != 'longPress' ||
+            spec['menuAlign'] != 'start' ||
+            outset is! List ||
+            outset.length != 2)) {
+      throw const FormatException('Invalid menuHighlightOutset');
+    }
+    final maximum = trigger == 'longPress' ? 7 : 3;
     if (raw is! List || raw.isEmpty || raw.length > maximum) {
       throw FormatException('swipeActions requires 1–$maximum actions');
     }
@@ -87,6 +101,8 @@ class ScriptSwipeConfig {
         'label',
         'icon',
         'event',
+        'command',
+        'copyText',
         'disabled',
         'dividerBefore',
         'tone',
@@ -96,9 +112,18 @@ class ScriptSwipeConfig {
           ? action['disabled']
           : false;
       final glyph = action.containsKey('icon') ? icon(action['icon']) : null;
+      final copy = action.containsKey('copyText');
+      if (action.containsKey('command') &&
+          (trigger != 'longPress' || action['command'] is! Map)) {
+        throw const FormatException('Invalid long-press command');
+      }
       if (label is! String ||
           label.trim().isEmpty ||
-          event is! Map ||
+          (copy
+              ? action['copyText'] is! String ||
+                    action.containsKey('event') ||
+                    action.containsKey('command')
+              : event is! Map) ||
           disabled is! bool ||
           action.containsKey('dividerBefore') &&
               action['dividerBefore'] is! bool ||
@@ -110,9 +135,11 @@ class ScriptSwipeConfig {
       actions.add(
         ScriptSwipeAction(
           label,
-          event.cast<String, Object?>(),
+          (event as Map?)?.cast<String, Object?>(),
           glyph,
           disabled,
+          command: (action['command'] as Map?)?.cast<String, Object?>(),
+          copyText: action['copyText'] as String?,
           dividerBefore: action['dividerBefore'] == true,
           danger: action['tone'] == 'danger',
         ),
@@ -120,7 +147,7 @@ class ScriptSwipeConfig {
     }
     final extent = uiNumber(
       spec['extent'],
-      raw.length * 48.0,
+      trigger == 'longPress' ? 48 : raw.length * 48.0,
       240,
       'swipe extent',
     );
@@ -129,6 +156,17 @@ class ScriptSwipeConfig {
       end: side == 'end',
       longPressMenu: trigger == 'longPress',
       anchorStart: spec['menuAlign'] == 'start',
+      highlightOutset: outset is List
+          ? EdgeInsets.symmetric(
+              horizontal: uiNumber(
+                outset[0],
+                0,
+                24,
+                'horizontal highlight outset',
+              ),
+              vertical: uiNumber(outset[1], 0, 24, 'vertical highlight outset'),
+            )
+          : EdgeInsets.zero,
       extent: extent,
       threshold: spec.containsKey('openThreshold')
           ? uiNumber(spec['openThreshold'], .2, .8, 'openThreshold')
@@ -157,7 +195,7 @@ class ScriptSwipeActions extends StatefulWidget {
   final ScriptSwipeConfig config;
   final bool canSwipe;
   final Widget child;
-  final Future<void> Function(Map<String, Object?> event) onAction;
+  final Future<void> Function(ScriptSwipeAction action) onAction;
   @override
   State<ScriptSwipeActions> createState() => _ScriptSwipeActionsState();
 }
@@ -310,7 +348,7 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
     setState(() => locked = true);
     _close();
     try {
-      await widget.onAction(action.event);
+      await widget.onAction(action);
     } finally {
       if (mounted) setState(() => locked = false);
     }
@@ -318,6 +356,7 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
 
   bool _fits(double width) {
     if (!widget.canSwipe ||
+        widget.config.extent < widget.config.actions.length * 48 ||
         !width.isFinite ||
         width < widget.config.extent + 48) {
       return false;
@@ -369,6 +408,7 @@ class _ScriptSwipeActionsState extends State<ScriptSwipeActions>
               key: ValueKey(identity),
               longPressChild: widget.child,
               anchorStart: widget.config.anchorStart,
+              highlightOutset: widget.config.highlightOutset,
               enabled: enabled,
               haptics: PopupMenuTheme.of(context).enableFeedback ?? true,
               items: [

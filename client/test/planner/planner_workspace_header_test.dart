@@ -99,6 +99,8 @@ export function render({state={},event,context}) {
   if(event?.type==='history')state.history=true;
   if(event?.type==='back')state.history=false;
   if(event?.type==='legacy')state.legacy=!state.legacy;
+  if(event?.type==='setAdjustment')state.adjustment=event.mode;
+  const contract={contract:'time-range/2',records:{subject:'time',journal:'journal',receipt:'receipt',occurrence:'occurrence'},taskModuleId:'test.timeline',applyServiceId:'planner.operation.apply',undoServiceId:'planner.batch.undo'};
   const home=context.pageId==='test.timeline.home';
   return {state,header:{
     title:state.history?'操作历史':home?'任务规划':'其他标题',compact:true,
@@ -106,13 +108,14 @@ export function render({state={},event,context}) {
     ...(state.history?{backEvent:{type:'back'}}:{}),
     actions:state.history?[]:[
       {label:'新建',icon:'add',iconOnly:true,presentation:'inline',overflowOnly:true,event:{type:'add'}},
+      ...(['declared','invalid'].includes(state.adjustment)?[{label:'移动时段',tooltip:'切换移动',presentation:'inline',quickAdjustment:state.adjustment==='invalid'?{}:contract}]:[]),
       {label:'操作历史',icon:'history',presentation:'menu',event:{type:'history'}},
       {label:'旧顶栏',presentation:'menu',event:{type:'legacy'}}
     ]},tree:{type:'column',children:[
       {type:'text',text:'JS render '+state.renders+' event '+(event?.type||'none')},
       ...(!state.history?[{type:'plannerBoard',key:'board',
         days:[{date:'2026-10-20',label:'周二'}],candidates:[],blocks:[],
-        quickAdjustment:{contract:'time-range/2',records:{subject:'time',journal:'journal',receipt:'receipt',occurrence:'occurrence'},taskModuleId:'test.timeline',applyServiceId:'planner.operation.apply',undoServiceId:'planner.batch.undo'}
+        quickAdjustment:state.adjustment?true:contract
       }]:[])
     ]}};
 }
@@ -254,6 +257,39 @@ export function render({state={},event,context}) {
     await initial.dispatch(event);
     expect(tester.takeException(), isNull);
     semantics.dispose();
+  });
+
+  testWidgets('declared toggle uses module order, label and record contract', (
+    tester,
+  ) async {
+    await show(tester);
+    final controller = headers(tester);
+    Future<void> setMode(String mode) async {
+      final change = controller.content!.dispatch({
+        'type': 'setAdjustment',
+        'mode': mode,
+      });
+      await _settle(tester);
+      await change;
+    }
+
+    await setMode('declared');
+    final actions = (controller.content!.spec['actions'] as List).map(object);
+    expect(actions.take(2).map((action) => action['label']), ['新建', '移动时段']);
+    expect(find.byTooltip('快速调整'), findsNothing);
+    await tester.tap(find.byTooltip('切换移动'));
+    await tester.pump();
+    expect(board(tester).quickAdjust, isTrue);
+    expect(find.text('JS render 2 event setAdjustment'), findsOneWidget);
+
+    for (final mode in ['invalid', 'omitted']) {
+      await setMode(mode);
+      expect(find.byTooltip('切换移动'), findsNothing);
+      expect(find.byTooltip('快速调整'), findsNothing);
+      expect(board(tester).onQuickAdjustChanged, isNull);
+      expect(board(tester).quickAdjust, isFalse);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('retained pages keep toggle but stale leases cannot change it', (
